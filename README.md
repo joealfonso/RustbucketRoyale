@@ -24,4 +24,4 @@ npm run server
 ```
 
 ## Status
-M4 passed. M5 is in three gates. Gate 5a (rooms by link, a match from countdown to results, the shrinking ring, spectating) is built and waiting for its playtest. Bots are 5b, radar and the soak test are 5c.
+M5 passed: rooms by link, full matches with the shrinking ring, bots that fill the room, radar with sound, and a soak test. M6 (destructible props, loot, looting wrecks) is next.

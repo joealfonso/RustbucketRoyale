@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M5 (in three gates: 5a rooms, match loop and ring; 5b bots; 5c radar and soak test)
+Current code milestone: M5 (passed, holding for M6 go-ahead)
 Current visual milestone: V1 (not started)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -49,4 +49,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: Gate 5c started on Joseph's go: radar polish, headless soak test per tier, rooms per process.
 - 2026-10-17: Gate 5c built, waiting for its playtest. Check: the radar arrow points the right way and reads well, `npm run soak` passes on all three tiers. Soak and rooms-per-process numbers are in docs/PERF.md. That would finish M5.
 - 2026-10-17: During the 5c check: added the 200 m Arena tier for quick tests (menu default), and sound on the radar: mechs beyond 40 m only show when they make noise (pulled forward from M6). Soak passes on arena, small, medium and large.
+- 2026-10-17: Gate 5c passed by Joseph's call. M5 is done: rooms by link, the full match loop with the ring, bots with fill and level of detail, radar with sound, soak test and scale numbers. M6 not started. Its noise part already exists (pulled forward during 5c).
 
