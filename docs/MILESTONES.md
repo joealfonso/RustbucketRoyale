@@ -34,3 +34,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: M2 passed by Joseph's call after two-tab play: players see each other, shots show. Bullets do not hit mechs yet, by design (M3). Moving to M3.
 - 2026-10-17: M3 built, waiting for its gate. To play: stop any old server, `npm run server`, `npm run dev`, open two tabs at http://localhost:5173/?online. Shoot the other mech, press G for a grenade. Tuning panel sliders only change your own client, so online they can rubber-band you.
 - 2026-10-17: M3 passed by Joseph's call after two-tab play. Requested during the playtest: tap Shift to dash. Added to the movement sim (below). M4 not started.
+- 2026-10-17: Dash (double-press Shift, or double-press a direction key) passed by Joseph's call after playing it. M3 stays passed. M4 not started.
