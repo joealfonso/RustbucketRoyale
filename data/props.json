@@ -46,7 +46,7 @@
   "barrelBlast": {
     "radius": 9,
     "damage": 70,
-    "delaySeconds": 0.15
+    "delaySeconds": 0.06
   },
   "density": {
     "minPerSquareKm": 400,

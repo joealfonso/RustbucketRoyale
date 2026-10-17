@@ -1,0 +1,55 @@
+{
+  "master": 0.7,
+  "maxVoices": 24,
+  "hearingMeters": 300,
+  "sounds": {
+    "shot": {
+      "volume": 0.45,
+      "file": null
+    },
+    "impact": {
+      "volume": 0.25,
+      "file": null
+    },
+    "explosion": {
+      "volume": 1.0,
+      "file": null
+    },
+    "smash": {
+      "volume": 0.7,
+      "file": null
+    },
+    "hitMarker": {
+      "volume": 0.35,
+      "file": null
+    },
+    "hurt": {
+      "volume": 0.6,
+      "file": null
+    },
+    "dash": {
+      "volume": 0.5,
+      "file": null
+    },
+    "jets": {
+      "volume": 0.35,
+      "file": null
+    },
+    "step": {
+      "volume": 0.4,
+      "file": null
+    },
+    "grenadeThrow": {
+      "volume": 0.4,
+      "file": null
+    },
+    "countdown": {
+      "volume": 0.4,
+      "file": null
+    },
+    "go": {
+      "volume": 0.5,
+      "file": null
+    }
+  }
+}

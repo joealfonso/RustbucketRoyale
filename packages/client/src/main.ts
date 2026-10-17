@@ -5,6 +5,9 @@ import {
   type HealthState, type MatchProgress, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
+import audioJson from "../../../data/audio.json";
+import { Sound, type AudioConfig } from "./audio";
+import { Fireballs } from "./fireballs";
 import weaponJson from "../../../data/weapon.json";
 import cameraJson from "../../../data/camera.json";
 import netJson from "../../../data/net.json";
@@ -129,9 +132,13 @@ scene.add(mechGroup);
 const glow = new THREE.MeshBasicMaterial({ color: "#ffb833" });
 const impacts = new TimedEffects(scene, 24, 0.25, glow);
 const flashes = new TimedEffects(scene, 6, 0.3, glow);
-const shotFx = new ShotFx(weaponStats, new Projectiles(scene, 64, glow, impacts), flashes, impacts);
-const blastMaterial = new THREE.MeshBasicMaterial({ color: "#ff7a1a", transparent: true, opacity: 0.75 });
-const blasts = new TimedEffects(scene, 6, 4, blastMaterial);
+const projectiles = new Projectiles(scene, 64, glow, impacts);
+const shotFx = new ShotFx(weaponStats, projectiles, flashes, impacts);
+const sound = new Sound(audioJson as AudioConfig);
+projectiles.onImpact = (x, y, z) => sound.play("impact", { x, y, z });
+// Browsers only allow sound after a click, and the click that locks the mouse is the first one.
+for (const el of [canvas, hint]) el.addEventListener("click", () => sound.start());
+const blasts = new Fireballs(scene, 8);
 // Art hook: a puff where a prop broke. Replace with real debris at V5.
 const debris = new TimedEffects(scene, 12, 1.6, new THREE.MeshBasicMaterial({ color: "#8c8577", transparent: true, opacity: 0.6 }));
 const grenades = new ClientGrenades(scene, 8, grenadeStats);
@@ -222,14 +229,17 @@ if (net) {
   net.onShot = (s) => {
     if (s.id === net.id) return; // our own shot already played the moment we fired
     shotFx.show(s, s.hitMech);
+    sound.play("shot", { x: s.ox, y: s.oy, z: s.oz });
   };
   net.onHit = (h) => {
     flashHitMarker(h.killed);
+    sound.play("hitMarker");
     impacts.spawn(h.x, h.y, h.z, 0.15);
   };
   net.onGrenade = (g) => {
     if (g.id === net.id) return; // our own grenade is already in the air
     grenades.spawn(g.x, g.y, g.z, g.vx, g.vy, g.vz);
+    sound.play("grenadeThrow", { x: g.x, y: g.y, z: g.z });
   };
   net.onExplode = (e) => showBlast(e.x, e.y, e.z);
   // A destroyed prop leaves the world here too, so walking where it stood matches the server.
@@ -239,6 +249,7 @@ if (net) {
     map.world.disable(prop.boxIndex);
     propView.destroy(id);
     debris.spawn(prop.x, prop.y, prop.z, 0.3);
+    sound.play("smash", { x: prop.x, y: prop.y, z: prop.z });
   };
   net.onRoom = (r) => {
     const wasCountdown = progress.state === "countdown";
@@ -280,6 +291,7 @@ function flashHitMarker(killed: boolean): void {
 }
 
 function flashHurt(): void {
+  sound.play("hurt");
   hurtOverlay.classList.add("on");
   clearTimeout(hurtTimer);
   hurtTimer = window.setTimeout(() => hurtOverlay.classList.remove("on"), 80);
@@ -287,7 +299,8 @@ function flashHurt(): void {
 
 function showBlast(x: number, y: number, z: number): void {
   grenades.removeNear(x, y, z);
-  blasts.spawn(x, y + 0.2, z, 0.25);
+  blasts.spawn(x, y + 0.6, z, 4.5);
+  sound.play("explosion", { x, y, z });
   const distance = Math.hypot(x - mech.x, y - mech.y, z - mech.z);
   if (distance < grenadeStats.shakeRadius) rig.addShake((1 - distance / grenadeStats.shakeRadius) * grenadeStats.shakeForce);
 }
@@ -308,6 +321,9 @@ window.addEventListener("resize", () => {
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 let accumulator = 0;
+let stepDistance = 0;
+let lastCountdown = -1;
+const camForward = new THREE.Vector3();
 let simTime = 0;
 let last = performance.now();
 let fps = 60;
@@ -324,6 +340,7 @@ function frame(now: number): void {
     else input.lock();
   }
   if (net === null && input.wasPressed("KeyR")) respawnOffline();
+  if (input.wasPressed("KeyM")) hud.feed(sound.toggleMute() ? "Sound off (M)" : "Sound on (M)");
   if (input.takeEnter() && net && hostId === net.id && progress.state === "lobby") net.sendStart();
 
   // Look is applied every frame so the camera answers the mouse at once, not once per sim step.
@@ -347,7 +364,14 @@ function frame(now: number): void {
       mechInput.fire = false; mechInput.grenade = false;
     }
 
+    const dashBefore = mech.dashTime;
     const seq = predictor.step(mechInput, STEP);
+    if (dashBefore <= 0 && mech.dashTime > 0) sound.play("dash", { x: mech.x, y: mech.y + 1, z: mech.z });
+    // Heavy footfalls, further apart when walking than when running.
+    if (mech.grounded && !health.dead) {
+      stepDistance += Math.hypot(mech.vx, mech.vz) * STEP;
+      if (stepDistance > (mech.running ? 4.2 : 3)) { stepDistance = 0; sound.play("step", { x: mech.x, y: mech.y, z: mech.z }); }
+    }
     net?.sendInput(seq, mechInput);
     if (net === null && mech.y < KILL_HEIGHT) respawnOffline();
 
@@ -355,11 +379,13 @@ function frame(now: number): void {
     if (mechInput.fire && gate.tryFire(simTime, weaponStats.shotsPerSecond)) {
       computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weaponStats, Math.random, shot);
       shotFx.show(shot);
+      sound.play("shot", { x: shot.ox, y: shot.oy, z: shot.oz });
       rig.addShake(weaponStats.shakeForce);
     }
     if (mechInput.grenade && grenadeGate.tryFire(simTime, 1 / grenadeStats.cooldownSeconds)) {
       throwGrenade(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, grenadeStats, thrown);
       grenades.spawn(thrown.x, thrown.y, thrown.z, thrown.vx, thrown.vy, thrown.vz);
+      sound.play("grenadeThrow", { x: thrown.x, y: thrown.y, z: thrown.z });
     }
     shotFx.update(STEP, map.world);
     blasts.update(STEP);
@@ -402,6 +428,17 @@ function frame(now: number): void {
   const ring: RingNow | null = ringView.update(matchSeconds);
   const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);
   if (net) hud.setProgress(progress, ring, outside);
+
+  // Sound: the ears go where the camera is, jets hiss while firing, and the countdown beeps each second then says go.
+  rig.camera.getWorldDirection(camForward);
+  sound.setListener(rig.camera.position.x, rig.camera.position.y, rig.camera.position.z, camForward.x, camForward.y, camForward.z);
+  sound.setJets(mech.jetting && !health.dead);
+  const countdown = progress.state === "countdown" ? Math.ceil(progress.seconds) : -1;
+  if (countdown !== lastCountdown) {
+    if (countdown > 0) sound.play("countdown");
+    else if (lastCountdown > 0 && progress.state === "active") sound.play("go");
+    lastCountdown = countdown;
+  }
   // Watching someone, the radar is centred on them.
   radar?.draw(viewX, viewZ, aim.yaw, remotes, progress.state === "lobby" ? null : ring, outside, performance.now());
 

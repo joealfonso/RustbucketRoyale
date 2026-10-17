@@ -12,6 +12,8 @@ export class Projectiles {
   private impactAtEnd: Uint8Array;
   private next = 0;
   private hit: RayHit = createRayHit();
+  // Called where a bullet hits something, for the sound.
+  onImpact?: (x: number, y: number, z: number) => void;
 
   constructor(scene: THREE.Scene, private count: number, material: THREE.Material, private impacts: TimedEffects) {
     const geometry = new THREE.SphereGeometry(0.15, 8, 6);
@@ -50,12 +52,11 @@ export class Projectiles {
 
       if (world.raycast(p.x, p.y, p.z, sx / length, sy / length, sz / length, length, this.hit)) {
         const h = this.hit;
-        this.impacts.spawn(
-          p.x + (sx / length) * h.distance + h.normalX * 0.1,
-          p.y + (sy / length) * h.distance + h.normalY * 0.1,
-          p.z + (sz / length) * h.distance + h.normalZ * 0.1,
-          0.15,
-        );
+        const ix = p.x + (sx / length) * h.distance + h.normalX * 0.1;
+        const iy = p.y + (sy / length) * h.distance + h.normalY * 0.1;
+        const iz = p.z + (sz / length) * h.distance + h.normalZ * 0.1;
+        this.impacts.spawn(ix, iy, iz, 0.15);
+        this.onImpact?.(ix, iy, iz);
         this.kill(i);
         continue;
       }
