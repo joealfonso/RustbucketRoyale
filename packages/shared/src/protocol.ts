@@ -13,6 +13,8 @@ export interface InputMessage {
   run: boolean;
   jet: boolean;
   dash: boolean;
+  dashMoveX: number;
+  dashMoveY: number;
   fire: boolean;
   grenade: boolean;
   targetX: number;
@@ -107,7 +109,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 
   if (m.t !== "input") return null;
 
-  const numbers = [m.seq, m.moveX, m.moveY, m.aimYaw, m.aimPitch, m.targetX, m.targetY, m.targetZ];
+  const numbers = [m.seq, m.dashMoveX, m.dashMoveY, m.moveX, m.moveY, m.aimYaw, m.aimPitch, m.targetX, m.targetY, m.targetZ];
   if (!numbers.every(finite)) return null;
   if (typeof m.run !== "boolean" || typeof m.jet !== "boolean" || typeof m.dash !== "boolean" || typeof m.fire !== "boolean" || typeof m.grenade !== "boolean") return null;
   if (!Number.isInteger(m.seq) || (m.seq as number) < 1) return null;
@@ -122,6 +124,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     run: m.run,
     jet: m.jet,
     dash: m.dash,
+    dashMoveX: clamp(m.dashMoveX as number, -1, 1),
+    dashMoveY: clamp(m.dashMoveY as number, -1, 1),
     fire: m.fire,
     grenade: m.grenade,
     targetX: m.targetX as number,
@@ -138,6 +142,8 @@ export function toMechInput(message: InputMessage, out: MechInput): void {
   out.run = message.run;
   out.jet = message.jet;
   out.dash = message.dash;
+  out.dashMoveX = message.dashMoveX;
+  out.dashMoveY = message.dashMoveY;
   out.fire = message.fire;
   out.grenade = message.grenade;
   out.targetX = message.targetX;

@@ -7,7 +7,10 @@ export interface MechInput {
   aimPitch: number; // radians, positive looks up
   run: boolean;
   jet: boolean;
-  dash: boolean; // true for the one step on which Shift was tapped
+  dash: boolean; // true for the one step on which a dash was triggered
+  // Which way to dash, in the same sense as moveX and moveY. Both zero means dash where you are steering.
+  dashMoveX: number;
+  dashMoveY: number;
   fire: boolean;
   grenade: boolean;
   // World point under the crosshair. Only used when firing. The server shoots from the barrel toward it.
@@ -17,5 +20,5 @@ export interface MechInput {
 }
 
 export function createMechInput(): MechInput {
-  return { moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0, run: false, jet: false, dash: false, fire: false, grenade: false, targetX: 0, targetY: 0, targetZ: 0 };
+  return { moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0, run: false, jet: false, dash: false, dashMoveX: 0, dashMoveY: 0, fire: false, grenade: false, targetX: 0, targetY: 0, targetZ: 0 };
 }

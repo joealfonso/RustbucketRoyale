@@ -114,6 +114,18 @@ describe("dash", () => {
     expect(still.dashZ).toBeCloseTo(1); // ahead of a mech facing +Z
   });
 
+  it("goes the way you tapped, even while steering another way", () => {
+    const s = settled();
+    // Aim yaw 0 faces -Z. Holding forward but double-tapping D dashes right (+X), not forward.
+    stepMech(s, forward({ dash: true, dashMoveX: 1 }), stats, DT, [ground]);
+    expect(s.dashX).toBeCloseTo(1);
+    expect(s.dashZ).toBeCloseTo(0);
+
+    const back = settled();
+    stepMech(back, forward({ dash: true, dashMoveY: -1 }), stats, DT, [ground]);
+    expect(back.dashZ).toBeCloseTo(1); // backwards from a mech facing -Z
+  });
+
   it("costs stamina and then has to cool down", () => {
     const s = settled();
     stepMech(s, forward({ dash: true }), stats, DT, [ground]);
