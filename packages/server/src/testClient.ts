@@ -1,4 +1,4 @@
-import { Predictor, STEP, createMechInput, type MechInput, type ServerMessage } from "@rustbucket/shared";
+import { Predictor, STEP, createMechInput, type MechInput, type PickupState, type ServerMessage } from "@rustbucket/shared";
 import { loadRoomConfig } from "./config";
 import { Room, type RoomConfig } from "./Room";
 
@@ -24,7 +24,8 @@ export const startMatch = (room: Room, host: Client) => {
   tickRoom(room, 20); // past the short test countdown
 };
 
-export type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
+// In tests the pickups are always filled in (see Client), so they are never null here.
+export type Snapshot = Extract<ServerMessage, { t: "snapshot" }> & { pickups: PickupState[] };
 
 export function inputMessage(seq: number, input: MechInput, lagMs?: number): string {
   return JSON.stringify({ t: "input", seq, ...(lagMs === undefined ? {} : { lagMs }), ...input });
@@ -41,7 +42,15 @@ export class Client {
   lagMs: number | undefined; // what this fake client reports about its own delay
   predictor: Predictor;
   constructor(public room: Room, config = loadRoomConfig()) {
-    this.id = room.join((m) => this.messages.push(m)) ?? 0;
+    // A snapshot that leaves the pickups unchanged is filled in with the last list, the way a real client keeps it.
+    let pickups: PickupState[] = [];
+    this.id = room.join((m) => {
+      if (m.t === "snapshot") {
+        if (m.pickups) pickups = m.pickups;
+        else m = { ...m, pickups };
+      }
+      this.messages.push(m);
+    }) ?? 0;
     // Start where the server put this player (slot = join order here) so the first snapshot is not a jump.
     const map = config.mapFor(room.tier, 0);
     const [x, y, z] = map.spawns[(this.id - 1) % map.spawns.length]!;

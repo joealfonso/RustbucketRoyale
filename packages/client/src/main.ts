@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, throwGrenade, parseLootConfig, parsePropConfig, itemWeapon,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, throwGrenade, zoneState, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
   type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
@@ -16,6 +16,8 @@ import netJson from "../../../data/net.json";
 import hudJson from "../../../data/hud.json";
 import grenadeJson from "../../../data/grenade.json";
 import zonesJson from "../../../data/zones.json";
+import damageFxJson from "../../../data/damageFx.json";
+import { DamageFx, parseDamageFx } from "./damageFx";
 import { setAimTarget } from "./aimTarget";
 import { DebugPanel } from "./debugPanel";
 import { TimedEffects } from "./effects";
@@ -27,7 +29,7 @@ import { PickupView } from "./pickupView";
 import { setMechGear } from "./mechModel";
 import { Hud } from "./hud";
 import { addMapMeshes, removeMapMeshes } from "./mapRenderer";
-import { createMechModel, setMechDamage } from "./mechModel";
+import { createMechModel, setCrawlLook, setMechDamage, type MechModel } from "./mechModel";
 import { NetClient } from "./net";
 import { Projectiles } from "./projectiles";
 import { Radar } from "./radar";
@@ -50,6 +52,8 @@ const grenadeStats = parseGrenadeStats(grenadeJson);
 const hudStats = parseHudStats(hudJson);
 const zoneSet = parseZones(zonesJson);
 const zoneMaxHp = zoneSet.zones.map((z) => z.hp);
+const damageFxConfig = parseDamageFx(damageFxJson);
+setCrawlLook(damageFxConfig.crawl);
 
 // How to play is chosen in the address:
 //   (nothing)                    the start menu
@@ -152,6 +156,9 @@ const debris = new TimedEffects(scene, 12, 1.6, new THREE.MeshBasicMaterial({ co
 const grenades = new ClientGrenades(scene, 8, grenadeStats);
 const grenadeGate = new FireGate();
 const thrown = createGrenade();
+const damageFx = new DamageFx(scene, damageFxConfig, zoneSet);
+let fxDt = 0;
+const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
 const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.maxViewDelayMs, netStats.snapshotEvery * STEP * 1000, zoneMaxHp);
 remotes.weaponColors = weaponColors;
 const pickupView = new PickupView(scene, lootConfig.colors, weaponColors);
@@ -246,11 +253,13 @@ if (net) {
     if (loadout.slots[0] !== old.slots[0] || loadout.slots[1] !== old.slots[1]) sound.play("swap");
     // When the server changes the weapon in hand itself (taking a weapon into an empty slot), follow it.
     if (loadout.active !== serverActive) { serverActive = loadout.active; input.setSlot(loadout.active); }
-    pickupsNow = snap.pickups;
+    if (snap.pickups) {
+      pickupsNow = snap.pickups;
+      pickupView.sync(snap.pickups);
+    }
     // A rattle every quarter of the way through looting, so holding E sounds like work being done.
     if (Math.floor(snap.looting * 4) > Math.floor(looting * 4)) sound.play("loot");
     looting = snap.looting;
-    pickupView.sync(snap.pickups);
     setMechDamage(ownModel, health.hp, health.dead);
     net.noteSnapshot(snap.ack, snap.ackAgeMs, performance.now());
     remotes.push(snap.others, snap.tick, performance.now());
@@ -309,7 +318,8 @@ if (net) {
 const crosshair = document.getElementById("crosshair")!;
 const hurtOverlay = document.getElementById("hurt")!;
 const statusText = document.getElementById("status")!;
-const zoneFills = Array.from(document.querySelectorAll<HTMLElement>("#zones .track > div"));
+const armsBroken = () => health.hp[ZONE_ARMS]! <= 0;
+const zoneFills = Array.from(document.querySelectorAll<HTMLElement>("#zones .track > div:not(.plate)"));
 let hitTimer = 0;
 let hurtTimer = 0;
 
@@ -413,14 +423,14 @@ function frame(now: number): void {
     if (mechInput.fire && gate.tryFire(simTime, weapon.shotsPerSecond)) {
       // Each pellet is drawn at once, with this client's own spread. The server decides what they hit.
       for (let i = 0; i < weapon.pellets; i++) {
-        computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weapon, Math.random, shot);
+        computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weapon, Math.random, shot, armsBroken() ? zoneSet.brokenArmsSpreadMultiplier : 1);
         shotFx.show(shot);
       }
       sound.play("shot", { x: shot.ox, y: shot.oy, z: shot.oz });
       rig.addShake(weapon.shakeForce);
     }
     // Online a grenade needs one in the bag. Count it down here so a held key does not throw twice before the server says.
-    const hasGrenade = net === null || loadout.grenades > 0;
+    const hasGrenade = (net === null || loadout.grenades > 0) && !armsBroken();
     if (mechInput.grenade && hasGrenade && grenadeGate.tryFire(simTime, 1 / grenadeStats.cooldownSeconds)) {
       if (net) loadout = { ...loadout, grenades: loadout.grenades - 1 };
       throwGrenade(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, grenadeStats, thrown);
@@ -490,7 +500,16 @@ function frame(now: number): void {
 
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;
   staminaFill.style.width = `${mech.stamina.fraction * 100}%`;
-  zoneFills.forEach((fill, zone) => { fill.style.width = `${(health.hp[zone]! / zoneMaxHp[zone]!) * 100}%`; });
+  zoneFills.forEach((fill, zone) => {
+    fill.style.width = `${(health.hp[zone]! / zoneMaxHp[zone]!) * 100}%`;
+    const state = zoneState(health.hp, zoneSet, zone);
+    fill.classList.toggle("damaged", state === ZONE_DAMAGED);
+    fill.parentElement!.classList.toggle("broken", state === ZONE_BROKEN); // the bar is empty, so the track shows it
+  });
+  fxDt = frameTime;
+  damageFx.emitFrom(ownModel, frameTime);
+  remotes.forEachModel(emitDamage);
+  damageFx.update(frameTime);
   hud.setLoadout(loadout, weaponSet.weapons, lootConfig.armorPlates);
   setMechGear(ownModel, weaponColors[loadout.slots[loadout.active]!] ?? weaponStats.color, loadout.armor);
   pickupView.update(performance.now());

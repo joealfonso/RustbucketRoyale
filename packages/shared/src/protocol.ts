@@ -41,7 +41,7 @@ export interface SelfState {
   x: number; y: number; z: number;
   vx: number; vz: number; vy: number;
   bodyYaw: number;
-  grounded: boolean; running: boolean; jetting: boolean;
+  grounded: boolean; running: boolean; jetting: boolean; crawling: boolean;
   dashTime: number; dashCooldown: number; dashX: number; dashZ: number;
   fuel: number; fuelLocked: boolean; fuelTimer: number;
   stamina: number; staminaLocked: boolean; staminaTimer: number;
@@ -141,7 +141,7 @@ export type ServerMessage =
   | { t: "refused"; reason: string }
   | { t: "prop"; id: number } // a prop was destroyed
   | { t: "props"; destroyed: number[] } // every prop destroyed so far, sent to someone arriving mid way
-  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; looting: number; pickups: PickupState[] }
+  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; looting: number; pickups: PickupState[] | null } // pickups null: unchanged since the last snapshot
   | ShotMessage
   | HitMessage
   | GrenadeMessage

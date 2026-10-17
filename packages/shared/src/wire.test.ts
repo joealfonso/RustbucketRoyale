@@ -9,7 +9,7 @@ const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3
 const snapshot = (others: OtherState[]): Snapshot => ({
   t: "snapshot", tick: 123456, ack: 99, ackAgeMs: 12.4,
   you: {
-    x: -321.123456, y: 4.5, z: 888.25, vx: 3.5, vz: -2.25, vy: 0.5, bodyYaw: 2.75, grounded: true, running: false, jetting: true,
+    x: -321.123456, y: 4.5, z: 888.25, vx: 3.5, vz: -2.25, vy: 0.5, bodyYaw: 2.75, grounded: true, running: false, jetting: true, crawling: true,
     dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0,
   },
   health: { hp: [60, 12, 88], dead: false, respawnIn: 0 },
@@ -32,7 +32,7 @@ describe("snapshot wire format", () => {
     for (const key of ["x", "y", "z", "vx", "vz", "vy", "bodyYaw", "fuel", "stamina", "dashX", "dashZ"] as const) {
       expect(back.you[key]).toBeCloseTo(original.you[key], 3);
     }
-    expect([back.you.grounded, back.you.running, back.you.jetting, back.you.fuelLocked, back.you.staminaLocked]).toEqual([true, false, true, false, true]);
+    expect([back.you.grounded, back.you.running, back.you.jetting, back.you.fuelLocked, back.you.staminaLocked, back.you.crawling]).toEqual([true, false, true, false, true, true]);
     expect(back.others).toHaveLength(2);
     expect(back.others[0]!.id).toBe(7);
     expect(Math.abs(back.others[0]!.x - 412.34)).toBeLessThanOrEqual(0.05 + 1e-9);
@@ -73,8 +73,17 @@ describe("snapshot wire format", () => {
     const back = decodeSnapshot(encodeSnapshot(s))!;
     expect(back.loadout).toEqual({ slots: [0, -1], active: 0, grenades: 2, armor: [30, 0, 40] });
     expect(back.pickups).toHaveLength(2);
-    expect(back.pickups[0]).toMatchObject({ id: 40000, item: 5 });
-    expect(Math.abs(back.pickups[0]!.x - -12.34)).toBeLessThanOrEqual(0.05 + 1e-9);
+    expect(back.pickups![0]).toMatchObject({ id: 40000, item: 5 });
+    expect(Math.abs(back.pickups![0]!.x - -12.34)).toBeLessThanOrEqual(0.05 + 1e-9);
+  });
+
+  it("can say the pickups are unchanged in one byte, which is not the same as none", () => {
+    const s = snapshot([]);
+    s.pickups = null;
+    expect(decodeSnapshot(encodeSnapshot(s))!.pickups).toBeNull();
+    expect(encodeSnapshot(s).length).toBe(snapshotSize(0));
+    s.pickups = [];
+    expect(decodeSnapshot(encodeSnapshot(s))!.pickups).toEqual([]);
   });
 
   it("works with nobody else, and with the biggest crowd it can hold", () => {

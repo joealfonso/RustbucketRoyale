@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import zonesJson from "../../../data/zones.json";
 import {
-  ZONE_ARMS, ZONE_LEGS, ZONE_TORSO, applyDamage, createHealth, createZoneHit, isDestroyed, parseZones, raycastMech,
+  ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, ZONE_INTACT, ZONE_LEGS, ZONE_TORSO, applyDamage, zoneState, createHealth, createZoneHit, isDestroyed, parseZones, raycastMech,
 } from "./zones";
 
 const set = parseZones(zonesJson);
@@ -66,5 +66,24 @@ describe("damage", () => {
   it("rejects a malformed zone file", () => {
     expect(() => parseZones({ zones: [] })).toThrow();
     expect(() => parseZones({ zones: [{ name: "legs" }, { name: "arms" }, { name: "torso" }] })).toThrow();
+  });
+});
+
+describe("zoneState", () => {
+  it("is intact down to the damaged share, damaged below it, broken at zero", () => {
+    const hp = createHealth(set);
+    const max = set.zones[ZONE_LEGS]!.hp;
+    expect(zoneState(hp, set, ZONE_LEGS)).toBe(ZONE_INTACT);
+    hp[ZONE_LEGS] = max * set.damagedBelowFraction;
+    expect(zoneState(hp, set, ZONE_LEGS)).toBe(ZONE_INTACT);
+    hp[ZONE_LEGS] = max * set.damagedBelowFraction - 1;
+    expect(zoneState(hp, set, ZONE_LEGS)).toBe(ZONE_DAMAGED);
+    hp[ZONE_LEGS] = 0;
+    expect(zoneState(hp, set, ZONE_LEGS)).toBe(ZONE_BROKEN);
+  });
+
+  it("refuses a zones file without the damaged share", () => {
+    const { damagedBelowFraction: _, ...rest } = zonesJson;
+    expect(() => parseZones(rest)).toThrow(/damagedBelowFraction/);
   });
 });

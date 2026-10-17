@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ITEM_ARMOR_FIRST, ITEM_GRENADE, ZONE_TORSO, itemWeapon, weaponItem, type MechInput, type ServerMessage } from "@rustbucket/shared";
+import { ITEM_ARMOR_FIRST, ITEM_GRENADE, ZONE_TORSO, itemWeapon, weaponItem, type MechInput, type PickupState, type ServerMessage } from "@rustbucket/shared";
 import { Client, idle, makeRoom, startMatch } from "./testClient";
 import type { Room, RoomConfig } from "./Room";
 
@@ -37,6 +37,17 @@ describe("loot", () => {
     expect(dropped).toHaveLength(1);
     expect(dropped[0]!.item).toBe(ITEM_GRENADE);
     expect(Math.hypot(dropped[0]!.x - -6, dropped[0]!.z - 18)).toBeLessThan(1);
+  });
+
+  it("is only sent again when the list near you changes", () => {
+    const { room, config } = makeRoom(alwaysDrops({ grenade: 1 }));
+    const a = new Client(room, config);
+    const raw: (PickupState[] | null)[] = [];
+    room.join((m) => { if (m.t === "snapshot") raw.push(m.pickups); });
+    run(room, [a], () => idle(aimAtCrate), 60);
+    const sent = raw.filter((p) => p !== null);
+    expect(sent.at(-1)).toHaveLength(1); // the drop was sent once it appeared...
+    expect(raw.filter((p) => p === null).length).toBeGreaterThan(sent.length); // ...and most snapshots said "unchanged"
   });
 
   it("a grenade is collected by walking over it, and adds one to the count", () => {

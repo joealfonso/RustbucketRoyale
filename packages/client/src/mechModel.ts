@@ -21,6 +21,8 @@ export function addBox(parent: THREE.Object3D, center: readonly number[], size: 
 
 export interface MechModel {
   group: THREE.Group;
+  body: THREE.Group; // everything above the feet, lowered and tipped forward when the mech crawls
+  legMeshes: THREE.Mesh[];
   // One material per hit zone (legs, arms, torso), owned by this mech so damage tints only it.
   zoneMaterials: THREE.MeshStandardMaterial[];
   armMeshes: THREE.Mesh[];
@@ -28,6 +30,21 @@ export interface MechModel {
   zoneMaxHp: number[];
   plates: THREE.Mesh[][]; // armor plate meshes per zone, shown while that zone has plate points
   gunMaterial: THREE.MeshStandardMaterial;
+  // The last damage shown, kept so the spark and smoke effects can read it each frame.
+  hp: number[];
+  dead: boolean;
+  fxTimers: number[]; // per zone: seconds until the next spark, then the next puff of smoke
+}
+
+// How a crawling mech sits. Read from data/damageFx.json once at startup.
+export interface CrawlLook {
+  dropMeters: number;
+  tiltDegrees: number;
+  legStubScale: number;
+}
+let crawlLook: CrawlLook = { dropMeters: 1.3, tiltDegrees: 12, legStubScale: 0.3 };
+export function setCrawlLook(look: CrawlLook): void {
+  crawlLook = look;
 }
 
 const WRECK = new THREE.Color("#262626");
@@ -36,8 +53,10 @@ const scratch = new THREE.Color();
 // Grey-box mech. Art hook: replace this with a loaded model, keep the zone mapping so damage still shows.
 export function createMechModel(accent: string, zoneMaxHp: readonly number[]): MechModel {
   const group = new THREE.Group();
-  const body = "#738087";
-  const baseColors = [new THREE.Color(body), new THREE.Color(accent), new THREE.Color(body)];
+  const body = new THREE.Group();
+  group.add(body);
+  const grey = "#738087";
+  const baseColors = [new THREE.Color(grey), new THREE.Color(accent), new THREE.Color(grey)];
   const zoneMaterials = baseColors.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1 }));
   const armMeshes: THREE.Mesh[] = [];
 
@@ -45,12 +64,16 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[]): M
     const mesh = new THREE.Mesh(unitBox, zoneMaterials[zone]!);
     mesh.position.set(center[0]!, center[1]!, center[2]!);
     mesh.scale.set(size[0]!, size[1]!, size[2]!);
-    group.add(mesh);
+    body.add(mesh);
     return mesh;
   };
   part(2, [0, 2.4, 0], [1.8, 1.6, 1.2]);
-  part(0, [-0.6, 0.8, 0], [0.6, 1.6, 0.7]);
-  part(0, [0.6, 0.8, 0], [0.6, 1.6, 0.7]);
+  // Legs hang from the hips (pivot at the top) so a broken one can shrink to a stub under the body.
+  const legMeshes: THREE.Mesh[] = [];
+  for (const x of [-0.6, 0.6]) {
+    const leg = part(0, [x, 0.8, 0], [0.6, 1.6, 0.7]);
+    legMeshes.push(leg);
+  }
   armMeshes.push(part(1, [-1.2, 2.4, 0], [0.5, 1.2, 0.5]));
   armMeshes.push(part(1, [1.2, 2.4, -0.6], [0.5, 0.6, 1.6]));
 
@@ -59,7 +82,7 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[]): M
   const barrel = new THREE.Mesh(unitBox, gunMaterial);
   barrel.position.set(1.2, 2.4, -1.65);
   barrel.scale.set(0.3, 0.3, 0.6);
-  group.add(barrel);
+  body.add(barrel);
 
   // Armor plates bolted on over each zone. Art hook: real plate models with bolts and scratches at V2.
   const plateMaterial = new THREE.MeshStandardMaterial({ color: "#a9b8c4", roughness: 0.5, metalness: 0.3 });
@@ -68,7 +91,7 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[]): M
     mesh.position.set(center[0]!, center[1]!, center[2]!);
     mesh.scale.set(size[0]!, size[1]!, size[2]!);
     mesh.visible = false;
-    group.add(mesh);
+    body.add(mesh);
     return mesh;
   };
   const plates = [
@@ -76,12 +99,18 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[]): M
     [plate([-1.48, 2.4, 0], [0.1, 0.9, 0.45]), plate([1.48, 2.4, -0.4], [0.1, 0.5, 0.9])],
     [plate([0, 2.5, -0.66], [1.5, 1.1, 0.12]), plate([0, 2.5, 0.66], [1.5, 1.1, 0.12])],
   ];
-  return { group, zoneMaterials, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial };
+  return {
+    group, body, legMeshes, zoneMaterials, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
+    hp: [...zoneMaxHp], dead: false, fxTimers: [0, 0, 0, 0, 0, 0],
+  };
 }
 
-// Damage you can read on the mech: parts darken as they take hits, a broken arm falls off,
-// and a destroyed mech slumps. Real damage art replaces this in V2 and M7.
+// Damage you can read on the mech: parts darken as they take hits, a broken arm falls off, broken legs leave the
+// body down on the ground on two stubs, and a destroyed mech slumps. Sparks and smoke come from damageFx.ts.
+// Art hook: real bent and missing parts at V2.
 export function setMechDamage(model: MechModel, hp: readonly number[], dead: boolean): void {
+  for (let zone = 0; zone < model.hp.length; zone++) model.hp[zone] = hp[zone]!;
+  model.dead = dead;
   for (let zone = 0; zone < model.zoneMaterials.length; zone++) {
     const fraction = Math.max(0, Math.min(1, hp[zone]! / model.zoneMaxHp[zone]!));
     scratch.copy(WRECK).lerp(model.baseColors[zone]!, fraction);
@@ -89,6 +118,16 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
   }
   const armsBroken = hp[1]! <= 0;
   for (const arm of model.armMeshes) arm.visible = !armsBroken;
+  // Crawling: the body drops onto stubs and tips forward, so a legless mech reads at a distance.
+  const crawling = hp[0]! <= 0 && !dead;
+  model.body.position.y = crawling ? -crawlLook.dropMeters : 0;
+  model.body.rotation.x = crawling ? -(crawlLook.tiltDegrees * Math.PI) / 180 : 0;
+  for (const leg of model.legMeshes) {
+    // A stub hangs from the bottom of the torso (1.6 m up in the body's frame).
+    const length = crawling ? 1.6 * crawlLook.legStubScale : 1.6;
+    leg.scale.y = length;
+    leg.position.y = 1.6 - length / 2;
+  }
   model.group.scale.y = dead ? 0.35 : 1;
 }
 

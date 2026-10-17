@@ -31,6 +31,7 @@ export class HeadlessPlayer {
   private message: InputMessage = { t: "input", seq: 0, ...createMechInput() };
   private settleSnapshots = 0; // a big jump right after a respawn or a new map is expected, so the next few are not judged
   private wasDead = false;
+  private wasCrawling = false;
 
   constructor(
     private room: Room,
@@ -86,8 +87,11 @@ export class HeadlessPlayer {
   private onSnapshot(snap: Snapshot): void {
     if (!this.predictor) return;
     const error = this.predictor.reconcile(snap.ack, snap.you, STEP);
-    if (snap.health.dead !== this.wasDead) this.settleSnapshots = 3;
+    // Legs breaking is only known from the snapshot that reports it, so the inputs already predicted at walk speed
+    // get one unavoidable correction then, like a respawn.
+    if (snap.health.dead !== this.wasDead || snap.you.crawling !== this.wasCrawling) this.settleSnapshots = 3;
     this.wasDead = snap.health.dead;
+    this.wasCrawling = snap.you.crawling;
     if (this.settleSnapshots > 0) this.settleSnapshots--;
     else {
       this.worstCorrection = Math.max(this.worstCorrection, error);

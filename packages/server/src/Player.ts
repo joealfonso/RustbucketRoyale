@@ -26,7 +26,8 @@ export interface Player {
   looted: boolean; // this mech's wreck has been emptied
   interested: Set<number>;
   watchId: number;
-  heard: NoiseEvent[]; // sounds to pass on in the next snapshot
+  heard: NoiseEvent[];
+  sentPickupIds: number[]; // the pickups in the last snapshot, so an unchanged list is not sent again // sounds to pass on in the next snapshot
   quietUntil: Int32Array; // per noise kind, the tick before which this mech makes no new pulse // when knocked out, the mech this client says it is watching (0 for none) // ids of the mechs this client is currently being sent
   dead: boolean;
   respawnTick: number; // between matches a destroyed mech comes back on this tick

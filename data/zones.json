@@ -1,4 +1,6 @@
 {
+  "damagedBelowFraction": 0.5,
+  "brokenArmsSpreadMultiplier": 3,
   "zones": [
     {
       "name": "legs",

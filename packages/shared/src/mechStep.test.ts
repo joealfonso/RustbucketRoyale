@@ -211,3 +211,24 @@ describe("moveTowardsAngle", () => {
     expect(next).toBeCloseTo(Math.PI - 0.05);
   });
 });
+
+describe("crawling on broken legs", () => {
+  it("drags along at the crawl share of walk speed, and cannot run or dash", () => {
+    const s = createMechState(stats, 0, 0, 0, 0);
+    s.crawling = true;
+    run(s, createMechInput(), 0.1);
+    run(s, forward({ run: true }), 2);
+    expect(Math.hypot(s.vx, s.vz)).toBeCloseTo(stats.walkSpeed * stats.crawlSpeedMultiplier, 1);
+    expect(s.running).toBe(false);
+    run(s, forward({ dash: true }), DT);
+    expect(s.dashTime).toBe(0);
+  });
+
+  it("still jets", () => {
+    const s = createMechState(stats, 0, 0, 0, 0);
+    s.crawling = true;
+    run(s, createMechInput(), 0.1);
+    run(s, { ...createMechInput(), jet: true }, 0.5);
+    expect(s.y).toBeGreaterThan(1);
+  });
+});

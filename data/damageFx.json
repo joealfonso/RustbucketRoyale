@@ -1,0 +1,28 @@
+{
+  "crawl": {
+    "dropMeters": 1.3,
+    "tiltDegrees": 12,
+    "legStubScale": 0.3
+  },
+  "sparks": {
+    "damagedEverySeconds": 1.1,
+    "brokenEverySeconds": 0.5,
+    "count": 5,
+    "speed": 7,
+    "lifeSeconds": 0.35,
+    "size": 0.12,
+    "color": "#ffd166",
+    "model": null
+  },
+  "smoke": {
+    "damagedEverySeconds": 0.7,
+    "brokenEverySeconds": 0.12,
+    "riseSpeed": 2.5,
+    "lifeSeconds": 1.6,
+    "startSize": 0.35,
+    "endSize": 1.8,
+    "damagedColor": "#8a8a8a",
+    "brokenColor": "#2e2e2e",
+    "model": null
+  }
+}

@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M7 (not started)
+Current code milestone: M7 (in two gates: 7a broken parts matter; 7b repair)
 Current visual milestone: V1 (not started)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -59,3 +59,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: Gate 6b passed by Joseph's call ("start the next pass"). 6c (looting wrecks, bots looting, loot density check) started.
 - 2026-10-17: Gate 6c built, waiting for its playtest. Check: knock someone out, stand by the wreck and hold E ("Hold E: loot wreck", then a percentage with a rattle); letting go starts again; it spills their guns, grenades and plates round the wreck and their plates come off; a wreck loots once; looting shows on other people's radar; bots with nobody to fight walk over to loot and to wrecks and take things. Maps now also check loot props near every spawn.
 - 2026-10-17: Gate 6c passed by Joseph's call. M6 is done: breakable props and barrels, loot and a two slot loadout, wreck looting, bots that loot, loot density checks. M7 not started.
+- 2026-10-17: M7 started on Joseph's go, in gates 7a (broken states that change play: crawl on broken legs, wild aim and no grenades with broken arms, damaged and broken looks) and 7b (hold F to repair the worst part back to damaged; bots repair). Choices: wild aim over no shooting, repair to damaged not full, F to repair.
+- 2026-10-17: Gate 7a built, waiting for its playtest. Check: shoot a mech's legs off and it drops onto stubs and drags along slowly, can still jet but not sprint or dash; with your own legs broken you crawl the same; broken arms send your shots everywhere and G does nothing; damaged parts spark and smoke lightly, broken ones smoke black; the L / A / T bars go yellow when damaged and the track turns red when broken. Pickups are now only sent when they change (a medium match had gone over the bandwidth budget). Soak passes on all tiers at 38 to 51 kbps.

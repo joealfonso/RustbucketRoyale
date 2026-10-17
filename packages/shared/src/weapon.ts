@@ -36,7 +36,7 @@ export class FireGate {
 // GUESS: this is the M2 stand-in for the camera ray versus barrel rule that is open in docs/DECISIONS.md (decide at M3).
 export function computeShot(
   mech: MechState, targetX: number, targetY: number, targetZ: number,
-  stats: WeaponStats, random: () => number, out: Shot,
+  stats: WeaponStats, random: () => number, out: Shot, spreadMultiplier = 1,
 ): void {
   const sin = Math.sin(mech.bodyYaw), cos = Math.cos(mech.bodyYaw);
   out.ox = mech.x + cos * MUZZLE_RIGHT - sin * MUZZLE_FORWARD;
@@ -53,7 +53,7 @@ export function computeShot(
     dx /= length; dy /= length; dz /= length;
   }
 
-  const spread = (stats.spreadDegrees * Math.PI) / 180;
+  const spread = (stats.spreadDegrees * spreadMultiplier * Math.PI) / 180;
   dx += (random() - 0.5) * 2 * spread;
   dy += (random() - 0.5) * 2 * spread;
   dz += (random() - 0.5) * 2 * spread;

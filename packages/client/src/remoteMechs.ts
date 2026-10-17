@@ -58,6 +58,10 @@ export class RemoteMechs {
     }
   }
 
+  forEachModel(fn: (model: MechModel) => void): void {
+    for (const r of this.remotes.values()) fn(r.model);
+  }
+
   isBot(id: number): boolean {
     return this.remotes.get(id)?.bot === true;
   }

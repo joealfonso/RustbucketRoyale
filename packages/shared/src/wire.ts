@@ -31,6 +31,7 @@ const SNAPSHOT_HEADER_BYTES = 23;
 const SHOT_BYTES = 24;
 const INPUT_BASE_BYTES = 1 + 4 + 1 + 1 + 1 + 1 + 4 + 4;
 const EMPTY_SLOT = 255;
+const PICKUPS_UNCHANGED = 255; // in place of the pickup count: keep the list from the last snapshot
 
 const u8 = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
 
@@ -43,7 +44,7 @@ export function snapshotSize(others: number, noises = 0, pickups = 0): number {
 export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Uint8Array {
   const others = m.others.slice(0, 255);
   const noises = m.noises.slice(0, 255);
-  const pickups = m.pickups.slice(0, 255);
+  const pickups = m.pickups?.slice(0, PICKUPS_UNCHANGED - 1) ?? [];
   const buffer = new ArrayBuffer(snapshotSize(others.length, noises.length, pickups.length));
   const v = new DataView(buffer);
   let o = 0;
@@ -63,7 +64,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
   for (const n of [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer]) {
     v.setFloat32(o, n, true); o += 4;
   }
-  v.setUint8(o, (s.grounded ? 1 : 0) | (s.running ? 2 : 0) | (s.jetting ? 4 : 0) | (s.fuelLocked ? 8 : 0) | (s.staminaLocked ? 16 : 0)); o += 1;
+  v.setUint8(o, (s.grounded ? 1 : 0) | (s.running ? 2 : 0) | (s.jetting ? 4 : 0) | (s.fuelLocked ? 8 : 0) | (s.staminaLocked ? 16 : 0) | (s.crawling ? 32 : 0)); o += 1;
 
   v.setUint8(o, others.length); o += 1;
   for (const other of others) {
@@ -91,7 +92,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
   v.setUint8(o, u8(l.grenades)); o += 1;
   for (let i = 0; i < 3; i++) { v.setUint8(o, u8(l.armor[i] ?? 0)); o += 1; }
   v.setUint8(o, u8(Math.max(0, Math.min(1, m.looting)) * 255)); o += 1;
-  v.setUint8(o, pickups.length); o += 1;
+  v.setUint8(o, m.pickups === null ? PICKUPS_UNCHANGED : pickups.length); o += 1;
   for (const p of pickups) {
     v.setUint16(o, p.id & 0xffff, true); o += 2;
     v.setUint8(o, p.item); o += 1;
@@ -122,11 +123,11 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
   const you: SelfState = {
     x: f(), y: f(), z: f(), vx: f(), vz: f(), vy: f(), bodyYaw: f(), dashTime: f(), dashCooldown: f(), dashX: f(), dashZ: f(),
     fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(),
-    grounded: false, running: false, jetting: false, fuelLocked: false, staminaLocked: false,
+    grounded: false, running: false, jetting: false, crawling: false, fuelLocked: false, staminaLocked: false,
   };
   const flags = v.getUint8(o); o += 1;
   you.grounded = (flags & 1) !== 0; you.running = (flags & 2) !== 0; you.jetting = (flags & 4) !== 0;
-  you.fuelLocked = (flags & 8) !== 0; you.staminaLocked = (flags & 16) !== 0;
+  you.fuelLocked = (flags & 8) !== 0; you.staminaLocked = (flags & 16) !== 0; you.crawling = (flags & 32) !== 0;
 
   const count = v.getUint8(o); o += 1;
   if (bytes.length < o + count * OTHER_BYTES + 1) return null;
@@ -157,7 +158,9 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
   };
   o += LOADOUT_BYTES;
   const looting = v.getUint8(o) / 255; o += LOOTING_BYTES;
-  const pickupCount = v.getUint8(o); o += 1;
+  const countByte = v.getUint8(o); o += 1;
+  const unchanged = countByte === PICKUPS_UNCHANGED;
+  const pickupCount = unchanged ? 0 : countByte;
   if (bytes.length !== o + pickupCount * PICKUP_BYTES) return null;
   const pickups: PickupState[] = [];
   for (let i = 0; i < pickupCount; i++) {
@@ -167,7 +170,7 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
     });
     o += PICKUP_BYTES;
   }
-  return { t: "snapshot", tick, ack, ackAgeMs, you, health: { hp, dead, respawnIn }, match: { state, seconds, alive, total }, others, noises, loadout, looting, pickups };
+  return { t: "snapshot", tick, ack, ackAgeMs, you, health: { hp, dead, respawnIn }, match: { state, seconds, alive, total }, others, noises, loadout, looting, pickups: unchanged ? null : pickups };
 }
 
 // ---- shot

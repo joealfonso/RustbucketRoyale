@@ -15,6 +15,8 @@ export interface ZoneDef {
 // The three hit zones of a mech and the boxes that make them up, in the mech's own frame
 // (x right, y up, forward is -z), so a mech can turn and the boxes turn with it.
 export interface ZoneSet {
+  damagedBelowFraction: number; // a zone under this share of its hit points shows as damaged
+  brokenArmsSpreadMultiplier: number; // with the arms broken every shot strays this much more
   zones: ZoneDef[];
   boxes: Box[];
   boxZone: number[];
@@ -28,7 +30,10 @@ export function parseZones(raw: unknown): ZoneSet {
   const list = (raw as { zones?: unknown })?.zones;
   if (!Array.isArray(list) || list.length !== ZONE_COUNT) throw new Error("zones.json: expected legs, arms, torso");
 
-  const set: ZoneSet = { zones: [], boxes: [], boxZone: [] };
+  const top = raw as { damagedBelowFraction?: unknown; brokenArmsSpreadMultiplier?: unknown };
+  if (typeof top.damagedBelowFraction !== "number" || !(top.damagedBelowFraction > 0 && top.damagedBelowFraction < 1)) throw new Error("zones.json: damagedBelowFraction must be between 0 and 1");
+  if (typeof top.brokenArmsSpreadMultiplier !== "number" || !(top.brokenArmsSpreadMultiplier >= 1)) throw new Error("zones.json: brokenArmsSpreadMultiplier must be at least 1");
+  const set: ZoneSet = { damagedBelowFraction: top.damagedBelowFraction, brokenArmsSpreadMultiplier: top.brokenArmsSpreadMultiplier, zones: [], boxes: [], boxZone: [] };
   list.forEach((entry, zone) => {
     const z = entry as { name: string; hp?: unknown; damageMultiplier?: unknown; boxes?: unknown };
     if (z.name !== ZONE_NAMES[zone]) throw new Error(`zones.json: zone ${zone} must be "${ZONE_NAMES[zone]}"`);
@@ -62,6 +67,17 @@ export function applyDamage(hp: number[], set: ZoneSet, zone: number, amount: nu
   const taken = Math.min(hp[zone]!, wanted);
   hp[zone] = hp[zone]! - taken;
   return soaked + taken;
+}
+
+export const ZONE_INTACT = 0;
+export const ZONE_DAMAGED = 1;
+export const ZONE_BROKEN = 2;
+
+// Intact, damaged or broken, from what is left of the zone's hit points.
+export function zoneState(hp: readonly number[], set: ZoneSet, zone: number): number {
+  const left = hp[zone]!;
+  if (left <= 0) return ZONE_BROKEN;
+  return left < set.zones[zone]!.hp * set.damagedBelowFraction ? ZONE_DAMAGED : ZONE_INTACT;
 }
 
 export function isDestroyed(hp: readonly number[]): boolean {

@@ -15,6 +15,7 @@ export interface MechState {
   grounded: boolean;
   running: boolean;
   jetting: boolean;
+  crawling: boolean; // legs broken: slow, no sprint or dash, jets still work. Set by the server from hit points.
   dashTime: number; // seconds of dash left, above 0 while dashing
   dashCooldown: number;
   dashX: number; dashZ: number; // dash direction, unit length
@@ -25,7 +26,7 @@ export interface MechState {
 export function createMechState(stats: MechStats, x: number, y: number, z: number, yaw: number): MechState {
   return {
     x, y, z, vx: 0, vz: 0, vy: 0, bodyYaw: yaw,
-    grounded: false, running: false, jetting: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
+    grounded: false, running: false, jetting: false, crawling: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
     fuel: new Meter(stats.fuelMax), stamina: new Meter(stats.staminaMax),
   };
 }
@@ -60,13 +61,13 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   }
   const moving = wishLength2 > 1e-4;
 
-  s.running = input.run && moving && s.stamina.canUse;
+  s.running = input.run && moving && s.stamina.canUse && !s.crawling;
   if (s.running) s.stamina.drain(stats.runDrainPerSecond * dt, stats.staminaRegenDelay);
   else s.stamina.regen(stats.staminaRegenPerSecond, dt, stats.staminaUnlockFraction);
 
   // A dash goes the way you are steering, in any of the eight directions, or straight ahead if you are standing still.
   s.dashCooldown = Math.max(0, s.dashCooldown - dt);
-  if (input.dash && s.dashCooldown <= 0 && s.dashTime <= 0 && s.stamina.canUse && s.stamina.value >= stats.dashStaminaCost) {
+  if (input.dash && !s.crawling && s.dashCooldown <= 0 && s.dashTime <= 0 && s.stamina.canUse && s.stamina.value >= stats.dashStaminaCost) {
     let dirX = forwardX, dirZ = forwardZ;
     const length = Math.hypot(wishX, wishZ);
     if (length > 1e-4) {
@@ -93,7 +94,7 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
       }
     }
   } else {
-    const topSpeed = s.running ? stats.runSpeed : stats.walkSpeed;
+    const topSpeed = s.crawling ? stats.walkSpeed * stats.crawlSpeedMultiplier : s.running ? stats.runSpeed : stats.walkSpeed;
     const rate = (moving ? stats.acceleration : stats.deceleration) * (s.grounded ? 1 : stats.airControl);
     const toX = wishX * topSpeed - s.vx;
     const toZ = wishZ * topSpeed - s.vz;
