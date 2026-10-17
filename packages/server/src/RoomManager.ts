@@ -15,7 +15,7 @@ export class RoomManager {
   private rooms = new Map<string, Room>();
 
   constructor(
-    private makeRoom: (code: string, tier: string, bots: number) => Room,
+    private makeRoom: (code: string, tier: string, bots: number | null) => Room,
     private tiers: readonly string[],
     private defaultTier: string,
     private maxRooms: number,
@@ -27,7 +27,7 @@ export class RoomManager {
   }
 
   // `code` null means make a new room with a fresh code. The tier and bot count only matter for a room that does not exist yet.
-  join(code: string | null, tier: string | null, send: (message: ServerMessage) => void, bots = 0): Joined | null {
+  join(code: string | null, tier: string | null, send: (message: ServerMessage) => void, bots: number | null = 0): Joined | null {
     const wanted = code?.toUpperCase() ?? null;
     if (wanted !== null && !CODE_PATTERN.test(wanted)) {
       send({ t: "refused", reason: "That room code does not look right." });

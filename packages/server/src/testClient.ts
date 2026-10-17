@@ -3,7 +3,7 @@ import { loadRoomConfig } from "./config";
 import { Room, type RoomConfig } from "./Room";
 
 // A room tuned for fast tests: short countdown and results, and the flat test map.
-export function makeRoom(patch: (config: RoomConfig) => RoomConfig = (c) => c, tier = "small", bots = 0): { room: Room; config: RoomConfig } {
+export function makeRoom(patch: (config: RoomConfig) => RoomConfig = (c) => c, tier = "small", bots: number | null = 0): { room: Room; config: RoomConfig } {
   const base = loadRoomConfig();
   const config = patch({ ...base, match: { ...base.match, countdownSeconds: 0.2, resultsSeconds: 0.5 }, random: lcg(12345) });
   return { room: new Room("TEST", tier, config, bots), config };

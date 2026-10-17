@@ -44,4 +44,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: Damage now works in the lobby too (quick respawn, no effect on matches), so bots can be shot in practice. Only the countdown is safe.
 - 2026-10-17: Gate 5a passed by Joseph's call, played with the simple bots, radar and lower delay. The 5 second countdown, damage in the lobby, and bots fighting each other were all added during the playtest. 5b and 5c not started.
 - 2026-10-17: Gate 5b started on Joseph's go, with the binary packing pulled forward from M8 so bandwidth can meet the 64 kbps budget. Measured before starting: 272 / 673 / 1279 kbps per client on small / medium / large with bots.
+- 2026-10-17: Gate 5b built, waiting for its playtest. Rooms fill themselves with bots to the tier size (12 / 24 / 40 players). Check: bots go round buildings and walls, easy / normal / hard feel different, a big medium room stays smooth, the F1 panel numbers. Network is now binary and nearby-only: 40 / 53 / 63 kbps measured on small / medium / large. Also fixed: a bug that could lift a mech onto the top of a wall.
 

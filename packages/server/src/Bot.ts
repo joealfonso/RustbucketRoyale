@@ -1,4 +1,5 @@
-import { createRayHit, type BotStats, type MechInput, type MechState, type RingNow, type World } from "@rustbucket/shared";
+import { createRayHit, type BotPathStats, type BotStats, type MechInput, type MechState, type RingNow, type World } from "@rustbucket/shared";
+import type { Pathfinder } from "./Pathfinder";
 
 const DEG = Math.PI / 180;
 const EYE_HEIGHT = 2.4;
@@ -33,7 +34,29 @@ export class Bot {
   private unstuckStrafe = 1;
   private hit = createRayHit();
 
-  constructor(private stats: BotStats, private random: () => number) {}
+  // The route to where it is heading: x, z, x, z... and how far along it is.
+  private path: number[] = [];
+  private pathIndex = 0;
+  private pathGoalX = 0;
+  private pathGoalZ = 0;
+  private replanIn = 0;
+  private heading = { x: 0, z: 0 };
+
+  constructor(
+    private stats: BotStats,
+    private random: () => number,
+    private pathStats: BotPathStats,
+    private finder: Pathfinder | null,
+    readonly rating = 2, // easy 1, normal 2, hard 3, used to settle fights that are worked out on paper
+  ) {
+    this.replanIn = random() * pathStats.replanSeconds; // so a room full of bots does not all search on the same tick
+  }
+
+  // A new map means the old routes are meaningless.
+  setFinder(finder: Pathfinder | null): void {
+    this.finder = finder;
+    this.path.length = 0;
+  }
 
   think(self: MechState, targets: readonly BotTarget[], ring: RingNow | null, world: World, dt: number, out: MechInput): void {
     out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.grenade = false;
@@ -41,6 +64,7 @@ export class Bot {
     this.retargetIn -= dt;
     this.strafeIn -= dt;
     this.wanderIn -= dt;
+    this.replanIn -= dt;
 
     const target = this.pickTarget(self, targets, world);
     let wantX = 0, wantZ = 0; // the direction to travel, in the world
@@ -58,6 +82,12 @@ export class Bot {
       const distance = Math.hypot(dx, dz) || 1;
       const toward = this.preferredMovement(distance, dx / distance, dz / distance);
       wantX = toward.x; wantZ = toward.z;
+      // A fight that is a long way off is walked to along a route, so the bot does not run into a wall on the way.
+      if (distance > s.preferredDistance + 8 && distance > this.pathStats.minPathDistance) {
+        const heading = this.travel(self, target.x, target.z, dt);
+        wantX = heading.x; wantZ = heading.z;
+      }
+      if (this.random() < s.dashChancePerSecond * dt) out.dash = true; // a quick dodge sideways
       run = distance > s.preferredDistance * 1.8;
 
       const wanted = this.angleTo(self, aimX, aimY, aimZ);
@@ -72,12 +102,11 @@ export class Bot {
     } else {
       this.lastTargetId = 0;
       const goal = this.chooseGoal(self, ring);
-      const dx = goal.x - self.x, dz = goal.z - self.z;
-      const distance = Math.hypot(dx, dz) || 1;
-      if (distance > 3) { wantX = dx / distance; wantZ = dz / distance; }
+      const heading = this.travel(self, goal.x, goal.z, dt);
+      wantX = heading.x; wantZ = heading.z;
       run = goal.urgent;
       // Look where it is going.
-      this.turnToward(self, goal.x, self.y + EYE_HEIGHT, goal.z, dt);
+      this.turnToward(self, self.x + heading.x * 10, self.y + EYE_HEIGHT, self.z + heading.z * 10, dt);
     }
 
     // Stuck: it means to move but is not getting anywhere, so hop and slide sideways for a moment.
@@ -110,6 +139,36 @@ export class Bot {
     }
     out.aimYaw = this.aimYaw;
     out.aimPitch = this.aimPitch;
+  }
+
+  // The direction to walk to reach a spot. Far spots are walked to along a planned route round obstacles,
+  // near ones straight. If no route can be found it just heads straight there.
+  private travel(self: MechState, goalX: number, goalZ: number, dt: number): { x: number; z: number } {
+    const out = this.heading;
+    let tx = goalX, tz = goalZ;
+    const straight = Math.hypot(goalX - self.x, goalZ - self.z);
+
+    if (this.finder && straight > this.pathStats.minPathDistance) {
+      const goalMoved = Math.hypot(goalX - this.pathGoalX, goalZ - this.pathGoalZ) > this.pathStats.goalMoveReplan;
+      if (this.path.length === 0 || this.replanIn <= 0 || goalMoved) {
+        this.pathIndex = 0;
+        this.pathGoalX = goalX; this.pathGoalZ = goalZ;
+        this.replanIn = this.pathStats.replanSeconds * (0.8 + this.random() * 0.4);
+        if (!this.finder.findPath(self.x, self.z, goalX, goalZ, this.path)) this.path.length = 0;
+      }
+      while (this.pathIndex * 2 < this.path.length - 2 && Math.hypot(this.path[this.pathIndex * 2]! - self.x, this.path[this.pathIndex * 2 + 1]! - self.z) < this.pathStats.waypointReach) this.pathIndex++;
+      if (this.path.length > 0 && this.pathIndex * 2 < this.path.length) {
+        tx = this.path[this.pathIndex * 2]!;
+        tz = this.path[this.pathIndex * 2 + 1]!;
+      }
+    } else {
+      this.path.length = 0;
+    }
+
+    const dx = tx - self.x, dz = tz - self.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance > 3) { out.x = dx / distance; out.z = dz / distance; } else { out.x = 0; out.z = 0; }
+    return out;
   }
 
   private pickTarget(self: MechState, targets: readonly BotTarget[], world: World): BotTarget | null {

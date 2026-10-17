@@ -40,3 +40,14 @@ Well inside the 3 s budget. A browser will be several times slower than Node, st
 
 Ping read 14 ms in the browser pane, which includes the pane's own timing. Still to measure on a real connection.
 
+### Network and server cost with a full room of bots (2026-10-17, MacBook, Node 25)
+One person in a running match, the other seats filled with bots to the tier's size. Measured with `npx tsx scripts/measure-bandwidth.ts`, 60 seconds each, person standing still. Bots far from the person run in the cheap mode.
+
+| Tier | Bots | Down kbps (one person) | Snapshot bytes | Mean tick ms | 99th percentile ms | Worst ms |
+| :- | :- | :- | :- | :- | :- | :- |
+| small | 11 | 40 | 239 | 0.012 | 0.08 | 0.3 |
+| medium | 23 | 53 | 327 | 0.033 | 0.46 | 2.0 |
+| large | 39 | 63 | 387 | 0.178 | 1.96 | 8.3 |
+
+Before the packed format and nearby-only updates the same rooms measured 272, 673 and 1279 kbps. The numbers move between runs because bots wander randomly: large is right at the 64 kbps budget when many bots happen to be near the person. Upstream, a client sends about 19 bytes per input (34 when shooting) 60 times a second, around 12 to 20 kbps. Server cost per room is tiny next to the 16.7 ms tick, so one process should hold many rooms, but that is not measured yet: next is a run with 20 rooms at once.
+

@@ -2,11 +2,13 @@ import {
   FireGate, STEP, ZONE_COUNT, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule,
   decodeInput, parseClientMessage, ringAt, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
-  type BotStats, type CombatStats, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
+  type BotConfig, type CombatStats, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
-  type WeaponStats, type World, type ZoneSet,
+  type NavGrid, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
+import { AbstractFights, RATINGS, botsNeeded, pickDifficulty, type FarBot } from "./botLod";
+import { Pathfinder } from "./Pathfinder";
 import type { Player } from "./Player";
 
 const KILL_HEIGHT = -50;
@@ -20,13 +22,14 @@ interface LiveGrenade {
 
 export interface MapForRoom {
   world: World;
+  nav: NavGrid;
   spawns: [number, number, number][];
   meters: number;
 }
 
 export interface RoomConfig {
   mech: MechStats;
-  bots: BotStats;
+  bots: BotConfig;
   weapon: WeaponStats;
   grenade: GrenadeStats;
   combat: CombatStats;
@@ -68,15 +71,34 @@ export class Room {
 
   private botInput = createMechInput();
   private botTargets: BotTarget[] = [];
+  private finder: Pathfinder;
+  private autoFill: boolean;
+  private fights = new AbstractFights();
+  private farBots: FarBot[] = [];
+  private anchors: Player[] = []; // the people bots keep full AI near
 
-  // `botCount` computer players fill the room. They are capped by the spawns the map has left over from the humans.
-  constructor(readonly code: string, readonly tier: string, private config: RoomConfig, botCount = 0) {
+  // `botCount` is how many computer players to start with, up to what the map has spawns for. `null` means keep the
+  // room topped up to its tier's target size, making room for people as they arrive.
+  constructor(readonly code: string, readonly tier: string, private config: RoomConfig, botCount: number | null = 0) {
     this.random = config.random ?? Math.random;
     this.historyLength = Math.ceil(config.combat.historyMs / (STEP * 1000));
     this.seed = this.newSeed();
     this.map = config.mapFor(tier, this.seed);
-    const room = this.map.spawns.length - config.net.maxPlayers;
-    for (let i = 0; i < Math.min(botCount, Math.max(0, room)); i++) this.addBot();
+    this.finder = new Pathfinder(this.map.nav, config.bots.path);
+    this.autoFill = botCount === null;
+    if (botCount === null) this.fillBots();
+    else for (let i = 0; i < Math.min(botCount, Math.max(0, this.map.spawns.length - config.net.maxPlayers)); i++) this.addBot();
+  }
+
+  // Adds or removes bots so people plus bots match the tier's target, when the room is set to fill itself.
+  private fillBots(): void {
+    if (!this.autoFill) return;
+    const humans = this.humans().length;
+    const target = this.config.bots.fill[this.tier] ?? 12;
+    const wanted = botsNeeded(target, humans, this.map.spawns.length);
+    const bots = [...this.players.values()].filter((p) => p.bot).sort((a, b) => a.id - b.id);
+    while (bots.length > wanted) this.players.delete(bots.pop()!.id);
+    for (let i = bots.length; i < wanted; i++) this.addBot();
   }
 
   // People, not bots. A room with only bots left in it is empty.
@@ -100,11 +122,17 @@ export class Room {
     const slot = this.freeSlot();
     const id = this.nextId++;
     this.players.set(id, {
-      id, slot, bot: new Bot(this.config.bots, this.random), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
+      id, slot, bot: this.newBot(), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
       hp: createHealth(this.config.zones), interested: new Set(), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
+  }
+
+  private newBot(): Bot {
+    const difficulty = pickDifficulty(this.config.bots, this.random());
+    const stats = this.config.bots.difficulties[difficulty] ?? this.config.bots.difficulties.normal!;
+    return new Bot(stats, this.random, this.config.bots.path, this.finder, RATINGS[difficulty] ?? 2);
   }
 
   get matchState(): MatchState {
@@ -136,6 +164,8 @@ export class Room {
     this.players.set(id, player);
     if (this.hostId === 0) this.hostId = id;
 
+    // In the lobby a person arriving takes a bot's place. Mid match nothing changes.
+    if (this.state === "lobby") this.fillBots();
     send({ t: "welcome", id, code: this.code, seed: this.seed, tier: this.tier });
     this.broadcastRoom();
     return id;
@@ -146,6 +176,7 @@ export class Room {
     if (!player) return;
     this.players.delete(id);
     if (this.hostId === id) this.hostId = this.humans()[0]?.id ?? 0;
+    if (this.state === "lobby") this.fillBots();
     // Walking out of a running match counts as being knocked out.
     if (this.state === "active" && player.participant && !player.eliminated) this.checkMatchOver();
     this.broadcastRoom();
@@ -188,6 +219,8 @@ export class Room {
     else if (this.state === "results" && this.tickCount >= this.phaseEndTick) this.afterResults();
 
     if (this.state === "active" && this.ring) ringAt(this.ring, this.elapsedSeconds(), this.ringNow);
+    this.anchors = this.humans().filter((p) => p.participant && !p.dead);
+    this.farBots.length = 0;
     for (const player of this.players.values()) {
       if (player.respawnTick > 0 && this.tickCount >= player.respawnTick && this.state !== "active") this.respawnForPractice(player);
       if (player.bot) {
@@ -206,6 +239,7 @@ export class Room {
       this.recordHistory(player);
     }
 
+    this.settleFarFights();
     this.stepGrenades();
     if (this.state === "active") this.applyRing();
     if (this.tickCount % net.snapshotEvery === 0) this.broadcastSnapshots();
@@ -216,17 +250,56 @@ export class Room {
   // Only the countdown holds everyone still.
   private runBot(player: Player): void {
     const input = this.botInput;
-    if (this.state !== "countdown" && !player.dead && player.bot) {
-      this.botTargets.length = 0;
-      for (const other of this.players.values()) {
-        if (other === player || !other.participant || other.dead) continue;
-        this.botTargets.push({ id: other.id, x: other.state.x, y: other.state.y, z: other.state.z });
-      }
-      player.bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, STEP, input);
-    } else {
+    const { lod } = this.config.bots;
+    const bot = player.bot!;
+
+    if (this.state === "countdown" || player.dead) {
       Object.assign(input, createMechInput(), { aimYaw: player.state.bodyYaw });
+      this.processInput(player, input);
+      return;
     }
+
+    // A bot with nobody near is not worth thinking about every tick. It thinks and moves a few times a second,
+    // heads for where it is going, and never looks for targets. Two such bots that meet fight on paper.
+    if (!this.nearAnyPerson(player, lod.fullRangeMeters)) {
+      this.farBots.push({ id: player.id, x: player.state.x, z: player.state.z, rating: bot.rating });
+      if ((this.tickCount + player.slot) % lod.cheapEveryTicks !== 0) return;
+      this.botTargets.length = 0;
+      const dt = lod.cheapEveryTicks * STEP;
+      bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, dt, input);
+      input.fire = false; input.grenade = false; input.dash = false;
+      this.processInput(player, input, dt);
+      return;
+    }
+
+    this.botTargets.length = 0;
+    for (const other of this.players.values()) {
+      if (other === player || !other.participant || other.dead) continue;
+      this.botTargets.push({ id: other.id, x: other.state.x, y: other.state.y, z: other.state.z });
+    }
+    bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, STEP, input);
     this.processInput(player, input);
+  }
+
+  private nearAnyPerson(bot: Player, range: number): boolean {
+    for (const p of this.anchors) if (Math.hypot(p.state.x - bot.state.x, p.state.z - bot.state.z) <= range) return true;
+    return false;
+  }
+
+  // Works out the fights between far away bots, a few times a second.
+  private settleFarFights(): void {
+    const { lod } = this.config.bots;
+    if (this.tickCount % lod.cheapEveryTicks !== 0 || this.state === "countdown") return;
+    for (const { winnerId, loserId } of this.fights.update(this.farBots, lod.cheapEveryTicks * STEP, lod, this.random)) {
+      const winner = this.players.get(winnerId), loser = this.players.get(loserId);
+      if (!winner || !loser || winner.dead || loser.dead) continue;
+      for (let zone = 0; zone < ZONE_COUNT; zone++) {
+        const max = this.config.zones.zones[zone]!.hp;
+        applyDamage(loser.hp, this.config.zones, zone, lod.abstractLoserDamage * max);
+        applyDamage(winner.hp, this.config.zones, zone, lod.abstractWinnerDamage * max);
+      }
+      if (isDestroyed(loser.hp)) this.eliminate(loser, winner);
+    }
   }
 
   // The area a bot wanders in: the live ring during a match. Otherwise a circle round the nearest person, so the room
@@ -253,6 +326,9 @@ export class Room {
   private beginCountdown(): void {
     this.seed = this.newSeed();
     this.map = this.config.mapFor(this.tier, this.seed);
+    this.finder = new Pathfinder(this.map.nav, this.config.bots.path);
+    for (const p of this.players.values()) p.bot?.setFinder(this.finder);
+    this.fillBots();
     this.ring = makeRingSchedule(this.config.ring, this.tier, this.map.meters, this.random);
     this.grenades = [];
     for (const player of this.players.values()) {
@@ -364,14 +440,14 @@ export class Room {
 
   // ---- movement and combat
 
-  private processInput(player: Player, input: MechInput): void {
+  private processInput(player: Player, input: MechInput, dt = STEP): void {
     // A destroyed or frozen mech can look around but not move, jet, or fire.
     // Players watch from the lobby phases too, and everyone stands still during the countdown.
     if (player.dead || this.state === "countdown") {
       input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.grenade = false;
     }
-    stepMech(player.state, input, this.config.mech, STEP, this.map.world);
-    player.steps++;
+    stepMech(player.state, input, this.config.mech, dt, this.map.world);
+    player.steps += Math.round(dt / STEP);
 
     if (input.fire) this.tryShoot(player, input);
     if (input.grenade) this.tryThrow(player, input);

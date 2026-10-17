@@ -1,17 +1,84 @@
 {
-  "sightRange": 110,
-  "preferredDistance": 24,
-  "strafeSeconds": 1.6,
-  "aimErrorDegrees": 4,
-  "aimRetargetSeconds": 0.5,
-  "turnDegreesPerSecond": 140,
-  "fireToleranceDegrees": 6,
-  "maxFireRange": 100,
-  "reactionSeconds": 0.5,
-  "grenadeChancePerSecond": 0.05,
-  "grenadeMinRange": 14,
-  "grenadeMaxRange": 45,
-  "stuckSeconds": 1,
-  "wanderSeconds": 12,
-  "ringMargin": 15
+  "mix": {
+    "easy": 0.5,
+    "normal": 0.35,
+    "hard": 0.15
+  },
+  "fill": {
+    "small": 12,
+    "medium": 24,
+    "large": 40
+  },
+  "difficulties": {
+    "easy": {
+      "sightRange": 100,
+      "preferredDistance": 28,
+      "strafeSeconds": 2.0,
+      "aimErrorDegrees": 6,
+      "aimRetargetSeconds": 0.5,
+      "turnDegreesPerSecond": 110,
+      "fireToleranceDegrees": 7,
+      "maxFireRange": 90,
+      "reactionSeconds": 0.7,
+      "grenadeChancePerSecond": 0.03,
+      "grenadeMinRange": 14,
+      "grenadeMaxRange": 45,
+      "stuckSeconds": 1,
+      "wanderSeconds": 12,
+      "ringMargin": 15,
+      "dashChancePerSecond": 0
+    },
+    "normal": {
+      "sightRange": 120,
+      "preferredDistance": 24,
+      "strafeSeconds": 1.5,
+      "aimErrorDegrees": 3.5,
+      "aimRetargetSeconds": 0.5,
+      "turnDegreesPerSecond": 160,
+      "fireToleranceDegrees": 5,
+      "maxFireRange": 105,
+      "reactionSeconds": 0.45,
+      "grenadeChancePerSecond": 0.05,
+      "grenadeMinRange": 14,
+      "grenadeMaxRange": 45,
+      "stuckSeconds": 1,
+      "wanderSeconds": 12,
+      "ringMargin": 15,
+      "dashChancePerSecond": 0.05
+    },
+    "hard": {
+      "sightRange": 140,
+      "preferredDistance": 20,
+      "strafeSeconds": 1.1,
+      "aimErrorDegrees": 1.5,
+      "aimRetargetSeconds": 0.5,
+      "turnDegreesPerSecond": 240,
+      "fireToleranceDegrees": 3.5,
+      "maxFireRange": 130,
+      "reactionSeconds": 0.25,
+      "grenadeChancePerSecond": 0.08,
+      "grenadeMinRange": 14,
+      "grenadeMaxRange": 45,
+      "stuckSeconds": 1,
+      "wanderSeconds": 12,
+      "ringMargin": 15,
+      "dashChancePerSecond": 0.15
+    }
+  },
+  "lod": {
+    "fullRangeMeters": 300,
+    "cheapEveryTicks": 4,
+    "abstractFightRange": 30,
+    "abstractFightSeconds": 3,
+    "abstractLoserDamage": 0.4,
+    "abstractWinnerDamage": 0.15
+  },
+  "path": {
+    "cellMeters": 8,
+    "maxNodes": 6000,
+    "replanSeconds": 2,
+    "waypointReach": 4,
+    "minPathDistance": 20,
+    "goalMoveReplan": 15
+  }
 }

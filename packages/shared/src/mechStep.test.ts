@@ -169,6 +169,23 @@ describe("dash", () => {
   });
 });
 
+describe("walls", () => {
+  it("never lift a mech onto the top of a wall it runs into, whatever the numbers", () => {
+    // A tall wall at 300 different spots, with fractional edges, and a mech sprinting straight at it from several angles.
+    for (let n = 0; n < 300; n++) {
+      const edge = -20 + (n * 0.6180339887) % 7; // an irrational spacing finds the rounding cases
+      const wall = boxFromData({ name: "w", center: [0, 15, edge], size: [200, 30, 2.1], color: "" });
+      const world = new World([ground, wall]);
+      const s = createMechState(stats, (n % 5) - 2, 0, -60, 0);
+      const input = { ...createMechInput(), moveY: -1, run: true, aimYaw: 0 }; // aim yaw 0 faces -Z, so this runs toward +Z
+      let highest = 0;
+      for (let i = 0; i < 60 * 8; i++) { stepMech(s, input, stats, DT, world); highest = Math.max(highest, s.y); }
+      expect(highest, `wall at z ${edge.toFixed(4)}`).toBeLessThan(0.6);
+      expect(s.z).toBeLessThan(edge - 1.05 + 0.01);
+    }
+  });
+});
+
 describe("body turn", () => {
   it("faces where you look at once when the turn speed is 0", () => {
     const s = createMechState(stats, 0, 0, 0, 0);

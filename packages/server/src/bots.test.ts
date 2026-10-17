@@ -1,19 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { World, boxFromData, createMechInput, createMechState, parseBotStats, type MechInput, type RingNow } from "@rustbucket/shared";
+import { World, boxFromData, buildNavGrid, createMechInput, createMechState, parseBotConfig, stepMech, type Box, type MechInput, type RingNow } from "@rustbucket/shared";
 import botsJson from "../../../data/bots.json";
 import { loadRoomConfig } from "./config";
 import { Bot } from "./Bot";
+import { Pathfinder } from "./Pathfinder";
 import { Client, idle, makeRoom, startMatch } from "./testClient";
 import type { Room } from "./Room";
 
-const stats = parseBotStats(botsJson);
+const botConfig = parseBotConfig(botsJson);
+const stats = botConfig.difficulties.normal!;
 const config = loadRoomConfig();
 const DT = 1 / 60;
 const flat = new World([boxFromData({ name: "g", center: [0, -0.5, 0], size: [1000, 1, 1000], color: "" })]);
 const random = () => 0.5;
 
+const tick = (room: Room, humans: Client[], count: number) => {
+  for (let i = 0; i < count; i++) { for (const h of humans) h.send(idle()); room.tick(); }
+};
+
 function spotted(distance: number, world: World = flat) {
-  const bot = new Bot(stats, random);
+  const bot = new Bot(stats, random, botConfig.path, null);
   const self = createMechState(config.mech, 0, 0, 0, 0);
   const input = createMechInput();
   // Looks down -Z. Give it a second to turn and settle.
@@ -25,7 +31,7 @@ function spotted(distance: number, world: World = flat) {
 describe("Bot", () => {
   it("shoots at someone it can see once it has had time to react", () => {
     let fired = 0;
-    const bot = new Bot(stats, random);
+    const bot = new Bot(stats, random, botConfig.path, null);
     const self = createMechState(config.mech, 0, 0, 0, 0);
     const input = createMechInput();
     for (let i = 0; i < 180; i++) { bot.think(self, [{ id: 2, x: 0, y: 0, z: -30 }], null, flat, DT, input); if (input.fire) fired++; }
@@ -47,7 +53,7 @@ describe("Bot", () => {
   });
 
   it("heads for the middle of the ring when it is outside it", () => {
-    const bot = new Bot(stats, random);
+    const bot = new Bot(stats, random, botConfig.path, null);
     const self = createMechState(config.mech, 100, 0, 0, 0);
     const ring: RingNow = { cx: 0, cz: 0, radius: 40, stage: 1, shrinking: false, damagePerSecond: 2, secondsToChange: 10 };
     const input = createMechInput();
@@ -59,7 +65,7 @@ describe("Bot", () => {
   });
 
   it("hops when it is stuck against something", () => {
-    const bot = new Bot(stats, random);
+    const bot = new Bot(stats, random, botConfig.path, null);
     const self = createMechState(config.mech, 0, 0, 0, 0);
     const input = createMechInput();
     let jetted = false;
@@ -69,10 +75,6 @@ describe("Bot", () => {
 });
 
 describe("rooms with bots", () => {
-  const tick = (room: Room, humans: Client[], count: number) => {
-    for (let i = 0; i < count; i++) { for (const h of humans) h.send(idle()); room.tick(); }
-  };
-
   it("fill the room, are shown to people as bots, and a room of only bots counts as empty", () => {
     const { room, config: c } = makeRoom(undefined, "small", 4);
     const human = new Client(room, c);
@@ -161,5 +163,104 @@ describe("bots fighting each other", () => {
       botWasHurt = human.last()?.others.some((o) => o.dead || o.hp.some((hp, zone) => hp < [60, 60, 100][zone]!)) ?? false;
     }
     expect(botWasHurt).toBe(true);
+  });
+});
+
+describe("bots with a route", () => {
+  // A wall 30 m high and 120 m long across the middle. The bot starts south of it and the ring is north of it.
+  const wall: Box = { minX: -60, maxX: 60, minZ: -1, maxZ: 1, minY: 0, maxY: 30 };
+  const ground: Box = { minX: -200, maxX: 200, minZ: -200, maxZ: 200, minY: -1, maxY: 0 };
+  const world = new World([ground, wall]);
+  const ring: RingNow = { cx: 0, cz: 70, radius: 15, stage: 1, shrinking: false, damagePerSecond: 2, secondsToChange: 99 };
+
+  function walk(withRoute: boolean): { z: number; crossedAt: number | null } {
+    const nav = buildNavGrid([wall], 400, 0, 0, { cellMeters: 2, stepHeight: config.mech.stepHeight, mechHeight: config.mech.height });
+    const finder = withRoute ? new Pathfinder(nav, botConfig.path) : null;
+    const bot = new Bot(stats, random, botConfig.path, finder);
+    const self = createMechState(config.mech, 0, 0, -40, 0);
+    const input = createMechInput();
+    let crossedAt: number | null = null;
+    for (let i = 0; i < 60 * 70; i++) {
+      bot.think(self, [], ring, world, DT, input);
+      input.jet = false; // no hopping over a 30 m wall, so only a route can get it across
+      stepMech(self, input, config.mech, DT, world);
+      if (crossedAt === null && self.z > 5) crossedAt = i * DT;
+    }
+    return { z: self.z, crossedAt };
+  }
+
+  it("walks round a wall to reach the ring on the other side", () => {
+    const result = walk(true);
+    expect(result.crossedAt).not.toBeNull();
+    expect(result.z).toBeGreaterThan(40);
+  });
+
+  it("gets round much sooner than a bot that only slides along the wall until it finds the end", () => {
+    const withRoute = walk(true).crossedAt!;
+    const without = walk(false).crossedAt ?? Infinity;
+    expect(withRoute).toBeLessThan(without - 10);
+  });
+});
+
+describe("rooms that fill themselves", () => {
+  it("top up to the tier size with people counted, make room for people who arrive, and refill when they leave", () => {
+    const { room, config: c } = makeRoom(undefined, "small", null);
+    const target = c.bots.fill.small!;
+    const bots = (client: Client) => client.last().others.filter((o) => o.bot).length;
+
+    const first = new Client(room, c);
+    tick(room, [first], 10);
+    expect(bots(first)).toBe(target - 1);
+
+    const second = new Client(room, c);
+    tick(room, [first, second], 10);
+    expect(bots(first)).toBe(target - 2);
+
+    room.leave(second.id);
+    tick(room, [first], 10);
+    expect(bots(first)).toBe(target - 1);
+  });
+
+  it("do not change in the middle of a match, and top up again for the next one", () => {
+    const { room, config: c } = makeRoom((cfg) => ({ ...cfg, match: { ...cfg.match, resultsSeconds: 1 } }), "small", null);
+    const host = new Client(room, c);
+    startMatch(room, host);
+    const late = new Client(room, c); // arrives mid match, so watches
+    tick(room, [host, late], 10);
+    expect(late.last().others.filter((o) => o.bot).length).toBe(c.bots.fill.small! - 1);
+  });
+});
+
+describe("bots far from anyone", () => {
+  // Every bot counts as far when the full AI range is tiny.
+  const farAway = (cfg: ReturnType<typeof loadRoomConfig>) => ({
+    ...cfg,
+    bots: { ...cfg.bots, lod: { ...cfg.bots.lod, fullRangeMeters: 5 } },
+    net: { ...cfg.net, interestRange: 1e6 }, // so the person can see everything for the test
+  });
+
+  it("do not shoot at anyone, since they are not looking for targets", () => {
+    const { room, config: c } = makeRoom(farAway, "small", 3);
+    const human = new Client(room, c);
+    tick(room, [human], 60 * 15);
+    expect(human.messages.some((m) => m.t === "shot")).toBe(false);
+  });
+
+  it("fight on paper when two meet, and one goes down with nothing but a result", () => {
+    const { room, config: c } = makeRoom((cfg) => {
+      const base = farAway(cfg);
+      const map = cfg.mapFor("small", 0);
+      // Two bots 6 m apart, and the person well away from them.
+      const spawns: [number, number, number][] = map.spawns.map((s, i) => (i === 0 ? [20, 0.1, 400] : i === 1 ? [26, 0.1, 400] : s));
+      return { ...base, mapFor: () => ({ ...map, spawns }) };
+    }, "small", 2);
+    const human = new Client(room, c);
+    let hurt = false;
+    for (let i = 0; i < 60 * 40 && !hurt; i++) {
+      human.send(idle()); room.tick();
+      hurt = human.last()?.others.some((o) => o.dead || o.hp.some((hp, zone) => hp < [60, 60, 100][zone]!)) ?? false;
+    }
+    expect(hurt).toBe(true);
+    expect(human.messages.some((m) => m.t === "shot")).toBe(false);
   });
 });

@@ -15,8 +15,9 @@ export interface RunningServer {
 // WebSocket front door. A connection to ws://host:port/?room=ABCD&tier=medium&bots=5 joins that room, making it
 // if it is new. With no room in the address it makes a fresh room. Every room ticks at 60 Hz.
 // Not done yet: check the Origin header against an allow list before this goes on a public host.
-// `defaultBots` is how many bots a new room gets when its link does not say (`&bots=0` asks for none).
-export function startServer(manager: RoomManager, port: number, defaultBots = 0): Promise<RunningServer> {
+// `defaultBots` is how many bots a new room gets when its link does not say (`&bots=0` asks for none). null keeps
+// the room topped up to its tier's target size.
+export function startServer(manager: RoomManager, port: number, defaultBots: number | null = 0): Promise<RunningServer> {
   const wss = new WebSocketServer({ port, maxPayload: MAX_MESSAGE_BYTES });
 
   wss.on("connection", (socket, request: IncomingMessage) => {

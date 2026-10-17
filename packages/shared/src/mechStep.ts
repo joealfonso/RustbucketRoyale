@@ -123,11 +123,15 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   moveVertical(s, stats, s.vy * dt, world);
 }
 
+// Touching is not overlapping. Without a little room for rounding, a mech pushed flush against a wall can read
+// as a hair inside it, and the vertical step then lifts it onto the top of the wall.
+const TOUCH = 1e-4;
+
 function overlaps(s: MechState, stats: MechStats, b: Box): boolean {
   return (
-    s.x - stats.halfWidth < b.maxX && s.x + stats.halfWidth > b.minX &&
-    s.y < b.maxY && s.y + stats.height > b.minY &&
-    s.z - stats.halfWidth < b.maxZ && s.z + stats.halfWidth > b.minZ
+    s.x - stats.halfWidth < b.maxX - TOUCH && s.x + stats.halfWidth > b.minX + TOUCH &&
+    s.y < b.maxY - TOUCH && s.y + stats.height > b.minY + TOUCH &&
+    s.z - stats.halfWidth < b.maxZ - TOUCH && s.z + stats.halfWidth > b.minZ + TOUCH
   );
 }
 

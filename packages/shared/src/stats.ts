@@ -82,6 +82,34 @@ export interface BotStats {
   stuckSeconds: number;
   wanderSeconds: number;
   ringMargin: number; // they head for the middle of the ring when this close to its edge
+  dashChancePerSecond: number; // how often a bot in a fight dashes sideways to dodge
+}
+
+// How far from every person a bot can be before it switches to the cheap mode, and how that mode behaves.
+export interface BotLodStats {
+  fullRangeMeters: number;
+  cheapEveryTicks: number; // a far bot thinks and moves only this often
+  abstractFightRange: number; // two far bots closer than this fight on paper
+  abstractFightSeconds: number;
+  abstractLoserDamage: number; // share of every zone's hit points the loser loses each round
+  abstractWinnerDamage: number;
+}
+
+export interface BotPathStats {
+  cellMeters: number;
+  maxNodes: number; // the most cells one search looks at
+  replanSeconds: number;
+  waypointReach: number;
+  minPathDistance: number; // nearer goals are walked to directly
+  goalMoveReplan: number; // plan again when the goal has moved this far
+}
+
+export interface BotConfig {
+  mix: Record<string, number>; // share of each difficulty when bots are added
+  fill: Record<string, number>; // total players (people plus bots) a room tops up to, by tier
+  difficulties: Record<string, BotStats>;
+  lod: BotLodStats;
+  path: BotPathStats;
 }
 
 export interface HudStats {
@@ -153,7 +181,7 @@ const COMBAT_KEYS: (keyof CombatStats & string)[] = ["lagCompensationMs", "defau
 const BOT_KEYS: (keyof BotStats & string)[] = [
   "sightRange", "preferredDistance", "strafeSeconds", "aimErrorDegrees", "aimRetargetSeconds", "turnDegreesPerSecond",
   "fireToleranceDegrees", "maxFireRange", "reactionSeconds", "grenadeChancePerSecond", "grenadeMinRange", "grenadeMaxRange",
-  "stuckSeconds", "wanderSeconds", "ringMargin",
+  "stuckSeconds", "wanderSeconds", "ringMargin", "dashChancePerSecond",
 ];
 
 const NET_KEYS: (keyof NetStats & string)[] = [
@@ -164,7 +192,29 @@ const NET_KEYS: (keyof NetStats & string)[] = [
 export const parseNetStats = (raw: unknown) => parseNumbers<NetStats>(raw, "net.json", NET_KEYS);
 export const parseGrenadeStats = (raw: unknown) => parseNumbers<GrenadeStats>(raw, "grenade.json", GRENADE_KEYS);
 export const parseCombatStats = (raw: unknown) => parseNumbers<CombatStats>(raw, "combat.json", COMBAT_KEYS);
-export const parseBotStats = (raw: unknown) => parseNumbers<BotStats>(raw, "bots.json", BOT_KEYS);
+export const parseBotStats = (raw: unknown, name = "bots.json") => parseNumbers<BotStats>(raw, name, BOT_KEYS);
+
+const LOD_KEYS: (keyof BotLodStats & string)[] = ["fullRangeMeters", "cheapEveryTicks", "abstractFightRange", "abstractFightSeconds", "abstractLoserDamage", "abstractWinnerDamage"];
+const PATH_KEYS: (keyof BotPathStats & string)[] = ["cellMeters", "maxNodes", "replanSeconds", "waypointReach", "minPathDistance", "goalMoveReplan"];
+
+export function parseBotConfig(raw: unknown): BotConfig {
+  const d = raw as Record<string, Record<string, unknown>>;
+  const numbersIn = (obj: unknown, what: string): Record<string, number> => {
+    if (typeof obj !== "object" || obj === null) throw new Error(`bots.json: ${what} must be an object`);
+    for (const [k, v] of Object.entries(obj)) if (typeof v !== "number" || !Number.isFinite(v)) throw new Error(`bots.json: ${what}.${k} must be a number`);
+    return obj as Record<string, number>;
+  };
+  const difficulties: Record<string, BotStats> = {};
+  for (const [name, stats] of Object.entries(d?.difficulties ?? {})) difficulties[name] = parseBotStats(stats, `bots.json difficulties.${name}`);
+  if (!difficulties.normal) throw new Error("bots.json: needs a normal difficulty");
+  const mix = numbersIn(d?.mix, "mix");
+  for (const name of Object.keys(mix)) if (!difficulties[name]) throw new Error(`bots.json: mix names unknown difficulty "${name}"`);
+  return {
+    mix, fill: numbersIn(d?.fill, "fill"), difficulties,
+    lod: parseNumbers<BotLodStats>(d?.lod, "bots.json lod", LOD_KEYS),
+    path: parseNumbers<BotPathStats>(d?.path, "bots.json path", PATH_KEYS),
+  };
+}
 export const parseHudStats = (raw: unknown) => parseNumbers<HudStats>(raw, "hud.json", ["radarRangeMeters"]);
 export const parseMechStats = (raw: unknown) => parseNumbers<MechStats>(raw, "mech.json", MECH_KEYS);
 export const parseWeaponStats = (raw: unknown) => parseNumbers<WeaponStats>(raw, "weapon.json", WEAPON_KEYS);
