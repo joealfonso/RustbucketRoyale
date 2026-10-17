@@ -90,7 +90,7 @@ Every map has crates, junk piles and red barrels placed by the seed. Shoot them 
 Broken crates and junk now drop glowing loot: grenades and armor plates you walk over, and two new guns you take with E. Two weapon slots on 1 and 2 or the wheel: the start Autocannon, a close-range Scattergun and a slow, hard-hitting Spike Driver. Plates bolt onto the mech and soak hits first. Grenades are counted now, one to start.
 
 ## 11. Gate 6c: picking over the wrecks
-*Passed 16:52. Commit `3847272`.*
+*Passed 16:39. Commit `3847272`.*
 
 ![Knocked out first and already looted: both slots empty, no grenades, Bot 5 standing over another wreck](11-6c-looted-by-a-bot.jpg)
 
