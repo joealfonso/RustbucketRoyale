@@ -13,6 +13,7 @@ export interface InputMessage {
   run: boolean;
   jet: boolean;
   fire: boolean;
+  grenade: boolean;
   targetX: number;
   targetY: number;
   targetZ: number;
@@ -37,6 +38,15 @@ export interface OtherState {
   yaw: number;
   running: boolean;
   jetting: boolean;
+  dead: boolean;
+  hp: number[]; // legs, arms, torso
+}
+
+// Your own health. Kept apart from SelfState because it never feeds back into movement.
+export interface HealthState {
+  hp: number[];
+  dead: boolean;
+  respawnIn: number; // seconds left until respawn while dead
 }
 
 export interface ShotMessage {
@@ -44,13 +54,40 @@ export interface ShotMessage {
   id: number;
   ox: number; oy: number; oz: number;
   dx: number; dy: number; dz: number;
+  length: number; // how far the shot travelled before it hit something
+  hitMech: boolean;
+}
+
+// Sent to the shooter only: what they hit. zone is -1 for splash damage.
+export interface HitMessage {
+  t: "hit";
+  targetId: number;
+  zone: number;
+  damage: number;
+  killed: boolean;
+  x: number; y: number; z: number;
+}
+
+export interface GrenadeMessage {
+  t: "grenade";
+  id: number;
+  x: number; y: number; z: number;
+  vx: number; vy: number; vz: number;
+}
+
+export interface ExplodeMessage {
+  t: "explode";
+  x: number; y: number; z: number;
 }
 
 export type ServerMessage =
   | { t: "welcome"; id: number }
   | { t: "full" }
-  | { t: "snapshot"; tick: number; ack: number; you: SelfState; others: OtherState[] }
-  | ShotMessage;
+  | { t: "snapshot"; tick: number; ack: number; you: SelfState; health: HealthState; others: OtherState[] }
+  | ShotMessage
+  | HitMessage
+  | GrenadeMessage
+  | ExplodeMessage;
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -70,7 +107,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 
   const numbers = [m.seq, m.moveX, m.moveY, m.aimYaw, m.aimPitch, m.targetX, m.targetY, m.targetZ];
   if (!numbers.every(finite)) return null;
-  if (typeof m.run !== "boolean" || typeof m.jet !== "boolean" || typeof m.fire !== "boolean") return null;
+  if (typeof m.run !== "boolean" || typeof m.jet !== "boolean" || typeof m.fire !== "boolean" || typeof m.grenade !== "boolean") return null;
   if (!Number.isInteger(m.seq) || (m.seq as number) < 1) return null;
 
   return {
@@ -83,6 +120,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     run: m.run,
     jet: m.jet,
     fire: m.fire,
+    grenade: m.grenade,
     targetX: m.targetX as number,
     targetY: m.targetY as number,
     targetZ: m.targetZ as number,
@@ -97,6 +135,7 @@ export function toMechInput(message: InputMessage, out: MechInput): void {
   out.run = message.run;
   out.jet = message.jet;
   out.fire = message.fire;
+  out.grenade = message.grenade;
   out.targetX = message.targetX;
   out.targetY = message.targetY;
   out.targetZ = message.targetZ;

@@ -25,10 +25,11 @@ export interface RayHit {
   normalX: number;
   normalY: number;
   normalZ: number;
+  index: number; // which box in the list was hit
 }
 
 export function createRayHit(): RayHit {
-  return { distance: 0, normalX: 0, normalY: 0, normalZ: 0 };
+  return { distance: 0, normalX: 0, normalY: 0, normalZ: 0, index: -1 };
 }
 
 // Slab test against every box, keeping the nearest hit. Direction must be unit length.
@@ -76,6 +77,7 @@ export function raycastBoxes(
       best = tMin;
       found = true;
       out.distance = tMin;
+      out.index = i;
       out.normalX = nx; out.normalY = ny; out.normalZ = nz;
     }
   }

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import {
-  boxFromData, parseMechStats, parseNetStats, parseWeaponStats, type BoxData,
+  boxFromData, parseCombatStats, parseGrenadeStats, parseMechStats, parseNetStats, parseWeaponStats, parseZones, type BoxData,
 } from "@rustbucket/shared";
 import type { RoomConfig } from "./Room";
 
@@ -16,7 +16,10 @@ export function loadRoomConfig(): RoomConfig {
   return {
     mech: parseMechStats(readJson("mech.json")),
     weapon: parseWeaponStats(readJson("weapon.json")),
+    grenade: parseGrenadeStats(readJson("grenade.json")),
+    combat: parseCombatStats(readJson("combat.json")),
     net: parseNetStats(readJson("net.json")),
+    zones: parseZones(readJson("zones.json")),
     boxes: map.boxes.map(boxFromData),
     spawn: map.spawn,
   };

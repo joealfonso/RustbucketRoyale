@@ -17,8 +17,6 @@ No accounts, no saved progression in v1. Avoids a server that stores player data
 ## 2026-10-17: AI generated art is reference only
 AI output is allowed for reference, mood, and blockout. Nothing AI generated ships as is. Everything is rebuilt and repainted by hand and logged in `docs/ASSETS.md`.
 
-## Open: which wins when the camera ray and the weapon barrel disagree
-Decide at M3 and record it here.
 
 ## 2026-10-17: Cinemachine 3 for the camera, direct Input System polling
 Cinemachine's third person follow gives the over-the-shoulder camera, wall avoidance and screen shake (impulse) for free. Input is read straight from Keyboard and Mouse into a MechInput struct, with no action asset, so bots can fill the same struct later. Cost: rebinding keys will need real input actions later.
@@ -55,3 +53,16 @@ The input carries the world point under the crosshair. The server fires from its
 
 ## 2026-10-17: JSON messages, everyone sees everyone (for now)
 Easy to read while building. Binary packing and nearby only snapshots come at the bandwidth pass (M8) and with bots (M4/M5). Cost: inputs cost roughly 48 kbps upstream, near the 64 kbps budget, so this must be packed before bots and 8 players.
+
+## 2026-10-17: Aim rule: the camera picks the point, the barrel has to be able to reach it
+The client sends the world point under the crosshair. The server fires from the barrel toward that point. If a wall is between the barrel and the point, the shot hits the wall. So what the crosshair shows is almost always what you hit, and peeking round corners with the barrel still counts. Settles the open question from M1.
+
+## 2026-10-17: Hitscan with a short rewind, not flying bullets
+The server checks a shot instantly against where each target stood about 150 ms ago (data/combat.json), because the shooter was looking at a slightly old picture. The flying bullet on screen is only a fast tracer. Real projectile hits would need lag compensation on every flight frame for little gain at this speed. Cost: the 150 ms is a fixed guess, not each player's measured delay, and the rewind makes it possible to be hit just after running behind cover.
+
+## 2026-10-17: Grenade splash hits every zone, walls block it
+A blast damages legs, arms and torso together, scaled by distance, so a close one wrecks parts and makes a story. Includes the thrower. Client and server fly the same deterministic arc, so only the throw and the blast are sent.
+
+## 2026-10-17: Destroyed mechs respawn after 3 seconds (stopgap until M5)
+Torso at zero destroys the mech. It looks around but cannot move or fire, then returns at its spawn with full health. This keeps playtests rolling until the real match loop and spectating land at M5.
+

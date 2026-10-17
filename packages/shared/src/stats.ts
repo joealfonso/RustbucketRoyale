@@ -35,6 +35,28 @@ export interface WeaponStats {
   spreadDegrees: number;
   maxAimDistance: number;
   shakeForce: number;
+  damage: number;
+}
+
+export interface GrenadeStats {
+  throwSpeed: number;
+  throwLift: number;
+  gravity: number;
+  bounce: number;
+  friction: number;
+  radius: number;
+  fuseSeconds: number;
+  blastRadius: number;
+  damage: number;
+  cooldownSeconds: number;
+  shakeRadius: number; // blasts closer than this shake the camera
+  shakeForce: number;
+}
+
+export interface CombatStats {
+  lagCompensationMs: number;
+  historyMs: number;
+  respawnSeconds: number;
 }
 
 export interface CameraStats {
@@ -83,11 +105,16 @@ const MECH_KEYS: (keyof MechStats & string)[] = [
   "mouseSensitivity", "minPitch", "maxPitch",
 ];
 const WEAPON_KEYS: (keyof WeaponStats & string)[] = [
-  "shotsPerSecond", "projectileSpeed", "projectileLifetime", "spreadDegrees", "maxAimDistance", "shakeForce",
+  "shotsPerSecond", "projectileSpeed", "projectileLifetime", "spreadDegrees", "maxAimDistance", "shakeForce", "damage",
 ];
 const CAMERA_KEYS: (keyof CameraStats & string)[] = [
   "fov", "distance", "shoulderX", "pivotHeight", "radius", "near", "pullOutSpeed",
 ];
+
+const GRENADE_KEYS: (keyof GrenadeStats & string)[] = [
+  "throwSpeed", "throwLift", "gravity", "bounce", "friction", "radius", "fuseSeconds", "blastRadius", "damage", "cooldownSeconds", "shakeRadius", "shakeForce",
+];
+const COMBAT_KEYS: (keyof CombatStats & string)[] = ["lagCompensationMs", "historyMs", "respawnSeconds"];
 
 const NET_KEYS: (keyof NetStats & string)[] = [
   "snapshotEvery", "maxPlayers", "maxInputsPerTick", "maxQueuedInputs", "maxMessagesPerSecond",
@@ -95,6 +122,8 @@ const NET_KEYS: (keyof NetStats & string)[] = [
 ];
 
 export const parseNetStats = (raw: unknown) => parseNumbers<NetStats>(raw, "net.json", NET_KEYS);
+export const parseGrenadeStats = (raw: unknown) => parseNumbers<GrenadeStats>(raw, "grenade.json", GRENADE_KEYS);
+export const parseCombatStats = (raw: unknown) => parseNumbers<CombatStats>(raw, "combat.json", COMBAT_KEYS);
 export const parseMechStats = (raw: unknown) => parseNumbers<MechStats>(raw, "mech.json", MECH_KEYS);
 export const parseWeaponStats = (raw: unknown) => parseNumbers<WeaponStats>(raw, "weapon.json", WEAPON_KEYS);
 export const parseCameraStats = (raw: unknown) => parseNumbers<CameraStats>(raw, "camera.json", CAMERA_KEYS);

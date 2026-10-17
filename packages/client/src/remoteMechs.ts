@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { OtherState } from "@rustbucket/shared";
-import { createMechModel } from "./mechModel";
+import { createMechModel, setMechDamage, type MechModel } from "./mechModel";
 
 interface Sample {
   time: number;
@@ -8,7 +8,7 @@ interface Sample {
 }
 
 interface Remote {
-  group: THREE.Group;
+  model: MechModel;
   samples: Sample[];
   seen: boolean;
 }
@@ -20,7 +20,7 @@ const MAX_SAMPLES = 12;
 export class RemoteMechs {
   private remotes = new Map<number, Remote>();
 
-  constructor(private scene: THREE.Scene, private delayMs: number) {}
+  constructor(private scene: THREE.Scene, private delayMs: number, private zoneMaxHp: readonly number[]) {}
 
   get count(): number {
     return this.remotes.size;
@@ -32,19 +32,20 @@ export class RemoteMechs {
     for (const o of others) {
       let remote = this.remotes.get(o.id);
       if (!remote) {
-        const group = createMechModel("#2f7fd0");
-        this.scene.add(group);
-        remote = { group, samples: [], seen: true };
+        const model = createMechModel("#2f7fd0", this.zoneMaxHp);
+        this.scene.add(model.group);
+        remote = { model, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;
+      setMechDamage(remote.model, o.hp, o.dead);
       remote.samples.push({ time: nowMs, x: o.x, y: o.y, z: o.z, yaw: o.yaw });
       if (remote.samples.length > MAX_SAMPLES) remote.samples.shift();
     }
 
     for (const [id, remote] of this.remotes) {
       if (!remote.seen) {
-        this.scene.remove(remote.group);
+        this.scene.remove(remote.model.group);
         this.remotes.delete(id);
       }
     }
@@ -64,10 +65,10 @@ export class RemoteMechs {
       const span = b.time - a.time;
       const t = span > 0 ? Math.min(1, Math.max(0, (renderTime - a.time) / span)) : 0;
 
-      remote.group.position.set(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t);
+      remote.model.group.position.set(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t);
       let dyaw = b.yaw - a.yaw;
       dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-      remote.group.rotation.y = a.yaw + dyaw * t;
+      remote.model.group.rotation.y = a.yaw + dyaw * t;
     }
   }
 }

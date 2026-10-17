@@ -8,3 +8,5 @@ export * from "./protocol";
 export * from "./mechWire";
 export * from "./weapon";
 export * from "./prediction";
+export * from "./zones";
+export * from "./grenade";

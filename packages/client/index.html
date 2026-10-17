@@ -19,6 +19,14 @@
       #fuel { bottom: 50px; } #fuel > div { background: #ff991a; }
       #stamina { bottom: 30px; } #stamina > div { background: #4dccff; }
       .bar.locked > div { background: #e03030; }
+      #crosshair.hit i { background: #ff4040; }
+      #crosshair.kill i { background: #ff4040; transform: scale(1.8); }
+      #zones { position: fixed; left: 20px; bottom: 80px; display: grid; grid-template-columns: 14px 120px; gap: 4px 8px; color: #fff; font-size: 11px; pointer-events: none; text-shadow: 0 0 2px #000; }
+      #zones .track { height: 8px; margin-top: 3px; background: rgba(0,0,0,.6); }
+      #zones .track > div { height: 100%; background: #6ddc6d; }
+      #hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 160px 40px rgba(220,30,30,.75); transition: opacity .4s; }
+      #hurt.on { opacity: 1; transition: none; }
+      #status { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); color: #fff; font-size: 26px; text-shadow: 0 0 6px #000; pointer-events: none; }
       #hint { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.45); font-size: 18px; text-align: center; line-height: 1.6; cursor: pointer; }
       #hint small { opacity: .75; font-size: 14px; }
       #hint.hidden { display: none; }
@@ -27,11 +35,18 @@
   <body>
     <canvas id="game"></canvas>
     <div id="crosshair"><i class="h l"></i><i class="h r"></i><i class="v t"></i><i class="v b"></i><i class="dot"></i></div>
+    <div id="hurt"></div>
+    <div id="status"></div>
+    <div id="zones">
+      <span>L</span><div class="track"><div></div></div>
+      <span>A</span><div class="track"><div></div></div>
+      <span>T</span><div class="track"><div></div></div>
+    </div>
     <div id="fuel" class="bar"><div></div></div>
     <div id="stamina" class="bar"><div></div></div>
     <div id="hint">
       Click to play<br />
-      <small>WASD move · Mouse look · Shift run · Space jets · Click fire<br />F1 tuning panel · Esc free the mouse · R respawn</small>
+      <small>WASD move · Mouse look · Shift run · Space jets · Click fire<br />G grenade · F1 tuning panel · Esc free the mouse · R respawn</small>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

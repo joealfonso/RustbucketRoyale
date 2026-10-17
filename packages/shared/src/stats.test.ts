@@ -2,13 +2,19 @@ import { describe, expect, it } from "vitest";
 import mechJson from "../../../data/mech.json";
 import weaponJson from "../../../data/weapon.json";
 import cameraJson from "../../../data/camera.json";
-import { parseCameraStats, parseMechStats, parseWeaponStats, secondsToCross } from "./stats";
+import grenadeJson from "../../../data/grenade.json";
+import combatJson from "../../../data/combat.json";
+import netJson from "../../../data/net.json";
+import { parseCameraStats, parseCombatStats, parseGrenadeStats, parseMechStats, parseNetStats, parseWeaponStats, secondsToCross } from "./stats";
 
 describe("stats", () => {
   it("accepts the shipped data files", () => {
     expect(() => parseMechStats(mechJson)).not.toThrow();
     expect(() => parseWeaponStats(weaponJson)).not.toThrow();
     expect(() => parseCameraStats(cameraJson)).not.toThrow();
+    expect(() => parseGrenadeStats(grenadeJson)).not.toThrow();
+    expect(() => parseCombatStats(combatJson)).not.toThrow();
+    expect(() => parseNetStats(netJson)).not.toThrow();
   });
 
   it("rejects a missing or non numeric field", () => {

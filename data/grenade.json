@@ -1,0 +1,14 @@
+{
+  "throwSpeed": 24,
+  "throwLift": 6,
+  "gravity": 25,
+  "bounce": 0.45,
+  "friction": 0.7,
+  "radius": 0.25,
+  "fuseSeconds": 2,
+  "blastRadius": 8,
+  "damage": 60,
+  "cooldownSeconds": 3,
+  "shakeRadius": 30,
+  "shakeForce": 0.7
+}

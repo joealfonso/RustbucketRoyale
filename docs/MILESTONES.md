@@ -32,3 +32,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: M1 (web) passed by Joseph's call after playing it. Camera raised and crosshair added during the playtest. Moving to M2.
 - 2026-10-17: M2 built, waiting for its gate. To play: `npm run server`, `npm run dev`, open two tabs at http://localhost:5173/?online.
 - 2026-10-17: M2 passed by Joseph's call after two-tab play: players see each other, shots show. Bullets do not hit mechs yet, by design (M3). Moving to M3.
+- 2026-10-17: M3 built, waiting for its gate. To play: stop any old server, `npm run server`, `npm run dev`, open two tabs at http://localhost:5173/?online. Shoot the other mech, press G for a grenade. Tuning panel sliders only change your own client, so online they can rubber-band you.

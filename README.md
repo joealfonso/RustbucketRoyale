@@ -16,7 +16,7 @@ The first Unity prototype is on the `unity-prototype` branch, kept for reference
 npm install
 npm run dev
 ```
-Open http://localhost:5173, click the page, play. F1 opens the tuning panel.
+Open http://localhost:5173, click the page, play. G throws a grenade. F1 opens the tuning panel.
 
 To play online, start the server in a second terminal and open two tabs:
 ```
@@ -25,4 +25,4 @@ npm run server
 http://localhost:5173/?online
 
 ## Status
-M1 passed. M2 (authoritative server, two browsers, prediction) is built and waiting for its playtest gate.
+M1 passed. M2 passed. M3 (hits, damage zones, grenades) is built and waiting for its playtest gate.

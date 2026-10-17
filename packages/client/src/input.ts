@@ -60,6 +60,7 @@ export class Input {
     out.run = active && (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight"));
     out.jet = active && this.keys.has("Space");
     out.fire = active && this.mouseDown;
+    out.grenade = active && this.keys.has("KeyG");
   }
 
   // Takes the mouse movement since the last call.

@@ -8,6 +8,7 @@ export interface MechInput {
   run: boolean;
   jet: boolean;
   fire: boolean;
+  grenade: boolean;
   // World point under the crosshair. Only used when firing. The server shoots from the barrel toward it.
   targetX: number;
   targetY: number;
@@ -15,5 +16,5 @@ export interface MechInput {
 }
 
 export function createMechInput(): MechInput {
-  return { moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0, run: false, jet: false, fire: false, targetX: 0, targetY: 0, targetZ: 0 };
+  return { moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0, run: false, jet: false, fire: false, grenade: false, targetX: 0, targetY: 0, targetZ: 0 };
 }

@@ -9,6 +9,7 @@ export class Projectiles {
   private vy: Float32Array;
   private vz: Float32Array;
   private life: Float32Array;
+  private impactAtEnd: Uint8Array;
   private next = 0;
   private hit: RayHit = createRayHit();
 
@@ -24,9 +25,10 @@ export class Projectiles {
     this.vy = new Float32Array(count);
     this.vz = new Float32Array(count);
     this.life = new Float32Array(count);
+    this.impactAtEnd = new Uint8Array(count);
   }
 
-  spawn(x: number, y: number, z: number, dx: number, dy: number, dz: number, speed: number, lifetime: number): void {
+  spawn(x: number, y: number, z: number, dx: number, dy: number, dz: number, speed: number, lifetime: number, impactAtEnd: boolean): void {
     const i = this.next;
     this.next = (this.next + 1) % this.count;
     this.meshes[i]!.position.set(x, y, z);
@@ -35,6 +37,7 @@ export class Projectiles {
     this.vy[i] = dy * speed;
     this.vz[i] = dz * speed;
     this.life[i] = lifetime;
+    this.impactAtEnd[i] = impactAtEnd ? 1 : 0;
   }
 
   update(dt: number, boxes: readonly Box[]): void {
@@ -59,7 +62,11 @@ export class Projectiles {
 
       p.x += sx; p.y += sy; p.z += sz;
       this.life[i]! -= dt;
-      if (this.life[i]! <= 0) this.kill(i);
+      if (this.life[i]! <= 0) {
+        // A tracer that ended on a mech: flash there, since no map box was hit.
+        if (this.impactAtEnd[i]) this.impacts.spawn(p.x, p.y, p.z, 0.15);
+        this.kill(i);
+      }
     }
   }
 

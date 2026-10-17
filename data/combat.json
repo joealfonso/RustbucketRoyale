@@ -1,0 +1,5 @@
+{
+  "lagCompensationMs": 150,
+  "historyMs": 400,
+  "respawnSeconds": 3
+}

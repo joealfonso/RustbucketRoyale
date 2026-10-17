@@ -1,37 +1,8 @@
 import { describe, expect, it } from "vitest";
-import {
-  Predictor, STEP, createMechInput, type MechInput, type ServerMessage,
-} from "@rustbucket/shared";
+import { STEP, type MechInput, type ServerMessage } from "@rustbucket/shared";
 import { loadRoomConfig } from "./config";
 import { Room } from "./Room";
-
-type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
-
-function inputMessage(seq: number, input: MechInput): string {
-  return JSON.stringify({ t: "input", seq, ...input });
-}
-
-class Client {
-  messages: ServerMessage[] = [];
-  id = 0;
-  predictor!: Predictor;
-  seq = 0;
-  constructor(public room: Room, private config = loadRoomConfig()) {
-    this.id = room.join((m) => this.messages.push(m)) ?? 0;
-    // Start where the server put this player (slot = join order here) so the first snapshot is not a jump.
-    const [x, y, z] = config.spawn;
-    this.predictor = new Predictor(config.mech, config.boxes, x + (this.id - 1 - 3.5) * config.net.spawnSpacing, y, z, Math.PI);
-  }
-  send(input: MechInput): void {
-    const seq = this.predictor.step(input, STEP);
-    this.room.receive(this.id, inputMessage(seq, input));
-  }
-  snapshots(): Snapshot[] {
-    return this.messages.filter((m): m is Snapshot => m.t === "snapshot");
-  }
-}
-
-const forward = (extra: Partial<MechInput> = {}): MechInput => ({ ...createMechInput(), moveY: 1, aimYaw: Math.PI, ...extra });
+import { Client, forward, inputMessage, type Snapshot } from "./testClient";
 
 describe("Room", () => {
   it("welcomes players, shows them to each other, and refuses a ninth", () => {

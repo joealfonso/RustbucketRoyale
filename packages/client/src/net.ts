@@ -1,4 +1,4 @@
-import type { InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
+import type { ExplodeMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
 
 type SnapshotMessage = Extract<ServerMessage, { t: "snapshot" }>;
 type ShotMessage = Extract<ServerMessage, { t: "shot" }>;
@@ -10,13 +10,16 @@ export class NetClient {
   onWelcome?: (id: number) => void;
   onSnapshot?: (snapshot: SnapshotMessage) => void;
   onShot?: (shot: ShotMessage) => void;
+  onHit?: (hit: HitMessage) => void;
+  onGrenade?: (grenade: GrenadeMessage) => void;
+  onExplode?: (explosion: ExplodeMessage) => void;
   onClose?: (reason: string) => void;
 
   private socket: WebSocket;
   // Reused every send so the frame loop does not build a new object each time.
   private message: InputMessage = {
     t: "input", seq: 0, moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0,
-    run: false, jet: false, fire: false, targetX: 0, targetY: 0, targetZ: 0,
+    run: false, jet: false, fire: false, grenade: false, targetX: 0, targetY: 0, targetZ: 0,
   };
 
   constructor(url: string) {
@@ -29,6 +32,9 @@ export class NetClient {
       if (message.t === "welcome") { this.id = message.id; this.onWelcome?.(message.id); }
       else if (message.t === "snapshot") this.onSnapshot?.(message);
       else if (message.t === "shot") this.onShot?.(message);
+      else if (message.t === "hit") this.onHit?.(message);
+      else if (message.t === "grenade") this.onGrenade?.(message);
+      else if (message.t === "explode") this.onExplode?.(message);
       else if (message.t === "full") this.onClose?.("The room is full.");
     };
   }
@@ -39,7 +45,7 @@ export class NetClient {
     m.seq = seq;
     m.moveX = input.moveX; m.moveY = input.moveY;
     m.aimYaw = input.aimYaw; m.aimPitch = input.aimPitch;
-    m.run = input.run; m.jet = input.jet; m.fire = input.fire;
+    m.run = input.run; m.jet = input.jet; m.fire = input.fire; m.grenade = input.grenade;
     m.targetX = input.targetX; m.targetY = input.targetY; m.targetZ = input.targetZ;
     this.socket.send(JSON.stringify(m));
   }

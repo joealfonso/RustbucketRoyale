@@ -1,19 +1,22 @@
 import * as THREE from "three";
 import {
-  FireGate, Predictor, STEP, applyLook, boxFromData, computeShot, createMechInput, createMechState, createShot,
-  parseCameraStats, parseMechStats, parseNetStats, parseWeaponStats,
-  type Box, type BoxData, type Shot,
+  FireGate, Predictor, STEP, applyLook, boxFromData, computeShot, createGrenade, createMechInput, createMechState, createShot,
+  parseCameraStats, parseGrenadeStats, parseMechStats, parseNetStats, parseWeaponStats, parseZones, throwGrenade,
+  type Box, type BoxData, type HealthState, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import weaponJson from "../../../data/weapon.json";
 import cameraJson from "../../../data/camera.json";
 import netJson from "../../../data/net.json";
+import grenadeJson from "../../../data/grenade.json";
+import zonesJson from "../../../data/zones.json";
 import greyboxJson from "../../../data/greybox.json";
 import { setAimTarget } from "./aimTarget";
 import { DebugPanel } from "./debugPanel";
 import { TimedEffects } from "./effects";
 import { Input } from "./input";
-import { addBox, createMechModel } from "./mechModel";
+import { ClientGrenades } from "./grenades";
+import { addBox, createMechModel, setMechDamage } from "./mechModel";
 import { NetClient } from "./net";
 import { Projectiles } from "./projectiles";
 import { RemoteMechs } from "./remoteMechs";
@@ -26,6 +29,9 @@ const mechStats = parseMechStats(mechJson);
 const weaponStats = parseWeaponStats(weaponJson);
 const cameraStats = parseCameraStats(cameraJson);
 const netStats = parseNetStats(netJson);
+const grenadeStats = parseGrenadeStats(grenadeJson);
+const zoneSet = parseZones(zonesJson);
+const zoneMaxHp = zoneSet.zones.map((z) => z.hp);
 const mapData = greyboxJson as { spawn: [number, number, number]; boxes: BoxData[] };
 const boxes: Box[] = mapData.boxes.map(boxFromData);
 
@@ -47,14 +53,20 @@ scene.add(sun);
 
 for (const b of mapData.boxes) addBox(scene, b.center, b.size, b.color);
 
-const mechGroup = createMechModel("#d9731a");
+const ownModel = createMechModel("#d9731a", zoneMaxHp);
+const mechGroup = ownModel.group;
 scene.add(mechGroup);
 
 const glow = new THREE.MeshBasicMaterial({ color: "#ffb833" });
 const impacts = new TimedEffects(scene, 24, 0.25, glow);
 const flashes = new TimedEffects(scene, 6, 0.3, glow);
 const shotFx = new ShotFx(weaponStats, new Projectiles(scene, 64, glow, impacts), flashes, impacts);
-const remotes = new RemoteMechs(scene, netStats.interpolationDelayMs);
+const blastMaterial = new THREE.MeshBasicMaterial({ color: "#ff7a1a", transparent: true, opacity: 0.75 });
+const blasts = new TimedEffects(scene, 6, 4, blastMaterial);
+const grenades = new ClientGrenades(scene, 8, grenadeStats);
+const grenadeGate = new FireGate();
+const thrown = createGrenade();
+const remotes = new RemoteMechs(scene, netStats.interpolationDelayMs, zoneMaxHp);
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
 const input = new Input(canvas, document.getElementById("hint")!);
@@ -70,6 +82,7 @@ const mechInput = createMechInput();
 const look = { dx: 0, dy: 0 };
 const shot: Shot = createShot();
 const gate = new FireGate();
+let health: HealthState = { hp: [...zoneMaxHp], dead: false, respawnIn: 0 };
 
 // Online: wait for the first snapshot before stepping, so we start from where the server put us.
 const net = serverUrl ? new NetClient(serverUrl) : null;
@@ -96,17 +109,57 @@ if (net) {
       offX += predictor.correctionX; offY += predictor.correctionY; offZ += predictor.correctionZ;
       prevX -= predictor.correctionX; prevY -= predictor.correctionY; prevZ -= predictor.correctionZ;
     }
+    const before = health.hp.reduce((a, b) => a + b, 0);
+    health = snap.health;
+    if (health.hp.reduce((a, b) => a + b, 0) < before) flashHurt();
+    setMechDamage(ownModel, health.hp, health.dead);
     remotes.push(snap.others, performance.now());
   };
   net.onShot = (s) => {
     if (s.id === net.id) return; // our own shot already played the moment we fired
-    shotFx.show(s);
+    shotFx.show(s, s.hitMech);
   };
+  net.onHit = (h) => {
+    flashHitMarker(h.killed);
+    impacts.spawn(h.x, h.y, h.z, 0.15);
+  };
+  net.onGrenade = (g) => {
+    if (g.id === net.id) return; // our own grenade is already in the air
+    grenades.spawn(g.x, g.y, g.z, g.vx, g.vy, g.vz);
+  };
+  net.onExplode = (e) => showBlast(e.x, e.y, e.z);
   net.onClose = (reason) => {
     ready = false;
     hint.classList.remove("hidden");
     hint.textContent = reason;
   };
+}
+
+const crosshair = document.getElementById("crosshair")!;
+const hurtOverlay = document.getElementById("hurt")!;
+const statusText = document.getElementById("status")!;
+const zoneFills = Array.from(document.querySelectorAll<HTMLElement>("#zones .track > div"));
+let hitTimer = 0;
+let hurtTimer = 0;
+
+function flashHitMarker(killed: boolean): void {
+  crosshair.classList.remove("hit", "kill");
+  crosshair.classList.add(killed ? "kill" : "hit");
+  clearTimeout(hitTimer);
+  hitTimer = window.setTimeout(() => crosshair.classList.remove("hit", "kill"), killed ? 400 : 120);
+}
+
+function flashHurt(): void {
+  hurtOverlay.classList.add("on");
+  clearTimeout(hurtTimer);
+  hurtTimer = window.setTimeout(() => hurtOverlay.classList.remove("on"), 80);
+}
+
+function showBlast(x: number, y: number, z: number): void {
+  grenades.removeNear(x, y, z);
+  blasts.spawn(x, y + 0.2, z, 0.25);
+  const distance = Math.hypot(x - mech.x, y - mech.y, z - mech.z);
+  if (distance < grenadeStats.shakeRadius) rig.addShake((1 - distance / grenadeStats.shakeRadius) * grenadeStats.shakeForce);
 }
 
 const fuelBar = document.getElementById("fuel")!;
@@ -154,6 +207,11 @@ function frame(now: number): void {
     mechInput.aimYaw = aim.yaw;
     mechInput.aimPitch = aim.pitch;
     setAimTarget(rig.camera, boxes, weaponStats.maxAimDistance, mechInput);
+    // A destroyed mech can only look around, the same rule the server applies.
+    if (health.dead) {
+      mechInput.moveX = 0; mechInput.moveY = 0; mechInput.run = false; mechInput.jet = false;
+      mechInput.fire = false; mechInput.grenade = false;
+    }
 
     const seq = predictor.step(mechInput, STEP);
     net?.sendInput(seq, mechInput);
@@ -165,7 +223,14 @@ function frame(now: number): void {
       shotFx.show(shot);
       rig.addShake(weaponStats.shakeForce);
     }
+    if (mechInput.grenade && grenadeGate.tryFire(simTime, 1 / grenadeStats.cooldownSeconds)) {
+      throwGrenade(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, grenadeStats, thrown);
+      grenades.spawn(thrown.x, thrown.y, thrown.z, thrown.vx, thrown.vy, thrown.vz);
+    }
     shotFx.update(STEP, boxes);
+    blasts.update(STEP);
+    // Offline there is no server to send the blast, so it goes off when the fuse ends.
+    grenades.update(STEP, boxes, net === null ? showBlast : undefined);
     accumulator -= STEP;
   }
 
@@ -183,6 +248,8 @@ function frame(now: number): void {
 
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;
   staminaFill.style.width = `${mech.stamina.fraction * 100}%`;
+  zoneFills.forEach((fill, zone) => { fill.style.width = `${(health.hp[zone]! / zoneMaxHp[zone]!) * 100}%`; });
+  statusText.textContent = health.dead ? `Destroyed. Respawning in ${Math.ceil(health.respawnIn)}` : "";
   fuelBar.classList.toggle("locked", mech.fuel.locked);
   staminaBar.classList.toggle("locked", mech.stamina.locked);
   if (panel.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection);
