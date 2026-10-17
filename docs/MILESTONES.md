@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M4
+Current code milestone: M4 (passed, holding for M5 go-ahead)
 Current visual milestone: V1 (not started)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -37,4 +37,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: Dash (double-press Shift, or double-press a direction key) passed by Joseph's call after playing it. M3 stays passed. M4 not started.
 - 2026-10-17: M4 started on Joseph's go. Plan: collision grid first, then chunk generation, validation, navigation grid, wire to server and client.
 - 2026-10-17: M4 built, waiting for its gate. To play: stop any old server, `npm run server` (builds a medium map from a random seed; set `TIER=small|large`), `npm run dev`, open two tabs at http://localhost:5173/?online. Both should see the same map. Offline: `?tier=small&seed=5`, add `&overview` to look down on it. Not in M4 by design: bots and path finding (M5), loot density check (M6), real chunk art (V3).
+- 2026-10-17: M4 passed by Joseph's call after playing it. Controls changed during the playtest: double-press W sprints, Shift dashes in any direction. M5 not started.
 
