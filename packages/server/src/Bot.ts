@@ -41,6 +41,9 @@ export class Bot {
   private pathGoalZ = 0;
   private replanIn = 0;
   private heading = { x: 0, z: 0 };
+  private heardX = 0;
+  private heardZ = 0;
+  private heardFor = 0;
 
   constructor(
     private stats: BotStats,
@@ -50,6 +53,13 @@ export class Bot {
     readonly rating = 2, // easy 1, normal 2, hard 3, used to settle fights that are worked out on paper
   ) {
     this.replanIn = random() * pathStats.replanSeconds; // so a room full of bots does not all search on the same tick
+  }
+
+  // Something was heard here. With nobody in sight, the bot goes to have a look for a while.
+  hear(x: number, z: number, seconds: number): void {
+    this.heardX = x;
+    this.heardZ = z;
+    this.heardFor = seconds;
   }
 
   // A new map means the old routes are meaningless.
@@ -65,6 +75,7 @@ export class Bot {
     this.strafeIn -= dt;
     this.wanderIn -= dt;
     this.replanIn -= dt;
+    this.heardFor -= dt;
 
     const target = this.pickTarget(self, targets, world);
     let wantX = 0, wantZ = 0; // the direction to travel, in the world
@@ -211,6 +222,11 @@ export class Bot {
     if (ring) {
       const fromCentre = Math.hypot(self.x - ring.cx, self.z - ring.cz);
       if (fromCentre > ring.radius - this.stats.ringMargin) return { x: ring.cx, z: ring.cz, urgent: fromCentre > ring.radius };
+    }
+    // A sound worth checking, as long as going there does not mean leaving the safe area.
+    if (this.heardFor > 0) {
+      const inside = !ring || Math.hypot(this.heardX - ring.cx, this.heardZ - ring.cz) < ring.radius - this.stats.ringMargin;
+      if (inside && Math.hypot(this.heardX - self.x, this.heardZ - self.z) > 6) return { x: this.heardX, z: this.heardZ, urgent: false };
     }
     if (this.wanderIn <= 0) {
       const range = ring ? Math.max(10, ring.radius - this.stats.ringMargin) : 60;

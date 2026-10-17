@@ -5,7 +5,7 @@ Casual 3D mech battle royale built for fun first. Players drop in, a safe zone r
 ## Match setup
 - Players: up to 8 humans per match. Bots fill the rest, and there are many more bots than humans.
 - Match length: 8 minutes on every map tier.
-- Maps: procedurally generated every match from a seed. Three tiers: small 300 m, medium 1000 m, large 2000 m. The room creator picks the tier in the lobby, default medium.
+- Maps: procedurally generated every match from a seed. Three tiers: small 300 m, medium 1000 m, large 2000 m. A 200 m Arena exists for quick tests only. The room creator picks the tier in the lobby, default medium.
 - Bot target per tier (starting guesses, tune with the soak test): small 12, medium 24, large 40. Bots fill up to the target minus the humans present.
 - Camera: third person, over the shoulder, with wall collision so it never clips through geometry.
 

@@ -1,3 +1,4 @@
 {
-  "radarRangeMeters": 150
+  "radarRangeMeters": 150,
+  "detectRangeMeters": 40
 }

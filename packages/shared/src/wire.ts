@@ -1,4 +1,4 @@
-import { sanitizeInput, type InputMessage, type OtherState, type SelfState, type ServerMessage, type ShotMessage } from "./protocol";
+import { sanitizeInput, type InputMessage, type NoiseEvent, type OtherState, type SelfState, type ServerMessage, type ShotMessage } from "./protocol";
 import type { MatchState } from "./match";
 
 // Packed binary forms of the three messages that make up nearly all the traffic: a client's input,
@@ -22,6 +22,8 @@ export const isBinaryType = (first: number) => first === TYPE_SNAPSHOT || first 
 
 const SELF_BYTES = 15 * 4 + 1;
 const OTHER_BYTES = 14;
+const NOISE_BYTES = 5;
+const NOISE_STEP = 0.5; // metres: noises are shown fuzzy anyway
 const SNAPSHOT_HEADER_BYTES = 23;
 const SHOT_BYTES = 24;
 const INPUT_BASE_BYTES = 1 + 4 + 1 + 1 + 1 + 4 + 4;
@@ -30,13 +32,14 @@ const u8 = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
 
 // ---- snapshot
 
-export function snapshotSize(others: number): number {
-  return SNAPSHOT_HEADER_BYTES + SELF_BYTES + 1 + others * OTHER_BYTES;
+export function snapshotSize(others: number, noises = 0): number {
+  return SNAPSHOT_HEADER_BYTES + SELF_BYTES + 1 + others * OTHER_BYTES + 1 + noises * NOISE_BYTES;
 }
 
 export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Uint8Array {
   const others = m.others.slice(0, 255);
-  const buffer = new ArrayBuffer(snapshotSize(others.length));
+  const noises = m.noises.slice(0, 255);
+  const buffer = new ArrayBuffer(snapshotSize(others.length, noises.length));
   const v = new DataView(buffer);
   let o = 0;
   v.setUint8(o, TYPE_SNAPSHOT); o += 1;
@@ -68,6 +71,12 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
     v.setUint8(o, (other.running ? 1 : 0) | (other.jetting ? 2 : 0) | (other.dead ? 4 : 0) | (other.bot ? 8 : 0)); o += 1;
     for (let i = 0; i < 3; i++) { v.setUint8(o, u8(other.hp[i] ?? 0)); o += 1; }
   }
+  v.setUint8(o, noises.length); o += 1;
+  for (const n of noises) {
+    v.setInt16(o, Math.round(n.x / NOISE_STEP), true); o += 2;
+    v.setInt16(o, Math.round(n.z / NOISE_STEP), true); o += 2;
+    v.setUint8(o, n.kind); o += 1;
+  }
   return new Uint8Array(buffer);
 }
 
@@ -98,7 +107,7 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
   you.fuelLocked = (flags & 8) !== 0; you.staminaLocked = (flags & 16) !== 0;
 
   const count = v.getUint8(o); o += 1;
-  if (bytes.length !== o + count * OTHER_BYTES) return null;
+  if (bytes.length < o + count * OTHER_BYTES + 1) return null;
   const others: OtherState[] = [];
   for (let i = 0; i < count; i++) {
     const id = v.getUint16(o, true); o += 2;
@@ -110,7 +119,14 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
     const ohp = [v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2)]; o += 3;
     others.push({ id, x, y, z, yaw, running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, bot: (bits & 8) !== 0, hp: ohp });
   }
-  return { t: "snapshot", tick, ack, ackAgeMs, you, health: { hp, dead, respawnIn }, match: { state, seconds, alive, total }, others };
+  const noiseCount = v.getUint8(o); o += 1;
+  if (bytes.length !== o + noiseCount * NOISE_BYTES) return null;
+  const noises: NoiseEvent[] = [];
+  for (let i = 0; i < noiseCount; i++) {
+    noises.push({ x: v.getInt16(o, true) * NOISE_STEP, z: v.getInt16(o + 2, true) * NOISE_STEP, kind: v.getUint8(o + 4) });
+    o += NOISE_BYTES;
+  }
+  return { t: "snapshot", tick, ack, ackAgeMs, you, health: { hp, dead, respawnIn }, match: { state, seconds, alive, total }, others, noises };
 }
 
 // ---- shot

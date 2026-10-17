@@ -48,4 +48,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: Gate 5b passed by Joseph's call after playing it. 5c (radar polish, the headless soak test per tier, the rooms-per-process number) not started.
 - 2026-10-17: Gate 5c started on Joseph's go: radar polish, headless soak test per tier, rooms per process.
 - 2026-10-17: Gate 5c built, waiting for its playtest. Check: the radar arrow points the right way and reads well, `npm run soak` passes on all three tiers. Soak and rooms-per-process numbers are in docs/PERF.md. That would finish M5.
+- 2026-10-17: During the 5c check: added the 200 m Arena tier for quick tests (menu default), and sound on the radar: mechs beyond 40 m only show when they make noise (pulled forward from M6). Soak passes on arena, small, medium and large.
 

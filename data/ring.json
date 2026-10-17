@@ -3,6 +3,32 @@
   "maxCenterShiftFraction": 0.6,
   "maxEdgeSpeedFraction": 0.9,
   "tiers": {
+    "arena": [
+      {
+        "radiusFraction": 0.3,
+        "waitSeconds": 70,
+        "shrinkSeconds": 45,
+        "damagePerSecond": 2
+      },
+      {
+        "radiusFraction": 0.16,
+        "waitSeconds": 60,
+        "shrinkSeconds": 35,
+        "damagePerSecond": 3
+      },
+      {
+        "radiusFraction": 0.07,
+        "waitSeconds": 50,
+        "shrinkSeconds": 25,
+        "damagePerSecond": 5
+      },
+      {
+        "radiusFraction": 0.02,
+        "waitSeconds": 40,
+        "shrinkSeconds": 20,
+        "damagePerSecond": 8
+      }
+    ],
     "small": [
       {
         "radiusFraction": 0.3,

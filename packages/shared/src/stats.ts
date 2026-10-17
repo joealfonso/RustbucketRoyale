@@ -113,7 +113,8 @@ export interface BotConfig {
 }
 
 export interface HudStats {
-  radarRangeMeters: number; // mechs closer than this show on the radar
+  radarRangeMeters: number; // how far the radar's edge reaches
+  detectRangeMeters: number; // mechs closer than this show on the radar whether they make a sound or not
 }
 
 export interface CameraStats {
@@ -215,7 +216,7 @@ export function parseBotConfig(raw: unknown): BotConfig {
     path: parseNumbers<BotPathStats>(d?.path, "bots.json path", PATH_KEYS),
   };
 }
-export const parseHudStats = (raw: unknown) => parseNumbers<HudStats>(raw, "hud.json", ["radarRangeMeters"]);
+export const parseHudStats = (raw: unknown) => parseNumbers<HudStats>(raw, "hud.json", ["radarRangeMeters", "detectRangeMeters"]);
 export const parseMechStats = (raw: unknown) => parseNumbers<MechStats>(raw, "mech.json", MECH_KEYS);
 export const parseWeaponStats = (raw: unknown) => parseNumbers<WeaponStats>(raw, "weapon.json", WEAPON_KEYS);
 export const parseCameraStats = (raw: unknown) => parseNumbers<CameraStats>(raw, "camera.json", CAMERA_KEYS);
@@ -224,3 +225,22 @@ export const parseCameraStats = (raw: unknown) => parseNumbers<CameraStats>(raw,
 export function secondsToCross(stats: MechStats, meters: number): number {
   return stats.runSpeed > 0 ? meters / stats.runSpeed : Number.POSITIVE_INFINITY;
 }
+
+// Everything a mech does that can be heard, quietest first. Walking makes no sound, so sneaking is possible.
+export const NOISE_KINDS = ["run", "dash", "jets", "shot", "explosion"] as const;
+export type NoiseKind = (typeof NOISE_KINDS)[number];
+
+export interface NoiseStats {
+  pulseSeconds: number; // one mech makes at most one pulse of each kind this often
+  fuzzFraction: number; // a pulse is shown off its true spot by up to this share of the distance...
+  fuzzMaxMeters: number; // ...but never more than this
+  botInvestigateSeconds: number; // how long a bot goes looking for something it heard
+  loudness: Record<NoiseKind, number>; // metres away it can be heard
+}
+
+export function parseNoiseStats(raw: unknown): NoiseStats {
+  const base = parseNumbers<Omit<NoiseStats, "loudness">>(raw, "noise.json", ["pulseSeconds", "fuzzFraction", "fuzzMaxMeters", "botInvestigateSeconds"]);
+  const loudness = parseNumbers<Record<NoiseKind, number>>((raw as { loudness?: unknown })?.loudness, "noise.json loudness", [...NOISE_KINDS]);
+  return { ...base, loudness };
+}
+

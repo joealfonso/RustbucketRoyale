@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import {
   World, boxFromData, buildNavGrid, generateMap, parseBotConfig, parseChunkSet, parseCombatStats, parseGrenadeStats, parseMatchConfig, parseMechStats,
-  parseNetStats, parseRingConfig, parseTiers, parseWeaponStats, parseZones, type BoxData,
+  parseNetStats, parseNoiseStats, parseRingConfig, parseTiers, parseWeaponStats, parseZones, type BoxData,
 } from "@rustbucket/shared";
 import type { MapForRoom, RoomConfig } from "./Room";
 
@@ -24,6 +24,7 @@ export function loadRoomConfig(options: ConfigOptions = {}): RoomConfig {
   const base = {
     mech, net,
     bots: parseBotConfig(readJson("bots.json")),
+    noise: parseNoiseStats(readJson("noise.json")),
     weapon: parseWeaponStats(readJson("weapon.json")),
     grenade: parseGrenadeStats(readJson("grenade.json")),
     combat: parseCombatStats(readJson("combat.json")),

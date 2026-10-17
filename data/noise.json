@@ -1,0 +1,13 @@
+{
+  "pulseSeconds": 0.75,
+  "fuzzFraction": 0.15,
+  "fuzzMaxMeters": 25,
+  "botInvestigateSeconds": 8,
+  "loudness": {
+    "run": 55,
+    "jets": 120,
+    "dash": 70,
+    "shot": 220,
+    "explosion": 320
+  }
+}

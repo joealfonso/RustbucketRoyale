@@ -6,6 +6,11 @@
   "navCellMeters": 2,
   "groundColor": "#59605a",
   "tiers": {
+    "arena": {
+      "meters": 200,
+      "spawns": 8,
+      "spawnSeparationChunks": 1
+    },
     "small": {
       "meters": 300,
       "spawns": 16,

@@ -15,6 +15,7 @@ const snapshot = (others: OtherState[]): Snapshot => ({
   health: { hp: [60, 12, 88], dead: false, respawnIn: 0 },
   match: { state: "active", seconds: 91.5, alive: 7, total: 24 },
   others,
+  noises: [],
 });
 
 describe("snapshot wire format", () => {
@@ -35,6 +36,17 @@ describe("snapshot wire format", () => {
     expect(Math.abs(back.others[1]!.x - -999.9)).toBeLessThanOrEqual(0.05 + 1e-9);
     expect(back.others[0]).toMatchObject({ running: true, jetting: false, dead: false, bot: true, hp: [60, 33, 100] });
     expect(back.others[0]!.yaw).toBeCloseTo(5.5, 3);
+  });
+
+  it("carries the sounds heard this snapshot, to half a metre, 5 bytes each", () => {
+    const s = snapshot([other(1, 2)]);
+    s.noises = [{ x: 120.3, z: -455.6, kind: 3 }, { x: -1, z: 2, kind: 0 }];
+    const back = decodeSnapshot(encodeSnapshot(s))!;
+    expect(back.noises).toHaveLength(2);
+    expect(Math.abs(back.noises[0]!.x - 120.3)).toBeLessThanOrEqual(0.25);
+    expect(back.noises[0]!.kind).toBe(3);
+    expect(back.others).toHaveLength(1);
+    expect(encodeSnapshot(s).length - encodeSnapshot(snapshot([other(1, 2)])).length).toBe(10);
   });
 
   it("is small: under 100 bytes with nobody else near, and 14 bytes per extra mech", () => {

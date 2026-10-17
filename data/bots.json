@@ -5,6 +5,7 @@
     "hard": 0.15
   },
   "fill": {
+    "arena": 8,
     "small": 12,
     "medium": 24,
     "large": 40

@@ -2,7 +2,7 @@
 // A failure prints its seed. Play it again exactly with SEED=123 npm run soak -- small
 import { runSoak } from "../packages/server/src/soak/runSoak";
 
-const tiers = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ["small", "medium", "large"];
+const tiers = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ["arena", "small", "medium", "large"];
 let failed = false;
 for (const tier of tiers) {
   const seed = process.env.SEED !== undefined ? Number(process.env.SEED) : Math.floor(Math.random() * 1_000_000_000);

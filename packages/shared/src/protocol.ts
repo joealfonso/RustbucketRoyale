@@ -57,6 +57,13 @@ export interface OtherState {
   hp: number[]; // legs, arms, torso
 }
 
+// A sound heard on the radar. The position is deliberately a little off, never the exact spot. `kind` indexes NOISE_KINDS.
+export interface NoiseEvent {
+  x: number;
+  z: number;
+  kind: number;
+}
+
 // Your own health. Kept apart from SelfState because it never feeds back into movement.
 export interface HealthState {
   hp: number[];
@@ -112,7 +119,7 @@ export type ServerMessage =
   | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number }
   | { t: "result"; winnerId: number | null }
   | { t: "refused"; reason: string }
-  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[] }
+  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[] }
   | ShotMessage
   | HitMessage
   | GrenadeMessage

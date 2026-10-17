@@ -59,7 +59,7 @@ if (!offline && !online) {
   const tierSelect = document.getElementById("tierSelect") as HTMLSelectElement;
   const codeInput = document.getElementById("roomCode") as HTMLInputElement;
   const botSelect = document.getElementById("botSelect") as HTMLSelectElement;
-  document.getElementById("createRoom")!.addEventListener("click", () => { location.search = `?create&tier=${tierSelect.value}&bots=${botSelect.value}`; });
+  document.getElementById("createRoom")!.addEventListener("click", () => { location.search = `?create&tier=${tierSelect.value}${botSelect.value === "" ? "" : `&bots=${botSelect.value}`}`; });
   document.getElementById("joinRoom")!.addEventListener("click", () => { if (codeInput.value.trim()) location.search = `?room=${codeInput.value.trim().toUpperCase()}`; });
   document.getElementById("playOffline")!.addEventListener("click", () => { location.search = `?offline&tier=${tierSelect.value}`; });
   await new Promise(() => {}); // nothing more to do until a button reloads the page
@@ -117,7 +117,7 @@ scene.add(sun);
 
 let mapGroup = addMapMeshes(scene, map);
 const ringView = new RingView(scene);
-const radar = net ? new Radar(hudStats.radarRangeMeters) : null;
+const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters) : null;
 
 const ownModel = createMechModel("#d9731a", zoneMaxHp);
 const mechGroup = ownModel.group;
@@ -208,6 +208,7 @@ if (net) {
     setMechDamage(ownModel, health.hp, health.dead);
     net.noteSnapshot(snap.ack, snap.ackAgeMs, performance.now());
     remotes.push(snap.others, snap.tick, performance.now());
+    for (const n of snap.noises) radar?.hear(n.x, n.z, n.kind, performance.now());
   };
   net.onShot = (s) => {
     if (s.id === net.id) return; // our own shot already played the moment we fired

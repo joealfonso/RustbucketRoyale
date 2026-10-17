@@ -2,7 +2,7 @@ import {
   FireGate, STEP, ZONE_COUNT, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule,
   decodeInput, parseClientMessage, ringAt, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
-  type BotConfig, type CombatStats, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
+  NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
   type NavGrid, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
@@ -30,6 +30,7 @@ export interface MapForRoom {
 export interface RoomConfig {
   mech: MechStats;
   bots: BotConfig;
+  noise: NoiseStats;
   weapon: WeaponStats;
   grenade: GrenadeStats;
   combat: CombatStats;
@@ -124,7 +125,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: this.newBot(), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), interested: new Set(), watchId: 0, dead: false, respawnTick: 0, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), interested: new Set(), watchId: 0, heard: [], quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -168,7 +169,7 @@ export class Room {
     const id = this.nextId++;
     const player: Player = {
       id, slot, bot: null, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
-      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), interested: new Set(), watchId: 0,
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), interested: new Set(), watchId: 0, heard: [], quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -458,8 +459,12 @@ export class Room {
     if (player.dead || this.state === "countdown") {
       input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.grenade = false;
     }
+    const dashBefore = player.state.dashTime;
     stepMech(player.state, input, this.config.mech, dt, this.map.world);
     player.steps += Math.round(dt / STEP);
+    if (player.state.running) this.makeNoise(player, "run", player.state.x, player.state.z);
+    if (player.state.jetting) this.makeNoise(player, "jets", player.state.x, player.state.z);
+    if (dashBefore <= 0 && player.state.dashTime > 0) this.makeNoise(player, "dash", player.state.x, player.state.z);
 
     if (input.fire) this.tryShoot(player, input);
     if (input.grenade) this.tryThrow(player, input);
@@ -501,6 +506,7 @@ export class Room {
       t: "shot", id: player.id, ox: s.ox, oy: s.oy, oz: s.oz, dx: s.dx, dy: s.dy, dz: s.dz, length: reach, hitMech: target !== null,
     };
     this.sendNear(s.ox, s.oz, message, player);
+    this.makeNoise(player, "shot", s.ox, s.oz);
   }
 
   // Finds the nearest living mech along the shot, checked at where it stood a moment ago, because
@@ -563,6 +569,7 @@ export class Room {
     const bx = g.x, by = g.y + BLAST_LIFT, bz = g.z;
     const blast: ServerMessage = { t: "explode", x: g.x, y: g.y, z: g.z };
     this.sendNear(g.x, g.z, blast, this.players.get(live.ownerId));
+    this.makeNoise(this.players.get(live.ownerId) ?? null, "explosion", g.x, g.z);
     if (this.state === "countdown") return;
 
     const owner = this.players.get(live.ownerId);
@@ -612,6 +619,32 @@ export class Room {
     else if (this.state === "active") seconds = this.elapsedSeconds();
     const alive = this.state === "lobby" ? this.players.size : this.alivePlayers().length;
     return { state: this.state, seconds, alive, total: this.state === "lobby" ? this.players.size : this.startedWith || this.players.size };
+  }
+
+  // Something made a sound. Everyone within earshot hears it, at a spot a little off the real one, and bots go to look.
+  // A mech makes at most one pulse of each kind every so often, so holding the jets is one pulse a beat, not sixty.
+  private makeNoise(source: Player | null, kind: NoiseKind, x: number, z: number): void {
+    const { noise } = this.config;
+    const k = NOISE_KINDS.indexOf(kind);
+    if (source) {
+      if (this.tickCount < source.quietUntil[k]!) return;
+      source.quietUntil[k] = this.tickCount + Math.round(noise.pulseSeconds / STEP);
+    }
+    const radius = noise.loudness[kind];
+    for (const p of this.players.values()) {
+      if (p === source) continue;
+      const ear = p.bot ? p.state : this.viewFrom(p);
+      const distance = Math.hypot(ear.x - x, ear.z - z);
+      if (distance > radius) continue;
+      const off = Math.min(noise.fuzzMaxMeters, distance * noise.fuzzFraction) * Math.sqrt(this.random());
+      const angle = this.random() * Math.PI * 2;
+      const fx = x + Math.cos(angle) * off, fz = z + Math.sin(angle) * off;
+      if (p.bot) {
+        if (!p.dead) p.bot.hear(fx, fz, noise.botInvestigateSeconds);
+      } else if (p.heard.length < 32) {
+        p.heard.push({ x: fx, z: fz, kind: k });
+      }
+    }
   }
 
   // Where a client is looking from: its own mech, or while knocked out the mech it is watching (or, if it has not
@@ -669,7 +702,7 @@ export class Room {
       player.send({
         t: "snapshot", tick: this.tickCount, ack: player.lastSeq, ackAgeMs: (this.tickCount - player.ackTick) * STEP * 1000, you: writeSelf(player.state),
         health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn: player.dead && this.state !== "active" ? Math.max(0, (player.respawnTick - this.tickCount) * STEP) : 0 }, match,
-        others,
+        others, noises: player.heard.splice(0),
       });
     }
   }
