@@ -37,3 +37,9 @@ The game must be reachable by link and able to scale, which Unity WebGL and a pl
 
 ## 2026-10-17: Not using Arrr.fun for now
 Its ordered tick relay suits lockstep games with a deterministic simulation. Ours is server authoritative with prediction and interest management, and many bots. It is also a young third party dependency. Revisit only if we choose lockstep.
+
+## 2026-10-17: Fixed 60 Hz sim, aim travels inside the input
+The mech steps at a fixed 60 Hz and the render blends between steps. Each input carries absolute aim yaw and pitch, so the server can replay exactly what the client did at M2. Look is applied every frame so the camera answers the mouse at once. Cost: shots use the last rendered camera, so there is up to one frame of aim lag on the shot direction.
+
+## 2026-10-17: Plain boxes for M1 collision
+World collision is axis aligned boxes with simple step-up for low ledges, shared by client and server. Enough for the grey-box map and cheap to run for many bots. Cost: no slopes, so the old ramp became stairs. Revisit when real chunk art arrives.

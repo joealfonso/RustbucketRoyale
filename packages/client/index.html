@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rustbucket Royale</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d1f; font-family: system-ui, sans-serif; }
+      canvas { display: block; width: 100%; height: 100%; }
+      #crosshair { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.5); pointer-events: none; }
+      .bar { position: fixed; left: 20px; width: 220px; height: 12px; background: rgba(0,0,0,.6); pointer-events: none; }
+      .bar > div { height: 100%; width: 100%; }
+      #fuel { bottom: 50px; } #fuel > div { background: #ff991a; }
+      #stamina { bottom: 30px; } #stamina > div { background: #4dccff; }
+      .bar.locked > div { background: #e03030; }
+      #hint { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.45); font-size: 18px; text-align: center; line-height: 1.6; cursor: pointer; }
+      #hint small { opacity: .75; font-size: 14px; }
+      #hint.hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="crosshair"></div>
+    <div id="fuel" class="bar"><div></div></div>
+    <div id="stamina" class="bar"><div></div></div>
+    <div id="hint">
+      Click to play<br />
+      <small>WASD move · Mouse look · Shift run · Space jets · Click fire<br />F1 tuning panel · Esc free the mouse · R respawn</small>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

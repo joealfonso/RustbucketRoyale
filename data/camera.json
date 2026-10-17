@@ -1,0 +1,9 @@
+{
+  "fov": 70,
+  "distance": 6,
+  "shoulderX": 0.9,
+  "pivotHeight": 3.2,
+  "radius": 0.3,
+  "near": 0.1,
+  "pullOutSpeed": 12
+}

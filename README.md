@@ -11,5 +11,12 @@ The first Unity prototype is on the `unity-prototype` branch, kept for reference
 - `docs/DECISIONS.md`: why things are the way they are.
 - `docs/PERF.md`: budgets and measurements.
 
+## Run it
+```
+npm install
+npm run dev
+```
+Open http://localhost:5173, click the page, play. F1 opens the tuning panel.
+
 ## Status
-The web rebuild is at M1: offline, one mech in the browser. No code yet.
+M1 (offline, one mech in the browser) is built and waiting for its playtest gate. No server yet, that is M2.

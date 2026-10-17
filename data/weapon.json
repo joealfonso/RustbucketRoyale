@@ -1,0 +1,8 @@
+{
+  "shotsPerSecond": 6,
+  "projectileSpeed": 120,
+  "projectileLifetime": 3,
+  "spreadDegrees": 0.8,
+  "maxAimDistance": 300,
+  "shakeForce": 0
+}

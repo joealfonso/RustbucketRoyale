@@ -1,0 +1,135 @@
+import type { MechInput } from "./MechInput";
+import { Meter } from "./Meter";
+import type { MechStats } from "./stats";
+import type { Box } from "./world";
+
+const DEG = Math.PI / 180;
+// A small constant push into the floor keeps the mech reporting grounded while it stands still.
+const STICK_TO_GROUND = -2;
+
+// Everything the sim needs to know about one mech. Plain numbers so it can be copied or sent.
+export interface MechState {
+  x: number; y: number; z: number; // y is the feet
+  vx: number; vz: number; vy: number;
+  bodyYaw: number;
+  grounded: boolean;
+  running: boolean;
+  jetting: boolean;
+  fuel: Meter;
+  stamina: Meter;
+}
+
+export function createMechState(stats: MechStats, x: number, y: number, z: number, yaw: number): MechState {
+  return {
+    x, y, z, vx: 0, vz: 0, vy: 0, bodyYaw: yaw,
+    grounded: false, running: false, jetting: false,
+    fuel: new Meter(stats.fuelMax), stamina: new Meter(stats.staminaMax),
+  };
+}
+
+export function moveTowardsAngle(current: number, target: number, maxDelta: number): number {
+  const twoPi = Math.PI * 2;
+  const diff = ((((target - current + Math.PI) % twoPi) + twoPi) % twoPi) - Math.PI;
+  if (Math.abs(diff) <= maxDelta) return current + diff;
+  return current + Math.sign(diff) * maxDelta;
+}
+
+// One fixed step of the mech. Weight comes from acceleration and the slow body turn, not slow top speed.
+// Same code runs on the client now and the server at M2, so prediction matches.
+export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: number, boxes: readonly Box[]): void {
+  s.fuel.setMax(stats.fuelMax);
+  s.stamina.setMax(stats.staminaMax);
+
+  s.bodyYaw = moveTowardsAngle(s.bodyYaw, input.aimYaw, stats.turnSpeedDegrees * DEG * dt);
+
+  // Movement is relative to where the camera looks, not where the body faces.
+  const yaw = input.aimYaw;
+  const forwardX = -Math.sin(yaw), forwardZ = -Math.cos(yaw);
+  const rightX = Math.cos(yaw), rightZ = -Math.sin(yaw);
+  let wishX = rightX * input.moveX + forwardX * input.moveY;
+  let wishZ = rightZ * input.moveX + forwardZ * input.moveY;
+  const wishLength2 = wishX * wishX + wishZ * wishZ;
+  if (wishLength2 > 1) {
+    const inv = 1 / Math.sqrt(wishLength2);
+    wishX *= inv;
+    wishZ *= inv;
+  }
+  const moving = wishLength2 > 1e-4;
+
+  s.running = input.run && moving && s.stamina.canUse;
+  if (s.running) s.stamina.drain(stats.runDrainPerSecond * dt, stats.staminaRegenDelay);
+  else s.stamina.regen(stats.staminaRegenPerSecond, dt, stats.staminaUnlockFraction);
+
+  const topSpeed = s.running ? stats.runSpeed : stats.walkSpeed;
+  const rate = (moving ? stats.acceleration : stats.deceleration) * (s.grounded ? 1 : stats.airControl);
+  const toX = wishX * topSpeed - s.vx;
+  const toZ = wishZ * topSpeed - s.vz;
+  const toLength = Math.hypot(toX, toZ);
+  const maxChange = rate * dt;
+  if (toLength <= maxChange) {
+    s.vx = wishX * topSpeed;
+    s.vz = wishZ * topSpeed;
+  } else {
+    s.vx += (toX / toLength) * maxChange;
+    s.vz += (toZ / toLength) * maxChange;
+  }
+
+  s.jetting = input.jet && s.fuel.canUse;
+  if (s.jetting) {
+    s.fuel.drain(stats.fuelDrainPerSecond * dt, stats.fuelRegenDelay);
+    s.vy = Math.min(s.vy + stats.jetLift * dt, stats.jetMaxRiseSpeed);
+  } else {
+    s.fuel.regen(stats.fuelRegenPerSecond, dt, stats.fuelUnlockFraction);
+    s.vy = s.grounded && s.vy < 0 ? STICK_TO_GROUND : Math.max(s.vy - stats.gravity * dt, -stats.maxFallSpeed);
+  }
+
+  s.grounded = false;
+  moveHorizontal(s, stats, s.vx * dt, 0, boxes);
+  moveHorizontal(s, stats, 0, s.vz * dt, boxes);
+  moveVertical(s, stats, s.vy * dt, boxes);
+}
+
+function overlaps(s: MechState, stats: MechStats, b: Box): boolean {
+  return (
+    s.x - stats.halfWidth < b.maxX && s.x + stats.halfWidth > b.minX &&
+    s.y < b.maxY && s.y + stats.height > b.minY &&
+    s.z - stats.halfWidth < b.maxZ && s.z + stats.halfWidth > b.minZ
+  );
+}
+
+function moveHorizontal(s: MechState, stats: MechStats, dx: number, dz: number, boxes: readonly Box[]): void {
+  if (dx === 0 && dz === 0) return;
+  s.x += dx;
+  s.z += dz;
+  const wasOnGround = s.vy <= 0;
+  for (let i = 0; i < boxes.length; i++) {
+    const b = boxes[i]!;
+    if (!overlaps(s, stats, b)) continue;
+
+    // Low ledges and stairs are walked up, not bumped into.
+    const rise = b.maxY - s.y;
+    if (wasOnGround && rise > 0 && rise <= stats.stepHeight) {
+      s.y = b.maxY;
+      continue;
+    }
+    if (dx > 0) { s.x = b.minX - stats.halfWidth; s.vx = 0; }
+    else if (dx < 0) { s.x = b.maxX + stats.halfWidth; s.vx = 0; }
+    else if (dz > 0) { s.z = b.minZ - stats.halfWidth; s.vz = 0; }
+    else { s.z = b.maxZ + stats.halfWidth; s.vz = 0; }
+  }
+}
+
+function moveVertical(s: MechState, stats: MechStats, dy: number, boxes: readonly Box[]): void {
+  s.y += dy;
+  for (let i = 0; i < boxes.length; i++) {
+    const b = boxes[i]!;
+    if (!overlaps(s, stats, b)) continue;
+    if (dy <= 0) {
+      s.y = b.maxY;
+      s.grounded = true;
+    } else {
+      s.y = b.minY - stats.height;
+    }
+    s.vy = 0;
+  }
+}

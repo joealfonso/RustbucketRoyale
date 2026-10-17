@@ -55,7 +55,10 @@ Open these on demand. Do not import them.
 - Placement decisions use integer math. Floats only appear after decisions, for visuals.
 
 ## Commands
-Filled in as the tooling lands (`npm run dev`, `npm test`, `npm run gauntlet`). Until then this section is the checklist to keep current.
+- `npm install`: once after cloning.
+- `npm run dev`: client dev server at http://localhost:5173.
+- `npm test`: Vitest. `npm run typecheck`: TypeScript. `npm run build`: production client build.
+- `npm run gauntlet`: typecheck, tests, and build in one pass or fail verdict. Results in `artifacts/`.
 
 ## Testing and CI
 - Vitest for pure logic: damage zones, ring math, upgrade stats, noise radius, bot level of detail, movement and reconciliation.
