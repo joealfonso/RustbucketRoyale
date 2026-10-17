@@ -4,7 +4,7 @@ import { createMechState, stepMech, type MechState } from "./mechStep";
 import { readSelf } from "./mechWire";
 import type { SelfState } from "./protocol";
 import type { MechStats } from "./stats";
-import type { Box } from "./world";
+import type { World } from "./world";
 
 // Must be larger than the most inputs that can be in flight, about two seconds at 60 Hz.
 const HISTORY = 256;
@@ -22,7 +22,7 @@ export class Predictor {
 
   private ring: MechInput[] = [];
 
-  constructor(private stats: MechStats, private boxes: readonly Box[], x: number, y: number, z: number, yaw: number) {
+  constructor(private stats: MechStats, private world: World, x: number, y: number, z: number, yaw: number) {
     this.state = createMechState(stats, x, y, z, yaw);
     for (let i = 0; i < HISTORY; i++) this.ring.push(createMechInput());
   }
@@ -31,7 +31,7 @@ export class Predictor {
   step(input: MechInput, dt: number): number {
     this.seq++;
     Object.assign(this.ring[this.seq % HISTORY]!, input);
-    stepMech(this.state, input, this.stats, dt, this.boxes);
+    stepMech(this.state, input, this.stats, dt, this.world);
     return this.seq;
   }
 
@@ -43,7 +43,7 @@ export class Predictor {
     // If the history was overwritten the replay would be wrong, so trust the server and move on.
     if (this.seq - ack < HISTORY) {
       for (let s = ack + 1; s <= this.seq; s++) {
-        stepMech(this.state, this.ring[s % HISTORY]!, this.stats, dt, this.boxes);
+        stepMech(this.state, this.ring[s % HISTORY]!, this.stats, dt, this.world);
       }
     }
 

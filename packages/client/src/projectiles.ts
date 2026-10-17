@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { createRayHit, raycastBoxes, type Box, type RayHit } from "@rustbucket/shared";
+import { createRayHit, type RayHit, type World } from "@rustbucket/shared";
 import type { TimedEffects } from "./effects";
 
 // Pooled bullets. Each step sweeps a ray from the old position to the new one, so fast shots cannot tunnel through thin walls.
@@ -40,7 +40,7 @@ export class Projectiles {
     this.impactAtEnd[i] = impactAtEnd ? 1 : 0;
   }
 
-  update(dt: number, boxes: readonly Box[]): void {
+  update(dt: number, world: World): void {
     for (let i = 0; i < this.count; i++) {
       if (this.life[i]! <= 0) continue;
       const mesh = this.meshes[i]!;
@@ -48,7 +48,7 @@ export class Projectiles {
       const length = Math.hypot(sx, sy, sz);
       const p = mesh.position;
 
-      if (raycastBoxes(p.x, p.y, p.z, sx / length, sy / length, sz / length, length, boxes, this.hit)) {
+      if (world.raycast(p.x, p.y, p.z, sx / length, sy / length, sz / length, length, this.hit)) {
         const h = this.hit;
         this.impacts.spawn(
           p.x + (sx / length) * h.distance + h.normalX * 0.1,

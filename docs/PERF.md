@@ -18,3 +18,15 @@ Record each measurement with date, build, hardware, tier, bot count, and the num
 
 | Date | Hardware | Tier | Bots | Metric | Result |
 | :- | :- | :- | :- | :- | :- |
+
+### Map generation (2026-10-17, MacBook, Node 25, chunk set of 11 grey-box chunks)
+Measured with `npx tsx scripts/measure-generation.ts`, 10 seeds per tier. Includes building the collision grid and navigation grid and checking the map.
+
+| Tier | Seeds | Median ms | Worst ms | Boxes | Nav cells | Retries |
+| :- | :- | :- | :- | :- | :- | :- |
+| small | 10 | 4 | 7 | 320 | 22500 | 0 |
+| medium | 10 | 41 | 43 | 3205 | 250000 | 0 |
+| large | 10 | 160 | 166 | 12451 | 1000000 | 0 |
+
+Well inside the 3 s budget. A browser will be several times slower than Node, still fine. Not measured yet: drawing 12,000 boxes on a mid-range laptop (one instanced mesh per colour, no culling), and how fast the collision grid answers with bots shooting.
+

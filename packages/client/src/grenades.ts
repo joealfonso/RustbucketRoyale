@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { createGrenade, stepGrenade, type Box, type GrenadeState, type GrenadeStats } from "@rustbucket/shared";
+import { createGrenade, stepGrenade, type GrenadeState, type GrenadeStats, type World } from "@rustbucket/shared";
 
 interface Live {
   state: GrenadeState;
@@ -34,11 +34,11 @@ export class ClientGrenades {
   }
 
   // `onFuse` fires when a grenade's fuse runs out on this client. Online the server's blast message is the real signal.
-  update(dt: number, boxes: readonly Box[], onFuse?: (x: number, y: number, z: number) => void): void {
+  update(dt: number, world: World, onFuse?: (x: number, y: number, z: number) => void): void {
     for (const g of this.pool) {
       if (!g.active || g.settled) continue;
       // Hold still at fuse end and wait for the server's blast message, which removes it.
-      if (stepGrenade(g.state, this.stats, dt, boxes)) {
+      if (stepGrenade(g.state, this.stats, dt, world)) {
         g.settled = true;
         onFuse?.(g.state.x, g.state.y, g.state.z);
       }

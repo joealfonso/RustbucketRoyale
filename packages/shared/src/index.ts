@@ -10,3 +10,4 @@ export * from "./weapon";
 export * from "./prediction";
 export * from "./zones";
 export * from "./grenade";
+export * from "./generation";

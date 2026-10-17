@@ -1,4 +1,4 @@
-import type { Box, Shot, WeaponStats } from "@rustbucket/shared";
+import type { Shot, WeaponStats, World } from "@rustbucket/shared";
 import type { TimedEffects } from "./effects";
 import type { Projectiles } from "./projectiles";
 
@@ -18,8 +18,8 @@ export class ShotFx {
     this.flashes.spawn(shot.ox + shot.dx, shot.oy + shot.dy, shot.oz + shot.dz, 0.05);
   }
 
-  update(dt: number, boxes: readonly Box[]): void {
-    this.projectiles.update(dt, boxes);
+  update(dt: number, world: World): void {
+    this.projectiles.update(dt, world);
     this.impacts.update(dt);
     this.flashes.update(dt);
   }

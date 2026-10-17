@@ -1,0 +1,25 @@
+{
+  "edgeWallHeight": 40,
+  "edgeWallThickness": 2,
+  "maxAttempts": 8,
+  "minConnectedFraction": 0.9,
+  "navCellMeters": 2,
+  "groundColor": "#59605a",
+  "tiers": {
+    "small": {
+      "meters": 300,
+      "spawns": 16,
+      "spawnSeparationChunks": 1
+    },
+    "medium": {
+      "meters": 1000,
+      "spawns": 32,
+      "spawnSeparationChunks": 2
+    },
+    "large": {
+      "meters": 2000,
+      "spawns": 56,
+      "spawnSeparationChunks": 3
+    }
+  }
+}

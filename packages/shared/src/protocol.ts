@@ -85,7 +85,7 @@ export interface ExplodeMessage {
 }
 
 export type ServerMessage =
-  | { t: "welcome"; id: number }
+  | { t: "welcome"; id: number; seed: number; tier: string }
   | { t: "full" }
   | { t: "snapshot"; tick: number; ack: number; you: SelfState; health: HealthState; others: OtherState[] }
   | ShotMessage

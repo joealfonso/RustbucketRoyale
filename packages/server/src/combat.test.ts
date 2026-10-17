@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ZONE_TORSO, boxFromData, type MechInput } from "@rustbucket/shared";
+import { ZONE_TORSO, World, boxFromData, type MechInput } from "@rustbucket/shared";
 import { loadRoomConfig } from "./config";
 import { Room, type RoomConfig } from "./Room";
 import { Client, forward, idle } from "./testClient";
@@ -45,7 +45,7 @@ describe("shots", () => {
 
   it("are stopped by a wall in between", () => {
     const { room, shooter, target } = setup((c) => ({
-      ...c, boxes: [...c.boxes, boxFromData({ name: "wall", center: [-18, 5, 0], size: [1, 10, 20], color: "" })],
+      ...c, world: new World([...c.world.boxes, boxFromData({ name: "wall", center: [-18, 5, 0], size: [1, 10, 20], color: "" })]),
     }));
     settle(room, shooter, target);
     tick(room, [shooter, target], (c) => (c === shooter ? idle(AT_TARGET) : turnedAway()), 20);
@@ -108,7 +108,7 @@ describe("grenades", () => {
 
   it("are blocked by walls", () => {
     const { room, shooter, target } = setup((c) => ({
-      ...dropBomb(c), boxes: [...c.boxes, boxFromData({ name: "wall", center: [-18, 5, 0], size: [1, 10, 20], color: "" })],
+      ...dropBomb(c), world: new World([...c.world.boxes, boxFromData({ name: "wall", center: [-18, 5, 0], size: [1, 10, 20], color: "" })]),
     }));
     tick(room, [shooter, target], (c, i) => (c === shooter && i === 0 ? idle(THROW) : idle()), 60);
     expect(target.last().health.hp).toEqual([60, 60, 100]);

@@ -7,7 +7,6 @@ type ShotMessage = Extract<ServerMessage, { t: "shot" }>;
 export class NetClient {
   id = 0;
   open = false;
-  onWelcome?: (id: number) => void;
   onSnapshot?: (snapshot: SnapshotMessage) => void;
   onShot?: (shot: ShotMessage) => void;
   onHit?: (hit: HitMessage) => void;
@@ -15,6 +14,8 @@ export class NetClient {
   onExplode?: (explosion: ExplodeMessage) => void;
   onClose?: (reason: string) => void;
 
+  // Resolves with the map to build once the server says hello, or rejects if it never does.
+  readonly welcome: Promise<{ seed: number; tier: string }>;
   private socket: WebSocket;
   // Reused every send so the frame loop does not build a new object each time.
   private message: InputMessage = {
@@ -23,19 +24,22 @@ export class NetClient {
   };
 
   constructor(url: string) {
+    let welcomed: (map: { seed: number; tier: string }) => void = () => {};
+    let failed: (reason: Error) => void = () => {};
+    this.welcome = new Promise((resolve, reject) => { welcomed = resolve; failed = reject; });
     this.socket = new WebSocket(url);
     this.socket.onopen = () => { this.open = true; };
-    this.socket.onclose = () => { this.open = false; this.onClose?.("The server closed the connection."); };
-    this.socket.onerror = () => this.onClose?.(`Could not reach the server at ${url}.`);
+    this.socket.onclose = () => { this.open = false; failed(new Error("The server closed the connection.")); this.onClose?.("The server closed the connection."); };
+    this.socket.onerror = () => { failed(new Error(`Could not reach the server at ${url}.`)); this.onClose?.(`Could not reach the server at ${url}.`); };
     this.socket.onmessage = (event) => {
       const message = JSON.parse(event.data as string) as ServerMessage;
-      if (message.t === "welcome") { this.id = message.id; this.onWelcome?.(message.id); }
+      if (message.t === "welcome") { this.id = message.id; welcomed({ seed: message.seed, tier: message.tier }); }
       else if (message.t === "snapshot") this.onSnapshot?.(message);
       else if (message.t === "shot") this.onShot?.(message);
       else if (message.t === "hit") this.onHit?.(message);
       else if (message.t === "grenade") this.onGrenade?.(message);
       else if (message.t === "explode") this.onExplode?.(message);
-      else if (message.t === "full") this.onClose?.("The room is full.");
+      else if (message.t === "full") { failed(new Error("The room is full.")); this.onClose?.("The room is full."); }
     };
   }
 

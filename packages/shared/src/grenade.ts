@@ -1,5 +1,5 @@
 import type { MechState } from "./mechStep";
-import { createRayHit, raycastBoxes, type Box } from "./world";
+import { createRayHit, type World } from "./world";
 import type { GrenadeStats } from "./stats";
 
 export interface GrenadeState {
@@ -32,12 +32,12 @@ const hit = createRayHit();
 
 // One step of a grenade: gravity, bounce off boxes, fuse. Returns true on the step it goes off.
 // Pure and deterministic, so the client can fly the same arc the server does without being told each frame.
-export function stepGrenade(g: GrenadeState, stats: GrenadeStats, dt: number, boxes: readonly Box[]): boolean {
+export function stepGrenade(g: GrenadeState, stats: GrenadeStats, dt: number, world: World): boolean {
   g.vy -= stats.gravity * dt;
   const sx = g.vx * dt, sy = g.vy * dt, sz = g.vz * dt;
   const length = Math.hypot(sx, sy, sz);
 
-  if (length > 1e-9 && raycastBoxes(g.x, g.y, g.z, sx / length, sy / length, sz / length, length + stats.radius, boxes, hit)) {
+  if (length > 1e-9 && world.raycast(g.x, g.y, g.z, sx / length, sy / length, sz / length, length + stats.radius, hit)) {
     // Stop one radius short of the surface, then bounce: lose some speed along the normal and some along the surface.
     const travel = Math.max(0, hit.distance - stats.radius);
     g.x += (sx / length) * travel; g.y += (sy / length) * travel; g.z += (sz / length) * travel;

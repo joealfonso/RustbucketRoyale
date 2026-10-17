@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import {
-  FireGate, Predictor, STEP, applyLook, boxFromData, computeShot, createGrenade, createMechInput, createMechState, createShot,
+  FireGate, Predictor, STEP, applyLook, computeShot, createGrenade, createMechInput, createMechState, createShot,
   parseCameraStats, parseGrenadeStats, parseMechStats, parseNetStats, parseWeaponStats, parseZones, throwGrenade,
-  type Box, type BoxData, type HealthState, type Shot,
+  type HealthState, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import weaponJson from "../../../data/weapon.json";
@@ -10,13 +10,14 @@ import cameraJson from "../../../data/camera.json";
 import netJson from "../../../data/net.json";
 import grenadeJson from "../../../data/grenade.json";
 import zonesJson from "../../../data/zones.json";
-import greyboxJson from "../../../data/greybox.json";
 import { setAimTarget } from "./aimTarget";
 import { DebugPanel } from "./debugPanel";
 import { TimedEffects } from "./effects";
 import { Input } from "./input";
 import { ClientGrenades } from "./grenades";
-import { addBox, createMechModel, setMechDamage } from "./mechModel";
+import { buildPlayMap } from "./loadMap";
+import { addMapMeshes } from "./mapRenderer";
+import { createMechModel, setMechDamage } from "./mechModel";
 import { NetClient } from "./net";
 import { Projectiles } from "./projectiles";
 import { RemoteMechs } from "./remoteMechs";
@@ -32,12 +33,33 @@ const netStats = parseNetStats(netJson);
 const grenadeStats = parseGrenadeStats(grenadeJson);
 const zoneSet = parseZones(zonesJson);
 const zoneMaxHp = zoneSet.zones.map((z) => z.hp);
-const mapData = greyboxJson as { spawn: [number, number, number]; boxes: BoxData[] };
-const boxes: Box[] = mapData.boxes.map(boxFromData);
 
 // Offline by default. Add ?online to join the local server, or ?server=ws://host:port for another one.
+// Offline, ?tier=small|medium|large|range and ?seed=123 choose the map. Online, the server chooses.
 const params = new URLSearchParams(location.search);
 const serverUrl = params.get("server") ?? (params.has("online") ? `ws://${location.hostname}:8080` : null);
+
+const hint = document.getElementById("hint")!;
+const hintHtml = hint.innerHTML;
+const net = serverUrl ? new NetClient(serverUrl) : null;
+let tier = params.get("tier") ?? "medium";
+let seed = params.has("seed") ? Number(params.get("seed")) : Math.floor(Math.random() * 0x100000000);
+
+try {
+  if (net) {
+    hint.textContent = "Connecting...";
+    ({ tier, seed } = await net.welcome);
+  }
+  hint.textContent = `Building ${tier} map...`;
+  // Let the message paint before the map build holds the thread.
+  await new Promise((resolve) => setTimeout(resolve, 30));
+} catch (error) {
+  hint.textContent = error instanceof Error ? error.message : String(error);
+  throw error;
+}
+const map = buildPlayMap(tier, seed, mechStats);
+const overview = params.has("overview");
+hint.innerHTML = hintHtml;
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -46,12 +68,13 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#9fb4c4");
 scene.fog = new THREE.Fog("#9fb4c4", 300, 1500);
+if (params.has("overview")) scene.fog = null;
 scene.add(new THREE.HemisphereLight("#ffffff", "#5b5a52", 1.4));
 const sun = new THREE.DirectionalLight("#fff4e0", 2);
 sun.position.set(80, 150, 40);
 scene.add(sun);
 
-for (const b of mapData.boxes) addBox(scene, b.center, b.size, b.color);
+addMapMeshes(scene, map);
 
 const ownModel = createMechModel("#d9731a", zoneMaxHp);
 const mechGroup = ownModel.group;
@@ -69,13 +92,13 @@ const thrown = createGrenade();
 const remotes = new RemoteMechs(scene, netStats.interpolationDelayMs, zoneMaxHp);
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
-const input = new Input(canvas, document.getElementById("hint")!, () => mechStats.dashDoubleTapSeconds);
+const input = new Input(canvas, hint, () => mechStats.dashDoubleTapSeconds);
 const panel = new DebugPanel(mechStats, weaponStats, cameraStats);
 // The rig re-applies the field of view from the tuning value every frame, so the slider needs no callback.
 
-const [spawnX, spawnY, spawnZ] = mapData.spawn;
-// Yaw PI faces +Z, down the long strip.
-const predictor = new Predictor(mechStats, boxes, spawnX, spawnY, spawnZ, Math.PI);
+const [spawnX, spawnY, spawnZ] = map.spawn;
+// Yaw PI faces +Z.
+const predictor = new Predictor(mechStats, map.world, spawnX, spawnY, spawnZ, Math.PI);
 const mech = predictor.state;
 const aim = { yaw: Math.PI, pitch: 0 };
 const mechInput = createMechInput();
@@ -85,7 +108,6 @@ const gate = new FireGate();
 let health: HealthState = { hp: [...zoneMaxHp], dead: false, respawnIn: 0 };
 
 // Online: wait for the first snapshot before stepping, so we start from where the server put us.
-const net = serverUrl ? new NetClient(serverUrl) : null;
 let ready = net === null;
 let lastCorrection = 0;
 // The visual offset left by a correction, faded out so the mech glides instead of snapping.
@@ -94,7 +116,6 @@ let offX = 0, offY = 0, offZ = 0;
 let prevX = mech.x, prevY = mech.y, prevZ = mech.z;
 
 if (net) {
-  const hint = document.getElementById("hint")!;
   net.onSnapshot = (snap) => {
     const error = predictor.reconcile(snap.ack, snap.you, STEP);
     lastCorrection = error;
@@ -206,7 +227,7 @@ function frame(now: number): void {
     input.sample(mechInput);
     mechInput.aimYaw = aim.yaw;
     mechInput.aimPitch = aim.pitch;
-    setAimTarget(rig.camera, boxes, weaponStats.maxAimDistance, mechInput);
+    setAimTarget(rig.camera, map.world, weaponStats.maxAimDistance, mechInput);
     // A destroyed mech can only look around, the same rule the server applies.
     if (health.dead) {
       mechInput.moveX = 0; mechInput.moveY = 0; mechInput.run = false; mechInput.jet = false;
@@ -227,10 +248,10 @@ function frame(now: number): void {
       throwGrenade(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, grenadeStats, thrown);
       grenades.spawn(thrown.x, thrown.y, thrown.z, thrown.vx, thrown.vy, thrown.vz);
     }
-    shotFx.update(STEP, boxes);
+    shotFx.update(STEP, map.world);
     blasts.update(STEP);
     // Offline there is no server to send the blast, so it goes off when the fuse ends.
-    grenades.update(STEP, boxes, net === null ? showBlast : undefined);
+    grenades.update(STEP, map.world, net === null ? showBlast : undefined);
     accumulator -= STEP;
   }
 
@@ -246,7 +267,13 @@ function frame(now: number): void {
 
   // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.
   rig.setFovKick(mech.dashTime > 0 ? mech.dashTime / mechStats.dashSeconds : 0, frameTime);
-  rig.update(x, y + cameraStats.pivotHeight, z, aim.yaw, aim.pitch, boxes, frameTime);
+  rig.update(x, y + cameraStats.pivotHeight, z, aim.yaw, aim.pitch, map.world, frameTime);
+
+  // ?overview floats the camera above the middle of the map, for looking over a seed at a glance.
+  if (overview) {
+    rig.camera.position.set(0, map.meters * 0.75, 1);
+    rig.camera.lookAt(0, 0, 0);
+  }
 
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;
   staminaFill.style.width = `${mech.stamina.fraction * 100}%`;

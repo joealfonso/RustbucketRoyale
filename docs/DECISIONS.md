@@ -69,3 +69,19 @@ Torso at zero destroys the mech. It looks around but cannot move or fire, then r
 
 ## 2026-10-17: Double-press to dash: Shift, or a movement key for that direction
 Two earlier versions failed: dash on release added up to 0.2 s of delay, and dash on press made every run start with a dash. Now two presses of the same key within 0.25 s (data/mech.json) dash at once. Double-press Shift dashes where you steer; double-press W, A, S or D dashes that way, even if you are steering another. One press or a hold is just walking or running. The dash is a short fixed burst, costs stamina, and has a cooldown, all in data. It lives in the shared movement step, so the server decides it and prediction replays it exactly. Cost: stuttering a movement key can dash by accident, and stamina and cooldown are the only brake. If playtests show people fumbling it or dashing by mistake, add a dedicated dash key or shorten the window.
+
+## 2026-10-17: Collision grid before generated maps
+A 2000 m map has about 12,000 boxes, and every shot, grenade, camera ray and mech step used to test every box. The map now lives in a flat grid of 16 m cells (`World`), and each query only touches the boxes near it. Tested against the old brute force on 2000 random rays. Cost: boxes are only grouped by footprint, so very tall or huge boxes (the ground, the edge wall) sit in many cells.
+
+## 2026-10-17: The map comes from a seed, retries use derived seeds
+The server picks a seed and tells clients the seed and tier. Everyone builds the same map from chunk templates in `data/chunks.json`, placed on a grid with integer decisions only and a 32 bit seeded generator (`SeededRng`). If a map fails its checks (blocked spawn, spawns that cannot reach each other, too much sealed off ground), the next attempt uses a seed derived from the first, so every machine ends up on the same map. Tested for 1000 seeds built twice. Cost: chunk numbers must be exact halves and spawnable chunks must keep their middle clear, both checked by tests.
+
+## 2026-10-17: Walkability is a height map with step checks, not a mesh
+Each 2 m cell remembers the height of what a mech could stand on. Two neighbours connect when the step between them is within the climb height, so stairs and terraced hills connect, walls do not, and roofs above head height are ignored. The server keeps this grid for bots at M5. Cost: it cannot tell a jets-only rooftop from ground, so those cells just do not count towards "connected ground".
+
+## 2026-10-17: A text scan, not ESLint, guards generation
+typescript-eslint does not support our TypeScript 7 yet, so `scripts/check-determinism.ts` scans the generation folder for Math.random, clocks, Date, crypto, engine dependent maths and `**`, with its own tests. Revisit when ESLint catches up; swap it for a real rule then.
+
+## 2026-10-17: Small map spawns sized to the bot target
+Small allows 16 spawns, medium 32, large 56, a little over the bot targets in the design (12, 24, 40 players in total including humans). The first guess of 24 on small could not be met on a 6 by 6 chunk map.
+

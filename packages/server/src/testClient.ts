@@ -20,8 +20,8 @@ export class Client {
   constructor(public room: Room, config = loadRoomConfig()) {
     this.id = room.join((m) => this.messages.push(m)) ?? 0;
     // Start where the server put this player (slot = join order here) so the first snapshot is not a jump.
-    const [x, y, z] = config.spawn;
-    this.predictor = new Predictor(config.mech, config.boxes, x + (this.id - 1 - 3.5) * config.net.spawnSpacing, y, z, Math.PI);
+    const [x, y, z] = config.spawns[(this.id - 1) % config.spawns.length]!;
+    this.predictor = new Predictor(config.mech, config.world, x, y, z, Math.PI);
   }
   send(input: MechInput): void {
     const seq = this.predictor.step(input, STEP);

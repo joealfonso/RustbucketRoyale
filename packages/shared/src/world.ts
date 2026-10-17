@@ -32,8 +32,47 @@ export function createRayHit(): RayHit {
   return { distance: 0, normalX: 0, normalY: 0, normalZ: 0, index: -1 };
 }
 
-// Slab test against every box, keeping the nearest hit. Direction must be unit length.
-// Writes into `out` so shots and camera checks allocate nothing each frame.
+// Slab test of one ray against one box. Returns the entry distance, or -1 for a miss. Direction must be unit length.
+// The normal of the face that was entered goes into `normal` as [x, y, z].
+function rayBox(
+  ox: number, oy: number, oz: number, dx: number, dy: number, dz: number,
+  maxDistance: number, b: Box, normal: number[],
+): number {
+  let tMin = 0;
+  let tMax = maxDistance;
+  let nx = 0, ny = 0, nz = 0;
+
+  for (let axis = 0; axis < 3; axis++) {
+    const o = axis === 0 ? ox : axis === 1 ? oy : oz;
+    const d = axis === 0 ? dx : axis === 1 ? dy : dz;
+    const lo = axis === 0 ? b.minX : axis === 1 ? b.minY : b.minZ;
+    const hi = axis === 0 ? b.maxX : axis === 1 ? b.maxY : b.maxZ;
+
+    if (Math.abs(d) < 1e-9) {
+      if (o < lo || o > hi) return -1;
+      continue;
+    }
+    let t1 = (lo - o) / d;
+    let t2 = (hi - o) / d;
+    let sign = -1; // entering through the low face means the normal points back toward -axis
+    if (t1 > t2) { const swap = t1; t1 = t2; t2 = swap; sign = 1; }
+    if (t1 > tMin) {
+      tMin = t1;
+      nx = axis === 0 ? sign : 0;
+      ny = axis === 1 ? sign : 0;
+      nz = axis === 2 ? sign : 0;
+    }
+    if (t2 < tMax) tMax = t2;
+    if (tMin > tMax) return -1;
+  }
+  normal[0] = nx; normal[1] = ny; normal[2] = nz;
+  return tMin;
+}
+
+const normalScratch = [0, 0, 0];
+
+// Ray against a plain list of boxes, keeping the nearest hit. Fine for a handful of boxes (a mech's hit zones);
+// use World for the map. Writes into `out` so nothing is allocated.
 export function raycastBoxes(
   ox: number, oy: number, oz: number,
   dx: number, dy: number, dz: number,
@@ -41,45 +80,133 @@ export function raycastBoxes(
 ): boolean {
   let best = maxDistance;
   let found = false;
-
   for (let i = 0; i < boxes.length; i++) {
-    const b = boxes[i]!;
-    let tMin = 0;
-    let tMax = best;
-    let nx = 0, ny = 0, nz = 0;
-    let hit = true;
-
-    for (let axis = 0; axis < 3; axis++) {
-      const o = axis === 0 ? ox : axis === 1 ? oy : oz;
-      const d = axis === 0 ? dx : axis === 1 ? dy : dz;
-      const lo = axis === 0 ? b.minX : axis === 1 ? b.minY : b.minZ;
-      const hi = axis === 0 ? b.maxX : axis === 1 ? b.maxY : b.maxZ;
-
-      if (Math.abs(d) < 1e-9) {
-        if (o < lo || o > hi) { hit = false; break; }
-        continue;
-      }
-      let t1 = (lo - o) / d;
-      let t2 = (hi - o) / d;
-      let sign = -1; // entering through the low face means the normal points back toward -axis
-      if (t1 > t2) { const swap = t1; t1 = t2; t2 = swap; sign = 1; }
-      if (t1 > tMin) {
-        tMin = t1;
-        nx = axis === 0 ? sign : 0;
-        ny = axis === 1 ? sign : 0;
-        nz = axis === 2 ? sign : 0;
-      }
-      if (t2 < tMax) tMax = t2;
-      if (tMin > tMax) { hit = false; break; }
-    }
-
-    if (hit && tMin <= best) {
-      best = tMin;
+    const t = rayBox(ox, oy, oz, dx, dy, dz, best, boxes[i]!, normalScratch);
+    if (t >= 0 && t <= best) {
+      best = t;
       found = true;
-      out.distance = tMin;
+      out.distance = t;
       out.index = i;
-      out.normalX = nx; out.normalY = ny; out.normalZ = nz;
+      out.normalX = normalScratch[0]!; out.normalY = normalScratch[1]!; out.normalZ = normalScratch[2]!;
     }
   }
   return found;
+}
+
+// The map's collision boxes, sorted into a flat grid of cells so a query only looks at boxes near it.
+// Without this every shot, grenade, camera ray and mech step would test every box on a 2000 m map.
+export class World {
+  readonly boxes: readonly Box[];
+  private readonly cellSize: number;
+  private readonly originX: number;
+  private readonly originZ: number;
+  private readonly cols: number;
+  private readonly rows: number;
+  private readonly cellStart: Int32Array; // boxes of cell c are items[cellStart[c] .. cellStart[c + 1])
+  private readonly items: Int32Array;
+  private readonly seen: Int32Array;
+  private stamp = 0;
+
+  constructor(boxes: readonly Box[], cellSize = 16) {
+    this.boxes = boxes;
+    this.cellSize = cellSize;
+
+    let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+    for (const b of boxes) {
+      minX = Math.min(minX, b.minX); maxX = Math.max(maxX, b.maxX);
+      minZ = Math.min(minZ, b.minZ); maxZ = Math.max(maxZ, b.maxZ);
+    }
+    if (boxes.length === 0) { minX = minZ = 0; maxX = maxZ = cellSize; }
+    this.originX = minX;
+    this.originZ = minZ;
+    this.cols = Math.max(1, Math.ceil((maxX - minX) / cellSize));
+    this.rows = Math.max(1, Math.ceil((maxZ - minZ) / cellSize));
+
+    // Two passes: count how many boxes land in each cell, then fill one flat array.
+    const counts = new Int32Array(this.cols * this.rows + 1);
+    const forEachCell = (b: Box, fn: (cell: number) => void) => {
+      const x0 = this.cellX(b.minX), x1 = this.cellX(b.maxX), z0 = this.cellZ(b.minZ), z1 = this.cellZ(b.maxZ);
+      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) fn(z * this.cols + x);
+    };
+    for (const b of boxes) forEachCell(b, (c) => counts[c + 1]!++);
+    for (let c = 0; c < this.cols * this.rows; c++) counts[c + 1]! += counts[c]!;
+    this.cellStart = counts;
+    this.items = new Int32Array(counts[this.cols * this.rows]!);
+    const fill = counts.slice(0, this.cols * this.rows);
+    boxes.forEach((b, i) => forEachCell(b, (c) => { this.items[fill[c]!++] = i; }));
+    this.seen = new Int32Array(boxes.length);
+  }
+
+  private cellX(x: number): number {
+    return Math.min(this.cols - 1, Math.max(0, Math.floor((x - this.originX) / this.cellSize)));
+  }
+
+  private cellZ(z: number): number {
+    return Math.min(this.rows - 1, Math.max(0, Math.floor((z - this.originZ) / this.cellSize)));
+  }
+
+  // Fills `out` with the indices of boxes whose footprint touches the given rectangle, each once,
+  // and returns how many. The caller still checks height. `out` is reused, so nothing is allocated.
+  query(minX: number, minZ: number, maxX: number, maxZ: number, out: number[]): number {
+    this.stamp++;
+    let count = 0;
+    const x0 = this.cellX(minX), x1 = this.cellX(maxX), z0 = this.cellZ(minZ), z1 = this.cellZ(maxZ);
+    for (let z = z0; z <= z1; z++) {
+      for (let x = x0; x <= x1; x++) {
+        const cell = z * this.cols + x;
+        for (let k = this.cellStart[cell]!; k < this.cellStart[cell + 1]!; k++) {
+          const index = this.items[k]!;
+          if (this.seen[index] === this.stamp) continue;
+          this.seen[index] = this.stamp;
+          out[count++] = index;
+        }
+      }
+    }
+    return count;
+  }
+
+  // Nearest box along a ray. Walks the grid cell by cell and stops as soon as a hit is nearer than the next cell.
+  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDistance: number, out: RayHit): boolean {
+    this.stamp++;
+    let best = maxDistance;
+    let found = false;
+
+    let x = this.cellX(ox), z = this.cellZ(oz);
+    const stepX = dx > 0 ? 1 : -1, stepZ = dz > 0 ? 1 : -1;
+    const nextX = this.originX + (x + (dx > 0 ? 1 : 0)) * this.cellSize;
+    const nextZ = this.originZ + (z + (dz > 0 ? 1 : 0)) * this.cellSize;
+    let tMaxX = Math.abs(dx) < 1e-9 ? Infinity : (nextX - ox) / dx;
+    let tMaxZ = Math.abs(dz) < 1e-9 ? Infinity : (nextZ - oz) / dz;
+    const tDeltaX = Math.abs(dx) < 1e-9 ? Infinity : this.cellSize / Math.abs(dx);
+    const tDeltaZ = Math.abs(dz) < 1e-9 ? Infinity : this.cellSize / Math.abs(dz);
+
+    for (;;) {
+      const cell = z * this.cols + x;
+      for (let k = this.cellStart[cell]!; k < this.cellStart[cell + 1]!; k++) {
+        const index = this.items[k]!;
+        if (this.seen[index] === this.stamp) continue;
+        this.seen[index] = this.stamp;
+        const t = rayBox(ox, oy, oz, dx, dy, dz, best, this.boxes[index]!, normalScratch);
+        if (t >= 0 && t <= best) {
+          best = t;
+          found = true;
+          out.distance = t;
+          out.index = index;
+          out.normalX = normalScratch[0]!; out.normalY = normalScratch[1]!; out.normalZ = normalScratch[2]!;
+        }
+      }
+
+      // Leave this cell through the nearer wall. A hit already closer than that wall cannot be beaten.
+      const tExit = Math.min(tMaxX, tMaxZ);
+      if (best <= tExit || tExit > maxDistance) break;
+      if (tMaxX < tMaxZ) {
+        x += stepX; tMaxX += tDeltaX;
+        if (x < 0 || x >= this.cols) break;
+      } else {
+        z += stepZ; tMaxZ += tDeltaZ;
+        if (z < 0 || z >= this.rows) break;
+      }
+    }
+    return found;
+  }
 }

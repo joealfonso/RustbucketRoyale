@@ -1,7 +1,7 @@
 import type { MechInput } from "./MechInput";
 import { Meter } from "./Meter";
 import type { MechStats } from "./stats";
-import type { Box } from "./world";
+import type { Box, World } from "./world";
 
 const DEG = Math.PI / 180;
 // A small constant push into the floor keeps the mech reporting grounded while it stands still.
@@ -39,7 +39,7 @@ export function moveTowardsAngle(current: number, target: number, maxDelta: numb
 
 // One fixed step of the mech. Weight comes from acceleration and the slow body turn, not slow top speed.
 // Same code runs on the client now and the server at M2, so prediction matches.
-export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: number, boxes: readonly Box[]): void {
+export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: number, world: World): void {
   s.fuel.setMax(stats.fuelMax);
   s.stamina.setMax(stats.staminaMax);
 
@@ -121,9 +121,9 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   }
 
   s.grounded = false;
-  moveHorizontal(s, stats, s.vx * dt, 0, boxes);
-  moveHorizontal(s, stats, 0, s.vz * dt, boxes);
-  moveVertical(s, stats, s.vy * dt, boxes);
+  moveHorizontal(s, stats, s.vx * dt, 0, world);
+  moveHorizontal(s, stats, 0, s.vz * dt, world);
+  moveVertical(s, stats, s.vy * dt, world);
 }
 
 function overlaps(s: MechState, stats: MechStats, b: Box): boolean {
@@ -134,13 +134,21 @@ function overlaps(s: MechState, stats: MechStats, b: Box): boolean {
   );
 }
 
-function moveHorizontal(s: MechState, stats: MechStats, dx: number, dz: number, boxes: readonly Box[]): void {
+// Reused for every query so the sim allocates nothing per step.
+const nearby: number[] = [];
+
+function nearbyBoxes(s: MechState, stats: MechStats, world: World): number {
+  return world.query(s.x - stats.halfWidth, s.z - stats.halfWidth, s.x + stats.halfWidth, s.z + stats.halfWidth, nearby);
+}
+
+function moveHorizontal(s: MechState, stats: MechStats, dx: number, dz: number, world: World): void {
   if (dx === 0 && dz === 0) return;
   s.x += dx;
   s.z += dz;
   const wasOnGround = s.vy <= 0;
-  for (let i = 0; i < boxes.length; i++) {
-    const b = boxes[i]!;
+  const count = nearbyBoxes(s, stats, world);
+  for (let i = 0; i < count; i++) {
+    const b = world.boxes[nearby[i]!]!;
     if (!overlaps(s, stats, b)) continue;
 
     // Low ledges and stairs are walked up, not bumped into.
@@ -156,10 +164,11 @@ function moveHorizontal(s: MechState, stats: MechStats, dx: number, dz: number, 
   }
 }
 
-function moveVertical(s: MechState, stats: MechStats, dy: number, boxes: readonly Box[]): void {
+function moveVertical(s: MechState, stats: MechStats, dy: number, world: World): void {
   s.y += dy;
-  for (let i = 0; i < boxes.length; i++) {
-    const b = boxes[i]!;
+  const count = nearbyBoxes(s, stats, world);
+  for (let i = 0; i < count; i++) {
+    const b = world.boxes[nearby[i]!]!;
     if (!overlaps(s, stats, b)) continue;
     if (dy <= 0) {
       s.y = b.maxY;

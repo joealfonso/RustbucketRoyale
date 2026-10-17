@@ -1,9 +1,9 @@
 import {
   FireGate, STEP, ZONE_COUNT, ZONE_TORSO, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
-  createMechState, createRayHit, createShot, createZoneHit, isDestroyed, parseClientMessage, raycastBoxes, raycastMech,
+  createMechState, createRayHit, createShot, createZoneHit, isDestroyed, parseClientMessage, raycastMech,
   stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
-  type Box, type CombatStats, type GrenadeState, type GrenadeStats, type MechInput, type MechState, type MechStats,
-  type NetStats, type OtherState, type ServerMessage, type WeaponStats, type ZoneSet,
+  type CombatStats, type GrenadeState, type GrenadeStats, type MechInput, type MechState, type MechStats,
+  type NetStats, type OtherState, type ServerMessage, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 
 const KILL_HEIGHT = -50;
@@ -41,8 +41,10 @@ export interface RoomConfig {
   combat: CombatStats;
   net: NetStats;
   zones: ZoneSet;
-  boxes: readonly Box[];
-  spawn: [number, number, number];
+  world: World;
+  spawns: [number, number, number][]; // where players start, one per slot
+  seed: number; // sent to clients so they build the same map
+  tier: string;
   random?: () => number;
 }
 
@@ -87,7 +89,7 @@ export class Room {
       budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), dead: false, respawnTick: 0,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
-    send({ t: "welcome", id });
+    send({ t: "welcome", id, seed: this.config.seed, tier: this.config.tier });
     return id;
   }
 
@@ -142,7 +144,7 @@ export class Room {
     if (player.dead) {
       input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.fire = false; input.grenade = false;
     }
-    stepMech(player.state, input, this.config.mech, STEP, this.config.boxes);
+    stepMech(player.state, input, this.config.mech, STEP, this.config.world);
     player.steps++;
 
     if (input.fire) this.tryShoot(player, input);
@@ -160,7 +162,7 @@ export class Room {
 
     // How far the shot goes: the nearest wall, unless a mech is in the way.
     let reach = weapon.maxAimDistance;
-    if (raycastBoxes(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.config.boxes, this.worldHit)) reach = this.worldHit.distance;
+    if (this.config.world.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.worldHit)) reach = this.worldHit.distance;
 
     const target = this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach);
     if (target) {
@@ -224,7 +226,7 @@ export class Room {
   private stepGrenades(): void {
     for (let i = this.grenades.length - 1; i >= 0; i--) {
       const live = this.grenades[i]!;
-      if (!stepGrenade(live.state, this.config.grenade, STEP, this.config.boxes)) continue;
+      if (!stepGrenade(live.state, this.config.grenade, STEP, this.config.world)) continue;
       this.grenades.splice(i, 1);
       this.explode(live);
     }
@@ -245,7 +247,7 @@ export class Room {
       const distance = Math.hypot(dx, dy, dz);
       if (distance >= grenade.blastRadius) continue;
       // Walls block the blast.
-      if (distance > 0.5 && raycastBoxes(bx, by, bz, dx / distance, dy / distance, dz / distance, distance - 0.5, this.config.boxes, this.worldHit)) continue;
+      if (distance > 0.5 && this.config.world.raycast(bx, by, bz, dx / distance, dy / distance, dz / distance, distance - 0.5, this.worldHit)) continue;
 
       const amount = grenade.damage * (1 - distance / grenade.blastRadius);
       let total = 0;
@@ -279,8 +281,8 @@ export class Room {
   }
 
   private spawnFor(slot: number): [number, number, number] {
-    const [x, y, z] = this.config.spawn;
-    return [x + (slot - 3.5) * this.config.net.spawnSpacing, y, z];
+    const { spawns } = this.config;
+    return spawns[slot % spawns.length]!;
   }
 
   private broadcastSnapshots(): void {

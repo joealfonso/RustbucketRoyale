@@ -51,13 +51,14 @@ Open these on demand. Do not import them.
 - Profile before optimizing. Record numbers in `docs/PERF.md`.
 
 ## Determinism
-- Generation code uses `SeededRng` only. Never `Math.random`, `Date.now`, or anything time based. An ESLint rule flags violations in `packages/shared/src/generation/`.
+- Generation code uses `SeededRng` only. Never `Math.random`, `Date.now`, or anything time based. The gauntlet scans `packages/shared/src/generation/` for banned calls (`scripts/check-determinism.ts`), because the TypeScript lint tools do not support our TypeScript version yet.
 - Placement decisions use integer math. Floats only appear after decisions, for visuals.
 
 ## Commands
 - `npm install`: once after cloning.
 - `npm run dev`: client dev server at http://localhost:5173. Offline play by default; add `?online` to join the server.
-- `npm run server`: the game server on ws://localhost:8080 (set `PORT` to change).
+- `npm run server`: the game server on ws://localhost:8080. Set `PORT`, `TIER` (small, medium, large, or range) and `SEED` to change them.
+- Offline map choice: `?tier=small|medium|large|range&seed=123`. Add `&overview` to look down on the whole map.
 - `npm test`: Vitest. `npm run typecheck`: TypeScript. `npm run build`: production client build.
 - `npm run gauntlet`: typecheck, tests (including a real two-client server test), and build in one pass or fail verdict. Results in `artifacts/`.
 

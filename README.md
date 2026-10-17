@@ -25,4 +25,4 @@ npm run server
 http://localhost:5173/?online
 
 ## Status
-M1 passed. M2 passed. M3 (hits, damage zones, grenades) is built and waiting for its playtest gate.
+M1 passed. M3 passed. M4 (maps built from a seed, three sizes, validation) is built and waiting for its playtest gate.

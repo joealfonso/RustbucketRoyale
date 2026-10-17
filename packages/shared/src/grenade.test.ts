@@ -4,7 +4,7 @@ import { createGrenade, stepGrenade, throwGrenade } from "./grenade";
 import { createMechState } from "./mechStep";
 import mechJson from "../../../data/mech.json";
 import { parseGrenadeStats, parseMechStats } from "./stats";
-import { boxFromData } from "./world";
+import { World, boxFromData } from "./world";
 
 const stats = parseGrenadeStats(grenadeJson);
 const mechStats = parseMechStats(mechJson);
@@ -12,12 +12,13 @@ const ground = boxFromData({ name: "g", center: [0, -0.5, 0], size: [2000, 1, 20
 const DT = 1 / 60;
 
 function fly(seconds: number, boxes = [ground]) {
+  const world = new World(boxes);
   const g = createGrenade();
   g.x = 0; g.y = 2; g.z = 0; g.vx = 10; g.vy = 0; g.vz = 0; g.timeLeft = stats.fuseSeconds;
   let exploded = false;
   const trail: number[] = [];
   for (let i = 0; i < Math.round(seconds / DT); i++) {
-    exploded = stepGrenade(g, stats, DT, boxes) || exploded;
+    exploded = stepGrenade(g, stats, DT, world) || exploded;
     trail.push(g.y);
   }
   return { g, exploded, trail };

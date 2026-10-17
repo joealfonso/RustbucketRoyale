@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { createRayHit, raycastBoxes, type Box, type CameraStats } from "@rustbucket/shared";
+import { createRayHit, type CameraStats, type World } from "@rustbucket/shared";
 
 const euler = new THREE.Euler(0, 0, 0, "YXZ");
 const quaternion = new THREE.Quaternion();
@@ -41,7 +41,7 @@ export class ThirdPersonCamera {
     this.trauma = Math.min(1, this.trauma + amount);
   }
 
-  update(px: number, py: number, pz: number, yaw: number, pitch: number, boxes: readonly Box[], dt: number): void {
+  update(px: number, py: number, pz: number, yaw: number, pitch: number, world: World, dt: number): void {
     const s = this.stats;
     euler.set(pitch, yaw, 0);
     quaternion.setFromEuler(euler);
@@ -59,7 +59,7 @@ export class ThirdPersonCamera {
       const sx = i === 1 ? s.radius : i === 2 ? -s.radius : 0;
       const sy = i === 3 ? s.radius : i === 4 ? -s.radius : 0;
       sample.set(px, py, pz).addScaledVector(right, sx).addScaledVector(up, sy);
-      if (raycastBoxes(sample.x, sample.y, sample.z, dirX, dirY, dirZ, length, boxes, hit)) {
+      if (world.raycast(sample.x, sample.y, sample.z, dirX, dirY, dirZ, length, hit)) {
         nearest = Math.min(nearest, hit.distance);
       }
     }
