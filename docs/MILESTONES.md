@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M6 (in three gates: 6a props to wreck; 6b loot and loadout; 6c looting wrecks)
+Current code milestone: M7 (not started)
 Current visual milestone: V1 (not started)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -58,3 +58,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 
 - 2026-10-17: Gate 6b passed by Joseph's call ("start the next pass"). 6c (looting wrecks, bots looting, loot density check) started.
 - 2026-10-17: Gate 6c built, waiting for its playtest. Check: knock someone out, stand by the wreck and hold E ("Hold E: loot wreck", then a percentage with a rattle); letting go starts again; it spills their guns, grenades and plates round the wreck and their plates come off; a wreck loots once; looting shows on other people's radar; bots with nobody to fight walk over to loot and to wrecks and take things. Maps now also check loot props near every spawn.
+- 2026-10-17: Gate 6c passed by Joseph's call. M6 is done: breakable props and barrels, loot and a two slot loadout, wreck looting, bots that loot, loot density checks. M7 not started.

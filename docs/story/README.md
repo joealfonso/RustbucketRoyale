@@ -89,6 +89,13 @@ Every map has crates, junk piles and red barrels placed by the seed. Shoot them 
 
 Broken crates and junk now drop glowing loot: grenades and armor plates you walk over, and two new guns you take with E. Two weapon slots on 1 and 2 or the wheel: the start Autocannon, a close-range Scattergun and a slow, hard-hitting Spike Driver. Plates bolt onto the mech and soak hits first. Grenades are counted now, one to start.
 
+## 11. Gate 6c: picking over the wrecks
+*Passed 16:52. Commit `3847272`.*
+
+![Knocked out first and already looted: both slots empty, no grenades, Bot 5 standing over another wreck](11-6c-looted-by-a-bot.jpg)
+
+A knocked-out mech leaves a wreck. Hold E beside it for two seconds and everything it carried spills on the ground round it: guns, grenades, plates. It rattles and shows up on everyone's radar, and letting go starts it over. Bots with nobody to fight now go for loot and wrecks too, which is how this shot happened. Maps also check there is loot near every spawn. That finishes M6.
+
 ---
 
-*Next: gate 6c, looting wrecks.*
+*Next: M7, part damage, broken states, crawling and repair.*
