@@ -53,4 +53,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: M6 started on Joseph's go, in gates 6a (props, barrels), 6b (loot, two weapon slots, grenade count, armor plates; no ammo for guns, walk over small items, E for weapons), 6c (looting wrecks, bots looting, loot density check).
 - 2026-10-17: Gate 6a built, waiting for its playtest. Check: crates, junk piles and red barrels in every map; shoot them until they break and vanish (cover really goes away); barrels blow up and set off barrels near them; breaking things is loud on the radar. Soak passes on all tiers with props.
 - 2026-10-17: During the 6a check: added placeholder sound everywhere (Web Audio, M to mute) and made explosions faster and punchier (shorter grenade fuse and barrel delay, bursting fireball and flash).
+- 2026-10-17: Gate 6a passed by Joseph's call, with the new sound and faster explosions. 6b (loot and loadout) not started.
 
