@@ -67,5 +67,5 @@ A blast damages legs, arms and torso together, scaled by distance, so a close on
 Torso at zero destroys the mech. It looks around but cannot move or fire, then returns at its spawn with full health. This keeps playtests rolling until the real match loop and spectating land at M5.
 
 
-## 2026-10-17: Tap Shift to dash, hold Shift to run
-A Shift press shorter than 0.2 s (data/mech.json) dashes when the key comes up, so the dash lands a beat after the tap in exchange for hold-to-run keeping working untouched. The dash is a short fixed burst toward where you steer (straight ahead if you are standing still), costs stamina, and has a cooldown, all in data. It lives in the shared movement step, so the server decides it and prediction replays it exactly. Cost: up to 0.2 s of delay on the dash; if that feels bad, fire on key down and let a held Shift continue into a run.
+## 2026-10-17: Pressing Shift dashes at once, holding it runs
+First version waited for the key to come up to tell a tap from a hold, which added up to 0.2 s of delay and felt bad. Now the dash fires on the press itself, and a held Shift carries on as a run. The dash is a short fixed burst toward where you steer (straight ahead if standing still), costs stamina, and has a cooldown, all in data. It lives in the shared movement step, so the server decides it and prediction replays it exactly. Cost: starting a run always starts with a dash while stamina and cooldown allow it. If that gets annoying, tune the cost or make the dash need a direction key held.

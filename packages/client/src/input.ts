@@ -10,23 +10,16 @@ export class Input {
   private mouseDown = false;
   locked = false;
 
-  private shiftDownAt = 0;
   private dashQueued = false;
 
-  // `tapSeconds` is read each time, so the tuning panel can change it live.
-  constructor(private canvas: HTMLCanvasElement, private hint: HTMLElement, private tapSeconds: () => number) {
+  constructor(private canvas: HTMLCanvasElement, private hint: HTMLElement) {
     window.addEventListener("keydown", (e) => {
-      if (isShift(e.code) && !this.keys.has(e.code)) this.shiftDownAt = performance.now();
+      // Dash on the press itself, so there is no wait. Key repeat does not count as a new press.
+      if (isShift(e.code) && !this.keys.has(e.code) && this.locked) this.dashQueued = true;
       this.keys.add(e.code);
       if (e.code === "Space") e.preventDefault();
     });
-    window.addEventListener("keyup", (e) => {
-      // A short press of Shift is a tap, which dashes. Holding it is running.
-      if (isShift(e.code) && this.locked && performance.now() - this.shiftDownAt <= this.tapSeconds() * 1000) {
-        this.dashQueued = true;
-      }
-      this.keys.delete(e.code);
-    });
+    window.addEventListener("keyup", (e) => this.keys.delete(e.code));
     window.addEventListener("blur", () => { this.keys.clear(); this.mouseDown = false; });
 
     window.addEventListener("mousemove", (e) => {

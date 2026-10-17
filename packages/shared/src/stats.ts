@@ -30,7 +30,6 @@ export interface MechStats {
   dashSeconds: number;
   dashCooldown: number;
   dashStaminaCost: number;
-  dashTapSeconds: number; // a Shift press shorter than this is a tap, which dashes
 }
 
 export interface WeaponStats {
@@ -109,7 +108,7 @@ const MECH_KEYS: (keyof MechStats & string)[] = [
   "jetLift", "jetMaxRiseSpeed", "fuelMax", "fuelDrainPerSecond", "fuelRegenPerSecond", "fuelRegenDelay", "fuelUnlockFraction",
   "staminaMax", "runDrainPerSecond", "staminaRegenPerSecond", "staminaRegenDelay", "staminaUnlockFraction",
   "mouseSensitivity", "minPitch", "maxPitch",
-  "dashSpeed", "dashSeconds", "dashCooldown", "dashStaminaCost", "dashTapSeconds",
+  "dashSpeed", "dashSeconds", "dashCooldown", "dashStaminaCost",
 ];
 const WEAPON_KEYS: (keyof WeaponStats & string)[] = [
   "shotsPerSecond", "projectileSpeed", "projectileLifetime", "spreadDegrees", "maxAimDistance", "shakeForce", "damage",

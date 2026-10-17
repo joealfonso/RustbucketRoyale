@@ -69,7 +69,7 @@ const thrown = createGrenade();
 const remotes = new RemoteMechs(scene, netStats.interpolationDelayMs, zoneMaxHp);
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
-const input = new Input(canvas, document.getElementById("hint")!, () => mechStats.dashTapSeconds);
+const input = new Input(canvas, document.getElementById("hint")!);
 const panel = new DebugPanel(mechStats, weaponStats, cameraStats);
 // The rig re-applies the field of view from the tuning value every frame, so the slider needs no callback.
 
