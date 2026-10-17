@@ -17,7 +17,8 @@ export interface Player {
   steps: number; // the player's own clock: one step per input processed
   budget: number; // message allowance, refills every tick
   hp: number[];
-  interested: Set<number>; // ids of the mechs this client is currently being sent
+  interested: Set<number>;
+  watchId: number; // when knocked out, the mech this client says it is watching (0 for none) // ids of the mechs this client is currently being sent
   dead: boolean;
   respawnTick: number; // between matches a destroyed mech comes back on this tick
   participant: boolean; // took part in the current match from its start

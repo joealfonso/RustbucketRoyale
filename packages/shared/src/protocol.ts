@@ -23,6 +23,8 @@ export interface InputMessage {
   // How far behind the server the client's picture of other mechs is (round trip plus its smoothing delay),
   // so a shot is checked against what the shooter actually saw. Optional, and capped by the server.
   lagMs?: number;
+  // While knocked out: which mech this client is watching, so it is sent what is near that mech.
+  watchId?: number;
 }
 
 // The room creator asks for the first match to begin. Later matches follow on their own.
@@ -145,9 +147,11 @@ export function sanitizeInput(m: Record<string, unknown>): InputMessage | null {
   if (!Number.isInteger(m.seq) || (m.seq as number) < 1) return null;
 
   const lagMs = finite(m.lagMs) ? clamp(m.lagMs, 0, 1000) : undefined;
+  const watchId = Number.isInteger(m.watchId) && (m.watchId as number) >= 0 ? (m.watchId as number) : undefined;
   return {
     t: "input",
     lagMs,
+    watchId,
     seq: m.seq as number,
     moveX: clamp(m.moveX as number, -1, 1),
     moveY: clamp(m.moveY as number, -1, 1),

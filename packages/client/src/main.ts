@@ -173,6 +173,8 @@ function swapMap(newSeed: number, newTier: string): void {
   predictor.setWorld(map.world);
 }
 
+if (net) net.watchId = () => (health.dead ? spectateId : 0);
+
 const name = (id: number | null) => (id === null ? "the zone" : id === net?.id ? "You" : remotes.isBot(id) ? `Bot ${id}` : `Player ${id}`);
 
 // Online: wait for the first snapshot before stepping, so we start from where the server put us.
@@ -320,8 +322,9 @@ function frame(now: number): void {
     mechInput.aimPitch = Math.fround(aim.pitch);
     setAimTarget(rig.camera, map.world, weaponStats.maxAimDistance, mechInput);
     mechInput.targetX = Math.fround(mechInput.targetX); mechInput.targetY = Math.fround(mechInput.targetY); mechInput.targetZ = Math.fround(mechInput.targetZ);
-    // A destroyed mech can only look around, the same rule the server applies.
-    if (health.dead) {
+    // A destroyed mech can only look around, and nobody moves during the countdown: the same rules the server applies,
+    // so prediction does not run ahead and get pulled back.
+    if (health.dead || progress.state === "countdown") {
       mechInput.moveX = 0; mechInput.moveY = 0; mechInput.run = false; mechInput.jet = false;
       mechInput.fire = false; mechInput.grenade = false;
     }
@@ -380,7 +383,8 @@ function frame(now: number): void {
   const ring: RingNow | null = ringView.update(matchSeconds);
   const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);
   if (net) hud.setProgress(progress, ring, outside);
-  radar?.draw(x, z, aim.yaw, remotes, progress.state === "lobby" ? null : ring);
+  // Watching someone, the radar is centred on them.
+  radar?.draw(viewX, viewZ, aim.yaw, remotes, progress.state === "lobby" ? null : ring, outside, performance.now());
 
   // ?overview floats the camera above the middle of the map, for looking over a seed at a glance.
   if (overview) {

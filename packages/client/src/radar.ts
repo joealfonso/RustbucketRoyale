@@ -20,7 +20,8 @@ export class Radar {
     this.scale = SIZE / 2 / rangeMeters;
   }
 
-  draw(x: number, z: number, yaw: number, remotes: RemoteMechs, ring: Circle | null): void {
+  // `outside` turns the zone arrow red and makes it pulse. `nowMs` drives the pulse.
+  draw(x: number, z: number, yaw: number, remotes: RemoteMechs, ring: Circle | null, outside: boolean, nowMs: number): void {
     const ctx = this.ctx;
     const mid = SIZE / 2;
     const cos = Math.cos(yaw), sin = Math.sin(yaw);
@@ -48,6 +49,27 @@ export class Radar {
         const angle = (i / RING_DOTS) * Math.PI * 2;
         const [px, py] = place(ring.cx + Math.cos(angle) * ring.radius, ring.cz + Math.sin(angle) * ring.radius);
         if (Math.hypot(px - mid, py - mid) <= mid - 2) ctx.fillRect(px - 1, py - 1, 3, 3);
+      }
+    }
+
+    // When the zone edge is off the radar, or you are outside it, an arrow on the rim points to the middle of the zone.
+    if (ring) {
+      const toCentre = Math.hypot(ring.cx - x, ring.cz - z);
+      const edgeOffRadar = Math.abs(ring.radius - toCentre) > this.rangeMeters;
+      if ((outside || edgeOffRadar) && toCentre > 1) {
+        const [px, py] = place(ring.cx, ring.cz);
+        const angle = Math.atan2(py - mid, px - mid);
+        const tipX = mid + Math.cos(angle) * (mid - 3), tipY = mid + Math.sin(angle) * (mid - 3);
+        const backX = mid + Math.cos(angle) * (mid - 15), backY = mid + Math.sin(angle) * (mid - 15);
+        const side = 6;
+        const pulse = outside ? 0.55 + 0.45 * Math.sin(nowMs / 120) : 1;
+        ctx.fillStyle = outside ? `rgba(255,70,60,${pulse})` : "#ffffff";
+        ctx.beginPath();
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(backX - Math.sin(angle) * side, backY + Math.cos(angle) * side);
+        ctx.lineTo(backX + Math.sin(angle) * side, backY - Math.cos(angle) * side);
+        ctx.closePath();
+        ctx.fill();
       }
     }
 

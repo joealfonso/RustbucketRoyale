@@ -32,6 +32,8 @@ export class NetClient {
   rttMs = 0;
   // Set by the game so each input can say how far behind its view of other mechs is.
   viewDelayMs: () => number = () => 0;
+  // Set by the game: the mech being watched while knocked out, or 0.
+  watchId: () => number = () => 0;
   private sentAt = new Float64Array(256);
   private socket: WebSocket;
   // Reused every send so the frame loop does not build a new object each time.
@@ -84,6 +86,8 @@ export class NetClient {
     const m = this.message;
     m.seq = seq;
     m.lagMs = this.rttMs + this.viewDelayMs();
+    const watching = this.watchId();
+    m.watchId = watching > 0 ? watching : undefined;
     m.moveX = input.moveX; m.moveY = input.moveY;
     m.aimYaw = input.aimYaw; m.aimPitch = input.aimPitch;
     m.run = input.run; m.jet = input.jet; m.dash = input.dash; m.fire = input.fire; m.grenade = input.grenade;

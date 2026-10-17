@@ -93,7 +93,14 @@ describe("input wire format", () => {
   it("round trips exactly for the values a client really sends", () => {
     const original = base({ fire: true, targetX: Math.fround(10.5), targetY: Math.fround(-2), targetZ: Math.fround(300.125), lagMs: 85 });
     const back = decodeInput(encodeInput(original, true))!;
-    expect(back).toEqual(original);
+    expect(back).toEqual({ ...original, watchId: undefined });
+  });
+
+  it("carries who a knocked out player is watching", () => {
+    const back = decodeInput(encodeInput(base({ watchId: 42, lagMs: 30 }), false))!;
+    expect(back.watchId).toBe(42);
+    expect(back.lagMs).toBe(30);
+    expect(decodeInput(encodeInput(base(), false))!.watchId).toBeUndefined();
   });
 
   it("leaves the target out when not shooting, which makes it smaller", () => {

@@ -24,14 +24,16 @@ describe("nearby only", () => {
     expect(Math.hypot(others[0]!.x - human.last().you.x, others[0]!.z - human.last().you.z)).toBeLessThan(config.net.interestRange);
   });
 
-  it("sends everyone to someone who is watching, since they are not looking from their own mech", () => {
+  it("sends a watcher what is near the mech it watches, not the whole map", () => {
     const { room, config } = makeRoom(spaced, "small", 3);
     const host = new Client(room, config);
     startMatch(room, host);
     const late = new Client(room, config); // arrives mid match, so can only watch
     tick(room, [host, late], 10);
     expect(late.last().health.dead).toBe(true);
-    expect(late.last().others.length).toBe(4); // three bots and the host, near or far
+    // With no say, it is shown the area round the nearest mech still standing, not all four.
+    expect(late.last().others.length).toBeLessThan(4);
+    expect(late.last().others.length).toBeGreaterThan(0);
   });
 
   it("tells a client about shots only when they are near enough to see them", () => {

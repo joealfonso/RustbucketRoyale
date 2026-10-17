@@ -146,18 +146,20 @@ export function decodeShot(bytes: Uint8Array): ShotMessage | null {
 
 export function encodeInput(m: InputMessage, hasTarget: boolean): Uint8Array {
   const hasLag = m.lagMs !== undefined;
-  const buffer = new ArrayBuffer(INPUT_BASE_BYTES + (hasTarget ? 12 : 0) + (hasLag ? 2 : 0));
+  const hasWatch = m.watchId !== undefined;
+  const buffer = new ArrayBuffer(INPUT_BASE_BYTES + (hasTarget ? 12 : 0) + (hasLag ? 2 : 0) + (hasWatch ? 2 : 0));
   const v = new DataView(buffer);
   let o = 0;
   v.setUint8(o, TYPE_INPUT); o += 1;
   v.setUint32(o, m.seq, true); o += 4;
   v.setInt8(o, Math.round(m.moveX * 127)); o += 1;
   v.setInt8(o, Math.round(m.moveY * 127)); o += 1;
-  v.setUint8(o, (m.run ? 1 : 0) | (m.jet ? 2 : 0) | (m.dash ? 4 : 0) | (m.fire ? 8 : 0) | (m.grenade ? 16 : 0) | (hasTarget ? 32 : 0) | (hasLag ? 64 : 0)); o += 1;
+  v.setUint8(o, (m.run ? 1 : 0) | (m.jet ? 2 : 0) | (m.dash ? 4 : 0) | (m.fire ? 8 : 0) | (m.grenade ? 16 : 0) | (hasTarget ? 32 : 0) | (hasLag ? 64 : 0) | (hasWatch ? 128 : 0)); o += 1;
   v.setFloat32(o, m.aimYaw, true); o += 4;
   v.setFloat32(o, m.aimPitch, true); o += 4;
   if (hasTarget) for (const n of [m.targetX, m.targetY, m.targetZ]) { v.setFloat32(o, n, true); o += 4; }
-  if (hasLag) v.setUint16(o, Math.max(0, Math.min(65535, Math.round(m.lagMs!))), true);
+  if (hasLag) { v.setUint16(o, Math.max(0, Math.min(65535, Math.round(m.lagMs!))), true); o += 2; }
+  if (hasWatch) v.setUint16(o, Math.max(0, Math.min(65535, m.watchId!)), true);
   return new Uint8Array(buffer);
 }
 
@@ -167,8 +169,8 @@ export function decodeInput(bytes: Uint8Array): InputMessage | null {
   if (bytes.length < INPUT_BASE_BYTES || bytes[0] !== TYPE_INPUT) return null;
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const flags = v.getUint8(7);
-  const hasTarget = (flags & 32) !== 0, hasLag = (flags & 64) !== 0;
-  if (bytes.length !== INPUT_BASE_BYTES + (hasTarget ? 12 : 0) + (hasLag ? 2 : 0)) return null;
+  const hasTarget = (flags & 32) !== 0, hasLag = (flags & 64) !== 0, hasWatch = (flags & 128) !== 0;
+  if (bytes.length !== INPUT_BASE_BYTES + (hasTarget ? 12 : 0) + (hasLag ? 2 : 0) + (hasWatch ? 2 : 0)) return null;
 
   let o = INPUT_BASE_BYTES;
   const record: Record<string, unknown> = {
@@ -180,7 +182,8 @@ export function decodeInput(bytes: Uint8Array): InputMessage | null {
   if (hasTarget) {
     record.targetX = v.getFloat32(o, true); record.targetY = v.getFloat32(o + 4, true); record.targetZ = v.getFloat32(o + 8, true); o += 12;
   }
-  if (hasLag) record.lagMs = v.getUint16(o, true);
+  if (hasLag) { record.lagMs = v.getUint16(o, true); o += 2; }
+  if (hasWatch) record.watchId = v.getUint16(o, true);
   return sanitizeInput(record);
 }
 

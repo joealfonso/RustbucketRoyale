@@ -124,7 +124,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: this.newBot(), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), interested: new Set(), dead: false, respawnTick: 0, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), interested: new Set(), watchId: 0, dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -133,6 +133,17 @@ export class Room {
     const difficulty = pickDifficulty(this.config.bots, this.random());
     const stats = this.config.bots.difficulties[difficulty] ?? this.config.bots.difficulties.normal!;
     return new Bot(stats, this.random, this.config.bots.path, this.finder, RATINGS[difficulty] ?? 2);
+  }
+
+  // A read-only look at every mech, for the soak test's checks. Not used by the game itself.
+  inspect(): { id: number; bot: boolean; x: number; y: number; z: number; hp: number[]; dead: boolean; eliminated: boolean; participant: boolean }[] {
+    return [...this.players.values()].map((p) => ({
+      id: p.id, bot: p.bot !== null, x: p.state.x, y: p.state.y, z: p.state.z, hp: [...p.hp], dead: p.dead, eliminated: p.eliminated, participant: p.participant,
+    }));
+  }
+
+  get mapMeters(): number {
+    return this.map.meters;
   }
 
   get matchState(): MatchState {
@@ -157,7 +168,7 @@ export class Room {
     const id = this.nextId++;
     const player: Player = {
       id, slot, bot: null, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
-      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), interested: new Set(),
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), interested: new Set(), watchId: 0,
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -201,6 +212,7 @@ export class Room {
     }
 
     if (message.lagMs !== undefined) player.lagMs = message.lagMs;
+    player.watchId = message.watchId ?? 0;
     if (message.seq <= (player.queue.at(-1)?.seq ?? player.lastSeq)) return true; // replayed or out of order
     if (player.queue.length >= this.config.net.maxQueuedInputs) return true; // client is far ahead, drop the extra
 
@@ -602,14 +614,29 @@ export class Room {
     return { state: this.state, seconds, alive, total: this.state === "lobby" ? this.players.size : this.startedWith || this.players.size };
   }
 
+  // Where a client is looking from: its own mech, or while knocked out the mech it is watching (or, if it has not
+  // said, the nearest one still standing). Both what it is sent and which events reach it are measured from here.
+  private viewFrom(player: Player): { x: number; z: number } {
+    if (!player.dead && player.participant) return player.state;
+    const watched = this.players.get(player.watchId);
+    if (watched && !watched.dead && watched.participant) return watched.state;
+    let best: Player | null = null;
+    let bestDistance = Infinity;
+    for (const p of this.players.values()) {
+      if (p === player || p.dead || !p.participant) continue;
+      const d = Math.hypot(p.state.x - player.state.x, p.state.z - player.state.z);
+      if (d < bestDistance) { bestDistance = d; best = p; }
+    }
+    return best ? best.state : player.state;
+  }
+
   // Sends something that happened at a spot only to the people close enough to care, and to whoever caused it.
-  // People watching (knocked out, or arrived late) see everything, since they are not looking from their own mech.
   private sendNear(x: number, z: number, message: ServerMessage, source?: Player): void {
     const range = this.config.net.interestRange * this.config.net.interestLeaveFactor;
     for (const p of this.players.values()) {
       if (p.bot) continue;
-      const watching = p.dead || !p.participant;
-      if (p === source || watching || Math.hypot(p.state.x - x, p.state.z - z) <= range) p.send(message);
+      const view = this.viewFrom(p);
+      if (p === source || Math.hypot(view.x - x, view.z - z) <= range) p.send(message);
     }
   }
 
@@ -626,19 +653,17 @@ export class Room {
     const match = this.progress();
     for (const player of this.players.values()) {
       if (player.bot) continue;
-      // Watchers get everyone. Everybody else gets mechs within the interest range, and a mech already in view
+      // Each client gets mechs within the interest range of where it is looking from, and a mech already in view
       // stays until it is clearly further off, so one standing right on the edge does not flicker in and out.
-      const watching = player.dead || !player.participant;
+      const view = this.viewFrom(player);
       const others: OtherState[] = [];
       for (const o of everyone) {
         if (o.id === player.id) continue;
-        if (!watching) {
-          const distance = Math.hypot(o.x - player.state.x, o.z - player.state.z);
-          const wasInView = player.interested.has(o.id);
-          const near = distance <= (wasInView ? interestRange * interestLeaveFactor : interestRange);
-          if (near) player.interested.add(o.id);
-          else { player.interested.delete(o.id); continue; }
-        }
+        const distance = Math.hypot(o.x - view.x, o.z - view.z);
+        const wasInView = player.interested.has(o.id);
+        const near = distance <= (wasInView ? interestRange * interestLeaveFactor : interestRange);
+        if (near) player.interested.add(o.id);
+        else { player.interested.delete(o.id); continue; }
         others.push(o);
       }
       player.send({

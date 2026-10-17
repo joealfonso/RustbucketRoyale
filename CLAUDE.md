@@ -61,7 +61,9 @@ Open these on demand. Do not import them.
 - `npm run server`: the game server on ws://localhost:8080. Set `PORT`, `TIER` (default tier for new rooms), `DEFAULT_BOTS` (a number for every new room instead of filling to the tier size) and `MAX_ROOMS`. Rooms are made on demand from `?create` or `?room=CODE` links.
 - Offline practice: `?offline&tier=small|medium|large|range&seed=123`. Add `&overview` to look down on the whole map.
 - `npm test`: Vitest. `npm run typecheck`: TypeScript. `npm run build`: production client build.
-- `npm run gauntlet`: typecheck, tests (including a real two-client server test), and build in one pass or fail verdict. Results in `artifacts/`.
+- `npm run gauntlet`: typecheck, the determinism scan, tests (including a real two-client server test and a full small-tier soak match), and build in one pass or fail verdict. Results in `artifacts/`.
+- `npm run soak`: a whole match per tier as fast as possible, with checks and budgets. `npm run soak -- large` for one tier, `SEED=123` to replay a failure. Runs nightly in CI.
+- `npx tsx scripts/measure-bandwidth.ts` and `npx tsx scripts/measure-rooms.ts`: bandwidth, tick cost and rooms per process. Record results in `docs/PERF.md`.
 
 ## Testing and CI
 - Vitest for pure logic: damage zones, ring math, upgrade stats, noise radius, bot level of detail, movement and reconciliation.

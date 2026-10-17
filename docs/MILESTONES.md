@@ -46,4 +46,6 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: Gate 5b started on Joseph's go, with the binary packing pulled forward from M8 so bandwidth can meet the 64 kbps budget. Measured before starting: 272 / 673 / 1279 kbps per client on small / medium / large with bots.
 - 2026-10-17: Gate 5b built, waiting for its playtest. Rooms fill themselves with bots to the tier size (12 / 24 / 40 players). Check: bots go round buildings and walls, easy / normal / hard feel different, a big medium room stays smooth, the F1 panel numbers. Network is now binary and nearby-only: 40 / 53 / 63 kbps measured on small / medium / large. Also fixed: a bug that could lift a mech onto the top of a wall.
 - 2026-10-17: Gate 5b passed by Joseph's call after playing it. 5c (radar polish, the headless soak test per tier, the rooms-per-process number) not started.
+- 2026-10-17: Gate 5c started on Joseph's go: radar polish, headless soak test per tier, rooms per process.
+- 2026-10-17: Gate 5c built, waiting for its playtest. Check: the radar arrow points the right way and reads well, `npm run soak` passes on all three tiers. Soak and rooms-per-process numbers are in docs/PERF.md. That would finish M5.
 

@@ -1,0 +1,23 @@
+// Plays a whole match per tier as fast as possible and checks it. Run: npm run soak (all tiers) or npm run soak -- small
+// A failure prints its seed. Play it again exactly with SEED=123 npm run soak -- small
+import { runSoak } from "../packages/server/src/soak/runSoak";
+
+const tiers = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ["small", "medium", "large"];
+let failed = false;
+for (const tier of tiers) {
+  const seed = process.env.SEED !== undefined ? Number(process.env.SEED) : Math.floor(Math.random() * 1_000_000_000);
+  const started = Date.now();
+  const r = runSoak(tier, seed);
+  const verdict = r.problems.length === 0 ? "PASS" : "FAIL";
+  console.log(
+    `${verdict} ${tier} seed ${seed}: ${r.matchSeconds.toFixed(0)} s match, ${r.eliminations} knocked out, ` +
+    `tick p99 ${r.tickP99Ms.toFixed(2)} ms (worst ${r.tickWorstMs.toFixed(1)}), ${r.kbpsPerPlayer.toFixed(0)} kbps per player, ` +
+    `worst correction ${(r.worstCorrection * 100).toFixed(2)} cm, took ${((Date.now() - started) / 1000).toFixed(1)} s`,
+  );
+  for (const p of r.problems) console.log(`    ${p}`);
+  if (r.problems.length > 0) {
+    failed = true;
+    console.log(`    replay with: SEED=${seed} npm run soak -- ${tier}`);
+  }
+}
+process.exit(failed ? 1 : 0);

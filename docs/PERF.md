@@ -51,3 +51,28 @@ One person in a running match, the other seats filled with bots to the tier's si
 
 Before the packed format and nearby-only updates the same rooms measured 272, 673 and 1279 kbps. The numbers move between runs because bots wander randomly: large is right at the 64 kbps budget when many bots happen to be near the person. Upstream, a client sends about 19 bytes per input (34 when shooting) 60 times a second, around 12 to 20 kbps. Server cost per room is tiny next to the 16.7 ms tick, so one process should hold many rooms, but that is not measured yet: next is a run with 20 rooms at once.
 
+### Soak: a whole match per tier (2026-10-17, MacBook, Node 25)
+`npm run soak`. The room fills with bots, and three headless players join that act like browsers (packed messages, prediction, replay). Three runs per tier on random seeds, all passing:
+
+| Tier | Match length | Tick 99th percentile | Worst tick | Per player | Worst prediction correction |
+| :- | :- | :- | :- | :- | :- |
+| small | 34 to 45 s | 0.08 to 0.12 ms | 1.8 ms | 41 to 42 kbps | 1.2 cm |
+| medium | 392 to 404 s | 0.15 to 0.17 ms | 3.0 ms | 36 to 41 kbps | under 0.1 mm |
+| large | 415 to 471 s | 1.11 to 1.12 ms | 7.8 ms | 38 to 41 kbps | under 0.1 mm |
+
+The first runs failed bandwidth on large (91 to 97 kbps): knocked out players were sent the whole map. Fixed by sending a watcher only what is near the mech it watches. Small matches are short because 12 mechs on a 300 m map find each other fast.
+
+### Rooms per server process (2026-10-17, MacBook, Node 25)
+`npx tsx scripts/measure-rooms.ts`. Each room is mid match with two people walking and shooting and bots filling the rest. Server work only: the cost of packing and sending messages is not included.
+
+| Tier | Rooms | Mechs | Mean ms per tick, all rooms | 99th percentile ms | Under 8 ms |
+| :- | :- | :- | :- | :- | :- |
+| medium | 10 | 240 | 0.40 | 2.19 | yes |
+| medium | 20 | 480 | 0.88 | 3.33 | yes |
+| medium | 40 | 960 | 1.69 | 5.14 | yes |
+| large | 5 | 200 | 0.88 | 4.55 | yes |
+| large | 10 | 400 | 1.78 | 7.29 | yes |
+| large | 20 | 800 | 3.55 | 12.74 | no |
+
+So roughly 40 medium rooms or 10 large rooms per process on this machine, keeping half the tick spare. A cloud core is usually slower than this laptop, so plan on about half that until it is measured on the real host.
+

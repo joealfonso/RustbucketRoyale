@@ -127,3 +127,12 @@ Bots come in easy, normal and hard in `data/bots.json` (50, 35 and 15 percent by
 ## 2026-10-17: Fixed mechs being lifted onto the top of walls
 A mech pushed flush against a wall could read as a hair inside it from rounding, and the vertical step then set it on top of the wall. The overlap test now ignores touching within 0.1 mm. A test sends a sprinting mech at 300 walls with awkward numbers.
 
+## 2026-10-17: The soak test plays real matches with pretend browsers
+Each soak match fills a room with bots and adds three headless players. A bot brain drives each one, but everything else is what a browser does: it builds the map from the seed, sends packed inputs, reads packed snapshots, predicts and replays. Every tick it checks for bad numbers, mechs off the map, health out of range and the alive count going up. At the end it checks the match finished, places were unique, the 99th percentile tick stayed under 8 ms, nobody was sent over 64 kbps, and prediction never drifted more than 5 cm outside respawns and new maps. Simulated time, so a full 8 minute large match takes about 3 seconds. A random seed each run, printed on failure, and everything random comes from it, so a failure replays exactly. Small runs in the gauntlet on every change, all three nightly in CI. Cost: it uses the room directly, not real sockets. The transport has its own tests.
+
+## 2026-10-17: Knocked out players are sent what is near the mech they watch
+They used to get the whole map, which the soak test showed pushed them to over 90 kbps on large. Inputs now carry the id of the mech being watched, and a watcher's snapshots and events are measured from that mech. If it has not said, the nearest mech still standing is used.
+
+## 2026-10-17: The radar points to the zone
+When the zone edge is off the radar, or you are outside the zone, an arrow on the rim points to the middle of the zone, and it pulses red while you are outside. While watching, the radar is centred on the mech being watched. Nobody moves during the countdown on the client either now, which stops prediction running ahead and being pulled back as the match starts.
+

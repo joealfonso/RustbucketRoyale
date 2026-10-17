@@ -11,7 +11,8 @@
     "typecheck": "tsc -b packages/shared packages/client packages/server",
     "test": "vitest run",
     "gauntlet": "bash scripts/gauntlet.sh",
-    "server": "npm run start -w @rustbucket/server"
+    "server": "npm run start -w @rustbucket/server",
+    "soak": "tsx scripts/soak.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
