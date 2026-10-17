@@ -24,6 +24,9 @@ export interface Player {
   lootingId: number; // the wreck being looted, 0 for none
   lootSeconds: number; // how long E has been held on that wreck
   looted: boolean; // this mech's wreck has been emptied
+  repairZone: number; // the part being repaired, -1 for none
+  repairSeconds: number; // how long F has been held on it
+  healthMark: number; // hit points plus armor last step, so any damage at all can cancel a repair
   interested: Set<number>;
   watchId: number;
   heard: NoiseEvent[];

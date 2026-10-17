@@ -23,7 +23,7 @@ export const isBinaryType = (first: number) => first === TYPE_SNAPSHOT || first 
 const SELF_BYTES = 15 * 4 + 1;
 const OTHER_BYTES = 18;
 const LOADOUT_BYTES = 7;
-const LOOTING_BYTES = 1; // how far through looting a wreck you are, 0 to 255
+const LOOTING_BYTES = 2; // how far through looting a wreck, then through a repair, 0 to 255 each
 const PICKUP_BYTES = 9;
 const NOISE_BYTES = 5;
 const NOISE_STEP = 0.5; // metres: noises are shown fuzzy anyway
@@ -74,7 +74,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
     v.setInt16(o, Math.round(other.z / POSITION_STEP), true); o += 2;
     const turns = ((other.yaw % TWO_PI) + TWO_PI) % TWO_PI;
     v.setUint16(o, Math.round((turns / TWO_PI) * 65535), true); o += 2;
-    v.setUint8(o, (other.running ? 1 : 0) | (other.jetting ? 2 : 0) | (other.dead ? 4 : 0) | (other.bot ? 8 : 0) | (other.looted ? 16 : 0)); o += 1;
+    v.setUint8(o, (other.running ? 1 : 0) | (other.jetting ? 2 : 0) | (other.dead ? 4 : 0) | (other.bot ? 8 : 0) | (other.looted ? 16 : 0) | (other.repairing ? 32 : 0)); o += 1;
     for (let i = 0; i < 3; i++) { v.setUint8(o, u8(other.hp[i] ?? 0)); o += 1; }
     v.setUint8(o, u8(other.weapon)); o += 1;
     for (let i = 0; i < 3; i++) { v.setUint8(o, u8(other.armor[i] ?? 0)); o += 1; }
@@ -92,6 +92,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
   v.setUint8(o, u8(l.grenades)); o += 1;
   for (let i = 0; i < 3; i++) { v.setUint8(o, u8(l.armor[i] ?? 0)); o += 1; }
   v.setUint8(o, u8(Math.max(0, Math.min(1, m.looting)) * 255)); o += 1;
+  v.setUint8(o, u8(Math.max(0, Math.min(1, m.repairing)) * 255)); o += 1;
   v.setUint8(o, m.pickups === null ? PICKUPS_UNCHANGED : pickups.length); o += 1;
   for (const p of pickups) {
     v.setUint16(o, p.id & 0xffff, true); o += 2;
@@ -142,7 +143,7 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
     const ohp = [v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2)]; o += 3;
     const weapon = v.getUint8(o); o += 1;
     const armor = [v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2)]; o += 3;
-    others.push({ id, x, y, z, yaw, running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, bot: (bits & 8) !== 0, hp: ohp, weapon, armor });
+    others.push({ id, x, y, z, yaw, running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, repairing: (bits & 32) !== 0, bot: (bits & 8) !== 0, hp: ohp, weapon, armor });
   }
   const noiseCount = v.getUint8(o); o += 1;
   if (bytes.length < o + noiseCount * NOISE_BYTES + LOADOUT_BYTES + LOOTING_BYTES + 1) return null;
@@ -157,7 +158,9 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
     armor: [v.getUint8(o + 4), v.getUint8(o + 5), v.getUint8(o + 6)],
   };
   o += LOADOUT_BYTES;
-  const looting = v.getUint8(o) / 255; o += LOOTING_BYTES;
+  const looting = v.getUint8(o) / 255;
+  const repairing = v.getUint8(o + 1) / 255;
+  o += LOOTING_BYTES;
   const countByte = v.getUint8(o); o += 1;
   const unchanged = countByte === PICKUPS_UNCHANGED;
   const pickupCount = unchanged ? 0 : countByte;
@@ -170,7 +173,7 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
     });
     o += PICKUP_BYTES;
   }
-  return { t: "snapshot", tick, ack, ackAgeMs, you, health: { hp, dead, respawnIn }, match: { state, seconds, alive, total }, others, noises, loadout, looting, pickups: unchanged ? null : pickups };
+  return { t: "snapshot", tick, ack, ackAgeMs, you, health: { hp, dead, respawnIn }, match: { state, seconds, alive, total }, others, noises, loadout, looting, repairing, pickups: unchanged ? null : pickups };
 }
 
 // ---- shot
@@ -215,7 +218,7 @@ export function encodeInput(m: InputMessage, hasTarget: boolean): Uint8Array {
   v.setInt8(o, Math.round(m.moveX * 127)); o += 1;
   v.setInt8(o, Math.round(m.moveY * 127)); o += 1;
   v.setUint8(o, (m.run ? 1 : 0) | (m.jet ? 2 : 0) | (m.dash ? 4 : 0) | (m.fire ? 8 : 0) | (m.grenade ? 16 : 0) | (hasTarget ? 32 : 0) | (hasLag ? 64 : 0) | (hasWatch ? 128 : 0)); o += 1;
-  v.setUint8(o, (m.interact ? 1 : 0) | (m.slot === 1 ? 2 : 0)); o += 1;
+  v.setUint8(o, (m.interact ? 1 : 0) | (m.slot === 1 ? 2 : 0) | (m.repair ? 4 : 0)); o += 1;
   v.setFloat32(o, m.aimYaw, true); o += 4;
   v.setFloat32(o, m.aimPitch, true); o += 4;
   if (hasTarget) for (const n of [m.targetX, m.targetY, m.targetZ]) { v.setFloat32(o, n, true); o += 4; }
@@ -238,7 +241,7 @@ export function decodeInput(bytes: Uint8Array): InputMessage | null {
   const record: Record<string, unknown> = {
     seq: v.getUint32(1, true), moveX: v.getInt8(5) / 127, moveY: v.getInt8(6) / 127,
     run: (flags & 1) !== 0, jet: (flags & 2) !== 0, dash: (flags & 4) !== 0, fire: (flags & 8) !== 0, grenade: (flags & 16) !== 0,
-    interact: (flags2 & 1) !== 0, slot: (flags2 & 2) !== 0 ? 1 : 0,
+    interact: (flags2 & 1) !== 0, slot: (flags2 & 2) !== 0 ? 1 : 0, repair: (flags2 & 4) !== 0,
     aimYaw: v.getFloat32(9, true), aimPitch: v.getFloat32(13, true),
     targetX: 0, targetY: 0, targetZ: 0,
   };

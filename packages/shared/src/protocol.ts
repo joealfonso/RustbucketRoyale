@@ -19,6 +19,7 @@ export interface InputMessage {
   grenade: boolean;
   slot: number;
   interact: boolean;
+  repair: boolean;
   targetX: number;
   targetY: number;
   targetZ: number;
@@ -56,6 +57,7 @@ export interface OtherState {
   jetting: boolean;
   dead: boolean;
   looted: boolean; // a wreck already emptied, so there is nothing left to take
+  repairing: boolean; // standing still fixing a part, shown with welding sparks
   bot: boolean;
   hp: number[]; // legs, arms, torso
   weapon: number; // index of the weapon in hand, for drawing the right gun
@@ -141,7 +143,7 @@ export type ServerMessage =
   | { t: "refused"; reason: string }
   | { t: "prop"; id: number } // a prop was destroyed
   | { t: "props"; destroyed: number[] } // every prop destroyed so far, sent to someone arriving mid way
-  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; looting: number; pickups: PickupState[] | null } // pickups null: unchanged since the last snapshot
+  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; looting: number; repairing: number; pickups: PickupState[] | null } // pickups null: unchanged since the last snapshot
   | ShotMessage
   | HitMessage
   | GrenadeMessage
@@ -193,6 +195,7 @@ export function sanitizeInput(m: Record<string, unknown>): InputMessage | null {
     grenade: m.grenade,
     slot: m.slot === 1 ? 1 : 0,
     interact: m.interact,
+    repair: m.repair === true,
     targetX: m.targetX as number,
     targetY: m.targetY as number,
     targetZ: m.targetZ as number,
@@ -211,6 +214,7 @@ export function toMechInput(message: InputMessage, out: MechInput): void {
   out.grenade = message.grenade;
   out.slot = message.slot;
   out.interact = message.interact;
+  out.repair = message.repair;
   out.targetX = message.targetX;
   out.targetY = message.targetY;
   out.targetZ = message.targetZ;

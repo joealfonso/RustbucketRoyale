@@ -6,6 +6,7 @@
   "loudness": {
     "run": 55,
     "dash": 70,
+    "repair": 80,
     "loot": 90,
     "jets": 120,
     "shot": 220,

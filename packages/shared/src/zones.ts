@@ -17,6 +17,8 @@ export interface ZoneDef {
 export interface ZoneSet {
   damagedBelowFraction: number; // a zone under this share of its hit points shows as damaged
   brokenArmsSpreadMultiplier: number; // with the arms broken every shot strays this much more
+  repairSeconds: number; // F held this long, standing still and unhurt, repairs one part
+  repairToFraction: number; // a repaired part comes back to this share of its hit points: running again, not new
   zones: ZoneDef[];
   boxes: Box[];
   boxZone: number[];
@@ -33,7 +35,13 @@ export function parseZones(raw: unknown): ZoneSet {
   const top = raw as { damagedBelowFraction?: unknown; brokenArmsSpreadMultiplier?: unknown };
   if (typeof top.damagedBelowFraction !== "number" || !(top.damagedBelowFraction > 0 && top.damagedBelowFraction < 1)) throw new Error("zones.json: damagedBelowFraction must be between 0 and 1");
   if (typeof top.brokenArmsSpreadMultiplier !== "number" || !(top.brokenArmsSpreadMultiplier >= 1)) throw new Error("zones.json: brokenArmsSpreadMultiplier must be at least 1");
-  const set: ZoneSet = { damagedBelowFraction: top.damagedBelowFraction, brokenArmsSpreadMultiplier: top.brokenArmsSpreadMultiplier, zones: [], boxes: [], boxZone: [] };
+  const repair = raw as { repairSeconds?: unknown; repairToFraction?: unknown };
+  if (typeof repair.repairSeconds !== "number" || !(repair.repairSeconds > 0)) throw new Error("zones.json: repairSeconds must be above 0");
+  if (typeof repair.repairToFraction !== "number" || !(repair.repairToFraction > 0 && repair.repairToFraction <= 1)) throw new Error("zones.json: repairToFraction must be between 0 and 1");
+  const set: ZoneSet = {
+    damagedBelowFraction: top.damagedBelowFraction, brokenArmsSpreadMultiplier: top.brokenArmsSpreadMultiplier,
+    repairSeconds: repair.repairSeconds, repairToFraction: repair.repairToFraction, zones: [], boxes: [], boxZone: [],
+  };
   list.forEach((entry, zone) => {
     const z = entry as { name: string; hp?: unknown; damageMultiplier?: unknown; boxes?: unknown };
     if (z.name !== ZONE_NAMES[zone]) throw new Error(`zones.json: zone ${zone} must be "${ZONE_NAMES[zone]}"`);
@@ -78,6 +86,18 @@ export function zoneState(hp: readonly number[], set: ZoneSet, zone: number): nu
   const left = hp[zone]!;
   if (left <= 0) return ZONE_BROKEN;
   return left < set.zones[zone]!.hp * set.damagedBelowFraction ? ZONE_DAMAGED : ZONE_INTACT;
+}
+
+// The part a repair works on: the one with the smallest share of its hit points left, as long as that is under what
+// a repair brings it back to. -1 when nothing needs it.
+export function partToRepair(hp: readonly number[], set: ZoneSet): number {
+  let worst = -1;
+  let worstShare = set.repairToFraction;
+  for (let zone = 0; zone < set.zones.length; zone++) {
+    const share = hp[zone]! / set.zones[zone]!.hp;
+    if (share < worstShare) { worst = zone; worstShare = share; }
+  }
+  return worst;
 }
 
 export function isDestroyed(hp: readonly number[]): boolean {

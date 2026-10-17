@@ -257,7 +257,7 @@ export function secondsToCross(stats: MechStats, meters: number): number {
 }
 
 // Everything a mech does that can be heard, quietest first. Walking makes no sound, so sneaking is possible.
-export const NOISE_KINDS = ["run", "dash", "loot", "jets", "shot", "explosion", "smash"] as const;
+export const NOISE_KINDS = ["run", "dash", "repair", "loot", "jets", "shot", "explosion", "smash"] as const;
 export type NoiseKind = (typeof NOISE_KINDS)[number];
 
 export interface NoiseStats {

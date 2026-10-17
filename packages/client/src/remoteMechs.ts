@@ -113,6 +113,7 @@ export class RemoteMechs {
       remote.seen = true;
       remote.dead = o.dead;
       remote.looted = o.looted;
+      remote.model.repairing = o.repairing;
       setMechDamage(remote.model, o.hp, o.dead);
       setMechGear(remote.model, this.weaponColors[o.weapon] ?? "#d9731a", o.armor);
       remote.samples.push({ time: serverMs, x: o.x, y: o.y, z: o.z, yaw: o.yaw });

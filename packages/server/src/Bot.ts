@@ -48,6 +48,7 @@ export class Bot {
   private heardX = 0;
   private heardZ = 0;
   private heardFor = 0;
+  needsRepair = false; // set by the room: a part is bad enough that the bot stops to fix it when nobody is in sight
   private hasLoot = false;
   private lootX = 0;
   private lootZ = 0;
@@ -87,7 +88,7 @@ export class Bot {
   }
 
   think(self: MechState, targets: readonly BotTarget[], ring: RingNow | null, world: World, dt: number, out: MechInput): void {
-    out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.grenade = false; out.interact = false;
+    out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.grenade = false; out.interact = false; out.repair = false;
     const s = this.stats;
     this.retargetIn -= dt;
     this.strafeIn -= dt;
@@ -130,6 +131,13 @@ export class Bot {
       }
     } else {
       this.lastTargetId = 0;
+      // Out of sight is as safe as it gets: stop and repair, unless the ring is coming.
+      if (this.needsRepair && (!ring || Math.hypot(self.x - ring.cx, self.z - ring.cz) < ring.radius - this.stats.ringMargin)) {
+        out.repair = true;
+        out.aimYaw = this.aimYaw;
+        out.aimPitch = this.aimPitch;
+        return;
+      }
       const goal = this.chooseGoal(self, ring);
       const heading = this.travel(self, goal.x, goal.z, dt);
       wantX = heading.x; wantZ = heading.z;

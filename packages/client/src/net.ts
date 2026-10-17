@@ -40,7 +40,7 @@ export class NetClient {
   // Reused every send so the frame loop does not build a new object each time.
   private message: InputMessage = {
     t: "input", seq: 0, moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0,
-    run: false, jet: false, dash: false, fire: false, grenade: false, slot: 0, interact: false, targetX: 0, targetY: 0, targetZ: 0,
+    run: false, jet: false, dash: false, fire: false, grenade: false, slot: 0, interact: false, repair: false, targetX: 0, targetY: 0, targetZ: 0,
   };
 
   constructor(url: string) {
@@ -93,7 +93,7 @@ export class NetClient {
     m.watchId = watching > 0 ? watching : undefined;
     m.moveX = input.moveX; m.moveY = input.moveY;
     m.aimYaw = input.aimYaw; m.aimPitch = input.aimPitch;
-    m.run = input.run; m.jet = input.jet; m.dash = input.dash; m.fire = input.fire; m.grenade = input.grenade; m.slot = input.slot; m.interact = input.interact;
+    m.run = input.run; m.jet = input.jet; m.dash = input.dash; m.fire = input.fire; m.grenade = input.grenade; m.slot = input.slot; m.interact = input.interact; m.repair = input.repair;
     m.targetX = input.targetX; m.targetY = input.targetY; m.targetZ = input.targetZ;
     // The aim point only matters on a step that shoots or throws, so it is left out of the rest.
     this.socket.send(encodeInput(m, input.fire || input.grenade).buffer as ArrayBuffer);

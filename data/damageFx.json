@@ -12,7 +12,8 @@
     "lifeSeconds": 0.35,
     "size": 0.12,
     "color": "#ffd166",
-    "model": null
+    "model": null,
+    "repairEverySeconds": 0.25
   },
   "smoke": {
     "damagedEverySeconds": 0.7,

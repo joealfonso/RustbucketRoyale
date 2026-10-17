@@ -1,10 +1,10 @@
 import * as THREE from "three";
-import { ZONE_BROKEN, ZONE_COUNT, ZONE_INTACT, zoneState, type ZoneSet } from "@rustbucket/shared";
+import { ZONE_BROKEN, ZONE_COUNT, ZONE_INTACT, partToRepair, zoneState, type ZoneSet } from "@rustbucket/shared";
 import type { CrawlLook, MechModel } from "./mechModel";
 
 export interface DamageFxConfig {
   crawl: CrawlLook;
-  sparks: { damagedEverySeconds: number; brokenEverySeconds: number; count: number; speed: number; lifeSeconds: number; size: number; color: string; model: string | null };
+  sparks: { damagedEverySeconds: number; brokenEverySeconds: number; repairEverySeconds: number; count: number; speed: number; lifeSeconds: number; size: number; color: string; model: string | null };
   smoke: {
     damagedEverySeconds: number; brokenEverySeconds: number; riseSpeed: number; lifeSeconds: number; startSize: number; endSize: number;
     damagedColor: string; brokenColor: string; model: string | null;
@@ -17,7 +17,7 @@ export function parseDamageFx(raw: unknown): DamageFxConfig {
     for (const k of keys) if (typeof obj?.[k] !== "number" || !Number.isFinite(obj[k])) throw new Error(`damageFx.json: ${what}.${k} must be a number`);
   };
   numbers(d?.crawl as unknown as Record<string, unknown>, ["dropMeters", "tiltDegrees", "legStubScale"], "crawl");
-  numbers(d?.sparks as unknown as Record<string, unknown>, ["damagedEverySeconds", "brokenEverySeconds", "count", "speed", "lifeSeconds", "size"], "sparks");
+  numbers(d?.sparks as unknown as Record<string, unknown>, ["damagedEverySeconds", "brokenEverySeconds", "repairEverySeconds", "count", "speed", "lifeSeconds", "size"], "sparks");
   numbers(d?.smoke as unknown as Record<string, unknown>, ["damagedEverySeconds", "brokenEverySeconds", "riseSpeed", "lifeSeconds", "startSize", "endSize"], "smoke");
   return d;
 }
@@ -66,6 +66,15 @@ export class DamageFx {
   // Counts down this mech's timers and lets off sparks and smoke for each part that is not intact.
   emitFrom(model: MechModel, dt: number): void {
     const { sparks, smoke } = this.config;
+    // Repairing: a steady shower of welding sparks off the part being fixed, so everyone can see who is busy.
+    const welding = model.repairing && !model.dead ? partToRepair(model.hp, this.zones) : -1;
+    if (welding >= 0 && (model.fxTimers[6] = model.fxTimers[6]! - dt) <= 0) {
+      model.fxTimers[6] = sparks.repairEverySeconds;
+      const anchor = ANCHORS[welding]!;
+      this.at.set(anchor[0], anchor[1], anchor[2]);
+      model.body.localToWorld(this.at);
+      for (let i = 0; i < sparks.count; i++) this.spark();
+    }
     for (let zone = 0; zone < ZONE_COUNT; zone++) {
       const state = zoneState(model.hp, this.zones, zone);
       if (state === ZONE_INTACT) continue;

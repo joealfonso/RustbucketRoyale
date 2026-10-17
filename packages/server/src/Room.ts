@@ -1,6 +1,6 @@
 import {
   FireGate, STEP, ZONE_ARMS, ZONE_COUNT, ZONE_LEGS, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
-  createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule,
+  createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule, partToRepair,
   decodeInput, parseClientMessage, ringAt, rollLoot, itemWeapon, weaponItem, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
   NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
@@ -138,7 +138,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: this.newBot(), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -182,7 +182,7 @@ export class Room {
     const id = this.nextId++;
     const player: Player = {
       id, slot, bot: null, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
-      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length),
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -287,7 +287,10 @@ export class Room {
       return;
     }
 
-    if ((this.tickCount + player.slot) % this.config.bots.loot.refreshTicks === 0) this.aimBotAtLoot(player);
+    if ((this.tickCount + player.slot) % this.config.bots.loot.refreshTicks === 0) {
+      this.aimBotAtLoot(player);
+      bot.needsRepair = partToRepair(player.hp, this.config.zones) >= 0;
+    }
 
     // A bot with nobody near is not worth thinking about every tick. It thinks and moves a few times a second,
     // heads for where it is going, and never looks for targets. Two such bots that meet fight on paper.
@@ -531,9 +534,11 @@ export class Room {
     if (!player.dead && player.participant && this.state !== "countdown") {
       this.interact(player, input.interact, dt);
       this.walkOver(player);
+      this.repair(player, input, dt);
     } else {
       player.interactHeld = false;
       this.stopLooting(player);
+      this.stopRepair(player);
     }
     if (player.state.y < KILL_HEIGHT && !player.dead) this.fellOffMap(player);
   }
@@ -712,6 +717,31 @@ export class Room {
     this.stopLooting(player);
   }
 
+  // F held, standing still, fixes the worst part back to running order (not new) after a few seconds. Moving, firing,
+  // jetting, letting go or taking any damage at all starts it over. It is loud, so repairing is a gamble.
+  private repair(player: Player, input: MechInput, dt: number): void {
+    const { zones } = this.config;
+    let health = 0;
+    for (let zone = 0; zone < ZONE_COUNT; zone++) health += player.hp[zone]! + player.loadout.armor[zone]!;
+    const hurt = health < player.healthMark;
+    player.healthMark = health;
+    const still = input.moveX === 0 && input.moveY === 0 && !input.fire && !input.jet && !input.dash && !input.grenade;
+    const zone = partToRepair(player.hp, zones);
+    if (!input.repair || !still || hurt || zone < 0) return this.stopRepair(player);
+
+    if (zone !== player.repairZone) { player.repairZone = zone; player.repairSeconds = 0; }
+    player.repairSeconds += dt;
+    this.makeNoise(player, "repair", player.state.x, player.state.z);
+    if (player.repairSeconds < zones.repairSeconds) return;
+    player.hp[zone] = zones.zones[zone]!.hp * zones.repairToFraction;
+    this.stopRepair(player);
+  }
+
+  private stopRepair(player: Player): void {
+    player.repairZone = -1;
+    player.repairSeconds = 0;
+  }
+
   private stopLooting(player: Player): void {
     player.lootingId = 0;
     player.lootSeconds = 0;
@@ -881,7 +911,7 @@ export class Room {
       if (!p.participant) continue; // spectators have no mech to draw
       everyone.push({
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
-        running: p.state.running, jetting: p.state.jetting, dead: p.dead, looted: p.looted, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
+        running: p.state.running, jetting: p.state.jetting, dead: p.dead, looted: p.looted, repairing: p.repairZone >= 0, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
         weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil),
       });
     }
@@ -907,6 +937,7 @@ export class Room {
         others, noises: player.heard.splice(0),
         loadout: { ...player.loadout, slots: [player.loadout.slots[0], player.loadout.slots[1]], armor: player.loadout.armor.map(Math.ceil) },
         looting: player.lootingId ? player.lootSeconds / this.config.loot.wreckLootSeconds : 0,
+        repairing: player.repairZone >= 0 ? player.repairSeconds / this.config.zones.repairSeconds : 0,
         pickups: this.pickupsChanged(player, this.pickups.near(view.x, view.z, interestRange, this.pickupScratch)),
       });
     }

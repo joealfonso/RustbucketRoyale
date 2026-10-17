@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, throwGrenade, zoneState, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, throwGrenade, zoneState, partToRepair, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
   type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
@@ -185,6 +185,7 @@ let serverActive = 0;
 let firingSlot = 0; // the slot this client is firing from, so the switch pause is predicted too
 let pickupsNow: PickupState[] = [];
 let looting = 0; // how far through looting a wreck, 0 to 1, from the server
+let repairing = 0; // how far through repairing a part, 0 to 1, from the server
 const sum = (values: readonly number[]) => values.reduce((a, b) => a + b, 0);
 
 // Match state. Offline there is no match, so this just stays quiet.
@@ -260,6 +261,10 @@ if (net) {
     // A rattle every quarter of the way through looting, so holding E sounds like work being done.
     if (Math.floor(snap.looting * 4) > Math.floor(looting * 4)) sound.play("loot");
     looting = snap.looting;
+    // A clank for every fifth of a repair, like work being done.
+    if (Math.floor(snap.repairing * 5) > Math.floor(repairing * 5)) sound.play("repair");
+    repairing = snap.repairing;
+    ownModel.repairing = repairing > 0;
     setMechDamage(ownModel, health.hp, health.dead);
     net.noteSnapshot(snap.ack, snap.ackAgeMs, performance.now());
     remotes.push(snap.others, snap.tick, performance.now());
@@ -528,8 +533,12 @@ function frame(now: number): void {
     hud.setPrompt(dropping ? `E: take ${name} (drops ${dropping})` : `E: take ${name}`);
   } else if (looting > 0 && !health.dead) {
     hud.setPrompt(`Looting... ${Math.round(looting * 100)}%`);
+  } else if (repairing > 0 && !health.dead) {
+    hud.setPrompt(`Repairing ${zoneSet.zones[partToRepair(health.hp, zoneSet)]?.name ?? ""}... ${Math.round(repairing * 100)}%`);
   } else if (!health.dead && remotes.fullWreckNear(mech.x, mech.z, lootConfig.interactRange)) {
     hud.setPrompt("Hold E: loot wreck");
+  } else if (!health.dead && net && partToRepair(health.hp, zoneSet) >= 0) {
+    hud.setPrompt(`Hold F: repair ${zoneSet.zones[partToRepair(health.hp, zoneSet)]!.name}`);
   } else {
     hud.setPrompt("");
   }

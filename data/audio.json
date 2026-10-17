@@ -62,6 +62,10 @@
     "loot": {
       "volume": 0.5,
       "file": null
+    },
+    "repair": {
+      "volume": 0.45,
+      "file": null
     }
   }
 }

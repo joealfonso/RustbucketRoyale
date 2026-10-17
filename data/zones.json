@@ -1,6 +1,8 @@
 {
   "damagedBelowFraction": 0.5,
   "brokenArmsSpreadMultiplier": 3,
+  "repairSeconds": 6,
+  "repairToFraction": 0.4,
   "zones": [
     {
       "name": "legs",

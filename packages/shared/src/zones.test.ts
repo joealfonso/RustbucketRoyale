@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import zonesJson from "../../../data/zones.json";
 import {
-  ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, ZONE_INTACT, ZONE_LEGS, ZONE_TORSO, applyDamage, zoneState, createHealth, createZoneHit, isDestroyed, parseZones, raycastMech,
+  ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, ZONE_INTACT, ZONE_LEGS, ZONE_TORSO, applyDamage, partToRepair, zoneState, createHealth, createZoneHit, isDestroyed, parseZones, raycastMech,
 } from "./zones";
 
 const set = parseZones(zonesJson);
@@ -85,5 +85,17 @@ describe("zoneState", () => {
   it("refuses a zones file without the damaged share", () => {
     const { damagedBelowFraction: _, ...rest } = zonesJson;
     expect(() => parseZones(rest)).toThrow(/damagedBelowFraction/);
+  });
+});
+
+describe("partToRepair", () => {
+  it("picks the part with the smallest share left, and nothing once all are at the repair level", () => {
+    const hp = createHealth(set);
+    expect(partToRepair(hp, set)).toBe(-1);
+    hp[ZONE_ARMS] = 10;
+    hp[ZONE_TORSO] = 30; // 30% of 100 is a bigger share than 10 of 60
+    expect(partToRepair(hp, set)).toBe(ZONE_ARMS);
+    hp[ZONE_ARMS] = set.zones[ZONE_ARMS]!.hp * set.repairToFraction;
+    expect(partToRepair(hp, set)).toBe(ZONE_TORSO);
   });
 });

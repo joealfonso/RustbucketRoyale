@@ -33,7 +33,8 @@ export interface MechModel {
   // The last damage shown, kept so the spark and smoke effects can read it each frame.
   hp: number[];
   dead: boolean;
-  fxTimers: number[]; // per zone: seconds until the next spark, then the next puff of smoke
+  repairing: boolean; // shown with welding sparks
+  fxTimers: number[]; // per zone: seconds until the next spark, then the next puff of smoke. Last: welding sparks
 }
 
 // How a crawling mech sits. Read from data/damageFx.json once at startup.
@@ -101,7 +102,7 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[]): M
   ];
   return {
     group, body, legMeshes, zoneMaterials, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
-    hp: [...zoneMaxHp], dead: false, fxTimers: [0, 0, 0, 0, 0, 0],
+    hp: [...zoneMaxHp], dead: false, repairing: false, fxTimers: [0, 0, 0, 0, 0, 0, 0],
   };
 }
 

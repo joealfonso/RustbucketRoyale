@@ -120,6 +120,7 @@ export class Input {
     out.slot = this.slot;
     // Held E loots a wreck. A press too quick to span a sim step still counts for one step, so taking a weapon never misses.
     out.interact = active && (this.interactQueued || this.keys.has("KeyE"));
+    out.repair = active && this.keys.has("KeyF");
     this.interactQueued = false;
   }
 
