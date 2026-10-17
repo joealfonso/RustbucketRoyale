@@ -63,18 +63,14 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   if (s.running) s.stamina.drain(stats.runDrainPerSecond * dt, stats.staminaRegenDelay);
   else s.stamina.regen(stats.staminaRegenPerSecond, dt, stats.staminaUnlockFraction);
 
-  // A dash goes the way you tapped (double-pressing a direction key), or the way you are steering,
-  // or straight ahead if you are standing still.
+  // A dash goes the way you are steering, in any of the eight directions, or straight ahead if you are standing still.
   s.dashCooldown = Math.max(0, s.dashCooldown - dt);
   if (input.dash && s.dashCooldown <= 0 && s.dashTime <= 0 && s.stamina.canUse && s.stamina.value >= stats.dashStaminaCost) {
     let dirX = forwardX, dirZ = forwardZ;
-    const tapped = input.dashMoveX !== 0 || input.dashMoveY !== 0;
-    const dx = tapped ? rightX * input.dashMoveX + forwardX * input.dashMoveY : wishX;
-    const dz = tapped ? rightZ * input.dashMoveX + forwardZ * input.dashMoveY : wishZ;
-    const length = Math.hypot(dx, dz);
+    const length = Math.hypot(wishX, wishZ);
     if (length > 1e-4) {
-      dirX = dx / length;
-      dirZ = dz / length;
+      dirX = wishX / length;
+      dirZ = wishZ / length;
     }
     s.dashX = dirX;
     s.dashZ = dirZ;

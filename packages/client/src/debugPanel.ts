@@ -36,12 +36,11 @@ export class DebugPanel {
     speed.add(mech, "turnSpeedDegrees", 30, 720).name("body turn speed");
     speed.add(mech, "gravity", 5, 80);
 
-    const dash = this.gui.addFolder("Dash (double-press Shift)");
+    const dash = this.gui.addFolder("Dash (Shift)");
     dash.add(mech, "dashSpeed", 10, 80);
     dash.add(mech, "dashSeconds", 0.05, 0.6);
     dash.add(mech, "dashCooldown", 0.1, 4);
     dash.add(mech, "dashStaminaCost", 0, 100);
-    dash.add(mech, "dashDoubleTapSeconds", 0.1, 0.6).name("double-tap window (s)");
 
     const jets = this.gui.addFolder("Jump jets");
     jets.add(mech, "jetLift", 5, 150);
@@ -50,7 +49,8 @@ export class DebugPanel {
     jets.add(mech, "fuelDrainPerSecond", 1, 150);
     jets.add(mech, "fuelRegenPerSecond", 1, 150);
 
-    const stamina = this.gui.addFolder("Run stamina");
+    const stamina = this.gui.addFolder("Sprint stamina (double-press W)");
+    stamina.add(mech, "sprintDoubleTapSeconds", 0.1, 0.6).name("double-tap window (s)");
     stamina.add(mech, "staminaMax", 10, 300);
     stamina.add(mech, "runDrainPerSecond", 1, 150);
     stamina.add(mech, "staminaRegenPerSecond", 1, 150);

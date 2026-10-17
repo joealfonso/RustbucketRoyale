@@ -117,16 +117,21 @@ describe("dash", () => {
     expect(still.dashZ).toBeCloseTo(1); // ahead of a mech facing +Z
   });
 
-  it("goes the way you tapped, even while steering another way", () => {
-    const s = settled();
-    // Aim yaw 0 faces -Z. Holding forward but double-tapping D dashes right (+X), not forward.
-    stepMech(s, forward({ dash: true, dashMoveX: 1 }), stats, DT, groundWorld);
-    expect(s.dashX).toBeCloseTo(1);
-    expect(s.dashZ).toBeCloseTo(0);
+  it("goes the way you are steering, including diagonals", () => {
+    // Aim yaw 0 faces -Z: forward is -Z, right is +X.
+    const right = settled();
+    stepMech(right, { ...createMechInput(), moveX: 1, dash: true }, stats, DT, groundWorld);
+    expect(right.dashX).toBeCloseTo(1);
+    expect(right.dashZ).toBeCloseTo(0);
 
     const back = settled();
-    stepMech(back, forward({ dash: true, dashMoveY: -1 }), stats, DT, groundWorld);
-    expect(back.dashZ).toBeCloseTo(1); // backwards from a mech facing -Z
+    stepMech(back, { ...createMechInput(), moveY: -1, dash: true }, stats, DT, groundWorld);
+    expect(back.dashZ).toBeCloseTo(1);
+
+    const diagonal = settled();
+    stepMech(diagonal, { ...createMechInput(), moveX: 1, moveY: 1, dash: true }, stats, DT, groundWorld);
+    expect(diagonal.dashX).toBeCloseTo(Math.SQRT1_2);
+    expect(diagonal.dashZ).toBeCloseTo(-Math.SQRT1_2);
   });
 
   it("costs stamina and then has to cool down", () => {
