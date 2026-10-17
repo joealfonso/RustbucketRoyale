@@ -59,8 +59,12 @@ export class Input {
 
   panelOpen = false;
 
+  // Raw mouse movement skips the operating system's pointer smoothing and acceleration, which adds lag and
+  // makes aim inconsistent. Not every browser allows it, so fall back to the normal lock.
   lock(): void {
-    void this.canvas.requestPointerLock();
+    const request = this.canvas.requestPointerLock as (options?: { unadjustedMovement?: boolean }) => Promise<void> | void;
+    const result = request.call(this.canvas, { unadjustedMovement: true });
+    if (result instanceof Promise) result.catch(() => void this.canvas.requestPointerLock());
   }
 
   unlock(): void {

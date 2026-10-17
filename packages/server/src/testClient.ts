@@ -26,8 +26,8 @@ export const startMatch = (room: Room, host: Client) => {
 
 export type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
 
-export function inputMessage(seq: number, input: MechInput): string {
-  return JSON.stringify({ t: "input", seq, ...input });
+export function inputMessage(seq: number, input: MechInput, lagMs?: number): string {
+  return JSON.stringify({ t: "input", seq, ...(lagMs === undefined ? {} : { lagMs }), ...input });
 }
 
 // Aim yaw PI faces +Z, the way a fresh mech spawns.
@@ -38,6 +38,7 @@ export const idle = (extra: Partial<MechInput> = {}): MechInput => ({ ...createM
 export class Client {
   messages: ServerMessage[] = [];
   id = 0;
+  lagMs: number | undefined; // what this fake client reports about its own delay
   predictor: Predictor;
   constructor(public room: Room, config = loadRoomConfig()) {
     this.id = room.join((m) => this.messages.push(m)) ?? 0;
@@ -48,7 +49,7 @@ export class Client {
   }
   send(input: MechInput): void {
     const seq = this.predictor.step(input, STEP);
-    this.room.receive(this.id, inputMessage(seq, input));
+    this.room.receive(this.id, inputMessage(seq, input, this.lagMs));
   }
   snapshots(): Snapshot[] {
     return this.messages.filter((m): m is Snapshot => m.t === "snapshot");

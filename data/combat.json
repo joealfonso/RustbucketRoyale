@@ -1,5 +1,6 @@
 {
-  "lagCompensationMs": 150,
+  "lagCompensationMs": 250,
   "historyMs": 400,
-  "respawnSeconds": 3
+  "respawnSeconds": 3,
+  "defaultLagMs": 100
 }

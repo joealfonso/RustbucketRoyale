@@ -5,8 +5,9 @@
   "maxQueuedInputs": 12,
   "maxMessagesPerSecond": 150,
   "floodKickBudget": -100,
-  "interpolationDelayMs": 100,
   "correctionSmoothing": 12,
   "snapDistance": 2,
-  "spawnSpacing": 6
+  "spawnSpacing": 6,
+  "interpolationBufferMs": 15,
+  "maxViewDelayMs": 200
 }

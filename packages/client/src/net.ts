@@ -28,6 +28,11 @@ export class NetClient {
 
   // Resolves with the map to build once the server says hello, or rejects if it never does.
   readonly welcome: Promise<{ seed: number; tier: string; code: string }>;
+  // The round trip to the server, with the time it held the input before answering taken off.
+  rttMs = 0;
+  // Set by the game so each input can say how far behind its view of other mechs is.
+  viewDelayMs: () => number = () => 0;
+  private sentAt = new Float64Array(256);
   private socket: WebSocket;
   // Reused every send so the frame loop does not build a new object each time.
   private message: InputMessage = {
@@ -62,10 +67,20 @@ export class NetClient {
     if (this.open) this.socket.send(JSON.stringify({ t: "start" }));
   }
 
+  // Call for every snapshot: works out the round trip from when the acknowledged input was sent.
+  noteSnapshot(ack: number, ackAgeMs: number, nowMs: number): void {
+    if (ack <= 0) return;
+    const sample = nowMs - this.sentAt[ack & 255]! - ackAgeMs;
+    if (sample < 0 || sample > 2000) return;
+    this.rttMs = this.rttMs === 0 ? sample : this.rttMs + (sample - this.rttMs) * 0.2;
+  }
+
   sendInput(seq: number, input: MechInput): void {
     if (!this.open) return;
+    this.sentAt[seq & 255] = performance.now();
     const m = this.message;
     m.seq = seq;
+    m.lagMs = this.rttMs + this.viewDelayMs();
     m.moveX = input.moveX; m.moveY = input.moveY;
     m.aimYaw = input.aimYaw; m.aimPitch = input.aimPitch;
     m.run = input.run; m.jet = input.jet; m.dash = input.dash; m.fire = input.fire; m.grenade = input.grenade;

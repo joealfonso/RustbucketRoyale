@@ -7,6 +7,8 @@ export interface Readouts {
   fps: number;
   players: number;
   correction: number;
+  ping: number;
+  viewDelay: number;
 }
 
 const CROSS_METERS = 2000;
@@ -15,7 +17,7 @@ const CROSS_METERS = 2000;
 // "Copy tuning JSON" puts them on the clipboard so good values can be saved into data/*.json.
 export class DebugPanel {
   readonly gui = new GUI({ title: "Tuning (F1)" });
-  readonly readouts: Readouts = { speed: 0, grounded: false, fps: 0, players: 1, correction: 0 };
+  readonly readouts: Readouts = { speed: 0, grounded: false, fps: 0, players: 1, correction: 0, ping: 0, viewDelay: 0 };
   private crossReadout = { seconds: 0 };
 
   constructor(private mech: MechStats, private weapon: WeaponStats, private cameraStats: CameraStats) {
@@ -25,6 +27,8 @@ export class DebugPanel {
     info.add(this.readouts, "fps").name("FPS").listen().disable();
     info.add(this.readouts, "players").listen().disable();
     info.add(this.readouts, "correction").name("Correction m").listen().disable();
+    info.add(this.readouts, "ping").name("Ping ms").listen().disable();
+    info.add(this.readouts, "viewDelay").name("Others shown behind (ms)").listen().disable();
     info.add(this.crossReadout, "seconds").name(`Cross ${CROSS_METERS} m (s)`).listen().disable();
 
     const speed = this.gui.addFolder("Speed");
@@ -72,11 +76,13 @@ export class DebugPanel {
     this.gui.hide();
   }
 
-  update(speed: number, grounded: boolean, fps: number, players: number, correction: number): void {
+  update(speed: number, grounded: boolean, fps: number, players: number, correction: number, ping: number, viewDelay: number): void {
     this.readouts.speed = Math.round(speed * 10) / 10;
     this.readouts.grounded = grounded;
     this.readouts.fps = Math.round(fps);
     this.readouts.players = players;
+    this.readouts.ping = Math.round(ping);
+    this.readouts.viewDelay = Math.round(viewDelay);
     this.readouts.correction = Math.round(correction * 1000) / 1000;
     this.crossReadout.seconds = Math.round(secondsToCross(this.mech, CROSS_METERS));
   }

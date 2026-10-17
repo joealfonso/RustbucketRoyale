@@ -20,6 +20,9 @@ export interface InputMessage {
   targetX: number;
   targetY: number;
   targetZ: number;
+  // How far behind the server the client's picture of other mechs is (round trip plus its smoothing delay),
+  // so a shot is checked against what the shooter actually saw. Optional, and capped by the server.
+  lagMs?: number;
 }
 
 // The room creator asks for the first match to begin. Later matches follow on their own.
@@ -107,7 +110,7 @@ export type ServerMessage =
   | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number }
   | { t: "result"; winnerId: number | null }
   | { t: "refused"; reason: string }
-  | { t: "snapshot"; tick: number; ack: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[] }
+  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[] }
   | ShotMessage
   | HitMessage
   | GrenadeMessage
@@ -135,8 +138,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (typeof m.run !== "boolean" || typeof m.jet !== "boolean" || typeof m.dash !== "boolean" || typeof m.fire !== "boolean" || typeof m.grenade !== "boolean") return null;
   if (!Number.isInteger(m.seq) || (m.seq as number) < 1) return null;
 
+  const lagMs = finite(m.lagMs) ? clamp(m.lagMs, 0, 1000) : undefined;
   return {
     t: "input",
+    lagMs,
     seq: m.seq as number,
     moveX: clamp(m.moveX as number, -1, 1),
     moveY: clamp(m.moveY as number, -1, 1),

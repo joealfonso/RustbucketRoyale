@@ -12,6 +12,8 @@ export interface Player {
   grenadeGate: FireGate;
   queue: { seq: number; input: MechInput }[];
   lastSeq: number; // highest input processed, sent back as the ack
+  ackTick: number; // the server tick on which that input was processed, so a client can subtract the wait from its ping
+  lagMs: number; // how far behind the client's view is, from what it reports. Used to rewind targets for its shots
   steps: number; // the player's own clock: one step per input processed
   budget: number; // message allowance, refills every tick
   hp: number[];

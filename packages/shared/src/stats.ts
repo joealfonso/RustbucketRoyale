@@ -59,7 +59,8 @@ export interface GrenadeStats {
 }
 
 export interface CombatStats {
-  lagCompensationMs: number;
+  lagCompensationMs: number; // the most a shot is ever rewound, whatever the client says
+  defaultLagMs: number; // used when a client does not say how far behind it is
   historyMs: number;
   respawnSeconds: number;
 }
@@ -105,7 +106,8 @@ export interface NetStats {
   maxQueuedInputs: number;
   maxMessagesPerSecond: number;
   floodKickBudget: number;
-  interpolationDelayMs: number;
+  interpolationBufferMs: number; // extra time kept on top of one snapshot interval, to ride out jitter
+  maxViewDelayMs: number;
   correctionSmoothing: number;
   snapDistance: number;
   spawnSpacing: number;
@@ -144,7 +146,7 @@ const CAMERA_KEYS: (keyof CameraStats & string)[] = [
 const GRENADE_KEYS: (keyof GrenadeStats & string)[] = [
   "throwSpeed", "throwLift", "gravity", "bounce", "friction", "radius", "fuseSeconds", "blastRadius", "damage", "cooldownSeconds", "shakeRadius", "shakeForce",
 ];
-const COMBAT_KEYS: (keyof CombatStats & string)[] = ["lagCompensationMs", "historyMs", "respawnSeconds"];
+const COMBAT_KEYS: (keyof CombatStats & string)[] = ["lagCompensationMs", "defaultLagMs", "historyMs", "respawnSeconds"];
 
 const BOT_KEYS: (keyof BotStats & string)[] = [
   "sightRange", "preferredDistance", "strafeSeconds", "aimErrorDegrees", "aimRetargetSeconds", "turnDegreesPerSecond",
@@ -154,7 +156,7 @@ const BOT_KEYS: (keyof BotStats & string)[] = [
 
 const NET_KEYS: (keyof NetStats & string)[] = [
   "snapshotEvery", "maxPlayers", "maxInputsPerTick", "maxQueuedInputs", "maxMessagesPerSecond",
-  "floodKickBudget", "interpolationDelayMs", "correctionSmoothing", "snapDistance", "spawnSpacing",
+  "floodKickBudget", "interpolationBufferMs", "maxViewDelayMs", "correctionSmoothing", "snapDistance", "spawnSpacing",
 ];
 
 export const parseNetStats = (raw: unknown) => parseNumbers<NetStats>(raw, "net.json", NET_KEYS);

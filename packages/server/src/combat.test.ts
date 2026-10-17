@@ -57,16 +57,19 @@ describe("shots", () => {
     expect(target.last().health.hp[ZONE_TORSO]).toBe(100);
   });
 
-  it("are checked against where the target was a moment ago (lag compensation)", () => {
-    const run = (lagMs: number) => {
-      const { room, shooter, target } = setup((c) => ({ ...c, combat: { ...c.combat, lagCompensationMs: lagMs, historyMs: 600 } }));
+  it("are checked against where the target was when the shooter saw it, up to a cap", () => {
+    // The target dashes sideways just before the shot. The shooter reports how far behind its picture is.
+    const run = (reportedMs: number, capMs: number) => {
+      const { room, shooter, target } = setup((c) => ({ ...c, combat: { ...c.combat, lagCompensationMs: capMs, historyMs: 600 } }));
+      shooter.lagMs = reportedMs;
       settle(room, shooter, target);
       tick(room, [shooter, target], (c) => (c === target ? turnedAway({ moveX: 1, run: true }) : idle()), 30);
       tick(room, [shooter, target], (c) => (c === shooter ? idle(AT_TARGET) : turnedAway({ moveX: 1, run: true })), 1);
       return hits(shooter).length > 0;
     };
-    expect(run(0)).toBe(false);
-    expect(run(500)).toBe(true);
+    expect(run(0, 500)).toBe(false); // saw it live: it has already moved
+    expect(run(500, 500)).toBe(true); // saw it half a second ago: it was still there
+    expect(run(500, 0)).toBe(false); // a client cannot ask for more than the server allows
   });
 
   it("do no harm in the lobby, where nobody has started a match", () => {

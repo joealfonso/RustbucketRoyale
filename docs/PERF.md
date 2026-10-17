@@ -30,3 +30,13 @@ Measured with `npx tsx scripts/measure-generation.ts`, 10 seeds per tier. Includ
 
 Well inside the 3 s budget. A browser will be several times slower than Node, still fine. Not measured yet: drawing 12,000 boxes on a mid-range laptop (one instanced mesh per colour, no culling), and how fast the collision grid answers with bots shooting.
 
+### Delay (2026-10-17, localhost, in the built in browser)
+| What | Before | After |
+| :- | :- | :- |
+| Other mechs shown behind the truth | 100 ms fixed | about 69 ms, grows with jitter (cap 200) |
+| Hit check rewind | 150 ms fixed | ping plus view delay, capped at 250 ms |
+| Body turn behind the camera | up to 750 ms for a half turn | none |
+| Dash | up to 200 ms after the press | on the press |
+
+Ping read 14 ms in the browser pane, which includes the pane's own timing. Still to measure on a real connection.
+

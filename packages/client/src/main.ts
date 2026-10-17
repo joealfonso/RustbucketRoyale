@@ -100,7 +100,7 @@ const overview = params.has("overview");
 hint.innerHTML = hintHtml;
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 const scene = new THREE.Scene();
@@ -129,7 +129,8 @@ const blasts = new TimedEffects(scene, 6, 4, blastMaterial);
 const grenades = new ClientGrenades(scene, 8, grenadeStats);
 const grenadeGate = new FireGate();
 const thrown = createGrenade();
-const remotes = new RemoteMechs(scene, netStats.interpolationDelayMs, zoneMaxHp);
+const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.maxViewDelayMs, netStats.snapshotEvery * STEP * 1000, zoneMaxHp);
+if (net) net.viewDelayMs = () => remotes.viewDelayMs;
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
 const input = new Input(canvas, hint, () => mechStats.sprintDoubleTapSeconds);
@@ -200,7 +201,8 @@ if (net) {
     health = snap.health;
     if (health.hp.reduce((a, b) => a + b, 0) < before) flashHurt();
     setMechDamage(ownModel, health.hp, health.dead);
-    remotes.push(snap.others, performance.now());
+    net.noteSnapshot(snap.ack, snap.ackAgeMs, performance.now());
+    remotes.push(snap.others, snap.tick, performance.now());
   };
   net.onShot = (s) => {
     if (s.id === net.id) return; // our own shot already played the moment we fired
@@ -389,7 +391,7 @@ function frame(now: number): void {
     : "";
   fuelBar.classList.toggle("locked", mech.fuel.locked);
   staminaBar.classList.toggle("locked", mech.stamina.locked);
-  if (panel.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection);
+  if (panel.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection, net?.rttMs ?? 0, net ? remotes.viewDelayMs : 0);
 
   renderer.render(scene, rig.camera);
   requestAnimationFrame(frame);

@@ -101,7 +101,7 @@ export class Room {
     const id = this.nextId++;
     this.players.set(id, {
       id, slot, bot: new Bot(this.config.bots, this.random), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
-      gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, steps: 0, budget: net.maxMessagesPerSecond,
+      gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
       hp: createHealth(this.config.zones), dead: false, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
@@ -129,7 +129,7 @@ export class Room {
     const id = this.nextId++;
     const player: Player = {
       id, slot, bot: null, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
-      queue: [], lastSeq: 0, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones),
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones),
       dead: watching, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -168,6 +168,7 @@ export class Room {
       return true;
     }
 
+    if (message.lagMs !== undefined) player.lagMs = message.lagMs;
     if (message.seq <= (player.queue.at(-1)?.seq ?? player.lastSeq)) return true; // replayed or out of order
     if (player.queue.length >= this.config.net.maxQueuedInputs) return true; // client is far ahead, drop the extra
 
@@ -198,6 +199,7 @@ export class Room {
         if (!next) break;
         this.processInput(player, next.input);
         player.lastSeq = next.seq;
+        player.ackTick = this.tickCount;
       }
       this.recordHistory(player);
     }
@@ -397,7 +399,9 @@ export class Room {
   // Finds the nearest living mech along the shot, checked at where it stood a moment ago, because
   // the shooter was looking at a slightly old picture. Result zone and distance are left in this.zoneHit.
   private findTarget(shooter: Player, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, reach: number): Player | null {
-    const rewindTicks = Math.min(this.historyLength - 1, Math.round(this.config.combat.lagCompensationMs / (STEP * 1000)));
+    // Rewind by what this shooter actually saw, never more than the cap, so the shot lands where they aimed.
+    const lagMs = Math.min(shooter.lagMs, this.config.combat.lagCompensationMs);
+    const rewindTicks = Math.min(this.historyLength - 1, Math.round(lagMs / (STEP * 1000)));
     const wanted = this.tickCount - rewindTicks;
     let best: Player | null = null;
     let bestDistance = reach;
@@ -517,7 +521,7 @@ export class Room {
     for (const player of this.players.values()) {
       if (player.bot) continue;
       player.send({
-        t: "snapshot", tick: this.tickCount, ack: player.lastSeq, you: writeSelf(player.state),
+        t: "snapshot", tick: this.tickCount, ack: player.lastSeq, ackAgeMs: (this.tickCount - player.ackTick) * STEP * 1000, you: writeSelf(player.state),
         health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn: 0 }, match,
         others: others.filter((o) => o.id !== player.id),
       });

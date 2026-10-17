@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { OtherState } from "@rustbucket/shared";
+import { STEP, type OtherState } from "@rustbucket/shared";
 import { createMechModel, setMechDamage, type MechModel } from "./mechModel";
 
 interface Sample {
@@ -16,13 +16,31 @@ interface Remote {
 }
 
 const MAX_SAMPLES = 12;
+const OFFSET_WINDOW = 40; // snapshots to look back over when working out the fastest the network has been
 
 // Other players, drawn a little in the past. Blending between two real snapshots looks smooth
-// where chasing the newest one would stutter, at the cost of showing them ~100 ms late.
+// where chasing the newest one would stutter. Samples are placed on the server's own clock (the tick number),
+// so a late packet does not jolt anyone, and the delay is one snapshot interval plus a small buffer that grows
+// only as far as the connection's measured jitter requires. A clean connection sees others about 65 ms behind.
 export class RemoteMechs {
   private remotes = new Map<number, Remote>();
+  private arrivals: number[] = []; // recent (local arrival time - server time), the lowest is the best case
+  private offset = 0;
+  private jitter = 0;
+  private hasClock = false;
 
-  constructor(private scene: THREE.Scene, private delayMs: number, private zoneMaxHp: readonly number[]) {}
+  constructor(
+    private scene: THREE.Scene,
+    private bufferMs: number,
+    private maxDelayMs: number,
+    private snapshotIntervalMs: number,
+    private zoneMaxHp: readonly number[],
+  ) {}
+
+  // How far behind the server the picture of other mechs is right now, in ms. Shots are rewound by this much plus the ping.
+  get viewDelayMs(): number {
+    return Math.min(this.maxDelayMs, this.snapshotIntervalMs + this.bufferMs + 3 * this.jitter);
+  }
 
   get count(): number {
     return this.remotes.size;
@@ -54,7 +72,16 @@ export class RemoteMechs {
     return true;
   }
 
-  push(others: readonly OtherState[], nowMs: number): void {
+  push(others: readonly OtherState[], serverTick: number, nowMs: number): void {
+    const serverMs = serverTick * STEP * 1000;
+    const gap = nowMs - serverMs;
+    this.arrivals.push(gap);
+    if (this.arrivals.length > OFFSET_WINDOW) this.arrivals.shift();
+    this.offset = Math.min(...this.arrivals);
+    // How much later than the best case this snapshot came, smoothed. This is the jitter the buffer has to absorb.
+    this.jitter = this.hasClock ? this.jitter + ((gap - this.offset) - this.jitter) * 0.1 : 0;
+    this.hasClock = true;
+
     for (const r of this.remotes.values()) r.seen = false;
 
     for (const o of others) {
@@ -68,7 +95,7 @@ export class RemoteMechs {
       remote.seen = true;
       remote.dead = o.dead;
       setMechDamage(remote.model, o.hp, o.dead);
-      remote.samples.push({ time: nowMs, x: o.x, y: o.y, z: o.z, yaw: o.yaw });
+      remote.samples.push({ time: serverMs, x: o.x, y: o.y, z: o.z, yaw: o.yaw });
       if (remote.samples.length > MAX_SAMPLES) remote.samples.shift();
     }
 
@@ -81,7 +108,9 @@ export class RemoteMechs {
   }
 
   update(nowMs: number): void {
-    const renderTime = nowMs - this.delayMs;
+    if (!this.hasClock) return;
+    // Where the server's clock is as far as this client can tell, minus the buffer: the moment we draw.
+    const renderTime = nowMs - this.offset - this.viewDelayMs;
     for (const remote of this.remotes.values()) {
       const s = remote.samples;
       if (s.length === 0) continue;

@@ -1,0 +1,84 @@
+import * as THREE from "three";
+import { describe, expect, it } from "vitest";
+import { STEP, type OtherState } from "@rustbucket/shared";
+import { RemoteMechs } from "./remoteMechs";
+
+const INTERVAL = 3 * STEP * 1000; // snapshots every 3 ticks
+const other = (id: number, x: number): OtherState => ({ id, x, y: 0, z: 0, yaw: 0, running: false, jetting: false, dead: false, bot: false, hp: [60, 60, 100] });
+const tickMs = (tick: number) => tick * STEP * 1000;
+
+function make() {
+  const scene = new THREE.Scene();
+  const remotes = new RemoteMechs(scene, 15, 200, INTERVAL, [60, 60, 100]);
+  return { scene, remotes };
+}
+
+// A mech moving along x at 10 m/s, snapshots arriving after `latency` ms plus whatever `jitter` returns.
+function feed(remotes: RemoteMechs, ticks: number, latency: number, jitter: (i: number) => number): number {
+  let now = 0;
+  for (let i = 1; i * 3 <= ticks; i++) {
+    const tick = i * 3;
+    now = tickMs(tick) + latency + jitter(i);
+    remotes.push([other(1, (tickMs(tick) / 1000) * 10)], tick, now);
+  }
+  return now;
+}
+
+describe("RemoteMechs", () => {
+  it("on a clean connection shows others about one snapshot plus the buffer behind, much less than a fixed 100 ms", () => {
+    const { remotes } = make();
+    feed(remotes, 300, 20, () => 0);
+    expect(remotes.viewDelayMs).toBeGreaterThan(INTERVAL);
+    expect(remotes.viewDelayMs).toBeLessThan(75);
+  });
+
+  it("puts the mech where it was at the moment it draws, not the latest snapshot", () => {
+    const { remotes, scene } = make();
+    const last = feed(remotes, 300, 20, () => 0);
+    remotes.update(last + 4); // draw a little after the newest snapshot arrived
+    const mesh = scene.children[0]!;
+    const drawnAt = mesh.position.x / 10; // seconds of server time that x corresponds to
+    const serverNow = (last + 4 - 20) / 1000; // what the server clock said, as far as the client can tell
+    expect(serverNow - drawnAt).toBeCloseTo(remotes.viewDelayMs / 1000, 1);
+  });
+
+  it("moves smoothly through steady jitter instead of stuttering", () => {
+    const { remotes, scene } = make();
+    // Snapshots every 50 ms, each arriving 20 ms plus up to 24 ms late in a repeating pattern, and a frame every 16.7 ms.
+    const arrivals = Array.from({ length: 200 }, (_, i) => ({ tick: (i + 1) * 3, at: tickMs((i + 1) * 3) + 20 + (i % 4) * 8 }));
+    const xs: number[] = [];
+    let next = 0;
+    for (let now = 0; now < 8000; now += 16.7) {
+      while (next < arrivals.length && arrivals[next]!.at <= now) {
+        const a = arrivals[next++]!;
+        remotes.push([other(1, (tickMs(a.tick) / 1000) * 10)], a.tick, a.at);
+      }
+      remotes.update(now);
+      if (now > 3000 && scene.children[0]) xs.push(scene.children[0].position.x);
+    }
+    const steps = xs.slice(1).map((x, i) => x - xs[i]!);
+    // About 10 m/s * 16.7 ms each frame, with no frame standing still or leaping.
+    expect(steps.length).toBeGreaterThan(200);
+    for (const step of steps) {
+      expect(step).toBeGreaterThan(0.1);
+      expect(step).toBeLessThan(0.25);
+    }
+  });
+
+  it("grows its delay when the connection is jittery, and stays under the cap", () => {
+    const calm = make();
+    feed(calm.remotes, 600, 20, () => 0);
+    const rough = make();
+    feed(rough.remotes, 600, 20, (i) => (i % 3 === 0 ? 70 : 0));
+    expect(rough.remotes.viewDelayMs).toBeGreaterThan(calm.remotes.viewDelayMs + 15);
+    expect(rough.remotes.viewDelayMs).toBeLessThanOrEqual(200);
+  });
+
+  it("drops a mech that is no longer in the snapshots", () => {
+    const { remotes, scene } = make();
+    feed(remotes, 30, 20, () => 0);
+    expect(scene.children.length).toBe(1);
+    remotes.push([], 33, 1000);
+    expect(scene.children.length).toBe(0);
+  });
+});
