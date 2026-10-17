@@ -8,6 +8,7 @@
     "com.unity.collab-proxy": "2.13.6",
     "com.unity.modules.vectorgraphics": "1.0.0",
     "com.unity.cinemachine": "3.1.4",
-    "com.unity.test-framework": "1.6.0"
+    "com.unity.test-framework": "1.6.0",
+    "com.unity.multiplayer.playmode": "2.0.0"
   }
 }
