@@ -82,6 +82,13 @@ A full match per size now plays itself in seconds as a soak test, with fake brow
 
 Every map has crates, junk piles and red barrels placed by the seed. Shoot them and they're gone, cover and all. Barrels blow up and set off their neighbours. The playtest added sound everywhere (built in code until real recordings arrive) and faster, punchier explosions.
 
+## 10. Gate 6b: loot and a loadout
+*Passed 16:30. Commit `77acb00`.*
+
+![Spectating Bot 1 after being knocked out in the Arena: two weapon slots and a grenade count bottom left](10-6b-loadout-and-spectating.jpg)
+
+Broken crates and junk now drop glowing loot: grenades and armor plates you walk over, and two new guns you take with E. Two weapon slots on 1 and 2 or the wheel: the start Autocannon, a close-range Scattergun and a slow, hard-hitting Spike Driver. Plates bolt onto the mech and soak hits first. Grenades are counted now, one to start.
+
 ---
 
-*Next: gate 6b, loot and a loadout.*
+*Next: gate 6c, looting wrecks.*
