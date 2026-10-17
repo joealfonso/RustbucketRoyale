@@ -85,14 +85,36 @@ describe("rooms with bots", () => {
     expect(room.playerCount).toBe(0);
   });
 
-  it("stand still in the lobby and then fight once the match is on", () => {
+  it("roam and shoot in the lobby without hurting anyone, then fight for real once the match is on", () => {
     const { room, config: c } = makeRoom(undefined, "small", 3);
     const human = new Client(room, c);
-    tick(room, [human], 60);
-    expect(human.messages.some((m) => m.t === "shot")).toBe(false);
-    startMatch(room, human);
-    tick(room, [human], 60 * 90);
+    tick(room, [human], 10);
+    const start = human.last().others.map((o) => ({ x: o.x, z: o.z }));
+    tick(room, [human], 60 * 40);
+
+    const later = human.last();
+    const moved = later.others.some((o, i) => Math.hypot(o.x - start[i]!.x, o.z - start[i]!.z) > 5);
+    expect(moved).toBe(true);
     expect(human.messages.some((m) => m.t === "shot")).toBe(true);
+    expect(later.others.every((o) => o.hp[2] === 100 && !o.dead)).toBe(true);
+    expect(room.matchState).toBe("lobby");
+
+    startMatch(room, human);
+    human.messages.length = 0;
+    tick(room, [human], 60 * 90);
+    expect(human.messages.some((m) => m.t === "eliminated")).toBe(true);
+  });
+
+  it("hold still during the countdown", () => {
+    const { room, config: c } = makeRoom((cfg) => ({ ...cfg, match: { ...cfg.match, countdownSeconds: 4 } }), "small", 3);
+    const human = new Client(room, c);
+    tick(room, [human], 30);
+    room.receive(human.id, JSON.stringify({ t: "start" }));
+    tick(room, [human], 5);
+    const before = human.last().others.map((o) => ({ x: o.x, z: o.z }));
+    tick(room, [human], 90);
+    expect(room.matchState).toBe("countdown");
+    human.last().others.forEach((o, i) => expect(Math.hypot(o.x - before[i]!.x, o.z - before[i]!.z)).toBeLessThan(0.01));
   });
 
   it("play a whole match to its end, with someone winning, without breaking", () => {

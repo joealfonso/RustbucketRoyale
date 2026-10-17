@@ -3,7 +3,7 @@ import {
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule,
   parseClientMessage, ringAt, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
   type BotStats, type CombatStats, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
-  type MechStats, type NetStats, type OtherState, type RingConfig, type RingSchedule, type ServerMessage,
+  type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
   type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
@@ -52,6 +52,7 @@ export class Room {
   private worldHit = createRayHit();
   private zoneHit = createZoneHit();
   private ringNow = createRingNow();
+  private lobbyZone = createRingNow();
   private random: () => number;
   private historyLength: number;
 
@@ -207,20 +208,29 @@ export class Room {
   }
 
   // A bot decides what to do this tick, from what it can see, and its input goes through the same path as a person's.
-  // Outside a running match it just stands there.
+  // It roams and fights in the lobby and between matches too, where nothing does damage, so the room feels alive.
+  // Only the countdown holds everyone still.
   private runBot(player: Player): void {
     const input = this.botInput;
-    if (this.state === "active" && !player.dead && player.bot) {
+    if (this.state !== "countdown" && !player.dead && player.bot) {
       this.botTargets.length = 0;
       for (const other of this.players.values()) {
         if (other === player || !other.participant || other.dead) continue;
         this.botTargets.push({ id: other.id, x: other.state.x, y: other.state.y, z: other.state.z });
       }
-      player.bot.think(player.state, this.botTargets, this.ring ? this.ringNow : null, this.map.world, STEP, input);
+      player.bot.think(player.state, this.botTargets, this.botZone(), this.map.world, STEP, input);
     } else {
       Object.assign(input, createMechInput(), { aimYaw: player.state.bodyYaw });
     }
     this.processInput(player, input);
+  }
+
+  // The area bots wander in: the live ring during a match, otherwise a wide circle over most of the map.
+  private botZone(): RingNow {
+    if (this.state === "active" && this.ring) return this.ringNow;
+    const zone = this.lobbyZone;
+    zone.radius = this.map.meters * 0.45;
+    return zone;
   }
 
   // ---- match flow
