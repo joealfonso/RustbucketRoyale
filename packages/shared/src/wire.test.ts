@@ -5,7 +5,7 @@ import type { InputMessage, OtherState, ServerMessage, ShotMessage } from "./pro
 
 type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
 
-const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12] });
+const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, looted: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12] });
 const snapshot = (others: OtherState[]): Snapshot => ({
   t: "snapshot", tick: 123456, ack: 99, ackAgeMs: 12.4,
   you: {
@@ -17,6 +17,7 @@ const snapshot = (others: OtherState[]): Snapshot => ({
   others,
   noises: [],
   loadout: { slots: [0, -1], active: 0, grenades: 2, armor: [30, 0, 40] },
+  looting: 0,
   pickups: [],
 });
 
@@ -38,6 +39,14 @@ describe("snapshot wire format", () => {
     expect(Math.abs(back.others[1]!.x - -999.9)).toBeLessThanOrEqual(0.05 + 1e-9);
     expect(back.others[0]).toMatchObject({ running: true, jetting: false, dead: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12] });
     expect(back.others[0]!.yaw).toBeCloseTo(5.5, 3);
+  });
+
+  it("carries an emptied wreck and how far through looting you are", () => {
+    const s = snapshot([{ ...other(4, 1), dead: true, looted: true }]);
+    s.looting = 0.6;
+    const back = decodeSnapshot(encodeSnapshot(s))!;
+    expect(back.others[0]).toMatchObject({ dead: true, looted: true });
+    expect(back.looting).toBeCloseTo(0.6, 2);
   });
 
   it("carries the sounds heard this snapshot, to half a metre, 5 bytes each", () => {

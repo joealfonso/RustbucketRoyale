@@ -62,6 +62,8 @@ Before the packed format and nearby-only updates the same rooms measured 272, 67
 
 The first runs failed bandwidth on large (91 to 97 kbps): knocked out players were sent the whole map. Fixed by sending a watcher only what is near the mech it watches. Small matches are short because 12 mechs on a 300 m map find each other fast.
 
+With gate 6c (wreck looting and bots that loot), one run per tier: arena 39, small 54, medium 57, large 58 kbps per player, tick 99th percentile 0.07 / 0.06 / 0.27 / 1.13 ms, worst tick 7.9 ms on large, all passing. Bandwidth went up from about 50 because looted wrecks spill more pickups and every pickup near you rides in every snapshot. That is 6 kbps under the 64 budget: if it gets tighter, send pickups only when the nearby set changes.
+
 ### Rooms per server process (2026-10-17, MacBook, Node 25)
 `npx tsx scripts/measure-rooms.ts`. Each room is mid match with two people walking and shooting and bots filling the rest. Server work only: the cost of packing and sending messages is not included.
 

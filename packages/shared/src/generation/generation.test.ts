@@ -199,6 +199,16 @@ describe("validateMap", () => {
     expect(report.problems.join()).toMatch(/cannot be reached|connected/);
   });
 
+  it("fails when a spawn has hardly any loot near it, or the whole map has too little", () => {
+    const [x, , z] = base.spawns[0]!;
+    const reach = propConfig.lootDensity.nearSpawnMeters;
+    const bare = base.props.filter((p) => !propConfig.types[p.type]!.dropsLoot || Math.hypot(p.x - x, p.z - z) > reach);
+    expect(validateMap(base, tiers, mech, propConfig).ok).toBe(true);
+    expect(validateMap({ ...base, props: bare }, tiers, mech, propConfig).problems.join()).toMatch(/loot props near it/);
+    const noLoot = base.props.filter((p) => !propConfig.types[p.type]!.dropsLoot);
+    expect(validateMap({ ...base, props: noLoot }, tiers, mech, propConfig).problems.join()).toMatch(/loot density/);
+  });
+
   it("fails when there are not enough spawns", () => {
     expect(validateMap({ ...base, spawns: base.spawns.slice(0, 3) }, tiers, mech).ok).toBe(false);
   });

@@ -9,7 +9,7 @@ import {
 import { Bot, type BotTarget } from "./Bot";
 import { AbstractFights, RATINGS, botsNeeded, pickDifficulty, type FarBot } from "./botLod";
 import { Pathfinder } from "./Pathfinder";
-import { activeWeapon, collectSmall, freshLoadout, selectSlot, takeWeapon } from "./loadout";
+import { activeWeapon, collectSmall, freshLoadout, selectSlot, spillItems, takeWeapon, wantsItem } from "./loadout";
 import { Pickups } from "./Pickups";
 import type { Player } from "./Player";
 
@@ -138,7 +138,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: this.newBot(), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interested: new Set(), watchId: 0, heard: [], quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, interested: new Set(), watchId: 0, heard: [], quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -182,7 +182,7 @@ export class Room {
     const id = this.nextId++;
     const player: Player = {
       id, slot, bot: null, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
-      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interested: new Set(), watchId: 0, heard: [], quietUntil: new Int32Array(NOISE_KINDS.length),
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, interested: new Set(), watchId: 0, heard: [], quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -287,6 +287,8 @@ export class Room {
       return;
     }
 
+    if ((this.tickCount + player.slot) % this.config.bots.loot.refreshTicks === 0) this.aimBotAtLoot(player);
+
     // A bot with nobody near is not worth thinking about every tick. It thinks and moves a few times a second,
     // heads for where it is going, and never looks for targets. Two such bots that meet fight on paper.
     if (!this.nearAnyPerson(player, lod.fullRangeMeters)) {
@@ -307,6 +309,32 @@ export class Room {
     }
     bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, STEP, input);
     this.processInput(player, input);
+  }
+
+  // With nobody to fight, a bot goes for the nearest thing worth having: a pickup it would take, or a full wreck.
+  private aimBotAtLoot(player: Player): void {
+    const bot = player.bot!;
+    const { x, z } = player.state;
+    let range = this.config.bots.loot.searchMeters;
+    const pickup = this.pickups.nearest(x, z, range, (p) => wantsItem(player.loadout, p.item, this.config.loot));
+    let goalX = 0, goalZ = 0, found = false;
+    if (pickup) { goalX = pickup.x; goalZ = pickup.z; range = Math.hypot(pickup.x - x, pickup.z - z); found = true; }
+    const wreck = this.nearestWreck(player, range);
+    if (wreck) { goalX = wreck.state.x; goalZ = wreck.state.z; found = true; }
+    if (found) bot.setLootGoal(goalX, goalZ);
+    else bot.clearLootGoal();
+  }
+
+  // The nearest wreck that still has something in it, within range of a mech, or null.
+  private nearestWreck(player: Player, range: number): Player | null {
+    let best: Player | null = null;
+    let bestDistance = range;
+    for (const other of this.players.values()) {
+      if (other === player || !other.dead || !other.participant || other.looted) continue;
+      const d = Math.hypot(other.state.x - player.state.x, other.state.z - player.state.z);
+      if (d <= bestDistance) { best = other; bestDistance = d; }
+    }
+    return best;
   }
 
   private nearAnyPerson(bot: Player, range: number): boolean {
@@ -369,6 +397,8 @@ export class Room {
       player.hp = createHealth(this.config.zones);
       player.loadout = freshLoadout(this.config.weapons, this.config.loot);
       player.askedSlot = 0;
+      player.looted = false;
+      this.stopLooting(player);
       player.state = createMechState(this.config.mech, ...this.spawnFor(player.slot), Math.PI);
       player.queue.length = 0;
     }
@@ -422,6 +452,7 @@ export class Room {
     player.state = createMechState(this.config.mech, ...this.spawnFor(player.slot), Math.PI);
     player.hp = createHealth(this.config.zones);
     player.loadout = freshLoadout(this.config.weapons, this.config.loot);
+    player.looted = false;
     player.dead = false;
     player.respawnTick = 0;
   }
@@ -497,8 +528,11 @@ export class Room {
     if (input.fire) this.tryShoot(player, input);
     if (input.grenade) this.tryThrow(player, input);
     if (!player.dead && player.participant && this.state !== "countdown") {
-      if (input.interact && this.tickCount >= player.interactReadyTick) this.interact(player);
+      this.interact(player, input.interact, dt);
       this.walkOver(player);
+    } else {
+      player.interactHeld = false;
+      this.stopLooting(player);
     }
     if (player.state.y < KILL_HEIGHT && !player.dead) this.fellOffMap(player);
   }
@@ -652,15 +686,55 @@ export class Room {
     }
   }
 
-  // E takes the nearest weapon in reach. The range is checked here, never trusted from the client.
-  private interact(player: Player): void {
-    player.interactReadyTick = this.tickCount + Math.round(this.config.loot.interactCooldownSeconds / STEP);
+  // E does one of two things. A press takes the nearest weapon in reach. Held beside a wreck, it loots it: that takes
+  // a couple of seconds, is loud, and starts again if you let go or step away. Ranges are checked here, never
+  // trusted from the client.
+  private interact(player: Player, held: boolean, dt: number): void {
+    const { loot } = this.config;
+    const pressed = held && !player.interactHeld;
+    player.interactHeld = held;
+    if (!held) return this.stopLooting(player);
+    if (pressed && this.tickCount >= player.interactReadyTick) {
+      player.interactReadyTick = this.tickCount + Math.round(loot.interactCooldownSeconds / STEP);
+      if (this.takeWeaponInReach(player)) return this.stopLooting(player);
+    }
+
+    const wreck = this.nearestWreck(player, loot.interactRange);
+    if (!wreck) return this.stopLooting(player);
+    if (wreck.id !== player.lootingId) { player.lootingId = wreck.id; player.lootSeconds = 0; }
+    player.lootSeconds += dt;
+    this.makeNoise(player, "loot", player.state.x, player.state.z);
+    if (player.lootSeconds < loot.wreckLootSeconds) return;
+    this.spill(wreck);
+    this.stopLooting(player);
+  }
+
+  private stopLooting(player: Player): void {
+    player.lootingId = 0;
+    player.lootSeconds = 0;
+  }
+
+  private takeWeaponInReach(player: Player): boolean {
     const pickup = this.pickups.nearest(player.state.x, player.state.z, this.config.loot.interactRange, (p) => itemWeapon(p.item) >= 0);
-    if (!pickup) return;
+    if (!pickup) return false;
     this.pickups.remove(pickup.id);
     const dropped = takeWeapon(player.loadout, pickup.item);
     if (dropped >= 0) this.pickups.add(weaponItem(dropped), player.state.x, 0.5, player.state.z);
     player.gate.holdUntil(player.steps * STEP + this.config.loot.switchSeconds);
+    return true;
+  }
+
+  // A looted wreck throws everything it carried on the ground round it, in a ring, and its plates come off.
+  private spill(wreck: Player): void {
+    const items = spillItems(wreck.loadout);
+    const start = this.random() * Math.PI * 2;
+    const r = this.config.loot.spillRadius;
+    items.forEach((item, i) => {
+      const angle = start + (i / items.length) * Math.PI * 2;
+      this.pickups.add(item, wreck.state.x + Math.cos(angle) * r, wreck.state.y + 0.5, wreck.state.z + Math.sin(angle) * r);
+    });
+    wreck.looted = true;
+    wreck.loadout = { slots: [-1, -1], active: 0, grenades: 0, armor: [0, 0, 0] };
   }
 
   // ---- props
@@ -794,7 +868,7 @@ export class Room {
       if (!p.participant) continue; // spectators have no mech to draw
       everyone.push({
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
-        running: p.state.running, jetting: p.state.jetting, dead: p.dead, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
+        running: p.state.running, jetting: p.state.jetting, dead: p.dead, looted: p.looted, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
         weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil),
       });
     }
@@ -819,6 +893,7 @@ export class Room {
         health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn: player.dead && this.state !== "active" ? Math.max(0, (player.respawnTick - this.tickCount) * STEP) : 0 }, match,
         others, noises: player.heard.splice(0),
         loadout: { ...player.loadout, slots: [player.loadout.slots[0], player.loadout.slots[1]], armor: player.loadout.armor.map(Math.ceil) },
+        looting: player.lootingId ? player.lootSeconds / this.config.loot.wreckLootSeconds : 0,
         pickups: [...this.pickups.near(view.x, view.z, interestRange, this.pickupScratch)],
       });
     }

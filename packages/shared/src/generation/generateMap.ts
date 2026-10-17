@@ -183,6 +183,17 @@ export function validateMap(
   if (propConfig) {
     const perKm = map.props.length / ((map.meters * map.meters) / 1_000_000);
     if (perKm < propConfig.density.minPerSquareKm || perKm > propConfig.density.maxPerSquareKm) problems.push(`prop density ${perKm.toFixed(0)} per square km is out of bounds`);
+
+    const { lootDensity } = propConfig;
+    const lootProps = map.props.filter((p) => propConfig.types[p.type]!.dropsLoot);
+    const lootPerKm = lootProps.length / ((map.meters * map.meters) / 1_000_000);
+    if (lootPerKm < lootDensity.minPerSquareKm || lootPerKm > lootDensity.maxPerSquareKm) problems.push(`loot density ${lootPerKm.toFixed(0)} per square km is out of bounds`);
+    // Squared whole-metre distances, so the count is exact on every machine.
+    const reach = lootDensity.nearSpawnMeters * lootDensity.nearSpawnMeters;
+    for (const [x, , z] of map.spawns) {
+      const near = lootProps.filter((p) => (p.x - x) * (p.x - x) + (p.z - z) * (p.z - z) <= reach).length;
+      if (near < lootDensity.minNearSpawn) problems.push(`spawn at ${x},${z} has only ${near} loot props near it`);
+    }
   }
 
   if (map.spawns.length < def.spawns) problems.push(`only ${map.spawns.length} of ${def.spawns} spawns placed`);

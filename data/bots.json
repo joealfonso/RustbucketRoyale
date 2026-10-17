@@ -81,5 +81,9 @@
     "waypointReach": 4,
     "minPathDistance": 20,
     "goalMoveReplan": 15
+  },
+  "loot": {
+    "searchMeters": 40,
+    "refreshTicks": 15
   }
 }

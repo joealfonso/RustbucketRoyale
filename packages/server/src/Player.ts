@@ -19,7 +19,11 @@ export interface Player {
   hp: number[];
   loadout: Loadout;
   askedSlot: number; // the slot the client last asked for. Only a change of request switches weapons.
-  interactReadyTick: number; // E is ignored until this tick, so it cannot be spammed
+  interactReadyTick: number; // a fresh press of E is ignored until this tick, so taking weapons cannot be spammed
+  interactHeld: boolean; // E was down on the last input, so a new press can be told from holding it
+  lootingId: number; // the wreck being looted, 0 for none
+  lootSeconds: number; // how long E has been held on that wreck
+  looted: boolean; // this mech's wreck has been emptied
   interested: Set<number>;
   watchId: number;
   heard: NoiseEvent[]; // sounds to pass on in the next snapshot

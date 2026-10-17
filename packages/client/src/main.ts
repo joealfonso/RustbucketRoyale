@@ -177,6 +177,7 @@ let loadout: Loadout = { slots: [weaponSet.start, -1], active: 0, grenades: loot
 let serverActive = 0;
 let firingSlot = 0; // the slot this client is firing from, so the switch pause is predicted too
 let pickupsNow: PickupState[] = [];
+let looting = 0; // how far through looting a wreck, 0 to 1, from the server
 const sum = (values: readonly number[]) => values.reduce((a, b) => a + b, 0);
 
 // Match state. Offline there is no match, so this just stays quiet.
@@ -246,6 +247,9 @@ if (net) {
     // When the server changes the weapon in hand itself (taking a weapon into an empty slot), follow it.
     if (loadout.active !== serverActive) { serverActive = loadout.active; input.setSlot(loadout.active); }
     pickupsNow = snap.pickups;
+    // A rattle every quarter of the way through looting, so holding E sounds like work being done.
+    if (Math.floor(snap.looting * 4) > Math.floor(looting * 4)) sound.play("loot");
+    looting = snap.looting;
     pickupView.sync(snap.pickups);
     setMechDamage(ownModel, health.hp, health.dead);
     net.noteSnapshot(snap.ack, snap.ackAgeMs, performance.now());
@@ -503,6 +507,10 @@ function frame(now: number): void {
     const full = loadout.slots[0] >= 0 && loadout.slots[1] >= 0;
     const dropping = full ? weaponSet.weapons[loadout.slots[loadout.active]!]?.name : undefined;
     hud.setPrompt(dropping ? `E: take ${name} (drops ${dropping})` : `E: take ${name}`);
+  } else if (looting > 0 && !health.dead) {
+    hud.setPrompt(`Looting... ${Math.round(looting * 100)}%`);
+  } else if (!health.dead && remotes.fullWreckNear(mech.x, mech.z, lootConfig.interactRange)) {
+    hud.setPrompt("Hold E: loot wreck");
   } else {
     hud.setPrompt("");
   }

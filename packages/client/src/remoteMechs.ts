@@ -10,6 +10,7 @@ interface Sample {
 interface Remote {
   model: MechModel;
   dead: boolean;
+  looted: boolean;
   bot: boolean;
   samples: Sample[];
   seen: boolean;
@@ -66,6 +67,16 @@ export class RemoteMechs {
     return [...this.remotes.entries()].filter(([, r]) => !r.dead).map(([id]) => id);
   }
 
+  // Whether a wreck that still has something in it is within range of a spot, for the "hold E" prompt.
+  fullWreckNear(x: number, z: number, range: number): boolean {
+    for (const r of this.remotes.values()) {
+      if (!r.dead || r.looted) continue;
+      const p = r.model.group.position;
+      if (Math.hypot(p.x - x, p.z - z) <= range) return true;
+    }
+    return false;
+  }
+
   // Where a mech is drawn right now, or false if we have not seen it.
   positionOf(id: number, out: { x: number; y: number; z: number }): boolean {
     const remote = this.remotes.get(id);
@@ -92,11 +103,12 @@ export class RemoteMechs {
       if (!remote) {
         const model = createMechModel("#2f7fd0", this.zoneMaxHp);
         this.scene.add(model.group);
-        remote = { model, dead: false, bot: o.bot, samples: [], seen: true };
+        remote = { model, dead: false, looted: false, bot: o.bot, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;
       remote.dead = o.dead;
+      remote.looted = o.looted;
       setMechDamage(remote.model, o.hp, o.dead);
       setMechGear(remote.model, this.weaponColors[o.weapon] ?? "#d9731a", o.armor);
       remote.samples.push({ time: serverMs, x: o.x, y: o.y, z: o.z, yaw: o.yaw });

@@ -18,6 +18,8 @@ export interface LootConfig {
   pickupRadius: number; // small things are collected by walking within this
   interactRange: number; // weapons are taken with E within this
   interactCooldownSeconds: number;
+  wreckLootSeconds: number; // E held this long beside a wreck spills what it carried
+  spillRadius: number; // how far round a looted wreck its things land
   switchSeconds: number; // a short pause after changing weapon before it can fire
   maxPickups: number;
   colors: { grenade: string; armor: string };
@@ -26,7 +28,7 @@ export interface LootConfig {
 
 export function parseLootConfig(raw: unknown, weapons: WeaponSet, props: PropConfig): LootConfig {
   const d = raw as Record<string, unknown>;
-  for (const key of ["grenadesStart", "grenadesMax", "pickupRadius", "interactRange", "interactCooldownSeconds", "switchSeconds", "maxPickups"]) {
+  for (const key of ["grenadesStart", "grenadesMax", "pickupRadius", "interactRange", "interactCooldownSeconds", "wreckLootSeconds", "spillRadius", "switchSeconds", "maxPickups"]) {
     if (typeof d?.[key] !== "number" || !Number.isFinite(d[key])) throw new Error(`loot.json: ${key} must be a number`);
   }
   if (!Array.isArray(d.armorPlates) || d.armorPlates.length !== 3) throw new Error("loot.json: armorPlates needs legs, arms, torso");
@@ -34,6 +36,8 @@ export function parseLootConfig(raw: unknown, weapons: WeaponSet, props: PropCon
   for (const prop of props.types) {
     const drop = drops?.[prop.id];
     if (!drop || typeof drop.chance !== "number") throw new Error(`loot.json: needs a drop for prop "${prop.id}"`);
+    // Map validation counts loot props from props.json, so the two files have to agree on which props drop anything.
+    if (prop.dropsLoot !== drop.chance > 0) throw new Error(`loot.json: ${prop.id} drop chance disagrees with dropsLoot in props.json`);
     for (const name of Object.keys(drop.table)) {
       if (name !== "grenade" && name !== "armor" && !weapons.weapons.some((w) => w.id === name)) throw new Error(`loot.json: ${prop.id} drops unknown item "${name}"`);
     }

@@ -7,6 +7,7 @@ export interface PropType {
   hp: number;
   color: string;
   explodes: boolean; // goes off like a grenade when destroyed
+  dropsLoot: boolean; // can leave something behind when broken (what, and how often, is in loot.json)
 }
 
 export interface PropConfig {
@@ -16,6 +17,8 @@ export interface PropConfig {
   types: PropType[];
   barrelBlast: { radius: number; damage: number; delaySeconds: number };
   density: { minPerSquareKm: number; maxPerSquareKm: number };
+  // Props that can drop loot: enough over the whole map, and a few near every spawn so nobody starts in a desert.
+  lootDensity: { minPerSquareKm: number; maxPerSquareKm: number; nearSpawnMeters: number; minNearSpawn: number };
 }
 
 // One breakable object on the map. Its id is its place in the map's prop list, which comes from the seed,
@@ -41,7 +44,7 @@ export function parsePropConfig(raw: unknown): PropConfig {
   for (const key of ["keepClearOfSpawn", "margin"]) if (typeof d[key] !== "number") throw new Error(`props.json: ${key} must be a number`);
   if (!Array.isArray(d.types) || d.types.length === 0) throw new Error("props.json: needs types");
   for (const t of d.types as Record<string, unknown>[]) {
-    if (typeof t.id !== "string" || !isVec3(t.size) || typeof t.hp !== "number" || !(t.hp > 0) || typeof t.color !== "string" || typeof t.explodes !== "boolean") {
+    if (typeof t.id !== "string" || !isVec3(t.size) || typeof t.hp !== "number" || !(t.hp > 0) || typeof t.color !== "string" || typeof t.explodes !== "boolean" || typeof t.dropsLoot !== "boolean") {
       throw new Error(`props.json: type ${String(t.id)} is incomplete`);
     }
     if (!Number.isInteger(t.weight) || (t.weight as number) <= 0) throw new Error(`props.json: ${t.id} weight must be a whole number above 0`);
@@ -50,6 +53,8 @@ export function parsePropConfig(raw: unknown): PropConfig {
   for (const key of ["radius", "damage", "delaySeconds"]) if (typeof blast?.[key] !== "number") throw new Error(`props.json: barrelBlast.${key} must be a number`);
   const density = d.density as Record<string, unknown> | undefined;
   for (const key of ["minPerSquareKm", "maxPerSquareKm"]) if (typeof density?.[key] !== "number") throw new Error(`props.json: density.${key} must be a number`);
+  const loot = d.lootDensity as Record<string, unknown> | undefined;
+  for (const key of ["minPerSquareKm", "maxPerSquareKm", "nearSpawnMeters", "minNearSpawn"]) if (typeof loot?.[key] !== "number") throw new Error(`props.json: lootDensity.${key} must be a number`);
   return d as unknown as PropConfig;
 }
 

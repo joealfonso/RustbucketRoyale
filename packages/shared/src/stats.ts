@@ -109,12 +109,18 @@ export interface BotPathStats {
   goalMoveReplan: number; // plan again when the goal has moved this far
 }
 
+export interface BotLootStats {
+  searchMeters: number; // with nobody in sight, a bot goes for useful loot and full wrecks this close
+  refreshTicks: number; // how often it looks again for the nearest thing worth having
+}
+
 export interface BotConfig {
   mix: Record<string, number>; // share of each difficulty when bots are added
   fill: Record<string, number>; // total players (people plus bots) a room tops up to, by tier
   difficulties: Record<string, BotStats>;
   lod: BotLodStats;
   path: BotPathStats;
+  loot: BotLootStats;
 }
 
 export interface HudStats {
@@ -219,6 +225,7 @@ export function parseBotConfig(raw: unknown): BotConfig {
     mix, fill: numbersIn(d?.fill, "fill"), difficulties,
     lod: parseNumbers<BotLodStats>(d?.lod, "bots.json lod", LOD_KEYS),
     path: parseNumbers<BotPathStats>(d?.path, "bots.json path", PATH_KEYS),
+    loot: parseNumbers<BotLootStats>(d?.loot, "bots.json loot", ["searchMeters", "refreshTicks"]),
   };
 }
 export const parseHudStats = (raw: unknown) => parseNumbers<HudStats>(raw, "hud.json", ["radarRangeMeters", "detectRangeMeters"]);
@@ -249,7 +256,7 @@ export function secondsToCross(stats: MechStats, meters: number): number {
 }
 
 // Everything a mech does that can be heard, quietest first. Walking makes no sound, so sneaking is possible.
-export const NOISE_KINDS = ["run", "dash", "jets", "shot", "explosion", "smash"] as const;
+export const NOISE_KINDS = ["run", "dash", "loot", "jets", "shot", "explosion", "smash"] as const;
 export type NoiseKind = (typeof NOISE_KINDS)[number];
 
 export interface NoiseStats {

@@ -4,7 +4,7 @@ import { STEP, type OtherState } from "@rustbucket/shared";
 import { RemoteMechs } from "./remoteMechs";
 
 const INTERVAL = 3 * STEP * 1000; // snapshots every 3 ticks
-const other = (id: number, x: number): OtherState => ({ id, x, y: 0, z: 0, yaw: 0, running: false, jetting: false, dead: false, bot: false, hp: [60, 60, 100], weapon: 0, armor: [0, 0, 0] });
+const other = (id: number, x: number): OtherState => ({ id, x, y: 0, z: 0, yaw: 0, running: false, jetting: false, dead: false, looted: false, bot: false, hp: [60, 60, 100], weapon: 0, armor: [0, 0, 0] });
 const tickMs = (tick: number) => tick * STEP * 1000;
 
 function make() {

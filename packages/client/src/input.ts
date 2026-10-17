@@ -118,8 +118,8 @@ export class Input {
     out.fire = active && this.mouseDown;
     out.grenade = active && this.keys.has("KeyG");
     out.slot = this.slot;
-    // True for exactly one sim step per press of E.
-    out.interact = active && this.interactQueued;
+    // Held E loots a wreck. A press too quick to span a sim step still counts for one step, so taking a weapon never misses.
+    out.interact = active && (this.interactQueued || this.keys.has("KeyE"));
     this.interactQueued = false;
   }
 

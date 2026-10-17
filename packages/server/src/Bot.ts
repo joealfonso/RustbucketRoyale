@@ -4,6 +4,10 @@ import type { Pathfinder } from "./Pathfinder";
 const DEG = Math.PI / 180;
 const EYE_HEIGHT = 2.4;
 const CHEST_HEIGHT = 2.0;
+// Close enough to loot: inside both the walk-over radius and the reach of E, with room to spare. A guess, small
+// enough that a bot standing here really is on top of the thing.
+const LOOT_REACH = 1.2;
+const LOOT_DIRECT = 6; // nearer than this a bot walks straight at loot, not along a route that stops short
 
 export interface BotTarget {
   id: number;
@@ -44,6 +48,9 @@ export class Bot {
   private heardX = 0;
   private heardZ = 0;
   private heardFor = 0;
+  private hasLoot = false;
+  private lootX = 0;
+  private lootZ = 0;
 
   constructor(
     private stats: BotStats,
@@ -62,6 +69,17 @@ export class Bot {
     this.heardFor = seconds;
   }
 
+  // Something worth having, set by the room. The bot goes for it whenever nobody is in sight.
+  setLootGoal(x: number, z: number): void {
+    this.hasLoot = true;
+    this.lootX = x;
+    this.lootZ = z;
+  }
+
+  clearLootGoal(): void {
+    this.hasLoot = false;
+  }
+
   // A new map means the old routes are meaningless.
   setFinder(finder: Pathfinder | null): void {
     this.finder = finder;
@@ -69,7 +87,7 @@ export class Bot {
   }
 
   think(self: MechState, targets: readonly BotTarget[], ring: RingNow | null, world: World, dt: number, out: MechInput): void {
-    out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.grenade = false;
+    out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.grenade = false; out.interact = false;
     const s = this.stats;
     this.retargetIn -= dt;
     this.strafeIn -= dt;
@@ -116,6 +134,13 @@ export class Bot {
       const heading = this.travel(self, goal.x, goal.z, dt);
       wantX = heading.x; wantZ = heading.z;
       run = goal.urgent;
+      // Loot: walk right up to it and hold E. Holding is what loots a wreck; the first step of it takes a weapon.
+      if (goal.loot) {
+        const dx = goal.x - self.x, dz = goal.z - self.z;
+        const distance = Math.hypot(dx, dz);
+        if (distance <= LOOT_REACH) { wantX = 0; wantZ = 0; out.interact = true; }
+        else if (distance < LOOT_DIRECT) { wantX = dx / distance; wantZ = dz / distance; }
+      }
       // Look where it is going.
       this.turnToward(self, self.x + heading.x * 10, self.y + EYE_HEIGHT, self.z + heading.z * 10, dt);
     }
@@ -218,15 +243,20 @@ export class Bot {
   }
 
   // The ring wins over wandering: near its edge, or outside it, the bot heads for the middle.
-  private chooseGoal(self: MechState, ring: RingNow | null): { x: number; z: number; urgent: boolean } {
+  private chooseGoal(self: MechState, ring: RingNow | null): { x: number; z: number; urgent: boolean; loot: boolean } {
     if (ring) {
       const fromCentre = Math.hypot(self.x - ring.cx, self.z - ring.cz);
-      if (fromCentre > ring.radius - this.stats.ringMargin) return { x: ring.cx, z: ring.cz, urgent: fromCentre > ring.radius };
+      if (fromCentre > ring.radius - this.stats.ringMargin) return { x: ring.cx, z: ring.cz, urgent: fromCentre > ring.radius, loot: false };
+    }
+    // Loot beats a noise: a bot is greedy before it is curious.
+    if (this.hasLoot) {
+      const inside = !ring || Math.hypot(this.lootX - ring.cx, this.lootZ - ring.cz) < ring.radius;
+      if (inside) return { x: this.lootX, z: this.lootZ, urgent: false, loot: true };
     }
     // A sound worth checking, as long as going there does not mean leaving the safe area.
     if (this.heardFor > 0) {
       const inside = !ring || Math.hypot(this.heardX - ring.cx, this.heardZ - ring.cz) < ring.radius - this.stats.ringMargin;
-      if (inside && Math.hypot(this.heardX - self.x, this.heardZ - self.z) > 6) return { x: this.heardX, z: this.heardZ, urgent: false };
+      if (inside && Math.hypot(this.heardX - self.x, this.heardZ - self.z) > 6) return { x: this.heardX, z: this.heardZ, urgent: false, loot: false };
     }
     if (this.wanderIn <= 0) {
       const range = ring ? Math.max(10, ring.radius - this.stats.ringMargin) : 60;
@@ -236,7 +266,7 @@ export class Bot {
       this.goalZ = (ring?.cz ?? self.z) + Math.sin(angle) * distance;
       this.wanderIn = this.stats.wanderSeconds;
     }
-    return { x: this.goalX, z: this.goalZ, urgent: false };
+    return { x: this.goalX, z: this.goalZ, urgent: false, loot: false };
   }
 
   private turnToward(self: MechState, x: number, y: number, z: number, dt: number): void {

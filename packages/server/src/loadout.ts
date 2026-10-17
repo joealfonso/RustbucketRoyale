@@ -1,4 +1,4 @@
-import { ITEM_GRENADE, itemArmorZone, itemWeapon, type Loadout, type LootConfig, type WeaponSet } from "@rustbucket/shared";
+import { ITEM_ARMOR_FIRST, ITEM_GRENADE, itemArmorZone, itemWeapon, weaponItem, type Loadout, type LootConfig, type WeaponSet } from "@rustbucket/shared";
 
 // What a mech carries and the rules for changing it. Plain functions on plain data, so they are easy to test.
 
@@ -48,4 +48,21 @@ export function takeWeapon(l: Loadout, item: number): number {
   const dropped = l.slots[l.active]!;
   l.slots[l.active] = weapon;
   return dropped;
+}
+
+// What a looted wreck spills: every weapon it carried, each grenade, and a plate for each zone that still had one.
+export function spillItems(l: Loadout): number[] {
+  const items: number[] = [];
+  for (const weapon of l.slots) if (weapon >= 0) items.push(weaponItem(weapon));
+  for (let i = 0; i < l.grenades; i++) items.push(ITEM_GRENADE);
+  l.armor.forEach((points, zone) => { if (points > 0) items.push(ITEM_ARMOR_FIRST + zone); });
+  return items;
+}
+
+// Whether a pickup is any use to someone carrying this, so a bot only goes for things it would actually take.
+export function wantsItem(l: Loadout, item: number, loot: LootConfig): boolean {
+  if (item === ITEM_GRENADE) return l.grenades < loot.grenadesMax;
+  const zone = itemArmorZone(item);
+  if (zone >= 0) return l.armor[zone]! < loot.armorPlates[zone]!;
+  return itemWeapon(item) >= 0 && l.slots.includes(-1);
 }

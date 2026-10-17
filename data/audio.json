@@ -58,6 +58,10 @@
     "swap": {
       "volume": 0.45,
       "file": null
+    },
+    "loot": {
+      "volume": 0.5,
+      "file": null
     }
   }
 }

@@ -5,7 +5,7 @@
 
 export type SoundName =
   | "shot" | "impact" | "explosion" | "smash" | "hitMarker" | "hurt"
-  | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap";
+  | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap" | "loot";
 
 export interface AudioConfig {
   master: number;
@@ -127,6 +127,7 @@ export class Sound {
       case "countdown": return this.tone(into, 660, 0.12, "sine", 0.6);
       case "go": return this.tone(into, 990, 0.35, "sine", 0.7);
       case "pickup": this.tone(into, 880, 0.06, "triangle", 0.5); return this.tone(into, 1320, 0.12, "triangle", 0.4);
+      case "loot": return this.burst(into, 0.07, "bandpass", 2200, 2.5);
       case "swap": this.thump(into, 300, 120, 0.08, 0.6); return this.burst(into, 0.12, "bandpass", 3000, 0.7);
       case "jets": return 0;
     }

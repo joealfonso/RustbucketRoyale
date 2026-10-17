@@ -16,7 +16,8 @@
       ],
       "hp": 45,
       "color": "#9a7b4f",
-      "explodes": false
+      "explodes": false,
+      "dropsLoot": true
     },
     {
       "id": "junk",
@@ -28,7 +29,8 @@
       ],
       "hp": 90,
       "color": "#6d6a5f",
-      "explodes": false
+      "explodes": false,
+      "dropsLoot": true
     },
     {
       "id": "barrel",
@@ -40,7 +42,8 @@
       ],
       "hp": 20,
       "color": "#c0392b",
-      "explodes": true
+      "explodes": true,
+      "dropsLoot": false
     }
   ],
   "barrelBlast": {
@@ -51,5 +54,11 @@
   "density": {
     "minPerSquareKm": 400,
     "maxPerSquareKm": 2600
+  },
+  "lootDensity": {
+    "minPerSquareKm": 300,
+    "maxPerSquareKm": 2200,
+    "nearSpawnMeters": 50,
+    "minNearSpawn": 2
   }
 }

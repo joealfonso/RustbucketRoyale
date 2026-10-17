@@ -55,6 +55,7 @@ export interface OtherState {
   running: boolean;
   jetting: boolean;
   dead: boolean;
+  looted: boolean; // a wreck already emptied, so there is nothing left to take
   bot: boolean;
   hp: number[]; // legs, arms, torso
   weapon: number; // index of the weapon in hand, for drawing the right gun
@@ -140,7 +141,7 @@ export type ServerMessage =
   | { t: "refused"; reason: string }
   | { t: "prop"; id: number } // a prop was destroyed
   | { t: "props"; destroyed: number[] } // every prop destroyed so far, sent to someone arriving mid way
-  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; pickups: PickupState[] }
+  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; looting: number; pickups: PickupState[] }
   | ShotMessage
   | HitMessage
   | GrenadeMessage

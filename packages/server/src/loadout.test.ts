@@ -3,7 +3,7 @@ import lootJson from "../../../data/loot.json";
 import propsJson from "../../../data/props.json";
 import weaponsJson from "../../../data/weapons.json";
 import { ITEM_ARMOR_FIRST, ITEM_GRENADE, parseLootConfig, parsePropConfig, parseWeapons, weaponItem } from "@rustbucket/shared";
-import { activeWeapon, collectSmall, freshLoadout, selectSlot, takeWeapon } from "./loadout";
+import { activeWeapon, collectSmall, freshLoadout, selectSlot, spillItems, takeWeapon, wantsItem } from "./loadout";
 
 const weapons = parseWeapons(weaponsJson);
 const loot = parseLootConfig(lootJson, weapons, parsePropConfig(propsJson));
@@ -49,5 +49,32 @@ describe("loadout", () => {
 
   it("does not collect a weapon by walking over it", () => {
     expect(collectSmall(freshLoadout(weapons, loot), weaponItem(SCATTER), loot)).toBe(false);
+  });
+
+  it("spills every weapon, each grenade and a plate for each zone that still has armor", () => {
+    const l = freshLoadout(weapons, loot);
+    l.slots[1] = SPIKE;
+    l.grenades = 3;
+    l.armor = [0, 12, 40];
+    expect(spillItems(l).sort((a, b) => a - b)).toEqual([ITEM_GRENADE, ITEM_GRENADE, ITEM_GRENADE, ITEM_ARMOR_FIRST + 1, ITEM_ARMOR_FIRST + 2, weaponItem(weapons.start), weaponItem(SPIKE)].sort((a, b) => a - b));
+  });
+
+  it("only wants what it would actually take", () => {
+    const l = freshLoadout(weapons, loot);
+    expect(wantsItem(l, ITEM_GRENADE, loot)).toBe(true);
+    expect(wantsItem(l, weaponItem(SCATTER), loot)).toBe(true);
+    l.grenades = loot.grenadesMax;
+    l.slots[1] = SPIKE;
+    l.armor[0] = loot.armorPlates[0]!;
+    expect(wantsItem(l, ITEM_GRENADE, loot)).toBe(false);
+    expect(wantsItem(l, weaponItem(SCATTER), loot)).toBe(false);
+    expect(wantsItem(l, ITEM_ARMOR_FIRST, loot)).toBe(false);
+    expect(wantsItem(l, ITEM_ARMOR_FIRST + 1, loot)).toBe(true);
+  });
+
+  it("refuses a loot file that disagrees with props.json about which props drop things", () => {
+    const props = parsePropConfig(propsJson);
+    const bad = { ...lootJson, drops: { ...lootJson.drops, barrel: { chance: 0.5, table: { grenade: 1 } } } };
+    expect(() => parseLootConfig(bad, weapons, props)).toThrow(/dropsLoot/);
   });
 });

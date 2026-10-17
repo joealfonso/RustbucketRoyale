@@ -9,6 +9,8 @@
   "pickupRadius": 2.5,
   "interactRange": 3.5,
   "interactCooldownSeconds": 0.3,
+  "wreckLootSeconds": 2,
+  "spillRadius": 1.5,
   "switchSeconds": 0.25,
   "maxPickups": 200,
   "colors": {
