@@ -16,13 +16,12 @@ The first Unity prototype is on the `unity-prototype` branch, kept for reference
 npm install
 npm run dev
 ```
-Open http://localhost:5173, click the page, play. G throws a grenade. F1 opens the tuning panel.
+Open http://localhost:5173 and pick "Create room", "Join room" or "Practice offline". Click the page to lock the mouse. WASD move, double-press W to sprint, Shift dashes, Space jets, click fires, G throws a grenade, F1 opens the tuning panel.
 
-To play online, start the server in a second terminal and open two tabs:
+To play with friends, start the server in a second terminal, create a room, and send them the invite link (the room code is in the address):
 ```
 npm run server
 ```
-http://localhost:5173/?online
 
 ## Status
-M1 passed. M3 passed. M4 (maps built from a seed, three sizes, validation) is built and waiting for its playtest gate.
+M4 passed. M5 is in three gates. Gate 5a (rooms by link, a match from countdown to results, the shrinking ring, spectating) is built and waiting for its playtest. Bots are 5b, radar and the soak test are 5c.

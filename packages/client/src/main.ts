@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import {
-  FireGate, Predictor, STEP, applyLook, computeShot, createGrenade, createMechInput, createMechState, createShot,
+  FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
   parseCameraStats, parseGrenadeStats, parseMechStats, parseNetStats, parseWeaponStats, parseZones, throwGrenade,
-  type HealthState, type Shot,
+  type HealthState, type MatchProgress, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import weaponJson from "../../../data/weapon.json";
@@ -16,11 +16,13 @@ import { TimedEffects } from "./effects";
 import { Input } from "./input";
 import { ClientGrenades } from "./grenades";
 import { buildPlayMap } from "./loadMap";
-import { addMapMeshes } from "./mapRenderer";
+import { Hud } from "./hud";
+import { addMapMeshes, removeMapMeshes } from "./mapRenderer";
 import { createMechModel, setMechDamage } from "./mechModel";
 import { NetClient } from "./net";
 import { Projectiles } from "./projectiles";
 import { RemoteMechs } from "./remoteMechs";
+import { RingView } from "./ringView";
 import { ShotFx } from "./shotFx";
 import { ThirdPersonCamera } from "./thirdPersonCamera";
 
@@ -34,21 +36,52 @@ const grenadeStats = parseGrenadeStats(grenadeJson);
 const zoneSet = parseZones(zonesJson);
 const zoneMaxHp = zoneSet.zones.map((z) => z.hp);
 
-// Offline by default. Add ?online to join the local server, or ?server=ws://host:port for another one.
-// Offline, ?tier=small|medium|large|range and ?seed=123 choose the map. Online, the server chooses.
+// How to play is chosen in the address:
+//   (nothing)                    the start menu
+//   ?create&tier=medium          make a new room on the local server, then share the link it shows
+//   ?room=ABCD                   join that room
+//   ?offline&tier=small&seed=5   practice alone, any tier or "range", any seed. Add &overview to look down on the map.
+//   ?server=ws://host:port       use another server than the local one
 const params = new URLSearchParams(location.search);
-const serverUrl = params.get("server") ?? (params.has("online") ? `ws://${location.hostname}:8080` : null);
+const offline = params.has("offline");
+const online = params.has("room") || params.has("create") || params.has("online") || params.has("server");
 
 const hint = document.getElementById("hint")!;
 const hintHtml = hint.innerHTML;
-const net = serverUrl ? new NetClient(serverUrl) : null;
+
+if (!offline && !online) {
+  hint.classList.add("hidden");
+  const menu = document.getElementById("menu")!;
+  menu.style.display = "flex";
+  const tierSelect = document.getElementById("tierSelect") as HTMLSelectElement;
+  const codeInput = document.getElementById("roomCode") as HTMLInputElement;
+  document.getElementById("createRoom")!.addEventListener("click", () => { location.search = `?create&tier=${tierSelect.value}`; });
+  document.getElementById("joinRoom")!.addEventListener("click", () => { if (codeInput.value.trim()) location.search = `?room=${codeInput.value.trim().toUpperCase()}`; });
+  document.getElementById("playOffline")!.addEventListener("click", () => { location.search = `?offline&tier=${tierSelect.value}`; });
+  await new Promise(() => {}); // nothing more to do until a button reloads the page
+}
+
+function serverAddress(): string {
+  const base = params.get("server") ?? `ws://${location.hostname}:8080`;
+  const query = new URLSearchParams();
+  if (params.get("room")) query.set("room", params.get("room")!);
+  if (params.get("tier")) query.set("tier", params.get("tier")!);
+  return `${base}/?${query}`;
+}
+
+const net = online ? new NetClient(serverAddress()) : null;
 let tier = params.get("tier") ?? "medium";
 let seed = params.has("seed") ? Number(params.get("seed")) : Math.floor(Math.random() * 0x100000000);
+let roomCode = "";
 
 try {
   if (net) {
     hint.textContent = "Connecting...";
-    ({ tier, seed } = await net.welcome);
+    const welcome = await net.welcome;
+    ({ tier, seed } = welcome);
+    roomCode = welcome.code;
+    // Reloading the page now rejoins this room.
+    history.replaceState(null, "", `?room=${roomCode}`);
   }
   hint.textContent = `Building ${tier} map...`;
   // Let the message paint before the map build holds the thread.
@@ -57,7 +90,7 @@ try {
   hint.textContent = error instanceof Error ? error.message : String(error);
   throw error;
 }
-const map = buildPlayMap(tier, seed, mechStats);
+let map = buildPlayMap(tier, seed, mechStats);
 const overview = params.has("overview");
 hint.innerHTML = hintHtml;
 
@@ -74,7 +107,8 @@ const sun = new THREE.DirectionalLight("#fff4e0", 2);
 sun.position.set(80, 150, 40);
 scene.add(sun);
 
-addMapMeshes(scene, map);
+let mapGroup = addMapMeshes(scene, map);
+const ringView = new RingView(scene);
 
 const ownModel = createMechModel("#d9731a", zoneMaxHp);
 const mechGroup = ownModel.group;
@@ -107,6 +141,30 @@ const shot: Shot = createShot();
 const gate = new FireGate();
 let health: HealthState = { hp: [...zoneMaxHp], dead: false, respawnIn: 0 };
 
+// Match state. Offline there is no match, so this just stays quiet.
+let progress: MatchProgress = { state: "lobby", seconds: 0, alive: 1, total: 1 };
+let progressAt = performance.now();
+let hostId = 0;
+let myPlace: number | null = null;
+let spectateId = 0;
+const spectatePos = { x: 0, y: 0, z: 0 };
+const hud = new Hud(() => net?.sendStart(), copyInviteLink);
+
+function copyInviteLink(): void {
+  void navigator.clipboard.writeText(`${location.origin}/?room=${roomCode}`);
+  hud.feed("Invite link copied");
+}
+
+// Every match brings a new map. Swap it in and point the sim at it.
+function swapMap(newSeed: number, newTier: string): void {
+  removeMapMeshes(scene, mapGroup);
+  map = buildPlayMap(newTier, newSeed, mechStats);
+  mapGroup = addMapMeshes(scene, map);
+  predictor.setWorld(map.world);
+}
+
+const name = (id: number | null) => (id === null ? "the zone" : id === net?.id ? "You" : `Player ${id}`);
+
 // Online: wait for the first snapshot before stepping, so we start from where the server put us.
 let ready = net === null;
 let lastCorrection = 0;
@@ -131,6 +189,8 @@ if (net) {
       prevX -= predictor.correctionX; prevY -= predictor.correctionY; prevZ -= predictor.correctionZ;
     }
     const before = health.hp.reduce((a, b) => a + b, 0);
+    progress = snap.match;
+    progressAt = performance.now();
     health = snap.health;
     if (health.hp.reduce((a, b) => a + b, 0) < before) flashHurt();
     setMechDamage(ownModel, health.hp, health.dead);
@@ -149,6 +209,24 @@ if (net) {
     grenades.spawn(g.x, g.y, g.z, g.vx, g.vy, g.vz);
   };
   net.onExplode = (e) => showBlast(e.x, e.y, e.z);
+  net.onRoom = (r) => {
+    const wasCountdown = progress.state === "countdown";
+    hostId = r.hostId;
+    if (r.seed !== map.seed || r.tier !== map.tier) swapMap(r.seed, r.tier);
+    ringView.setSchedule(r.ring);
+    hud.setRoom(r, net.id);
+    if (r.state === "countdown") { hud.hideResult(); myPlace = null; }
+    if (r.state === "active" && wasCountdown) hud.flash("GO", 900);
+    progress = { ...progress, state: r.state };
+  };
+  net.onEliminated = (e) => {
+    hud.feed(e.killerId === null && e.id !== net.id ? `${name(e.id)} fell to the zone` : `${name(e.killerId)} knocked out ${name(e.id)}`);
+    if (e.id === net.id) myPlace = e.place;
+  };
+  net.onResult = (r) => {
+    const won = r.winnerId === net.id;
+    hud.showResult(won ? "Victory!" : r.winnerId === null ? "Nobody wins" : `${name(r.winnerId)} wins`, myPlace && !won ? `You placed ${myPlace}. Next match starting...` : "Next match starting...");
+  };
   net.onClose = (reason) => {
     ready = false;
     hint.classList.remove("hidden");
@@ -215,6 +293,7 @@ function frame(now: number): void {
     else input.lock();
   }
   if (net === null && input.wasPressed("KeyR")) respawnOffline();
+  if (input.takeEnter() && net && hostId === net.id && progress.state === "lobby") net.sendStart();
 
   // Look is applied every frame so the camera answers the mouse at once, not once per sim step.
   input.takeLook(look);
@@ -267,7 +346,26 @@ function frame(now: number): void {
 
   // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.
   rig.setFovKick(mech.dashTime > 0 ? mech.dashTime / mechStats.dashSeconds : 0, frameTime);
-  rig.update(x, y + cameraStats.pivotHeight, z, aim.yaw, aim.pitch, map.world, frameTime);
+  // A knocked out player (or someone who arrived mid match) watches a mech that is still standing.
+  const spectating = net !== null && progress.state === "active" && health.dead;
+  let viewX = x, viewY = y, viewZ = z;
+  if (spectating) {
+    const alive = remotes.aliveIds();
+    if (input.takeClick() && alive.length > 0) spectateId = alive[(Math.max(0, alive.indexOf(spectateId)) + 1) % alive.length]!;
+    else if (!alive.includes(spectateId)) spectateId = alive[0] ?? 0;
+    if (spectateId && remotes.positionOf(spectateId, spectatePos)) {
+      viewX = spectatePos.x; viewY = spectatePos.y; viewZ = spectatePos.z;
+    }
+  } else {
+    input.takeClick(); // keep the click from piling up
+  }
+  mechGroup.visible = !(spectating && myPlace === null); // someone who never had a mech has nothing to show
+  rig.update(viewX, viewY + cameraStats.pivotHeight, viewZ, aim.yaw, aim.pitch, map.world, frameTime);
+
+  const matchSeconds = progress.state === "active" ? progress.seconds + (performance.now() - progressAt) / 1000 : 0;
+  const ring: RingNow | null = ringView.update(matchSeconds);
+  const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);
+  if (net) hud.setProgress(progress, ring, outside);
 
   // ?overview floats the camera above the middle of the map, for looking over a seed at a glance.
   if (overview) {
@@ -278,7 +376,9 @@ function frame(now: number): void {
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;
   staminaFill.style.width = `${mech.stamina.fraction * 100}%`;
   zoneFills.forEach((fill, zone) => { fill.style.width = `${(health.hp[zone]! / zoneMaxHp[zone]!) * 100}%`; });
-  statusText.textContent = health.dead ? `Destroyed. Respawning in ${Math.ceil(health.respawnIn)}` : "";
+  statusText.textContent = spectating
+    ? `${myPlace ? `You placed ${myPlace}. ` : ""}${spectateId ? `Watching ${name(spectateId)}. Click to switch.` : "Nobody left to watch."}`
+    : "";
   fuelBar.classList.toggle("locked", mech.fuel.locked);
   staminaBar.classList.toggle("locked", mech.stamina.locked);
   if (panel.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection);

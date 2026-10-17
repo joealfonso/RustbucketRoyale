@@ -11,3 +11,5 @@ export * from "./prediction";
 export * from "./zones";
 export * from "./grenade";
 export * from "./generation";
+export * from "./ring";
+export * from "./match";

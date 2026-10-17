@@ -12,6 +12,8 @@ export class Input {
   locked = false;
 
   private dashQueued = false;
+  private clickQueued = false;
+  private enterQueued = false;
   private sprint = new Sprint();
 
   // `sprintWindowSeconds` is read each time, so the tuning panel can change it live.
@@ -26,6 +28,7 @@ export class Input {
       }
       this.keys.add(e.code);
       if (e.code === "Space") e.preventDefault();
+      if (e.code === "Enter" && !e.repeat) this.enterQueued = true;
     });
     window.addEventListener("keyup", (e) => {
       if (e.code === "KeyW") this.sprint.forwardReleased();
@@ -38,7 +41,11 @@ export class Input {
       this.mouseDx += e.movementX;
       this.mouseDy += e.movementY;
     });
-    window.addEventListener("mousedown", (e) => { if (e.button === 0) this.mouseDown = true; });
+    window.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      this.mouseDown = true;
+      if (this.locked) this.clickQueued = true;
+    });
     window.addEventListener("mouseup", (e) => { if (e.button === 0) this.mouseDown = false; });
 
     hint.addEventListener("click", () => this.lock());
@@ -63,6 +70,19 @@ export class Input {
   setPanelOpen(open: boolean): void {
     this.panelOpen = open;
     this.hint.classList.toggle("hidden", open || this.locked);
+  }
+
+  // True once per click while the mouse is locked. Used to cycle who you are watching.
+  takeClick(): boolean {
+    const clicked = this.clickQueued;
+    this.clickQueued = false;
+    return clicked;
+  }
+
+  takeEnter(): boolean {
+    const pressed = this.enterQueued;
+    this.enterQueued = false;
+    return pressed;
   }
 
   wasPressed(code: string): boolean {

@@ -9,7 +9,8 @@ const noTurn = new THREE.Quaternion();
 
 // Draws the whole map with one instanced mesh per colour, so thousands of boxes cost a handful of draw calls.
 // Art hook: swap a colour's material, or replace this with real chunk models at V3.
-export function addMapMeshes(scene: THREE.Scene, map: PlayMap): void {
+export function addMapMeshes(scene: THREE.Scene, map: PlayMap): THREE.Group {
+  const group = new THREE.Group();
   const byColor = new Map<number, number[]>();
   map.colors.forEach((color, box) => {
     const list = byColor.get(color);
@@ -26,6 +27,18 @@ export function addMapMeshes(scene: THREE.Scene, map: PlayMap): void {
       mesh.setMatrixAt(instance, matrix.compose(position, noTurn, scale));
     });
     mesh.instanceMatrix.needsUpdate = true;
-    scene.add(mesh);
+    group.add(mesh);
+  }
+  scene.add(group);
+  return group;
+}
+
+// Takes a map out of the scene and frees what it used, so building a new one each match does not leak.
+export function removeMapMeshes(scene: THREE.Scene, group: THREE.Group): void {
+  scene.remove(group);
+  for (const child of group.children) {
+    const mesh = child as THREE.InstancedMesh;
+    mesh.dispose();
+    (mesh.material as THREE.Material).dispose();
   }
 }

@@ -1,4 +1,6 @@
+import type { MatchState } from "./match";
 import type { MechInput } from "./MechInput";
+import type { RingSchedule } from "./ring";
 
 // The fixed simulation step. Client and server both step the mech in these slices.
 export const STEP = 1 / 60;
@@ -20,7 +22,12 @@ export interface InputMessage {
   targetZ: number;
 }
 
-export type ClientMessage = InputMessage;
+// The room creator asks for the first match to begin. Later matches follow on their own.
+export interface StartMessage {
+  t: "start";
+}
+
+export type ClientMessage = InputMessage | StartMessage;
 
 // The full state a client needs to rewind and replay its own mech.
 export interface SelfState {
@@ -82,10 +89,24 @@ export interface ExplodeMessage {
   x: number; y: number; z: number;
 }
 
+// Where the match is. `seconds` means: time left in the countdown or results, or time elapsed once active.
+export interface MatchProgress {
+  state: MatchState;
+  seconds: number;
+  alive: number;
+  total: number;
+}
+
 export type ServerMessage =
-  | { t: "welcome"; id: number; seed: number; tier: string }
-  | { t: "full" }
-  | { t: "snapshot"; tick: number; ack: number; you: SelfState; health: HealthState; others: OtherState[] }
+  | { t: "welcome"; id: number; code: string; seed: number; tier: string }
+  | {
+      t: "room"; code: string; tier: string; state: MatchState; seed: number; hostId: number;
+      players: number; ring: RingSchedule | null; matchSeconds: number;
+    }
+  | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number }
+  | { t: "result"; winnerId: number | null }
+  | { t: "refused"; reason: string }
+  | { t: "snapshot"; tick: number; ack: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[] }
   | ShotMessage
   | HitMessage
   | GrenadeMessage
@@ -104,6 +125,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   }
   if (typeof data !== "object" || data === null) return null;
   const m = data as Record<string, unknown>;
+  if (m.t === "start") return { t: "start" };
 
   if (m.t !== "input") return null;
 

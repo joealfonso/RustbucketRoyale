@@ -27,6 +27,19 @@
       #hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 160px 40px rgba(220,30,30,.75); transition: opacity .4s; }
       #hurt.on { opacity: 1; transition: none; }
       #status { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); color: #fff; font-size: 26px; text-shadow: 0 0 6px #000; pointer-events: none; }
+      #roomBar { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); display: none; gap: 8px; align-items: center; color: #fff; font-size: 13px; background: rgba(0,0,0,.55); padding: 6px 10px; border-radius: 6px; }
+      #roomBar button, #menu button { font: inherit; cursor: pointer; border: 0; border-radius: 4px; padding: 6px 10px; background: #d9731a; color: #fff; }
+      #roomBar button.hidden { display: none; }
+      #bigText { position: fixed; left: 50%; top: 32%; transform: translate(-50%, -50%); color: #fff; font-size: 72px; font-weight: 700; text-shadow: 0 0 12px #000; pointer-events: none; }
+      #matchHud { position: fixed; top: 12px; right: 16px; color: #fff; font-size: 14px; text-align: right; text-shadow: 0 0 3px #000; pointer-events: none; line-height: 1.5; }
+      #feed { position: fixed; top: 80px; right: 16px; color: #fff; font-size: 13px; text-align: right; text-shadow: 0 0 3px #000; pointer-events: none; }
+      #results { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.5); pointer-events: none; text-align: center; }
+      #results h2 { font-size: 44px; margin: 0 0 8px; } #results p { font-size: 18px; margin: 4px; }
+      #zoneWarning { position: fixed; left: 50%; top: 14%; transform: translateX(-50%); color: #ff6a5a; font-size: 22px; font-weight: 700; text-shadow: 0 0 6px #000; display: none; pointer-events: none; }
+      #menu { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #fff; background: #1b1d1f; z-index: 10; text-align: center; }
+      #menu h1 { margin: 0 0 6px; font-size: 40px; } #menu .row { display: flex; gap: 8px; align-items: center; }
+      #menu input, #menu select { font: inherit; padding: 6px 8px; border-radius: 4px; border: 0; text-transform: uppercase; width: 90px; } #menu select { text-transform: none; width: auto; }
+      #menu small { opacity: .7; }
       #hint { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.45); font-size: 18px; text-align: center; line-height: 1.6; cursor: pointer; }
       #hint small { opacity: .75; font-size: 14px; }
       #hint.hidden { display: none; }
@@ -35,6 +48,19 @@
   <body>
     <canvas id="game"></canvas>
     <div id="crosshair"><i class="h l"></i><i class="h r"></i><i class="v t"></i><i class="v b"></i><i class="dot"></i></div>
+    <div id="roomBar"><span id="roomText"></span><button id="copyLink">Copy invite link</button><button id="startButton" class="hidden">Start match (Enter)</button></div>
+    <div id="bigText"></div>
+    <div id="matchHud"><div id="aliveText"></div><div id="timerText"></div><div id="ringText"></div></div>
+    <div id="feed"></div>
+    <div id="zoneWarning">Outside the zone! Run to the circle</div>
+    <div id="results"><h2 id="resultTitle"></h2><p id="resultSub"></p></div>
+    <div id="menu">
+      <h1>Rustbucket Royale</h1>
+      <div class="row"><select id="tierSelect"><option value="small">Small</option><option value="medium" selected>Medium</option><option value="large">Large</option></select><button id="createRoom">Create room</button></div>
+      <div class="row"><input id="roomCode" maxlength="4" placeholder="CODE" /><button id="joinRoom">Join room</button></div>
+      <div class="row"><button id="playOffline">Practice offline</button></div>
+      <small>Create a room, then share the invite link with friends.</small>
+    </div>
     <div id="hurt"></div>
     <div id="status"></div>
     <div id="zones">

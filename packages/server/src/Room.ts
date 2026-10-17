@@ -1,37 +1,26 @@
 import {
-  FireGate, STEP, ZONE_COUNT, ZONE_TORSO, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
-  createMechState, createRayHit, createShot, createZoneHit, isDestroyed, parseClientMessage, raycastMech,
-  stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
-  type CombatStats, type GrenadeState, type GrenadeStats, type MechInput, type MechState, type MechStats,
-  type NetStats, type OtherState, type ServerMessage, type WeaponStats, type World, type ZoneSet,
+  FireGate, STEP, ZONE_COUNT, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
+  createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule,
+  parseClientMessage, ringAt, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
+  type CombatStats, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
+  type MechStats, type NetStats, type OtherState, type RingConfig, type RingSchedule, type ServerMessage,
+  type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
+import type { Player } from "./Player";
 
 const KILL_HEIGHT = -50;
 const CHEST_HEIGHT = 1.7; // where splash damage measures to
 const BLAST_LIFT = 0.2; // keeps a grenade resting on the floor from blasting from inside it
 
-interface Player {
-  id: number;
-  slot: number;
-  send: (message: ServerMessage) => void;
-  state: MechState;
-  gate: FireGate;
-  grenadeGate: FireGate;
-  queue: { seq: number; input: MechInput }[];
-  lastSeq: number; // highest input processed, sent back as the ack
-  steps: number; // the player's own clock: one step per input processed
-  budget: number; // message allowance, refills every tick
-  hp: number[];
-  dead: boolean;
-  respawnTick: number;
-  // Recent positions, one per tick, so shots can be checked against where a target was a moment ago.
-  historyTick: Int32Array;
-  history: Float32Array; // x, y, z, yaw per entry
-}
-
 interface LiveGrenade {
   ownerId: number;
   state: GrenadeState;
+}
+
+export interface MapForRoom {
+  world: World;
+  spawns: [number, number, number][];
+  meters: number;
 }
 
 export interface RoomConfig {
@@ -40,16 +29,17 @@ export interface RoomConfig {
   grenade: GrenadeStats;
   combat: CombatStats;
   net: NetStats;
+  match: MatchConfig;
+  ring: RingConfig;
   zones: ZoneSet;
-  world: World;
-  spawns: [number, number, number][]; // where players start, one per slot
-  seed: number; // sent to clients so they build the same map
-  tier: string;
+  // Builds the map for a tier and seed. The room asks for a fresh one at the start of every match.
+  mapFor: (tier: string, seed: number) => MapForRoom;
   random?: () => number;
 }
 
-// One match. Transport free: it only sees parsed messages and a send function, so it is easy to test.
-// Every input is processed exactly once, in order, so the client's prediction and the server never disagree on history.
+// One room: a lobby that runs match after match. Transport free: it only sees parsed messages and a send
+// function, so it is easy to test. Every input is processed exactly once, in order, so the client's
+// prediction and the server never disagree on history.
 export class Room {
   private players = new Map<number, Player>();
   private grenades: LiveGrenade[] = [];
@@ -59,42 +49,75 @@ export class Room {
   private newGrenade = createGrenade();
   private worldHit = createRayHit();
   private zoneHit = createZoneHit();
+  private ringNow = createRingNow();
   private random: () => number;
   private historyLength: number;
 
-  constructor(private config: RoomConfig) {
+  private state: MatchState = "lobby";
+  private phaseEndTick = 0;
+  private matchStartTick = 0;
+  private startedWith = 0;
+  private placeCounter = 0;
+  private hostId = 0;
+  private seed: number;
+  private map: MapForRoom;
+  private ring: RingSchedule | null = null;
+
+  constructor(readonly code: string, readonly tier: string, private config: RoomConfig) {
     this.random = config.random ?? Math.random;
     this.historyLength = Math.ceil(config.combat.historyMs / (STEP * 1000));
+    this.seed = this.newSeed();
+    this.map = config.mapFor(tier, this.seed);
   }
 
   get playerCount(): number {
     return this.players.size;
   }
 
+  get matchState(): MatchState {
+    return this.state;
+  }
+
+  private newSeed(): number {
+    return Math.floor(this.random() * 0x100000000);
+  }
+
   // Returns the new player's id, or null if the room is full.
   join(send: (message: ServerMessage) => void): number | null {
     const { net, mech } = this.config;
     if (this.players.size >= net.maxPlayers) {
-      send({ t: "full" });
+      send({ t: "refused", reason: "The room is full." });
       return null;
     }
     const taken = new Set([...this.players.values()].map((p) => p.slot));
     let slot = 0;
     while (taken.has(slot)) slot++;
 
+    // Someone arriving while a match is running can only watch it.
+    const watching = this.state === "active" || this.state === "results";
     const id = this.nextId++;
-    const state = createMechState(mech, ...this.spawnFor(slot), Math.PI);
-    this.players.set(id, {
-      id, slot, send, state, gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, steps: 0,
-      budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), dead: false, respawnTick: 0,
+    const player: Player = {
+      id, slot, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
+      queue: [], lastSeq: 0, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones),
+      dead: watching, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
-    });
-    send({ t: "welcome", id, seed: this.config.seed, tier: this.config.tier });
+    };
+    this.players.set(id, player);
+    if (this.hostId === 0) this.hostId = id;
+
+    send({ t: "welcome", id, code: this.code, seed: this.seed, tier: this.tier });
+    this.broadcastRoom();
     return id;
   }
 
   leave(id: number): void {
+    const player = this.players.get(id);
+    if (!player) return;
     this.players.delete(id);
+    if (this.hostId === id) this.hostId = this.players.keys().next().value ?? 0;
+    // Walking out of a running match counts as being knocked out.
+    if (this.state === "active" && player.participant && !player.eliminated) this.checkMatchOver();
+    this.broadcastRoom();
   }
 
   // Returns false when the client is flooding and should be disconnected.
@@ -108,6 +131,12 @@ export class Room {
 
     const message = parseClientMessage(raw);
     if (!message) return true;
+
+    if (message.t === "start") {
+      if (id === this.hostId && this.state === "lobby") this.beginCountdown();
+      return true;
+    }
+
     if (message.seq <= (player.queue.at(-1)?.seq ?? player.lastSeq)) return true; // replayed or out of order
     if (player.queue.length >= this.config.net.maxQueuedInputs) return true; // client is far ahead, drop the extra
 
@@ -122,10 +151,11 @@ export class Room {
     const { net } = this.config;
     this.tickCount++;
 
+    if (this.state === "countdown" && this.tickCount >= this.phaseEndTick) this.beginMatch();
+    else if (this.state === "results" && this.tickCount >= this.phaseEndTick) this.afterResults();
+
     for (const player of this.players.values()) {
       player.budget = Math.min(net.maxMessagesPerSecond, player.budget + net.maxMessagesPerSecond * STEP);
-      if (player.dead && this.tickCount >= player.respawnTick) this.respawn(player);
-
       for (let i = 0; i < net.maxInputsPerTick; i++) {
         const next = player.queue.shift();
         if (!next) break;
@@ -136,20 +166,126 @@ export class Room {
     }
 
     this.stepGrenades();
+    if (this.state === "active") this.applyRing();
     if (this.tickCount % net.snapshotEvery === 0) this.broadcastSnapshots();
   }
 
-  private processInput(player: Player, input: MechInput): void {
-    // A destroyed mech can look around but not move, jet, or fire.
-    if (player.dead) {
-      input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.fire = false; input.grenade = false;
+  // ---- match flow
+
+  // Builds a fresh map, puts everyone on a spawn, and starts the countdown.
+  private beginCountdown(): void {
+    this.seed = this.newSeed();
+    this.map = this.config.mapFor(this.tier, this.seed);
+    this.ring = makeRingSchedule(this.config.ring, this.tier, this.map.meters, this.random);
+    this.grenades = [];
+    for (const player of this.players.values()) {
+      player.participant = true;
+      player.eliminated = false;
+      player.dead = false;
+      player.hp = createHealth(this.config.zones);
+      player.state = createMechState(this.config.mech, ...this.spawnFor(player.slot), Math.PI);
+      player.queue.length = 0;
     }
-    stepMech(player.state, input, this.config.mech, STEP, this.config.world);
+    this.state = "countdown";
+    this.phaseEndTick = this.tickCount + Math.ceil(this.config.match.countdownSeconds / STEP);
+    this.broadcastRoom();
+  }
+
+  private beginMatch(): void {
+    this.state = "active";
+    this.matchStartTick = this.tickCount;
+    this.startedWith = this.players.size;
+    this.placeCounter = this.players.size;
+    this.broadcastRoom();
+  }
+
+  private elapsedSeconds(): number {
+    return (this.tickCount - this.matchStartTick) * STEP;
+  }
+
+  private alivePlayers(): Player[] {
+    return [...this.players.values()].filter((p) => p.participant && !p.eliminated);
+  }
+
+  // Someone is out. Records their place, tells the room, and checks whether the match is over.
+  private eliminate(player: Player, killer: Player | null): void {
+    if (player.eliminated) return;
+    player.eliminated = true;
+    player.dead = true;
+    player.hp[ZONE_COUNT - 1] = 0;
+    const place = this.placeCounter--;
+    const alive = this.alivePlayers().length;
+    const message: ServerMessage = { t: "eliminated", id: player.id, killerId: killer?.id ?? null, place, alive };
+    for (const p of this.players.values()) p.send(message);
+    this.checkMatchOver();
+  }
+
+  private checkMatchOver(): void {
+    if (this.state !== "active") return;
+    const alive = this.alivePlayers();
+    // A match that began with one player runs until they fall or time runs out, so a solo test is not over at once.
+    const over = this.startedWith >= 2 ? alive.length <= 1 : alive.length === 0;
+    if (over) this.endMatch(alive.length === 1 ? alive[0]! : null);
+  }
+
+  private endMatch(winner: Player | null): void {
+    this.state = "results";
+    this.phaseEndTick = this.tickCount + Math.ceil(this.config.match.resultsSeconds / STEP);
+    const message: ServerMessage = { t: "result", winnerId: winner?.id ?? null };
+    for (const p of this.players.values()) p.send(message);
+    this.broadcastRoom();
+  }
+
+  private afterResults(): void {
+    if (this.config.match.autoNextMatch && this.players.size > 0) this.beginCountdown();
+    else {
+      this.state = "lobby";
+      this.broadcastRoom();
+    }
+  }
+
+  // Everyone outside the ring takes its damage on every zone, every tick.
+  private applyRing(): void {
+    if (!this.ring) return;
+    const elapsed = this.elapsedSeconds();
+    const ring = this.ringNow;
+    if (elapsed >= this.config.match.matchSeconds) {
+      // Time is up. The healthiest survivor wins.
+      const alive = this.alivePlayers();
+      const health = (p: Player) => p.hp.reduce((a, b) => a + b, 0);
+      alive.sort((a, b) => health(b) - health(a));
+      this.endMatch(alive[0] ?? null);
+      return;
+    }
+    // The same circle the clients draw, worked out from the same schedule and the match clock.
+    ringAt(this.ring, elapsed, ring);
+    for (const player of this.alivePlayers()) {
+      if (!isOutsideRing(ring, player.state.x, player.state.z)) continue;
+      for (let zone = 0; zone < ZONE_COUNT; zone++) applyDamage(player.hp, this.config.zones, zone, ring.damagePerSecond * STEP);
+      if (isDestroyed(player.hp)) this.eliminate(player, null);
+    }
+  }
+
+  // ---- movement and combat
+
+  private processInput(player: Player, input: MechInput): void {
+    // A destroyed or frozen mech can look around but not move, jet, or fire.
+    // Players watch from the lobby phases too, and everyone stands still during the countdown.
+    if (player.dead || this.state === "countdown") {
+      input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.grenade = false;
+    }
+    stepMech(player.state, input, this.config.mech, STEP, this.map.world);
     player.steps++;
 
     if (input.fire) this.tryShoot(player, input);
     if (input.grenade) this.tryThrow(player, input);
-    if (player.state.y < KILL_HEIGHT && !player.dead) this.kill(player);
+    if (player.state.y < KILL_HEIGHT && !player.dead) this.fellOffMap(player);
+  }
+
+  // Outside a running match nothing can be lost, so a fall just puts you back on your spawn.
+  private fellOffMap(player: Player): void {
+    if (this.state === "active") this.eliminate(player, null);
+    else player.state = createMechState(this.config.mech, ...this.spawnFor(player.slot), Math.PI);
   }
 
   private tryShoot(player: Player, input: MechInput): void {
@@ -162,18 +298,19 @@ export class Room {
 
     // How far the shot goes: the nearest wall, unless a mech is in the way.
     let reach = weapon.maxAimDistance;
-    if (this.config.world.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.worldHit)) reach = this.worldHit.distance;
+    if (this.map.world.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.worldHit)) reach = this.worldHit.distance;
 
-    const target = this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach);
+    // Shots are only harmful while a match is running.
+    const target = this.state === "active" ? this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach) : null;
     if (target) {
       reach = this.zoneHit.distance;
       const taken = applyDamage(target.hp, this.config.zones, this.zoneHit.zone, weapon.damage);
-      const killed = !target.dead && isDestroyed(target.hp);
+      const killed = !target.eliminated && isDestroyed(target.hp);
       player.send({
         t: "hit", targetId: target.id, zone: this.zoneHit.zone, damage: taken, killed,
         x: s.ox + s.dx * reach, y: s.oy + s.dy * reach, z: s.oz + s.dz * reach,
       });
-      if (killed) this.kill(target);
+      if (killed) this.eliminate(target, player);
     }
 
     const message: ServerMessage = {
@@ -192,7 +329,7 @@ export class Room {
     let bestZone = -1;
 
     for (const target of this.players.values()) {
-      if (target === shooter || target.dead) continue;
+      if (target === shooter || target.dead || !target.participant) continue;
       const index = ((wanted % this.historyLength) + this.historyLength) % this.historyLength;
       const old = target.historyTick[index] === wanted;
       const x = old ? target.history[index * 4]! : target.state.x;
@@ -226,49 +363,37 @@ export class Room {
   private stepGrenades(): void {
     for (let i = this.grenades.length - 1; i >= 0; i--) {
       const live = this.grenades[i]!;
-      if (!stepGrenade(live.state, this.config.grenade, STEP, this.config.world)) continue;
+      if (!stepGrenade(live.state, this.config.grenade, STEP, this.map.world)) continue;
       this.grenades.splice(i, 1);
       this.explode(live);
     }
   }
 
   // Splash hits every zone of everyone in range, so a close grenade wrecks parts and makes a story.
+  // Walls block it, and it does nothing outside a running match.
   private explode(live: LiveGrenade): void {
     const { grenade, zones } = this.config;
     const g = live.state;
     const bx = g.x, by = g.y + BLAST_LIFT, bz = g.z;
     const blast: ServerMessage = { t: "explode", x: g.x, y: g.y, z: g.z };
     for (const p of this.players.values()) p.send(blast);
+    if (this.state !== "active") return;
 
     const owner = this.players.get(live.ownerId);
     for (const target of this.players.values()) {
-      if (target.dead) continue;
+      if (target.dead || !target.participant) continue;
       const dx = target.state.x - bx, dy = target.state.y + CHEST_HEIGHT - by, dz = target.state.z - bz;
       const distance = Math.hypot(dx, dy, dz);
       if (distance >= grenade.blastRadius) continue;
-      // Walls block the blast.
-      if (distance > 0.5 && this.config.world.raycast(bx, by, bz, dx / distance, dy / distance, dz / distance, distance - 0.5, this.worldHit)) continue;
+      if (distance > 0.5 && this.map.world.raycast(bx, by, bz, dx / distance, dy / distance, dz / distance, distance - 0.5, this.worldHit)) continue;
 
       const amount = grenade.damage * (1 - distance / grenade.blastRadius);
       let total = 0;
       for (let zone = 0; zone < ZONE_COUNT; zone++) total += applyDamage(target.hp, zones, zone, amount);
       const killed = isDestroyed(target.hp);
       owner?.send({ t: "hit", targetId: target.id, zone: -1, damage: total, killed, x: target.state.x, y: target.state.y + CHEST_HEIGHT, z: target.state.z });
-      if (killed) this.kill(target);
+      if (killed) this.eliminate(target, owner ?? null);
     }
-  }
-
-  private kill(player: Player): void {
-    player.hp[ZONE_TORSO] = 0;
-    player.dead = true;
-    player.respawnTick = this.tickCount + Math.ceil(this.config.combat.respawnSeconds / STEP);
-  }
-
-  // Stand-in until the real match loop (M5): destroyed mechs come back at their spawn after a short wait.
-  private respawn(player: Player): void {
-    player.state = createMechState(this.config.mech, ...this.spawnFor(player.slot), Math.PI);
-    player.hp = createHealth(this.config.zones);
-    player.dead = false;
   }
 
   private recordHistory(player: Player): void {
@@ -281,24 +406,43 @@ export class Room {
   }
 
   private spawnFor(slot: number): [number, number, number] {
-    const { spawns } = this.config;
+    const { spawns } = this.map;
     return spawns[slot % spawns.length]!;
   }
 
+  // ---- messages out
+
+  private broadcastRoom(): void {
+    const message: ServerMessage = {
+      t: "room", code: this.code, tier: this.tier, state: this.state, seed: this.seed, hostId: this.hostId,
+      players: this.players.size, ring: this.state === "lobby" ? null : this.ring, matchSeconds: this.config.match.matchSeconds,
+    };
+    for (const p of this.players.values()) p.send(message);
+  }
+
+  private progress(): { state: MatchState; seconds: number; alive: number; total: number } {
+    let seconds = 0;
+    if (this.state === "countdown" || this.state === "results") seconds = Math.max(0, (this.phaseEndTick - this.tickCount) * STEP);
+    else if (this.state === "active") seconds = this.elapsedSeconds();
+    const alive = this.state === "lobby" ? this.players.size : this.alivePlayers().length;
+    return { state: this.state, seconds, alive, total: this.state === "lobby" ? this.players.size : this.startedWith || this.players.size };
+  }
+
   private broadcastSnapshots(): void {
-    // Everyone sees everyone for now. Nearby-only filtering lands with bots and big maps (M4/M5).
+    // Everyone sees everyone for now. Nearby-only filtering comes with the bots (gate 5b).
     const others: OtherState[] = [];
     for (const p of this.players.values()) {
+      if (!p.participant) continue; // spectators have no mech to draw
       others.push({
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
         running: p.state.running, jetting: p.state.jetting, dead: p.dead, hp: p.hp.map(Math.ceil),
       });
     }
+    const match = this.progress();
     for (const player of this.players.values()) {
-      const respawnIn = player.dead ? Math.max(0, (player.respawnTick - this.tickCount) * STEP) : 0;
       player.send({
         t: "snapshot", tick: this.tickCount, ack: player.lastSeq, you: writeSelf(player.state),
-        health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn },
+        health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn: 0 }, match,
         others: others.filter((o) => o.id !== player.id),
       });
     }

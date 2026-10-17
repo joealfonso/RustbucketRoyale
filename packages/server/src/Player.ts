@@ -1,0 +1,22 @@
+import type { FireGate, MechInput, MechState, ServerMessage } from "@rustbucket/shared";
+
+// One person in a room. Plain data: the room moves it, this file just names the fields.
+export interface Player {
+  id: number;
+  slot: number;
+  send: (message: ServerMessage) => void;
+  state: MechState;
+  gate: FireGate;
+  grenadeGate: FireGate;
+  queue: { seq: number; input: MechInput }[];
+  lastSeq: number; // highest input processed, sent back as the ack
+  steps: number; // the player's own clock: one step per input processed
+  budget: number; // message allowance, refills every tick
+  hp: number[];
+  dead: boolean;
+  participant: boolean; // took part in the current match from its start
+  eliminated: boolean; // out of the current match, now watching
+  // Recent positions, one per tick, so shots can be checked against where a target was a moment ago.
+  historyTick: Int32Array;
+  history: Float32Array; // x, y, z, yaw per entry
+}

@@ -85,3 +85,15 @@ typescript-eslint does not support our TypeScript 7 yet, so `scripts/check-deter
 ## 2026-10-17: Small map spawns sized to the bot target
 Small allows 16 spawns, medium 32, large 56, a little over the bot targets in the design (12, 24, 40 players in total including humans). The first guess of 24 on small could not be met on a 6 by 6 chunk map.
 
+## 2026-10-17: Rooms by code, many in one server process
+A link like `?room=ABCD` joins that room, and the server makes it if it does not exist. `?create` makes a new room with a fresh code, and the page rewrites its own address to the invite link. A room closes when its last player leaves. A server has a room cap. Scaling is more rooms and more processes, never a bigger room. Cost: room codes are the only access control, which is fine for casual play with friends, and the server does not yet check where a connection comes from.
+
+## 2026-10-17: A match runs lobby, countdown, active, results, and then starts again by itself
+The room's host presses Start once. After that every match follows the last with no clicks, which is the "no dead time" rule. If you want to stop, you leave. Each match gets a fresh seed and map, so the next game is never the same arena. Cost: building a map takes up to about 160 ms on the server on the large tier, and the same on every client.
+
+## 2026-10-17: Knocked out means watching, not respawning (replaces the 3 second stopgap)
+A mech whose torso hits zero is out for the match. Its player watches a mech that is still standing and clicks to switch. Someone who joins mid match can only watch. Damage, grenades and the ring only do anything while a match is active, so the lobby and countdown are safe to mess around in.
+
+## 2026-10-17: The ring is a schedule, chosen once, damage on every zone
+The server picks each stage's circle when the countdown starts and sends the whole schedule. Clients draw the ring from that schedule and the match clock, with no per frame updates. Standing outside takes damage on all three zones every tick, scaled by stage. Circles are chosen so the edge never moves faster than 90% of walk speed, even in the worst case, and a test checks 300 random rings per tier. Numbers are guesses to tune. If the match clock runs out the healthiest survivor wins.
+

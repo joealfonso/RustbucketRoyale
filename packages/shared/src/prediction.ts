@@ -27,6 +27,11 @@ export class Predictor {
     for (let i = 0; i < HISTORY; i++) this.ring.push(createMechInput());
   }
 
+  // A new match brings a new map. The mech keeps its history, the next snapshot puts it in the right place.
+  setWorld(world: World): void {
+    this.world = world;
+  }
+
   // Steps the mech one tick with this input and returns its sequence number.
   step(input: MechInput, dt: number): number {
     this.seq++;

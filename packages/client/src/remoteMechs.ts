@@ -9,6 +9,7 @@ interface Sample {
 
 interface Remote {
   model: MechModel;
+  dead: boolean;
   samples: Sample[];
   seen: boolean;
 }
@@ -26,6 +27,20 @@ export class RemoteMechs {
     return this.remotes.size;
   }
 
+  // Who can be watched: everyone still standing.
+  aliveIds(): number[] {
+    return [...this.remotes.entries()].filter(([, r]) => !r.dead).map(([id]) => id);
+  }
+
+  // Where a mech is drawn right now, or false if we have not seen it.
+  positionOf(id: number, out: { x: number; y: number; z: number }): boolean {
+    const remote = this.remotes.get(id);
+    if (!remote) return false;
+    const p = remote.model.group.position;
+    out.x = p.x; out.y = p.y; out.z = p.z;
+    return true;
+  }
+
   push(others: readonly OtherState[], nowMs: number): void {
     for (const r of this.remotes.values()) r.seen = false;
 
@@ -34,10 +49,11 @@ export class RemoteMechs {
       if (!remote) {
         const model = createMechModel("#2f7fd0", this.zoneMaxHp);
         this.scene.add(model.group);
-        remote = { model, samples: [], seen: true };
+        remote = { model, dead: false, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;
+      remote.dead = o.dead;
       setMechDamage(remote.model, o.hp, o.dead);
       remote.samples.push({ time: nowMs, x: o.x, y: o.y, z: o.z, yaw: o.yaw });
       if (remote.samples.length > MAX_SAMPLES) remote.samples.shift();

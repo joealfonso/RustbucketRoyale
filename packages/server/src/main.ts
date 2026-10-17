@@ -1,14 +1,13 @@
-import { loadRoomConfig } from "./config";
+import { loadRoomConfig, tierNames } from "./config";
 import { Room } from "./Room";
+import { RoomManager } from "./RoomManager";
 import { startServer } from "./transport";
 
 const port = Number(process.env.PORT ?? 8080);
-const tier = process.env.TIER ?? "medium";
-// The server may use any random number to choose the seed. Only what is built from the seed has to be repeatable.
-const seed = process.env.SEED !== undefined ? Number(process.env.SEED) : Math.floor(Math.random() * 0x100000000);
+const defaultTier = process.env.TIER ?? "medium";
+const maxRooms = Number(process.env.MAX_ROOMS ?? 50);
 
-const started = Date.now();
-const room = new Room(loadRoomConfig({ tier, seed }));
-console.log(`Built ${tier} map from seed ${seed} in ${Date.now() - started} ms`);
-const server = await startServer(room, port);
-console.log(`Rustbucket Royale server listening on ws://localhost:${server.port}`);
+const config = loadRoomConfig({ maps: "generated" });
+const manager = new RoomManager((code, tier) => new Room(code, tier, config), tierNames(), defaultTier, maxRooms);
+const server = await startServer(manager, port);
+console.log(`Rustbucket Royale server listening on ws://localhost:${server.port} (default ${defaultTier}, up to ${maxRooms} rooms)`);
