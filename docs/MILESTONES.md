@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M1
+Current code milestone: M2
 Current visual milestone: V1 (not started)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -27,3 +27,4 @@ Update the two lines above when a gate passes. Claude Code reads this file first
 Record each gate here: date, what was played, who played, what felt bad.
 
 - 2026-10-17, M1 first look (not the full gate): played by Joseph for a short session. Feels fine for now. Known issue: the camera clips through walls when pressed against them, deferred. Shot camera shake turned off because it made the camera bounce. The one-hour gate is still to do.
+- 2026-10-17, M1 gate passed by Joseph's call after a short session (not a full hour). Wall camera clipping deferred. Moving to M2.
