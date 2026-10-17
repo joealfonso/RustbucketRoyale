@@ -15,7 +15,7 @@ export class RoomManager {
   private rooms = new Map<string, Room>();
 
   constructor(
-    private makeRoom: (code: string, tier: string) => Room,
+    private makeRoom: (code: string, tier: string, bots: number) => Room,
     private tiers: readonly string[],
     private defaultTier: string,
     private maxRooms: number,
@@ -26,8 +26,8 @@ export class RoomManager {
     return this.rooms.size;
   }
 
-  // `code` null means make a new room with a fresh code. The tier only matters for a room that does not exist yet.
-  join(code: string | null, tier: string | null, send: (message: ServerMessage) => void): Joined | null {
+  // `code` null means make a new room with a fresh code. The tier and bot count only matter for a room that does not exist yet.
+  join(code: string | null, tier: string | null, send: (message: ServerMessage) => void, bots = 0): Joined | null {
     const wanted = code?.toUpperCase() ?? null;
     if (wanted !== null && !CODE_PATTERN.test(wanted)) {
       send({ t: "refused", reason: "That room code does not look right." });
@@ -42,7 +42,7 @@ export class RoomManager {
       }
       const chosenTier = tier && this.tiers.includes(tier) ? tier : this.defaultTier;
       const newCode = wanted ?? this.freshCode();
-      room = this.makeRoom(newCode, chosenTier);
+      room = this.makeRoom(newCode, chosenTier, bots);
       this.rooms.set(newCode, room);
     }
 

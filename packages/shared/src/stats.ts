@@ -64,6 +64,25 @@ export interface CombatStats {
   respawnSeconds: number;
 }
 
+// How the simple bots behave. One set of numbers for now, easy to beat on purpose.
+export interface BotStats {
+  sightRange: number;
+  preferredDistance: number; // they try to fight from about this far
+  strafeSeconds: number;
+  aimErrorDegrees: number; // how far off their aim is, which is what makes them beatable
+  aimRetargetSeconds: number; // how often the aim error is rerolled
+  turnDegreesPerSecond: number;
+  fireToleranceDegrees: number; // they shoot once their aim is this close to the target
+  maxFireRange: number;
+  reactionSeconds: number; // a pause after first spotting someone before shooting
+  grenadeChancePerSecond: number;
+  grenadeMinRange: number;
+  grenadeMaxRange: number;
+  stuckSeconds: number;
+  wanderSeconds: number;
+  ringMargin: number; // they head for the middle of the ring when this close to its edge
+}
+
 export interface CameraStats {
   fov: number;
   distance: number;
@@ -123,6 +142,12 @@ const GRENADE_KEYS: (keyof GrenadeStats & string)[] = [
 ];
 const COMBAT_KEYS: (keyof CombatStats & string)[] = ["lagCompensationMs", "historyMs", "respawnSeconds"];
 
+const BOT_KEYS: (keyof BotStats & string)[] = [
+  "sightRange", "preferredDistance", "strafeSeconds", "aimErrorDegrees", "aimRetargetSeconds", "turnDegreesPerSecond",
+  "fireToleranceDegrees", "maxFireRange", "reactionSeconds", "grenadeChancePerSecond", "grenadeMinRange", "grenadeMaxRange",
+  "stuckSeconds", "wanderSeconds", "ringMargin",
+];
+
 const NET_KEYS: (keyof NetStats & string)[] = [
   "snapshotEvery", "maxPlayers", "maxInputsPerTick", "maxQueuedInputs", "maxMessagesPerSecond",
   "floodKickBudget", "interpolationDelayMs", "correctionSmoothing", "snapDistance", "spawnSpacing",
@@ -131,6 +156,7 @@ const NET_KEYS: (keyof NetStats & string)[] = [
 export const parseNetStats = (raw: unknown) => parseNumbers<NetStats>(raw, "net.json", NET_KEYS);
 export const parseGrenadeStats = (raw: unknown) => parseNumbers<GrenadeStats>(raw, "grenade.json", GRENADE_KEYS);
 export const parseCombatStats = (raw: unknown) => parseNumbers<CombatStats>(raw, "combat.json", COMBAT_KEYS);
+export const parseBotStats = (raw: unknown) => parseNumbers<BotStats>(raw, "bots.json", BOT_KEYS);
 export const parseMechStats = (raw: unknown) => parseNumbers<MechStats>(raw, "mech.json", MECH_KEYS);
 export const parseWeaponStats = (raw: unknown) => parseNumbers<WeaponStats>(raw, "weapon.json", WEAPON_KEYS);
 export const parseCameraStats = (raw: unknown) => parseNumbers<CameraStats>(raw, "camera.json", CAMERA_KEYS);

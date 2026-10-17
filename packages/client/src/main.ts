@@ -38,7 +38,7 @@ const zoneMaxHp = zoneSet.zones.map((z) => z.hp);
 
 // How to play is chosen in the address:
 //   (nothing)                    the start menu
-//   ?create&tier=medium          make a new room on the local server, then share the link it shows
+//   ?create&tier=medium&bots=5   make a new room on the local server with 5 bots, then share the link it shows
 //   ?room=ABCD                   join that room
 //   ?offline&tier=small&seed=5   practice alone, any tier or "range", any seed. Add &overview to look down on the map.
 //   ?server=ws://host:port       use another server than the local one
@@ -55,7 +55,8 @@ if (!offline && !online) {
   menu.style.display = "flex";
   const tierSelect = document.getElementById("tierSelect") as HTMLSelectElement;
   const codeInput = document.getElementById("roomCode") as HTMLInputElement;
-  document.getElementById("createRoom")!.addEventListener("click", () => { location.search = `?create&tier=${tierSelect.value}`; });
+  const botSelect = document.getElementById("botSelect") as HTMLSelectElement;
+  document.getElementById("createRoom")!.addEventListener("click", () => { location.search = `?create&tier=${tierSelect.value}&bots=${botSelect.value}`; });
   document.getElementById("joinRoom")!.addEventListener("click", () => { if (codeInput.value.trim()) location.search = `?room=${codeInput.value.trim().toUpperCase()}`; });
   document.getElementById("playOffline")!.addEventListener("click", () => { location.search = `?offline&tier=${tierSelect.value}`; });
   await new Promise(() => {}); // nothing more to do until a button reloads the page
@@ -66,6 +67,7 @@ function serverAddress(): string {
   const query = new URLSearchParams();
   if (params.get("room")) query.set("room", params.get("room")!);
   if (params.get("tier")) query.set("tier", params.get("tier")!);
+  if (params.get("bots")) query.set("bots", params.get("bots")!);
   return `${base}/?${query}`;
 }
 
@@ -163,7 +165,7 @@ function swapMap(newSeed: number, newTier: string): void {
   predictor.setWorld(map.world);
 }
 
-const name = (id: number | null) => (id === null ? "the zone" : id === net?.id ? "You" : `Player ${id}`);
+const name = (id: number | null) => (id === null ? "the zone" : id === net?.id ? "You" : remotes.isBot(id) ? `Bot ${id}` : `Player ${id}`);
 
 // Online: wait for the first snapshot before stepping, so we start from where the server put us.
 let ready = net === null;

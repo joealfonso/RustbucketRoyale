@@ -5,13 +5,14 @@ import type { Joined, RoomManager } from "./RoomManager";
 
 const MAX_MESSAGE_BYTES = 4096;
 const MAX_CATCH_UP_TICKS = 5;
+const MAX_BOTS_REQUESTED = 64; // the room trims this to what the map has spawns for
 
 export interface RunningServer {
   port: number;
   close(): Promise<void>;
 }
 
-// WebSocket front door. A connection to ws://host:port/?room=ABCD&tier=medium joins that room, making it
+// WebSocket front door. A connection to ws://host:port/?room=ABCD&tier=medium&bots=5 joins that room, making it
 // if it is new. With no room in the address it makes a fresh room. Every room ticks at 60 Hz.
 // Not done yet: check the Origin header against an allow list before this goes on a public host.
 export function startServer(manager: RoomManager, port: number): Promise<RunningServer> {
@@ -19,9 +20,10 @@ export function startServer(manager: RoomManager, port: number): Promise<Running
 
   wss.on("connection", (socket, request: IncomingMessage) => {
     const query = new URL(request.url ?? "/", "http://localhost").searchParams;
+    const bots = Math.min(MAX_BOTS_REQUESTED, Math.max(0, Math.floor(Number(query.get("bots")) || 0)));
     const joined: Joined | null = manager.join(query.get("room"), query.get("tier"), (message) => {
       if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
-    });
+    }, bots);
     if (!joined) {
       socket.close();
       return;

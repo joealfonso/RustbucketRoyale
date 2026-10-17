@@ -2,10 +2,11 @@ import {
   FireGate, STEP, ZONE_COUNT, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule,
   parseClientMessage, ringAt, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
-  type CombatStats, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
+  type BotStats, type CombatStats, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingSchedule, type ServerMessage,
   type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
+import { Bot, type BotTarget } from "./Bot";
 import type { Player } from "./Player";
 
 const KILL_HEIGHT = -50;
@@ -25,6 +26,7 @@ export interface MapForRoom {
 
 export interface RoomConfig {
   mech: MechStats;
+  bots: BotStats;
   weapon: WeaponStats;
   grenade: GrenadeStats;
   combat: CombatStats;
@@ -63,15 +65,45 @@ export class Room {
   private map: MapForRoom;
   private ring: RingSchedule | null = null;
 
-  constructor(readonly code: string, readonly tier: string, private config: RoomConfig) {
+  private botInput = createMechInput();
+  private botTargets: BotTarget[] = [];
+
+  // `botCount` computer players fill the room. They are capped by the spawns the map has left over from the humans.
+  constructor(readonly code: string, readonly tier: string, private config: RoomConfig, botCount = 0) {
     this.random = config.random ?? Math.random;
     this.historyLength = Math.ceil(config.combat.historyMs / (STEP * 1000));
     this.seed = this.newSeed();
     this.map = config.mapFor(tier, this.seed);
+    const room = this.map.spawns.length - config.net.maxPlayers;
+    for (let i = 0; i < Math.min(botCount, Math.max(0, room)); i++) this.addBot();
   }
 
+  // People, not bots. A room with only bots left in it is empty.
   get playerCount(): number {
-    return this.players.size;
+    return this.humans().length;
+  }
+
+  private humans(): Player[] {
+    return [...this.players.values()].filter((p) => !p.bot);
+  }
+
+  private freeSlot(): number {
+    const taken = new Set([...this.players.values()].map((p) => p.slot));
+    let slot = 0;
+    while (taken.has(slot)) slot++;
+    return slot;
+  }
+
+  private addBot(): void {
+    const { mech, net } = this.config;
+    const slot = this.freeSlot();
+    const id = this.nextId++;
+    this.players.set(id, {
+      id, slot, bot: new Bot(this.config.bots, this.random), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
+      gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, steps: 0, budget: net.maxMessagesPerSecond,
+      hp: createHealth(this.config.zones), dead: false, participant: true, eliminated: false,
+      historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
+    });
   }
 
   get matchState(): MatchState {
@@ -85,19 +117,17 @@ export class Room {
   // Returns the new player's id, or null if the room is full.
   join(send: (message: ServerMessage) => void): number | null {
     const { net, mech } = this.config;
-    if (this.players.size >= net.maxPlayers) {
+    if (this.humans().length >= net.maxPlayers) {
       send({ t: "refused", reason: "The room is full." });
       return null;
     }
-    const taken = new Set([...this.players.values()].map((p) => p.slot));
-    let slot = 0;
-    while (taken.has(slot)) slot++;
+    const slot = this.freeSlot();
 
     // Someone arriving while a match is running can only watch it.
     const watching = this.state === "active" || this.state === "results";
     const id = this.nextId++;
     const player: Player = {
-      id, slot, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
+      id, slot, bot: null, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
       queue: [], lastSeq: 0, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones),
       dead: watching, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
@@ -114,7 +144,7 @@ export class Room {
     const player = this.players.get(id);
     if (!player) return;
     this.players.delete(id);
-    if (this.hostId === id) this.hostId = this.players.keys().next().value ?? 0;
+    if (this.hostId === id) this.hostId = this.humans()[0]?.id ?? 0;
     // Walking out of a running match counts as being knocked out.
     if (this.state === "active" && player.participant && !player.eliminated) this.checkMatchOver();
     this.broadcastRoom();
@@ -154,7 +184,13 @@ export class Room {
     if (this.state === "countdown" && this.tickCount >= this.phaseEndTick) this.beginMatch();
     else if (this.state === "results" && this.tickCount >= this.phaseEndTick) this.afterResults();
 
+    if (this.state === "active" && this.ring) ringAt(this.ring, this.elapsedSeconds(), this.ringNow);
     for (const player of this.players.values()) {
+      if (player.bot) {
+        this.runBot(player);
+        this.recordHistory(player);
+        continue;
+      }
       player.budget = Math.min(net.maxMessagesPerSecond, player.budget + net.maxMessagesPerSecond * STEP);
       for (let i = 0; i < net.maxInputsPerTick; i++) {
         const next = player.queue.shift();
@@ -168,6 +204,23 @@ export class Room {
     this.stepGrenades();
     if (this.state === "active") this.applyRing();
     if (this.tickCount % net.snapshotEvery === 0) this.broadcastSnapshots();
+  }
+
+  // A bot decides what to do this tick, from what it can see, and its input goes through the same path as a person's.
+  // Outside a running match it just stands there.
+  private runBot(player: Player): void {
+    const input = this.botInput;
+    if (this.state === "active" && !player.dead && player.bot) {
+      this.botTargets.length = 0;
+      for (const other of this.players.values()) {
+        if (other === player || !other.participant || other.dead) continue;
+        this.botTargets.push({ id: other.id, x: other.state.x, y: other.state.y, z: other.state.z });
+      }
+      player.bot.think(player.state, this.botTargets, this.ring ? this.ringNow : null, this.map.world, STEP, input);
+    } else {
+      Object.assign(input, createMechInput(), { aimYaw: player.state.bodyYaw });
+    }
+    this.processInput(player, input);
   }
 
   // ---- match flow
@@ -415,7 +468,7 @@ export class Room {
   private broadcastRoom(): void {
     const message: ServerMessage = {
       t: "room", code: this.code, tier: this.tier, state: this.state, seed: this.seed, hostId: this.hostId,
-      players: this.players.size, ring: this.state === "lobby" ? null : this.ring, matchSeconds: this.config.match.matchSeconds,
+      players: this.humans().length, ring: this.state === "lobby" ? null : this.ring, matchSeconds: this.config.match.matchSeconds,
     };
     for (const p of this.players.values()) p.send(message);
   }
@@ -435,11 +488,12 @@ export class Room {
       if (!p.participant) continue; // spectators have no mech to draw
       others.push({
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
-        running: p.state.running, jetting: p.state.jetting, dead: p.dead, hp: p.hp.map(Math.ceil),
+        running: p.state.running, jetting: p.state.jetting, dead: p.dead, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
       });
     }
     const match = this.progress();
     for (const player of this.players.values()) {
+      if (player.bot) continue;
       player.send({
         t: "snapshot", tick: this.tickCount, ack: player.lastSeq, you: writeSelf(player.state),
         health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn: 0 }, match,

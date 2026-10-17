@@ -11,7 +11,7 @@ afterEach(async () => { await server?.close(); server = undefined; });
 
 const config = loadRoomConfig();
 async function start(): Promise<RunningServer> {
-  const manager = new RoomManager((code, tier) => new Room(code, tier, config), ["small", "medium", "large"], "small", 5);
+  const manager = new RoomManager((code, tier, bots) => new Room(code, tier, config, bots), ["small", "medium", "large"], "small", 5);
   server = await startServer(manager, 0);
   return server;
 }

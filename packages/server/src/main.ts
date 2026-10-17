@@ -8,6 +8,6 @@ const defaultTier = process.env.TIER ?? "medium";
 const maxRooms = Number(process.env.MAX_ROOMS ?? 50);
 
 const config = loadRoomConfig({ maps: "generated" });
-const manager = new RoomManager((code, tier) => new Room(code, tier, config), tierNames(), defaultTier, maxRooms);
+const manager = new RoomManager((code, tier, bots) => new Room(code, tier, config, bots), tierNames(), defaultTier, maxRooms);
 const server = await startServer(manager, port);
 console.log(`Rustbucket Royale server listening on ws://localhost:${server.port} (default ${defaultTier}, up to ${maxRooms} rooms)`);

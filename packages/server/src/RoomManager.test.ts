@@ -6,7 +6,7 @@ import { RoomManager } from "./RoomManager";
 import { lcg } from "./testClient";
 
 const config = loadRoomConfig();
-const manager = (max = 3) => new RoomManager((code, tier) => new Room(code, tier, config), ["small", "medium", "large"], "medium", max, lcg(3));
+const manager = (max = 3) => new RoomManager((code, tier, bots) => new Room(code, tier, config, bots), ["small", "medium", "large"], "medium", max, lcg(3));
 const quiet = (_: ServerMessage) => {};
 
 describe("RoomManager", () => {

@@ -48,6 +48,7 @@ export interface OtherState {
   running: boolean;
   jetting: boolean;
   dead: boolean;
+  bot: boolean;
   hp: number[]; // legs, arms, torso
 }
 

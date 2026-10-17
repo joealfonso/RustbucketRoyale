@@ -57,6 +57,7 @@ Open these on demand. Do not import them.
 ## Commands
 - `npm install`: once after cloning.
 - `npm run dev`: client dev server at http://localhost:5173. Opens a start menu: create a room, join by code, or practice offline.
+- `?create&tier=small&bots=5`: a new room with 5 simple bots to fight.
 - `npm run server`: the game server on ws://localhost:8080. Set `PORT`, `TIER` (default tier for new rooms) and `MAX_ROOMS`. Rooms are made on demand from `?create` or `?room=CODE` links.
 - Offline practice: `?offline&tier=small|medium|large|range&seed=123`. Add `&overview` to look down on the whole map.
 - `npm test`: Vitest. `npm run typecheck`: TypeScript. `npm run build`: production client build.

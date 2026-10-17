@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import {
-  World, boxFromData, generateMap, parseChunkSet, parseCombatStats, parseGrenadeStats, parseMatchConfig, parseMechStats,
+  World, boxFromData, generateMap, parseBotStats, parseChunkSet, parseCombatStats, parseGrenadeStats, parseMatchConfig, parseMechStats,
   parseNetStats, parseRingConfig, parseTiers, parseWeaponStats, parseZones, type BoxData,
 } from "@rustbucket/shared";
 import type { MapForRoom, RoomConfig } from "./Room";
@@ -23,6 +23,7 @@ export function loadRoomConfig(options: ConfigOptions = {}): RoomConfig {
   const net = parseNetStats(readJson("net.json"));
   const base = {
     mech, net,
+    bots: parseBotStats(readJson("bots.json")),
     weapon: parseWeaponStats(readJson("weapon.json")),
     grenade: parseGrenadeStats(readJson("grenade.json")),
     combat: parseCombatStats(readJson("combat.json")),
@@ -43,7 +44,8 @@ export function loadRoomConfig(options: ConfigOptions = {}): RoomConfig {
 
   const range = readJson("greybox.json") as { boxes: BoxData[] };
   const world = new World(range.boxes.map(boxFromData));
-  const spawns: [number, number, number][] = Array.from({ length: net.maxPlayers }, (_, slot) => [(slot - 3.5) * net.spawnSpacing, 0.1, 0]);
+  // Room for the eight people and as many bots again.
+  const spawns: [number, number, number][] = Array.from({ length: net.maxPlayers * 2 }, (_, slot) => [(slot - 3.5) * net.spawnSpacing, 0.1, 0]);
   return { ...base, mapFor: () => ({ world, spawns, meters: 300 }) };
 }
 

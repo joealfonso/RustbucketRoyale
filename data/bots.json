@@ -1,0 +1,17 @@
+{
+  "sightRange": 110,
+  "preferredDistance": 24,
+  "strafeSeconds": 1.6,
+  "aimErrorDegrees": 4,
+  "aimRetargetSeconds": 0.5,
+  "turnDegreesPerSecond": 140,
+  "fireToleranceDegrees": 6,
+  "maxFireRange": 100,
+  "reactionSeconds": 0.5,
+  "grenadeChancePerSecond": 0.05,
+  "grenadeMinRange": 14,
+  "grenadeMaxRange": 45,
+  "stuckSeconds": 1,
+  "wanderSeconds": 12,
+  "ringMargin": 15
+}

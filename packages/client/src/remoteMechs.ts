@@ -10,6 +10,7 @@ interface Sample {
 interface Remote {
   model: MechModel;
   dead: boolean;
+  bot: boolean;
   samples: Sample[];
   seen: boolean;
 }
@@ -25,6 +26,10 @@ export class RemoteMechs {
 
   get count(): number {
     return this.remotes.size;
+  }
+
+  isBot(id: number): boolean {
+    return this.remotes.get(id)?.bot === true;
   }
 
   // Who can be watched: everyone still standing.
@@ -49,7 +54,7 @@ export class RemoteMechs {
       if (!remote) {
         const model = createMechModel("#2f7fd0", this.zoneMaxHp);
         this.scene.add(model.group);
-        remote = { model, dead: false, samples: [], seen: true };
+        remote = { model, dead: false, bot: o.bot, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;

@@ -1,9 +1,11 @@
+import type { Bot } from "./Bot";
 import type { FireGate, MechInput, MechState, ServerMessage } from "@rustbucket/shared";
 
 // One person in a room. Plain data: the room moves it, this file just names the fields.
 export interface Player {
   id: number;
   slot: number;
+  bot: Bot | null; // set for computer players, which have no connection
   send: (message: ServerMessage) => void;
   state: MechState;
   gate: FireGate;
