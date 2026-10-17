@@ -8,12 +8,15 @@
   "scripts": {
     "dev": "npm run dev -w @rustbucket/client",
     "build": "npm run build -w @rustbucket/client",
-    "typecheck": "tsc -b packages/shared packages/client",
+    "typecheck": "tsc -b packages/shared packages/client packages/server",
     "test": "vitest run",
-    "gauntlet": "bash scripts/gauntlet.sh"
+    "gauntlet": "bash scripts/gauntlet.sh",
+    "server": "npm run start -w @rustbucket/server"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "@types/three": "^0.186.0",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "vitest": "^4.1.12"

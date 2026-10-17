@@ -3,7 +3,7 @@
 export class Meter {
   value: number;
   locked = false;
-  private regenTimer = 0;
+  regenTimer = 0; // public so prediction can copy it from a server snapshot
 
   constructor(public max: number) {
     this.value = max;

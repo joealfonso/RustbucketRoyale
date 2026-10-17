@@ -47,6 +47,19 @@ export interface CameraStats {
   pullOutSpeed: number;
 }
 
+export interface NetStats {
+  snapshotEvery: number;
+  maxPlayers: number;
+  maxInputsPerTick: number;
+  maxQueuedInputs: number;
+  maxMessagesPerSecond: number;
+  floodKickBudget: number;
+  interpolationDelayMs: number;
+  correctionSmoothing: number;
+  snapDistance: number;
+  spawnSpacing: number;
+}
+
 // Fails loudly on a missing or non numeric field, so a typo in a data file cannot silently become NaN.
 function parseNumbers<T>(raw: unknown, name: string, keys: readonly (keyof T & string)[]): T {
   if (typeof raw !== "object" || raw === null) throw new Error(`${name}: expected an object`);
@@ -76,6 +89,12 @@ const CAMERA_KEYS: (keyof CameraStats & string)[] = [
   "fov", "distance", "shoulderX", "pivotHeight", "radius", "near", "pullOutSpeed",
 ];
 
+const NET_KEYS: (keyof NetStats & string)[] = [
+  "snapshotEvery", "maxPlayers", "maxInputsPerTick", "maxQueuedInputs", "maxMessagesPerSecond",
+  "floodKickBudget", "interpolationDelayMs", "correctionSmoothing", "snapDistance", "spawnSpacing",
+];
+
+export const parseNetStats = (raw: unknown) => parseNumbers<NetStats>(raw, "net.json", NET_KEYS);
 export const parseMechStats = (raw: unknown) => parseNumbers<MechStats>(raw, "mech.json", MECH_KEYS);
 export const parseWeaponStats = (raw: unknown) => parseNumbers<WeaponStats>(raw, "weapon.json", WEAPON_KEYS);
 export const parseCameraStats = (raw: unknown) => parseNumbers<CameraStats>(raw, "camera.json", CAMERA_KEYS);

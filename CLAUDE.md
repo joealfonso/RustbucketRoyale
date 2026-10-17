@@ -56,9 +56,10 @@ Open these on demand. Do not import them.
 
 ## Commands
 - `npm install`: once after cloning.
-- `npm run dev`: client dev server at http://localhost:5173.
+- `npm run dev`: client dev server at http://localhost:5173. Offline play by default; add `?online` to join the server.
+- `npm run server`: the game server on ws://localhost:8080 (set `PORT` to change).
 - `npm test`: Vitest. `npm run typecheck`: TypeScript. `npm run build`: production client build.
-- `npm run gauntlet`: typecheck, tests, and build in one pass or fail verdict. Results in `artifacts/`.
+- `npm run gauntlet`: typecheck, tests (including a real two-client server test), and build in one pass or fail verdict. Results in `artifacts/`.
 
 ## Testing and CI
 - Vitest for pure logic: damage zones, ring math, upgrade stats, noise radius, bot level of detail, movement and reconciliation.

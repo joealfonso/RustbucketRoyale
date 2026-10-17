@@ -18,5 +18,11 @@ npm run dev
 ```
 Open http://localhost:5173, click the page, play. F1 opens the tuning panel.
 
+To play online, start the server in a second terminal and open two tabs:
+```
+npm run server
+```
+http://localhost:5173/?online
+
 ## Status
-M1 (offline, one mech in the browser) is built and waiting for its playtest gate. No server yet, that is M2.
+M1 passed. M2 (authoritative server, two browsers, prediction) is built and waiting for its playtest gate.

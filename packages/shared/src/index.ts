@@ -4,3 +4,7 @@ export * from "./stats";
 export * from "./world";
 export * from "./mechStep";
 export * from "./look";
+export * from "./protocol";
+export * from "./mechWire";
+export * from "./weapon";
+export * from "./prediction";

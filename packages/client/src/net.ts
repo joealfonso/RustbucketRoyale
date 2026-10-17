@@ -1,0 +1,46 @@
+import type { InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
+
+type SnapshotMessage = Extract<ServerMessage, { t: "snapshot" }>;
+type ShotMessage = Extract<ServerMessage, { t: "shot" }>;
+
+// The browser side of the connection. Sends one input per sim step and hands snapshots and shots to the game.
+export class NetClient {
+  id = 0;
+  open = false;
+  onWelcome?: (id: number) => void;
+  onSnapshot?: (snapshot: SnapshotMessage) => void;
+  onShot?: (shot: ShotMessage) => void;
+  onClose?: (reason: string) => void;
+
+  private socket: WebSocket;
+  // Reused every send so the frame loop does not build a new object each time.
+  private message: InputMessage = {
+    t: "input", seq: 0, moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0,
+    run: false, jet: false, fire: false, targetX: 0, targetY: 0, targetZ: 0,
+  };
+
+  constructor(url: string) {
+    this.socket = new WebSocket(url);
+    this.socket.onopen = () => { this.open = true; };
+    this.socket.onclose = () => { this.open = false; this.onClose?.("The server closed the connection."); };
+    this.socket.onerror = () => this.onClose?.(`Could not reach the server at ${url}.`);
+    this.socket.onmessage = (event) => {
+      const message = JSON.parse(event.data as string) as ServerMessage;
+      if (message.t === "welcome") { this.id = message.id; this.onWelcome?.(message.id); }
+      else if (message.t === "snapshot") this.onSnapshot?.(message);
+      else if (message.t === "shot") this.onShot?.(message);
+      else if (message.t === "full") this.onClose?.("The room is full.");
+    };
+  }
+
+  sendInput(seq: number, input: MechInput): void {
+    if (!this.open) return;
+    const m = this.message;
+    m.seq = seq;
+    m.moveX = input.moveX; m.moveY = input.moveY;
+    m.aimYaw = input.aimYaw; m.aimPitch = input.aimPitch;
+    m.run = input.run; m.jet = input.jet; m.fire = input.fire;
+    m.targetX = input.targetX; m.targetY = input.targetY; m.targetZ = input.targetZ;
+    this.socket.send(JSON.stringify(m));
+  }
+}

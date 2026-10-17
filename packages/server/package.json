@@ -1,0 +1,17 @@
+{
+  "name": "@rustbucket/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@rustbucket/shared": "*",
+    "ws": "*"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2"
+  }
+}

@@ -43,3 +43,15 @@ The mech steps at a fixed 60 Hz and the render blends between steps. Each input 
 
 ## 2026-10-17: Plain boxes for M1 collision
 World collision is axis aligned boxes with simple step-up for low ledges, shared by client and server. Enough for the grey-box map and cheap to run for many bots. Cost: no slopes, so the old ramp became stairs. Revisit when real chunk art arrives.
+
+## 2026-10-17: Plain `ws` server with our own Room, not Colyseus
+Prediction and interest management are custom anyway, and Colyseus's automatic state sync would fight them. The Room class is about 150 lines, has no transport inside it, and is tested without sockets. Cost: no built in matchmaking or room lists, we write those at M5.
+
+## 2026-10-17: Every input is processed once, in order, at most two per tick
+The server steps a player once per received input, not once per server tick. That keeps the client's recorded history and the server in lockstep, so replaying after a snapshot reproduces the server exactly (tested to 1e-6 under latency). The two per tick cap lets a lagging client catch up but stops anyone speeding up by sending extra inputs. Cost: a player who stops sending simply freezes.
+
+## 2026-10-17: Shots aim at a point the client sends (M2 stand-in for the open aim rule)
+The input carries the world point under the crosshair. The server fires from its own barrel position toward it, rate limited on the player's step clock. So the crosshair stays accurate with our over the shoulder camera, and a client cannot fire faster or from somewhere else. Clients ignore the server echo of their own shots. M3 still decides the real rule and adds hit checks.
+
+## 2026-10-17: JSON messages, everyone sees everyone (for now)
+Easy to read while building. Binary packing and nearby only snapshots come at the bandwidth pass (M8) and with bots (M4/M5). Cost: inputs cost roughly 48 kbps upstream, near the 64 kbps budget, so this must be packed before bots and 8 players.

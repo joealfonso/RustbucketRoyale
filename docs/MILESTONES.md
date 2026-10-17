@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M1 (web rebuild)
+Current code milestone: M2
 Current visual milestone: V1 (not started)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -29,3 +29,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17, M1 first look (not the full gate): played by Joseph for a short session. Feels fine for now. Known issue: the camera clips through walls when pressed against them, deferred. Shot camera shake turned off because it made the camera bounce. The one-hour gate is still to do.
 - 2026-10-17, M1 gate passed by Joseph's call after a short session (not a full hour). Wall camera clipping deferred. Moving to M2.
 - 2026-10-17: Unity prototype M1 reached a first look, then the project moved to the web. M1 restarts in TypeScript. The Unity feel numbers (walk 8, run 16 m/s, jets, stamina) are the starting point, not a pass.
+- 2026-10-17: M1 (web) passed by Joseph's call after playing it. Camera raised and crosshair added during the playtest. Moving to M2.
+- 2026-10-17: M2 built, waiting for its gate. To play: `npm run server`, `npm run dev`, open two tabs at http://localhost:5173/?online.
