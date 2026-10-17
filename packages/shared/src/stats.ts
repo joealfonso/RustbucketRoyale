@@ -5,7 +5,7 @@ export interface MechStats {
   acceleration: number;
   deceleration: number;
   airControl: number;
-  turnSpeedDegrees: number;
+  turnSpeedDegrees: number; // how fast the body swings to face where you look. 0 means instantly
   gravity: number;
   maxFallSpeed: number;
   stepHeight: number;

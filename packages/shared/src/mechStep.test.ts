@@ -169,6 +169,25 @@ describe("dash", () => {
   });
 });
 
+describe("body turn", () => {
+  it("faces where you look at once when the turn speed is 0", () => {
+    const s = createMechState(stats, 0, 0, 0, 0);
+    stepMech(s, { ...createMechInput(), aimYaw: 2.5 }, { ...stats, turnSpeedDegrees: 0 }, DT, groundWorld);
+    expect(s.bodyYaw).toBe(2.5);
+  });
+
+  it("swings round gradually when the turn speed is above 0", () => {
+    const s = createMechState(stats, 0, 0, 0, 0);
+    stepMech(s, { ...createMechInput(), aimYaw: 2.5 }, { ...stats, turnSpeedDegrees: 90 }, DT, groundWorld);
+    expect(s.bodyYaw).toBeGreaterThan(0);
+    expect(s.bodyYaw).toBeLessThan(0.1);
+  });
+
+  it("ships with the instant turn", () => {
+    expect(stats.turnSpeedDegrees).toBe(0);
+  });
+});
+
 describe("moveTowardsAngle", () => {
   it("takes the short way round", () => {
     const next = moveTowardsAngle(Math.PI - 0.1, -Math.PI + 0.1, 0.05);

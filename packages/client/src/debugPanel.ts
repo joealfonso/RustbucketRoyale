@@ -33,7 +33,7 @@ export class DebugPanel {
     speed.add(mech, "acceleration", 1, 150);
     speed.add(mech, "deceleration", 1, 150);
     speed.add(mech, "airControl", 0, 1);
-    speed.add(mech, "turnSpeedDegrees", 30, 720).name("body turn speed");
+    speed.add(mech, "turnSpeedDegrees", 0, 720).name("body turn speed (0 = instant)");
     speed.add(mech, "gravity", 5, 80);
 
     const dash = this.gui.addFolder("Dash (Shift)");

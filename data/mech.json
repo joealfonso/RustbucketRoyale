@@ -4,7 +4,7 @@
   "acceleration": 40,
   "deceleration": 50,
   "airControl": 0.4,
-  "turnSpeedDegrees": 240,
+  "turnSpeedDegrees": 0,
   "gravity": 30,
   "maxFallSpeed": 50,
   "stepHeight": 0.6,

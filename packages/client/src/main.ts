@@ -343,7 +343,8 @@ function frame(now: number): void {
   const y = prevY + (mech.y - prevY) * alpha + offY;
   const z = prevZ + (mech.z - prevZ) * alpha + offZ;
   mechGroup.position.set(x, y, z);
-  mechGroup.rotation.y = mech.bodyYaw;
+  // With an instant body turn, face exactly where the camera looks, even between sim steps.
+  mechGroup.rotation.y = mechStats.turnSpeedDegrees > 0 ? mech.bodyYaw : aim.yaw;
   remotes.update(performance.now());
 
   // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.

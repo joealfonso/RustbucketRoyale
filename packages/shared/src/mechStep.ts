@@ -43,7 +43,8 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   s.fuel.setMax(stats.fuelMax);
   s.stamina.setMax(stats.staminaMax);
 
-  s.bodyYaw = moveTowardsAngle(s.bodyYaw, input.aimYaw, stats.turnSpeedDegrees * DEG * dt);
+  // 0 means the body always faces where you look. Above 0 it swings round at that many degrees a second, which feels heavier.
+  s.bodyYaw = stats.turnSpeedDegrees > 0 ? moveTowardsAngle(s.bodyYaw, input.aimYaw, stats.turnSpeedDegrees * DEG * dt) : input.aimYaw;
 
   // Movement is relative to where the camera looks, not where the body faces.
   const yaw = input.aimYaw;
