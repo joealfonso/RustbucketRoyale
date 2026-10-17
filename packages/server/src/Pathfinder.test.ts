@@ -3,7 +3,8 @@ import chunksJson from "../../../data/chunks.json";
 import botsJson from "../../../data/bots.json";
 import mechJson from "../../../data/mech.json";
 import tiersJson from "../../../data/tiers.json";
-import { buildNavGrid, generateMap, parseBotConfig, parseChunkSet, parseMechStats, parseTiers, type Box } from "@rustbucket/shared";
+import propsJson from "../../../data/props.json";
+import { buildNavGrid, generateMap, parseBotConfig, parseChunkSet, parseMechStats, parsePropConfig, parseTiers, type Box } from "@rustbucket/shared";
 import { Pathfinder } from "./Pathfinder";
 
 const pathStats = parseBotConfig(botsJson).path;
@@ -75,7 +76,7 @@ describe("Pathfinder", () => {
   it("is quick on a real large map, across the whole of it, and nearly always finds a way", () => {
     const chunks = parseChunkSet(chunksJson);
     const tiers = parseTiers(tiersJson);
-    const map = generateMap(5, "large", chunks, tiers, mech);
+    const map = generateMap(5, "large", chunks, tiers, mech, parsePropConfig(propsJson));
     const f = new Pathfinder(map.nav, pathStats);
     const path: number[] = [];
     const started = Date.now();

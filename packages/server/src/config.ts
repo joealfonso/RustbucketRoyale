@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import {
-  World, boxFromData, buildNavGrid, generateMap, parseBotConfig, parseChunkSet, parseCombatStats, parseGrenadeStats, parseMatchConfig, parseMechStats,
-  parseNetStats, parseNoiseStats, parseRingConfig, parseTiers, parseWeaponStats, parseZones, type BoxData,
+  World, buildNavGrid, buildRange, generateMap, parseBotConfig, parseChunkSet, parseCombatStats, parseGrenadeStats, parseMatchConfig, parseMechStats,
+  parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseTiers, parseWeaponStats, parseZones, type RangeData,
 } from "@rustbucket/shared";
 import type { MapForRoom, RoomConfig } from "./Room";
 
@@ -25,6 +25,7 @@ export function loadRoomConfig(options: ConfigOptions = {}): RoomConfig {
     mech, net,
     bots: parseBotConfig(readJson("bots.json")),
     noise: parseNoiseStats(readJson("noise.json")),
+    props: parsePropConfig(readJson("props.json")),
     weapon: parseWeaponStats(readJson("weapon.json")),
     grenade: parseGrenadeStats(readJson("grenade.json")),
     combat: parseCombatStats(readJson("combat.json")),
@@ -37,19 +38,19 @@ export function loadRoomConfig(options: ConfigOptions = {}): RoomConfig {
     const chunks = parseChunkSet(readJson("chunks.json"));
     const tiers = parseTiers(readJson("tiers.json"));
     const mapFor = (tier: string, seed: number): MapForRoom => {
-      const map = generateMap(seed, tier, chunks, tiers, mech);
-      return { world: map.world, nav: map.nav, spawns: map.spawns, meters: map.meters };
+      const map = generateMap(seed, tier, chunks, tiers, mech, base.props);
+      return { world: map.world, nav: map.nav, spawns: map.spawns, meters: map.meters, props: map.props, propOfBox: map.propOfBox };
     };
     return { ...base, mapFor };
   }
 
-  const range = readJson("greybox.json") as { boxes: BoxData[] };
-  const boxes = range.boxes.map(boxFromData);
-  const world = new World(boxes);
+  // Each call builds a fresh world, because destroying a prop switches its box off and every match starts whole.
+  const range = buildRange(readJson("greybox.json") as RangeData, base.props);
+  const boxes = range.boxes;
   const nav = buildNavGrid(boxes, 600, 0, 0, { cellMeters: 2, stepHeight: mech.stepHeight, mechHeight: mech.height });
   // Room for the eight people and as many bots again.
   const spawns: [number, number, number][] = Array.from({ length: net.maxPlayers * 2 }, (_, slot) => [(slot - 3.5) * net.spawnSpacing, 0.1, 0]);
-  return { ...base, mapFor: () => ({ world, nav, spawns, meters: 300 }) };
+  return { ...base, mapFor: () => ({ world: new World(boxes), nav, spawns, meters: 300, props: range.props, propOfBox: range.propOfBox }) };
 }
 
 export function tierNames(): string[] {

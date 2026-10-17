@@ -2,7 +2,7 @@ import {
   FireGate, STEP, ZONE_COUNT, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule,
   decodeInput, parseClientMessage, ringAt, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
-  NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
+  NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
   type NavGrid, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
@@ -23,6 +23,8 @@ interface LiveGrenade {
 export interface MapForRoom {
   world: World;
   nav: NavGrid;
+  props: PropInstance[];
+  propOfBox: Int32Array;
   spawns: [number, number, number][];
   meters: number;
 }
@@ -31,6 +33,7 @@ export interface RoomConfig {
   mech: MechStats;
   bots: BotConfig;
   noise: NoiseStats;
+  props: PropConfig;
   weapon: WeaponStats;
   grenade: GrenadeStats;
   combat: CombatStats;
@@ -69,6 +72,9 @@ export class Room {
   private seed: number;
   private map: MapForRoom;
   private ring: RingSchedule | null = null;
+  private propHp: Float32Array = new Float32Array(0);
+  private destroyedProps: number[] = [];
+  private pendingBlasts: { x: number; y: number; z: number; tick: number; owner: Player | null }[] = [];
 
   private botInput = createMechInput();
   private botTargets: BotTarget[] = [];
@@ -85,6 +91,7 @@ export class Room {
     this.historyLength = Math.ceil(config.combat.historyMs / (STEP * 1000));
     this.seed = this.newSeed();
     this.map = config.mapFor(tier, this.seed);
+    this.resetProps();
     this.finder = new Pathfinder(this.map.nav, config.bots.path);
     this.autoFill = botCount === null;
     if (botCount === null) this.fillBots();
@@ -179,6 +186,7 @@ export class Room {
     // In the lobby a person arriving takes a bot's place. Mid match nothing changes.
     if (this.state === "lobby") this.fillBots();
     send({ t: "welcome", id, code: this.code, seed: this.seed, tier: this.tier });
+    if (this.destroyedProps.length > 0) send({ t: "props", destroyed: [...this.destroyedProps] });
     this.broadcastRoom();
     return id;
   }
@@ -254,6 +262,7 @@ export class Room {
 
     this.settleFarFights();
     this.stepGrenades();
+    this.setOffBarrels();
     if (this.state === "active") this.applyRing();
     if (this.tickCount % net.snapshotEvery === 0) this.broadcastSnapshots();
   }
@@ -339,6 +348,8 @@ export class Room {
   private beginCountdown(): void {
     this.seed = this.newSeed();
     this.map = this.config.mapFor(this.tier, this.seed);
+    this.resetProps();
+    this.pendingBlasts = [];
     this.finder = new Pathfinder(this.map.nav, this.config.bots.path);
     for (const p of this.players.values()) p.bot?.setFinder(this.finder);
     this.fillBots();
@@ -487,7 +498,8 @@ export class Room {
 
     // How far the shot goes: the nearest wall, unless a mech is in the way.
     let reach = weapon.maxAimDistance;
-    if (this.map.world.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.worldHit)) reach = this.worldHit.distance;
+    let hitBox = -1;
+    if (this.map.world.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.worldHit)) { reach = this.worldHit.distance; hitBox = this.worldHit.index; }
 
     // Shots do damage in the lobby too, so there is something to practise on. Only the countdown is safe.
     const target = this.state !== "countdown" ? this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach) : null;
@@ -500,6 +512,9 @@ export class Room {
         x: s.ox + s.dx * reach, y: s.oy + s.dy * reach, z: s.oz + s.dz * reach,
       });
       if (killed) this.eliminate(target, player);
+    } else if (hitBox >= 0 && this.state !== "countdown") {
+      const prop = this.map.propOfBox[hitBox]!;
+      if (prop >= 0) this.damageProp(prop, weapon.damage, player);
     }
 
     const message: ServerMessage = {
@@ -561,31 +576,79 @@ export class Room {
     }
   }
 
-  // Splash hits every zone of everyone in range, so a close grenade wrecks parts and makes a story.
-  // Walls block it, and it does nothing during the countdown.
   private explode(live: LiveGrenade): void {
-    const { grenade, zones } = this.config;
     const g = live.state;
-    const bx = g.x, by = g.y + BLAST_LIFT, bz = g.z;
-    const blast: ServerMessage = { t: "explode", x: g.x, y: g.y, z: g.z };
-    this.sendNear(g.x, g.z, blast, this.players.get(live.ownerId));
-    this.makeNoise(this.players.get(live.ownerId) ?? null, "explosion", g.x, g.z);
+    const { grenade } = this.config;
+    this.blast(g.x, g.y, g.z, grenade.damage, grenade.blastRadius, this.players.get(live.ownerId) ?? null);
+  }
+
+  // Splash hits every zone of everyone in range, so a close blast wrecks parts and makes a story. Walls block it,
+  // props in range take damage too (so barrels set each other off), and it does nothing during the countdown.
+  private blast(x: number, y: number, z: number, damage: number, radius: number, owner: Player | null): void {
+    const { zones } = this.config;
+    const bx = x, by = y + BLAST_LIFT, bz = z;
+    const message: ServerMessage = { t: "explode", x, y, z };
+    this.sendNear(x, z, message, owner ?? undefined);
+    this.makeNoise(owner, "explosion", x, z);
     if (this.state === "countdown") return;
 
-    const owner = this.players.get(live.ownerId);
     for (const target of this.players.values()) {
       if (target.dead || !target.participant) continue;
       const dx = target.state.x - bx, dy = target.state.y + CHEST_HEIGHT - by, dz = target.state.z - bz;
       const distance = Math.hypot(dx, dy, dz);
-      if (distance >= grenade.blastRadius) continue;
+      if (distance >= radius) continue;
       if (distance > 0.5 && this.map.world.raycast(bx, by, bz, dx / distance, dy / distance, dz / distance, distance - 0.5, this.worldHit)) continue;
 
-      const amount = grenade.damage * (1 - distance / grenade.blastRadius);
+      const amount = damage * (1 - distance / radius);
       let total = 0;
       for (let zone = 0; zone < ZONE_COUNT; zone++) total += applyDamage(target.hp, zones, zone, amount);
       const killed = isDestroyed(target.hp);
       owner?.send({ t: "hit", targetId: target.id, zone: -1, damage: total, killed, x: target.state.x, y: target.state.y + CHEST_HEIGHT, z: target.state.z });
-      if (killed) this.eliminate(target, owner ?? null);
+      if (killed) this.eliminate(target, owner);
+    }
+
+    for (const prop of this.map.props) {
+      if (this.propHp[prop.id]! <= 0) continue;
+      const distance = Math.hypot(prop.x - bx, prop.y - by, prop.z - bz);
+      if (distance < radius) this.damageProp(prop.id, damage * (1 - distance / radius), owner);
+    }
+  }
+
+  // ---- props
+
+  private resetProps(): void {
+    this.propHp = new Float32Array(this.map.props.length);
+    this.map.props.forEach((p) => { this.propHp[p.id] = this.config.props.types[p.type]!.hp; });
+    this.destroyedProps = [];
+  }
+
+  // A prop that runs out of hit points is gone: its box leaves the world, everyone in the room is told (collision has
+  // to match for everyone's prediction), it makes a loud crash, and a barrel goes off a moment later.
+  private damageProp(id: number, amount: number, by: Player | null): void {
+    if (this.propHp[id]! <= 0) return;
+    this.propHp[id] = this.propHp[id]! - amount;
+    if (this.propHp[id]! > 0) return;
+
+    const prop = this.map.props[id]!;
+    this.map.world.disable(prop.boxIndex);
+    this.destroyedProps.push(id);
+    const message: ServerMessage = { t: "prop", id };
+    for (const p of this.players.values()) if (!p.bot) p.send(message);
+    this.makeNoise(by, "smash", prop.x, prop.z);
+    if (this.config.props.types[prop.type]!.explodes) {
+      const delay = Math.round(this.config.props.barrelBlast.delaySeconds / STEP);
+      this.pendingBlasts.push({ x: prop.x, y: 0, z: prop.z, tick: this.tickCount + delay, owner: by });
+    }
+  }
+
+  // Barrels go off a beat after they break, so a chain of them ripples rather than all going at once.
+  private setOffBarrels(): void {
+    const { barrelBlast } = this.config.props;
+    for (let i = this.pendingBlasts.length - 1; i >= 0; i--) {
+      const b = this.pendingBlasts[i]!;
+      if (this.tickCount < b.tick) continue;
+      this.pendingBlasts.splice(i, 1);
+      this.blast(b.x, b.y, b.z, barrelBlast.damage, barrelBlast.radius, b.owner);
     }
   }
 

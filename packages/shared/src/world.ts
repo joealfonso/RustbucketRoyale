@@ -105,6 +105,7 @@ export class World {
   private readonly cellStart: Int32Array; // boxes of cell c are items[cellStart[c] .. cellStart[c + 1])
   private readonly items: Int32Array;
   private readonly seen: Int32Array;
+  private readonly off: Uint8Array; // boxes switched off, like a prop that has been destroyed
   private stamp = 0;
 
   constructor(boxes: readonly Box[], cellSize = 16) {
@@ -135,6 +136,16 @@ export class World {
     const fill = counts.slice(0, this.cols * this.rows);
     boxes.forEach((b, i) => forEachCell(b, (c) => { this.items[fill[c]!++] = i; }));
     this.seen = new Int32Array(boxes.length);
+    this.off = new Uint8Array(boxes.length);
+  }
+
+  // Takes a box out of the world: nothing collides with it or hits it any more.
+  disable(index: number): void {
+    this.off[index] = 1;
+  }
+
+  isDisabled(index: number): boolean {
+    return this.off[index] === 1;
   }
 
   private cellX(x: number): number {
@@ -156,7 +167,7 @@ export class World {
         const cell = z * this.cols + x;
         for (let k = this.cellStart[cell]!; k < this.cellStart[cell + 1]!; k++) {
           const index = this.items[k]!;
-          if (this.seen[index] === this.stamp) continue;
+          if (this.seen[index] === this.stamp || this.off[index]) continue;
           this.seen[index] = this.stamp;
           out[count++] = index;
         }
@@ -184,7 +195,7 @@ export class World {
       const cell = z * this.cols + x;
       for (let k = this.cellStart[cell]!; k < this.cellStart[cell + 1]!; k++) {
         const index = this.items[k]!;
-        if (this.seen[index] === this.stamp) continue;
+        if (this.seen[index] === this.stamp || this.off[index]) continue;
         this.seen[index] = this.stamp;
         const t = rayBox(ox, oy, oz, dx, dy, dz, best, this.boxes[index]!, normalScratch);
         if (t >= 0 && t <= best) {

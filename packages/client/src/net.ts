@@ -24,6 +24,7 @@ export class NetClient {
   }
   onEliminated?: (out: EliminatedMessage) => void;
   onResult?: (result: ResultMessage) => void;
+  onPropDestroyed?: (id: number) => void;
   onClose?: (reason: string) => void;
 
   // Resolves with the map to build once the server says hello, or rejects if it never does.
@@ -61,6 +62,8 @@ export class NetClient {
       else if (message.t === "room") { this.latestRoom = message; this.roomHandler?.(message); }
       else if (message.t === "eliminated") this.onEliminated?.(message);
       else if (message.t === "result") this.onResult?.(message);
+      else if (message.t === "prop") this.onPropDestroyed?.(message.id);
+      else if (message.t === "props") for (const id of message.destroyed) this.onPropDestroyed?.(id);
       else if (message.t === "hit") this.onHit?.(message);
       else if (message.t === "grenade") this.onGrenade?.(message);
       else if (message.t === "explode") this.onExplode?.(message);

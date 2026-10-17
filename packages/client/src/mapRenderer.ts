@@ -13,6 +13,7 @@ export function addMapMeshes(scene: THREE.Scene, map: PlayMap): THREE.Group {
   const group = new THREE.Group();
   const byColor = new Map<number, number[]>();
   map.colors.forEach((color, box) => {
+    if (map.propOfBox[box]! >= 0) return; // props are drawn by PropView, so they can disappear
     const list = byColor.get(color);
     if (list) list.push(box);
     else byColor.set(color, [box]);

@@ -75,3 +75,20 @@ describe("World", () => {
     expect(() => world.raycast(-500, 2, -500, 1, 0, 0, 100, hit)).not.toThrow();
   });
 });
+
+describe("switching a box off", () => {
+  it("removes it from rays and from area queries", () => {
+    const boxes: Box[] = [{ minX: -1, maxX: 1, minY: 0, maxY: 2, minZ: 9, maxZ: 11 }, { minX: -1, maxX: 1, minY: 0, maxY: 2, minZ: 19, maxZ: 21 }];
+    const world = new World(boxes);
+    const hit = createRayHit();
+    expect(world.raycast(0, 1, 0, 0, 0, 1, 100, hit) && hit.index).toBe(0);
+    world.disable(0);
+    expect(world.isDisabled(0)).toBe(true);
+    expect(world.raycast(0, 1, 0, 0, 0, 1, 100, hit) && hit.index).toBe(1);
+    // Queries are a broad first pass by grid cell, so check the switched off box is simply not among the results.
+    const out: number[] = [];
+    const count = world.query(-2, 8, 2, 12, out);
+    expect(out.slice(0, count)).not.toContain(0);
+  });
+});
+

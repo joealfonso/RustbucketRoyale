@@ -6,7 +6,7 @@ const RING_DOTS = 90;
 
 const PULSE_MS = 1400;
 const MAX_PULSES = 48;
-const LOUD = new Set([NOISE_KINDS.indexOf("shot"), NOISE_KINDS.indexOf("explosion")]);
+const LOUD = new Set([NOISE_KINDS.indexOf("shot"), NOISE_KINDS.indexOf("explosion"), NOISE_KINDS.indexOf("smash")]);
 
 interface Pulse {
   x: number;

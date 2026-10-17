@@ -1,4 +1,5 @@
 import { World, type Box } from "../world";
+import { addProp, type PropConfig, type PropInstance } from "../props";
 import { orient, type ChunkSet } from "./chunks";
 import { buildNavGrid, floodFill, navCell, type NavGrid, type NavParams } from "./navGrid";
 import { SeededRng, deriveSeed } from "./SeededRng";
@@ -14,6 +15,8 @@ export interface GeneratedMap {
   colors: number[]; // palette index of each box
   palette: string[];
   spawns: [number, number, number][];
+  props: PropInstance[];
+  propOfBox: Int32Array; // for each box, the prop it belongs to, or -1
   world: World;
   nav: NavGrid;
 }
@@ -32,7 +35,7 @@ export interface ValidationReport {
 
 // Builds one map from one seed, with no checks. Deterministic: same inputs, same output, on any machine.
 // Placement decisions are integer only; the box numbers that come out are sums of exact values.
-function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet): Omit<GeneratedMap, "seed" | "usedSeed" | "attempts" | "world" | "nav"> {
+function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, propConfig: PropConfig): Omit<GeneratedMap, "seed" | "usedSeed" | "attempts" | "world" | "nav"> {
   const def = tiers.tiers[tier];
   if (!def) throw new Error(`Unknown tier "${tier}"`);
   if (def.meters % chunks.size !== 0) throw new Error(`Tier ${tier}: ${def.meters} m is not a whole number of ${chunks.size} m chunks`);
@@ -89,11 +92,46 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet): Om
   add(0, -0.5, 0, def.meters + margin * 2, 1, def.meters + margin * 2, 0);
   const wallColor = palette.length; // one extra colour for the edge wall
   palette.push("#3d4348");
+  const propColor = palette.length; // then one colour per prop type
+  for (const t of propConfig.types) palette.push(t.color);
+  const props: PropInstance[] = [];
+  const propWeight = propConfig.types.reduce((sum, t) => sum + t.weight, 0);
   const wallY = tiers.edgeWallHeight / 2;
   add(0, wallY, -half - margin / 2, def.meters + margin * 2, tiers.edgeWallHeight, margin, wallColor);
   add(0, wallY, half + margin / 2, def.meters + margin * 2, tiers.edgeWallHeight, margin, wallColor);
   add(-half - margin / 2, wallY, 0, margin, tiers.edgeWallHeight, def.meters, wallColor);
   add(half + margin / 2, wallY, 0, margin, tiers.edgeWallHeight, def.meters, wallColor);
+
+  // Breakable props scattered in a chunk, on a 1 m grid, clear of the chunk's own boxes, of each other, and of the
+  // middle of a chunk where mechs may start. The same number of random draws happens whatever is decided, so the
+  // rest of the map does not depend on how crowded one chunk was.
+  const placeProps = (firstBox: number, originX: number, originZ: number, keepMiddleClear: boolean) => {
+    const { min, max } = propConfig.perChunk;
+    const count = min + rng.nextInt(max - min + 1);
+    const edge = 3;
+    const chunkProps: PropInstance[] = [];
+    for (let i = 0; i < count; i++) {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        let roll = rng.nextInt(propWeight);
+        let type = 0;
+        while (roll >= propConfig.types[type]!.weight) { roll -= propConfig.types[type]!.weight; type++; }
+        const x = originX + edge + rng.nextInt(chunks.size - edge * 2);
+        const z = originZ + edge + rng.nextInt(chunks.size - edge * 2);
+        const [sx, , sz] = propConfig.types[type]!.size;
+        const m = propConfig.margin;
+        const hits = (b: Box) => x - sx / 2 - m < b.maxX && x + sx / 2 + m > b.minX && z - sz / 2 - m < b.maxZ && z + sz / 2 + m > b.minZ;
+        let blocked = false;
+        for (let k = firstBox; k < boxes.length && !blocked; k++) blocked = hits(boxes[k]!);
+        for (const p of chunkProps) if (!blocked) blocked = hits(boxes[p.boxIndex]!);
+        const middleX = originX + chunks.size / 2, middleZ = originZ + chunks.size / 2;
+        if (keepMiddleClear && Math.abs(x - middleX) < propConfig.keepClearOfSpawn + sx / 2 && Math.abs(z - middleZ) < propConfig.keepClearOfSpawn + sz / 2) blocked = true;
+        if (blocked) continue;
+        chunkProps.push(addProp(boxes, props, propConfig, type, x, z));
+        colors.push(propColor + type);
+        break;
+      }
+    }
+  };
 
   const oriented = { center: [0, 0, 0] as [number, number, number], size: [0, 0, 0] as [number, number, number] };
   const spawnCandidates: number[] = [];
@@ -103,10 +141,12 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet): Om
       const template = templates[grid[cell]!]!;
       const originX = x * chunks.size - half;
       const originZ = z * chunks.size - half;
+      const firstBox = boxes.length;
       for (const b of template.boxes) {
         orient(b, chunks.size, turnsOf[cell]!, mirrorOf[cell] === 1, oriented);
         add(originX + oriented.center[0], oriented.center[1], originZ + oriented.center[2], oriented.size[0], oriented.size[1], oriented.size[2], b.colorIndex + 1);
       }
+      placeProps(firstBox, originX, originZ, template.spawnable);
       if (template.spawnable) spawnCandidates.push(cell);
     }
   }
@@ -124,15 +164,26 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet): Om
     spawns.push([x * chunks.size - half + chunks.size / 2, 0.05, z * chunks.size - half + chunks.size / 2]);
   }
 
-  return { tier, meters: def.meters, boxes, colors, palette, spawns };
+  const propOfBox = new Int32Array(boxes.length).fill(-1);
+  for (const p of props) propOfBox[p.boxIndex] = p.id;
+  return { tier, meters: def.meters, boxes, colors, palette, spawns, props, propOfBox };
 }
 
 const nearby: number[] = [];
 
 // Checks a built map is playable: enough clear spawns, all reachable from each other, and no large sealed-off areas.
-export function validateMap(map: Pick<GeneratedMap, "boxes" | "spawns" | "meters" | "tier"> & { world: World; nav: NavGrid }, tiers: TierSet, mech: MechSize): ValidationReport {
+export function validateMap(
+  map: Pick<GeneratedMap, "boxes" | "spawns" | "meters" | "tier" | "props"> & { world: World; nav: NavGrid },
+  tiers: TierSet, mech: MechSize, propConfig?: PropConfig,
+): ValidationReport {
   const problems: string[] = [];
   const def = tiers.tiers[map.tier]!;
+
+  // Enough to break and loot, but not a solid field of crates.
+  if (propConfig) {
+    const perKm = map.props.length / ((map.meters * map.meters) / 1_000_000);
+    if (perKm < propConfig.density.minPerSquareKm || perKm > propConfig.density.maxPerSquareKm) problems.push(`prop density ${perKm.toFixed(0)} per square km is out of bounds`);
+  }
 
   if (map.spawns.length < def.spawns) problems.push(`only ${map.spawns.length} of ${def.spawns} spawns placed`);
 
@@ -172,17 +223,17 @@ export function validateMap(map: Pick<GeneratedMap, "boxes" | "spawns" | "meters
 
 // Builds a map from a seed and checks it. If it fails the checks, derives a new seed and tries again,
 // the same way on every machine, so server and clients still end up with the same map.
-export function generateMap(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, mech: MechSize): GeneratedMap {
+export function generateMap(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, mech: MechSize, propConfig: PropConfig): GeneratedMap {
   const nav: NavParams = { cellMeters: tiers.navCellMeters, stepHeight: mech.stepHeight, mechHeight: mech.height };
   let lastProblems: string[] = [];
 
   for (let attempt = 0; attempt < tiers.maxAttempts; attempt++) {
     const usedSeed = attempt === 0 ? seed >>> 0 : deriveSeed(seed, attempt);
-    const built = build(usedSeed, tier, chunks, tiers);
+    const built = build(usedSeed, tier, chunks, tiers, propConfig);
     const world = new World(built.boxes);
     const navGrid = buildNavGrid(built.boxes, built.meters, 0, 0, nav);
     const map: GeneratedMap = { ...built, seed: seed >>> 0, usedSeed, attempts: attempt + 1, world, nav: navGrid };
-    const report = validateMap(map, tiers, mech);
+    const report = validateMap(map, tiers, mech, propConfig);
     if (report.ok) return map;
     lastProblems = report.problems;
   }

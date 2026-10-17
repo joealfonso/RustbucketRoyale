@@ -8,6 +8,7 @@
     "jets": 120,
     "dash": 70,
     "shot": 220,
-    "explosion": 320
+    "explosion": 320,
+    "smash": 260
   }
 }

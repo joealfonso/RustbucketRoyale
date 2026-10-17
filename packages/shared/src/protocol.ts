@@ -119,6 +119,8 @@ export type ServerMessage =
   | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number }
   | { t: "result"; winnerId: number | null }
   | { t: "refused"; reason: string }
+  | { t: "prop"; id: number } // a prop was destroyed
+  | { t: "props"; destroyed: number[] } // every prop destroyed so far, sent to someone arriving mid way
   | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[] }
   | ShotMessage
   | HitMessage

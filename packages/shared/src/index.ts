@@ -14,3 +14,5 @@ export * from "./generation";
 export * from "./ring";
 export * from "./match";
 export * from "./wire";
+export * from "./props";
+export * from "./rangeMap";

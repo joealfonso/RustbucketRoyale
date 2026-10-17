@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import chunksJson from "../../../../data/chunks.json";
 import mechJson from "../../../../data/mech.json";
 import tiersJson from "../../../../data/tiers.json";
+import propsJson from "../../../../data/props.json";
+import { parsePropConfig } from "../props";
 import { World } from "../world";
 import { parseMechStats } from "../stats";
 import { orient, parseChunkSet } from "./chunks";
@@ -13,10 +15,11 @@ import { parseTiers } from "./tiers";
 const chunks = parseChunkSet(chunksJson);
 const tiers = parseTiers(tiersJson);
 const mech = parseMechStats(mechJson);
-const generate = (seed: number, tier: string) => generateMap(seed, tier, chunks, tiers, mech);
+const propConfig = parsePropConfig(propsJson);
+const generate = (seed: number, tier: string) => generateMap(seed, tier, chunks, tiers, mech, propConfig);
 
 // Everything that makes one map different from another, as one string.
-const fingerprint = (m: GeneratedMap) => JSON.stringify([m.usedSeed, m.attempts, m.boxes, m.colors, m.palette, m.spawns]);
+const fingerprint = (m: GeneratedMap) => JSON.stringify([m.usedSeed, m.attempts, m.boxes, m.colors, m.palette, m.spawns, m.props]);
 
 describe("SeededRng", () => {
   it("gives the same numbers for the same seed and different numbers for another", () => {
@@ -130,6 +133,44 @@ describe("generateMap", () => {
     for (const b of map.boxes) {
       expect(b.minX).toBeGreaterThanOrEqual(-half - 1e-9);
       expect(b.maxX).toBeLessThanOrEqual(half + 1e-9);
+    }
+  });
+});
+
+describe("props", () => {
+  it("never sit on a chunk's own boxes or on each other, and keep the spawns clear", () => {
+    const nearby: number[] = [];
+    for (const seed of [1, 2, 3]) {
+      const map = generate(seed, "medium");
+      expect(map.props.length).toBeGreaterThan(0);
+      const clashes: string[] = [];
+      for (const p of map.props) {
+        const a = map.boxes[p.boxIndex]!;
+        const count = map.world.query(a.minX, a.minZ, a.maxX, a.maxZ, nearby);
+        for (let k = 0; k < count; k++) {
+          const i = nearby[k]!;
+          if (i === p.boxIndex || i === 0) continue; // the ground slab is under everything
+          const b = map.boxes[i]!;
+          if (a.minX < b.maxX && a.maxX > b.minX && a.minZ < b.maxZ && a.maxZ > b.minZ && a.minY < b.maxY && a.maxY > b.minY) clashes.push(`prop ${p.id} and box ${i}`);
+        }
+      }
+      expect(clashes).toEqual([]);
+      expect(validateMap(map, tiers, mech).ok).toBe(true); // spawns still clear
+    }
+  });
+
+  it("are listed both ways round: each prop knows its box, each box knows its prop", () => {
+    const map = generate(9, "small");
+    for (const p of map.props) expect(map.propOfBox[p.boxIndex]).toBe(p.id);
+    expect([...map.propOfBox].filter((id) => id >= 0)).toHaveLength(map.props.length);
+  });
+
+  it("keep within the density bounds on every tier", () => {
+    for (const tier of Object.keys(tiers.tiers)) {
+      const map = generate(77, tier);
+      const perKm = map.props.length / ((map.meters * map.meters) / 1_000_000);
+      expect(perKm).toBeGreaterThanOrEqual(propConfig.density.minPerSquareKm);
+      expect(perKm).toBeLessThanOrEqual(propConfig.density.maxPerSquareKm);
     }
   });
 });

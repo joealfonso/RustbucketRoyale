@@ -1,6 +1,6 @@
 import {
   Predictor, STEP, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
-  ringAt, type BotConfig, type ChunkSet, type InputMessage, type MechStats, type RingSchedule, type ServerMessage, type TierSet, type World,
+  ringAt, type BotConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type RingSchedule, type ServerMessage, type TierSet, type World,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "../Bot";
 import { Pathfinder } from "../Pathfinder";
@@ -21,6 +21,7 @@ export class HeadlessPlayer {
   private predictor: Predictor | null = null;
   private brain: Bot | null = null;
   private world: World | null = null;
+  private props: PropInstance[] = [];
   private seed = -1;
   private tier = "";
   private ring: RingSchedule | null = null;
@@ -37,6 +38,7 @@ export class HeadlessPlayer {
     private bots: BotConfig,
     private chunks: ChunkSet,
     private tiers: TierSet,
+    private propConfig: PropConfig,
     private random: () => number,
   ) {
     this.id = room.join((m) => this.receive(m)) ?? 0;
@@ -51,6 +53,9 @@ export class HeadlessPlayer {
     if (message.t === "welcome" || message.t === "room") this.useMap(message.seed, message.tier);
     if (message.t === "room") { this.ring = message.ring; this.settleSnapshots = 3; }
     if (message.t === "snapshot") this.onSnapshot(message);
+    // A destroyed prop leaves this player's world too, as in the browser, or prediction walks into walls that are gone.
+    if (message.t === "prop") this.breakProp(message.id);
+    if (message.t === "props") for (const id of message.destroyed) this.breakProp(id);
     if (message.t === "eliminated") this.places.push(message.place);
     if (message.t === "result") this.winnerSeen = true;
   }
@@ -59,8 +64,9 @@ export class HeadlessPlayer {
     if (seed === this.seed && tier === this.tier) return;
     this.seed = seed;
     this.tier = tier;
-    const map = generateMap(seed, tier, this.chunks, this.tiers, this.mech);
+    const map = generateMap(seed, tier, this.chunks, this.tiers, this.mech, this.propConfig);
     this.world = map.world;
+    this.props = map.props;
     const finder = new Pathfinder(map.nav, this.bots.path);
     if (!this.predictor) {
       this.predictor = new Predictor(this.mech, map.world, ...map.spawns[0]!, Math.PI);
@@ -70,6 +76,11 @@ export class HeadlessPlayer {
       this.brain!.setFinder(finder);
     }
     this.settleSnapshots = 3;
+  }
+
+  private breakProp(id: number): void {
+    const prop = this.props[id];
+    if (prop && this.world) this.world.disable(prop.boxIndex);
   }
 
   private onSnapshot(snap: Snapshot): void {

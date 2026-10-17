@@ -16,7 +16,8 @@ import { DebugPanel } from "./debugPanel";
 import { TimedEffects } from "./effects";
 import { Input } from "./input";
 import { ClientGrenades } from "./grenades";
-import { buildPlayMap } from "./loadMap";
+import { buildPlayMap, propConfig } from "./loadMap";
+import { PropView } from "./propView";
 import { Hud } from "./hud";
 import { addMapMeshes, removeMapMeshes } from "./mapRenderer";
 import { createMechModel, setMechDamage } from "./mechModel";
@@ -116,6 +117,8 @@ sun.position.set(80, 150, 40);
 scene.add(sun);
 
 let mapGroup = addMapMeshes(scene, map);
+let propView = new PropView(map, propConfig);
+scene.add(propView.group);
 const ringView = new RingView(scene);
 const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters) : null;
 
@@ -129,6 +132,8 @@ const flashes = new TimedEffects(scene, 6, 0.3, glow);
 const shotFx = new ShotFx(weaponStats, new Projectiles(scene, 64, glow, impacts), flashes, impacts);
 const blastMaterial = new THREE.MeshBasicMaterial({ color: "#ff7a1a", transparent: true, opacity: 0.75 });
 const blasts = new TimedEffects(scene, 6, 4, blastMaterial);
+// Art hook: a puff where a prop broke. Replace with real debris at V5.
+const debris = new TimedEffects(scene, 12, 1.6, new THREE.MeshBasicMaterial({ color: "#8c8577", transparent: true, opacity: 0.6 }));
 const grenades = new ClientGrenades(scene, 8, grenadeStats);
 const grenadeGate = new FireGate();
 const thrown = createGrenade();
@@ -168,8 +173,12 @@ function copyInviteLink(): void {
 // Every match brings a new map. Swap it in and point the sim at it.
 function swapMap(newSeed: number, newTier: string): void {
   removeMapMeshes(scene, mapGroup);
+  scene.remove(propView.group);
+  propView.dispose();
   map = buildPlayMap(newTier, newSeed, mechStats);
   mapGroup = addMapMeshes(scene, map);
+  propView = new PropView(map, propConfig);
+  scene.add(propView.group);
   predictor.setWorld(map.world);
 }
 
@@ -223,6 +232,14 @@ if (net) {
     grenades.spawn(g.x, g.y, g.z, g.vx, g.vy, g.vz);
   };
   net.onExplode = (e) => showBlast(e.x, e.y, e.z);
+  // A destroyed prop leaves the world here too, so walking where it stood matches the server.
+  net.onPropDestroyed = (id) => {
+    const prop = map.props[id];
+    if (!prop || map.world.isDisabled(prop.boxIndex)) return;
+    map.world.disable(prop.boxIndex);
+    propView.destroy(id);
+    debris.spawn(prop.x, prop.y, prop.z, 0.3);
+  };
   net.onRoom = (r) => {
     const wasCountdown = progress.state === "countdown";
     hostId = r.hostId;
@@ -346,6 +363,7 @@ function frame(now: number): void {
     }
     shotFx.update(STEP, map.world);
     blasts.update(STEP);
+    debris.update(STEP);
     // Offline there is no server to send the blast, so it goes off when the fuse ends.
     grenades.update(STEP, map.world, net === null ? showBlast : undefined);
     accumulator -= STEP;
