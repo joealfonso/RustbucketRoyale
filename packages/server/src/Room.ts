@@ -1,7 +1,7 @@
 import {
   FireGate, STEP, ZONE_COUNT, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule,
-  parseClientMessage, ringAt, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
+  decodeInput, parseClientMessage, ringAt, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
   type BotStats, type CombatStats, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
   type WeaponStats, type World, type ZoneSet,
@@ -102,7 +102,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: new Bot(this.config.bots, this.random), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), dead: false, respawnTick: 0, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), interested: new Set(), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -129,7 +129,7 @@ export class Room {
     const id = this.nextId++;
     const player: Player = {
       id, slot, bot: null, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
-      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones),
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), interested: new Set(),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -152,7 +152,8 @@ export class Room {
   }
 
   // Returns false when the client is flooding and should be disconnected.
-  receive(id: number, raw: string): boolean {
+  // `raw` is either a text message or a packed binary input.
+  receive(id: number, raw: string | Uint8Array): boolean {
     const player = this.players.get(id);
     if (!player) return false;
 
@@ -160,7 +161,7 @@ export class Room {
     if (player.budget < this.config.net.floodKickBudget) return false;
     if (player.budget < 0) return true; // over the rate: ignore this message
 
-    const message = parseClientMessage(raw);
+    const message = typeof raw === "string" ? parseClientMessage(raw) : decodeInput(raw);
     if (!message) return true;
 
     if (message.t === "start") {
@@ -411,7 +412,7 @@ export class Room {
     const message: ServerMessage = {
       t: "shot", id: player.id, ox: s.ox, oy: s.oy, oz: s.oz, dx: s.dx, dy: s.dy, dz: s.dz, length: reach, hitMech: target !== null,
     };
-    for (const other of this.players.values()) other.send(message);
+    this.sendNear(s.ox, s.oz, message, player);
   }
 
   // Finds the nearest living mech along the shot, checked at where it stood a moment ago, because
@@ -454,7 +455,7 @@ export class Room {
     const g = this.newGrenade;
     this.grenades.push({ ownerId: player.id, state: { ...g } });
     const message: ServerMessage = { t: "grenade", id: player.id, x: g.x, y: g.y, z: g.z, vx: g.vx, vy: g.vy, vz: g.vz };
-    for (const other of this.players.values()) other.send(message);
+    this.sendNear(g.x, g.z, message, player);
   }
 
   private stepGrenades(): void {
@@ -473,7 +474,7 @@ export class Room {
     const g = live.state;
     const bx = g.x, by = g.y + BLAST_LIFT, bz = g.z;
     const blast: ServerMessage = { t: "explode", x: g.x, y: g.y, z: g.z };
-    for (const p of this.players.values()) p.send(blast);
+    this.sendNear(g.x, g.z, blast, this.players.get(live.ownerId));
     if (this.state === "countdown") return;
 
     const owner = this.players.get(live.ownerId);
@@ -525,12 +526,23 @@ export class Room {
     return { state: this.state, seconds, alive, total: this.state === "lobby" ? this.players.size : this.startedWith || this.players.size };
   }
 
+  // Sends something that happened at a spot only to the people close enough to care, and to whoever caused it.
+  // People watching (knocked out, or arrived late) see everything, since they are not looking from their own mech.
+  private sendNear(x: number, z: number, message: ServerMessage, source?: Player): void {
+    const range = this.config.net.interestRange * this.config.net.interestLeaveFactor;
+    for (const p of this.players.values()) {
+      if (p.bot) continue;
+      const watching = p.dead || !p.participant;
+      if (p === source || watching || Math.hypot(p.state.x - x, p.state.z - z) <= range) p.send(message);
+    }
+  }
+
   private broadcastSnapshots(): void {
-    // Everyone sees everyone for now. Nearby-only filtering comes with the bots (gate 5b).
-    const others: OtherState[] = [];
+    const { interestRange, interestLeaveFactor } = this.config.net;
+    const everyone: OtherState[] = [];
     for (const p of this.players.values()) {
       if (!p.participant) continue; // spectators have no mech to draw
-      others.push({
+      everyone.push({
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
         running: p.state.running, jetting: p.state.jetting, dead: p.dead, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
       });
@@ -538,10 +550,25 @@ export class Room {
     const match = this.progress();
     for (const player of this.players.values()) {
       if (player.bot) continue;
+      // Watchers get everyone. Everybody else gets mechs within the interest range, and a mech already in view
+      // stays until it is clearly further off, so one standing right on the edge does not flicker in and out.
+      const watching = player.dead || !player.participant;
+      const others: OtherState[] = [];
+      for (const o of everyone) {
+        if (o.id === player.id) continue;
+        if (!watching) {
+          const distance = Math.hypot(o.x - player.state.x, o.z - player.state.z);
+          const wasInView = player.interested.has(o.id);
+          const near = distance <= (wasInView ? interestRange * interestLeaveFactor : interestRange);
+          if (near) player.interested.add(o.id);
+          else { player.interested.delete(o.id); continue; }
+        }
+        others.push(o);
+      }
       player.send({
         t: "snapshot", tick: this.tickCount, ack: player.lastSeq, ackAgeMs: (this.tickCount - player.ackTick) * STEP * 1000, you: writeSelf(player.state),
         health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn: player.dead && this.state !== "active" ? Math.max(0, (player.respawnTick - this.tickCount) * STEP) : 0 }, match,
-        others: others.filter((o) => o.id !== player.id),
+        others,
       });
     }
   }

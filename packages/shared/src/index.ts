@@ -13,3 +13,4 @@ export * from "./grenade";
 export * from "./generation";
 export * from "./ring";
 export * from "./match";
+export * from "./wire";

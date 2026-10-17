@@ -315,9 +315,11 @@ function frame(now: number): void {
   while (accumulator >= STEP) {
     prevX = mech.x; prevY = mech.y; prevZ = mech.z;
     input.sample(mechInput);
-    mechInput.aimYaw = aim.yaw;
-    mechInput.aimPitch = aim.pitch;
+    // Rounded to float precision, which is what the server receives, so both sides run identical numbers.
+    mechInput.aimYaw = Math.fround(aim.yaw);
+    mechInput.aimPitch = Math.fround(aim.pitch);
     setAimTarget(rig.camera, map.world, weaponStats.maxAimDistance, mechInput);
+    mechInput.targetX = Math.fround(mechInput.targetX); mechInput.targetY = Math.fround(mechInput.targetY); mechInput.targetZ = Math.fround(mechInput.targetZ);
     // A destroyed mech can only look around, the same rule the server applies.
     if (health.dead) {
       mechInput.moveX = 0; mechInput.moveY = 0; mechInput.run = false; mechInput.jet = false;

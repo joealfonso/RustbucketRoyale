@@ -1,4 +1,4 @@
-import type { ExplodeMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
+import { decodeServerBinary, encodeInput, type ExplodeMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
 
 type SnapshotMessage = Extract<ServerMessage, { t: "snapshot" }>;
 type ShotMessage = Extract<ServerMessage, { t: "shot" }>;
@@ -45,11 +45,14 @@ export class NetClient {
     let failed: (reason: Error) => void = () => {};
     this.welcome = new Promise((resolve, reject) => { welcomed = resolve; failed = reject; });
     this.socket = new WebSocket(url);
+    this.socket.binaryType = "arraybuffer";
     this.socket.onopen = () => { this.open = true; };
     this.socket.onclose = () => { this.open = false; failed(new Error("The server closed the connection.")); this.onClose?.("The server closed the connection."); };
     this.socket.onerror = () => { failed(new Error(`Could not reach the server at ${url}.`)); this.onClose?.(`Could not reach the server at ${url}.`); };
     this.socket.onmessage = (event) => {
-      const message = JSON.parse(event.data as string) as ServerMessage;
+      // Snapshots and shots arrive packed, everything else as text.
+      const message = event.data instanceof ArrayBuffer ? decodeServerBinary(new Uint8Array(event.data)) : (JSON.parse(event.data as string) as ServerMessage);
+      if (!message) return;
       if (message.t === "welcome") { this.id = message.id; welcomed({ seed: message.seed, tier: message.tier, code: message.code }); }
       else if (message.t === "snapshot") this.onSnapshot?.(message);
       else if (message.t === "shot") this.onShot?.(message);
@@ -85,6 +88,7 @@ export class NetClient {
     m.aimYaw = input.aimYaw; m.aimPitch = input.aimPitch;
     m.run = input.run; m.jet = input.jet; m.dash = input.dash; m.fire = input.fire; m.grenade = input.grenade;
     m.targetX = input.targetX; m.targetY = input.targetY; m.targetZ = input.targetZ;
-    this.socket.send(JSON.stringify(m));
+    // The aim point only matters on a step that shoots or throws, so it is left out of the rest.
+    this.socket.send(encodeInput(m, input.fire || input.grenade).buffer as ArrayBuffer);
   }
 }

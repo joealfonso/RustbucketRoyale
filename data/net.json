@@ -9,5 +9,7 @@
   "snapDistance": 2,
   "spawnSpacing": 6,
   "interpolationBufferMs": 15,
-  "maxViewDelayMs": 200
+  "maxViewDelayMs": 200,
+  "interestRange": 250,
+  "interestLeaveFactor": 1.15
 }

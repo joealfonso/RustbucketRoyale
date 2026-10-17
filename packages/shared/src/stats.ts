@@ -108,6 +108,8 @@ export interface NetStats {
   floodKickBudget: number;
   interpolationBufferMs: number; // extra time kept on top of one snapshot interval, to ride out jitter
   maxViewDelayMs: number;
+  interestRange: number; // a client is only sent mechs and events closer than this
+  interestLeaveFactor: number; // a mech already being sent stays until it is this many times further away, so the edge does not flicker
   correctionSmoothing: number;
   snapDistance: number;
   spawnSpacing: number;
@@ -156,7 +158,7 @@ const BOT_KEYS: (keyof BotStats & string)[] = [
 
 const NET_KEYS: (keyof NetStats & string)[] = [
   "snapshotEvery", "maxPlayers", "maxInputsPerTick", "maxQueuedInputs", "maxMessagesPerSecond",
-  "floodKickBudget", "interpolationBufferMs", "maxViewDelayMs", "correctionSmoothing", "snapDistance", "spawnSpacing",
+  "floodKickBudget", "interpolationBufferMs", "maxViewDelayMs", "interestRange", "interestLeaveFactor", "correctionSmoothing", "snapDistance", "spawnSpacing",
 ];
 
 export const parseNetStats = (raw: unknown) => parseNumbers<NetStats>(raw, "net.json", NET_KEYS);

@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { WebSocketServer } from "ws";
-import { STEP } from "@rustbucket/shared";
+import { STEP, encodeServerBinary } from "@rustbucket/shared";
 import type { Joined, RoomManager } from "./RoomManager";
 
 const MAX_MESSAGE_BYTES = 4096;
@@ -24,14 +24,19 @@ export function startServer(manager: RoomManager, port: number, defaultBots = 0)
     const asked = query.get("bots");
     const bots = asked === null ? defaultBots : Math.min(MAX_BOTS_REQUESTED, Math.max(0, Math.floor(Number(asked) || 0)));
     const joined: Joined | null = manager.join(query.get("room"), query.get("tier"), (message) => {
-      if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
+      if (socket.readyState !== socket.OPEN) return;
+      // Snapshots and shots are packed binary, the rare messages are readable text.
+      const packed = encodeServerBinary(message);
+      if (packed) socket.send(packed);
+      else socket.send(JSON.stringify(message));
     }, bots);
     if (!joined) {
       socket.close();
       return;
     }
-    socket.on("message", (data) => {
-      if (!joined.room.receive(joined.id, data.toString())) socket.close();
+    socket.on("message", (data, isBinary) => {
+      const ok = isBinary ? joined.room.receive(joined.id, new Uint8Array(data as Buffer)) : joined.room.receive(joined.id, data.toString());
+      if (!ok) socket.close();
     });
     socket.on("close", () => manager.leave(joined));
     socket.on("error", () => socket.close());

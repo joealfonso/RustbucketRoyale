@@ -43,4 +43,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: Simple bots added early for testing 5a. Menu has a bots choice, or use `?create&tier=small&bots=5`. This is not gate 5b, which still covers path finding, difficulty levels, level of detail and nearby-only updates.
 - 2026-10-17: Damage now works in the lobby too (quick respawn, no effect on matches), so bots can be shot in practice. Only the countdown is safe.
 - 2026-10-17: Gate 5a passed by Joseph's call, played with the simple bots, radar and lower delay. The 5 second countdown, damage in the lobby, and bots fighting each other were all added during the playtest. 5b and 5c not started.
+- 2026-10-17: Gate 5b started on Joseph's go, with the binary packing pulled forward from M8 so bandwidth can meet the 64 kbps budget. Measured before starting: 272 / 673 / 1279 kbps per client on small / medium / large with bots.
 

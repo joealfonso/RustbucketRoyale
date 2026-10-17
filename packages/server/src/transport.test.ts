@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
-import { createMechInput, type ServerMessage } from "@rustbucket/shared";
+import { createMechInput, decodeServerBinary, encodeInput, type InputMessage, type ServerMessage } from "@rustbucket/shared";
 import { loadRoomConfig } from "./config";
 import { Room } from "./Room";
 import { RoomManager } from "./RoomManager";
@@ -20,7 +20,11 @@ function connect(port: number, query = ""): Promise<{ socket: WebSocket; message
   return new Promise((resolve) => {
     const socket = new WebSocket(`ws://localhost:${port}/${query}`);
     const messages: ServerMessage[] = [];
-    socket.on("message", (data) => messages.push(JSON.parse(data.toString())));
+    // Snapshots and shots come packed, everything else as text.
+    socket.on("message", (data, isBinary) => {
+      const message = isBinary ? decodeServerBinary(new Uint8Array(data as Buffer)) : JSON.parse(data.toString());
+      if (message) messages.push(message);
+    });
     socket.on("open", () => resolve({ socket, messages }));
   });
 }
@@ -79,6 +83,34 @@ describe("websocket server", () => {
     const closed = new Promise<void>((resolve) => client.socket.on("close", () => resolve()));
     client.socket.send("x".repeat(10_000));
     await closed;
+  });
+});
+
+describe("packed messages", () => {
+  it("accepts a packed input and answers with packed snapshots that acknowledge it", async () => {
+    const { port } = await start();
+    const a = await connect(port, "?room=PACK");
+    const input: InputMessage = { t: "input", seq: 1, ...createMechInput(), moveY: 1, aimYaw: Math.fround(Math.PI) };
+    for (let seq = 1; seq <= 20; seq++) {
+      a.socket.send(encodeInput({ ...input, seq }, false));
+      await wait(16);
+    }
+    await wait(100);
+    const snap = a.messages.filter((m) => m.t === "snapshot").at(-1);
+    expect(snap?.t === "snapshot" && snap.ack).toBeGreaterThan(5);
+    expect(snap?.t === "snapshot" && snap.you.z).toBeGreaterThan(0.5); // it walked forward
+    a.socket.close();
+  });
+
+  it("ignores a packed input that has been tampered with", async () => {
+    const { port } = await start();
+    const a = await connect(port, "?room=EVIL");
+    const good = encodeInput({ t: "input", seq: 1, ...createMechInput() }, false);
+    a.socket.send(good.slice(0, 7));
+    await wait(100);
+    const snap = a.messages.filter((m) => m.t === "snapshot").at(-1);
+    expect(snap?.t === "snapshot" && snap.ack).toBe(0);
+    a.socket.close();
   });
 });
 

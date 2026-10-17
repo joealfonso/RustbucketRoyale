@@ -133,6 +133,12 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 
   if (m.t !== "input") return null;
 
+  return sanitizeInput(m);
+}
+
+// Checks one input message from a client, whether it came as text or packed binary, and clamps what it can.
+// Anything that is not what it should be becomes null and is dropped.
+export function sanitizeInput(m: Record<string, unknown>): InputMessage | null {
   const numbers = [m.seq, m.moveX, m.moveY, m.aimYaw, m.aimPitch, m.targetX, m.targetY, m.targetZ];
   if (!numbers.every(finite)) return null;
   if (typeof m.run !== "boolean" || typeof m.jet !== "boolean" || typeof m.dash !== "boolean" || typeof m.fire !== "boolean" || typeof m.grenade !== "boolean") return null;
