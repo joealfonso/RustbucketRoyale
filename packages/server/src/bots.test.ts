@@ -105,6 +105,23 @@ describe("rooms with bots", () => {
     expect(human.messages.some((m) => m.t === "eliminated")).toBe(true);
   });
 
+  it("come to wherever the people are when the room is quiet, instead of staying out of sight", () => {
+    // The bots take the first three spawns and start 130 m to the side of the human, on open ground, who joins after them.
+    const { room, config: c } = makeRoom((cfg) => {
+      const map = cfg.mapFor("small", 0);
+      const spawns: [number, number, number][] = map.spawns.map((sp, i) => (i < 3 ? [sp[0] + 130, sp[1], sp[2]] : sp));
+      return { ...cfg, mapFor: () => ({ ...map, spawns }) };
+    }, "small", 3);
+    const human = new Client(room, c);
+    tick(room, [human], 10);
+    const startNearest = Math.min(...human.last().others.map((o) => Math.hypot(o.x - human.last().you.x, o.z - human.last().you.z)));
+    expect(startNearest).toBeGreaterThan(100);
+    tick(room, [human], 60 * 45);
+    const you = human.last().you;
+    const nearest = Math.min(...human.last().others.map((o) => Math.hypot(o.x - you.x, o.z - you.z)));
+    expect(nearest).toBeLessThan(80);
+  });
+
   it("hold still during the countdown", () => {
     const { room, config: c } = makeRoom((cfg) => ({ ...cfg, match: { ...cfg.match, countdownSeconds: 4 } }), "small", 3);
     const human = new Client(room, c);

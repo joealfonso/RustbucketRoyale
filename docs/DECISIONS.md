@@ -103,3 +103,6 @@ Pulled forward so there is something to test against: bots run on the server, pr
 ## 2026-10-17: The mech body faces where you look, instantly
 The body used to swing round at 240 degrees a second to add weight, and it read as lag against the camera. `turnSpeedDegrees` in `data/mech.json` is now 0, which means the body snaps to the aim direction every step, and your own mech is drawn at the camera's exact yaw between steps. Weight still comes from acceleration and deceleration. Set the number above 0 to bring the swing back. Cost: other players' bodies still arrive about 100 ms late, because they are drawn from network snapshots.
 
+## 2026-10-17: Bots come to you between matches, and a first radar
+On a Medium map the bots spawned spread across 1000 m and were never in sight, so it looked like there were none. Between matches they now wander within about 70 m of the nearest person and only go for people, not each other. During a match they fight everyone, as before. A small round radar (bottom right) shows mechs within 150 m (`data/hud.json`), bots red, people blue, with you in the middle, forward up, and the ring edge as blue dots. This is the first cut of the 5c radar: it has no noise pulses yet.
+

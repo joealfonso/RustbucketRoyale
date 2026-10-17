@@ -28,6 +28,14 @@ export class RemoteMechs {
     return this.remotes.size;
   }
 
+  // Calls `fn` for every mech we can see, with where it is drawn. Allocates nothing.
+  forEach(fn: (x: number, z: number, bot: boolean, dead: boolean) => void): void {
+    for (const r of this.remotes.values()) {
+      const p = r.model.group.position;
+      fn(p.x, p.z, r.bot, r.dead);
+    }
+  }
+
   isBot(id: number): boolean {
     return this.remotes.get(id)?.bot === true;
   }

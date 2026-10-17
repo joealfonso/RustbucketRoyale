@@ -1,13 +1,14 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseMechStats, parseNetStats, parseWeaponStats, parseZones, throwGrenade,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeaponStats, parseZones, throwGrenade,
   type HealthState, type MatchProgress, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import weaponJson from "../../../data/weapon.json";
 import cameraJson from "../../../data/camera.json";
 import netJson from "../../../data/net.json";
+import hudJson from "../../../data/hud.json";
 import grenadeJson from "../../../data/grenade.json";
 import zonesJson from "../../../data/zones.json";
 import { setAimTarget } from "./aimTarget";
@@ -21,6 +22,7 @@ import { addMapMeshes, removeMapMeshes } from "./mapRenderer";
 import { createMechModel, setMechDamage } from "./mechModel";
 import { NetClient } from "./net";
 import { Projectiles } from "./projectiles";
+import { Radar } from "./radar";
 import { RemoteMechs } from "./remoteMechs";
 import { RingView } from "./ringView";
 import { ShotFx } from "./shotFx";
@@ -33,6 +35,7 @@ const weaponStats = parseWeaponStats(weaponJson);
 const cameraStats = parseCameraStats(cameraJson);
 const netStats = parseNetStats(netJson);
 const grenadeStats = parseGrenadeStats(grenadeJson);
+const hudStats = parseHudStats(hudJson);
 const zoneSet = parseZones(zonesJson);
 const zoneMaxHp = zoneSet.zones.map((z) => z.hp);
 
@@ -111,6 +114,7 @@ scene.add(sun);
 
 let mapGroup = addMapMeshes(scene, map);
 const ringView = new RingView(scene);
+const radar = net ? new Radar(hudStats.radarRangeMeters) : null;
 
 const ownModel = createMechModel("#d9731a", zoneMaxHp);
 const mechGroup = ownModel.group;
@@ -369,6 +373,7 @@ function frame(now: number): void {
   const ring: RingNow | null = ringView.update(matchSeconds);
   const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);
   if (net) hud.setProgress(progress, ring, outside);
+  radar?.draw(x, z, aim.yaw, remotes, progress.state === "lobby" ? null : ring);
 
   // ?overview floats the camera above the middle of the map, for looking over a seed at a glance.
   if (overview) {

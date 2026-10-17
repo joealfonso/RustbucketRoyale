@@ -216,20 +216,32 @@ export class Room {
       this.botTargets.length = 0;
       for (const other of this.players.values()) {
         if (other === player || !other.participant || other.dead) continue;
+        // Between matches they only go for people, so they come to you instead of squabbling out of sight.
+        if (this.state !== "active" && other.bot) continue;
         this.botTargets.push({ id: other.id, x: other.state.x, y: other.state.y, z: other.state.z });
       }
-      player.bot.think(player.state, this.botTargets, this.botZone(), this.map.world, STEP, input);
+      player.bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, STEP, input);
     } else {
       Object.assign(input, createMechInput(), { aimYaw: player.state.bodyYaw });
     }
     this.processInput(player, input);
   }
 
-  // The area bots wander in: the live ring during a match, otherwise a wide circle over most of the map.
-  private botZone(): RingNow {
+  // The area a bot wanders in: the live ring during a match. Otherwise a circle round the nearest person, so the room
+  // is full of activity where you are, not out of sight across the map.
+  private botZone(bot: Player): RingNow {
     if (this.state === "active" && this.ring) return this.ringNow;
     const zone = this.lobbyZone;
-    zone.radius = this.map.meters * 0.45;
+    let nearest: Player | null = null;
+    let best = Infinity;
+    for (const p of this.players.values()) {
+      if (p.bot) continue;
+      const d = Math.hypot(p.state.x - bot.state.x, p.state.z - bot.state.z);
+      if (d < best) { best = d; nearest = p; }
+    }
+    zone.cx = nearest ? nearest.state.x : 0;
+    zone.cz = nearest ? nearest.state.z : 0;
+    zone.radius = nearest ? 70 : this.map.meters * 0.45;
     return zone;
   }
 

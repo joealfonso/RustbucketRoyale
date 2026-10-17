@@ -83,6 +83,10 @@ export interface BotStats {
   ringMargin: number; // they head for the middle of the ring when this close to its edge
 }
 
+export interface HudStats {
+  radarRangeMeters: number; // mechs closer than this show on the radar
+}
+
 export interface CameraStats {
   fov: number;
   distance: number;
@@ -157,6 +161,7 @@ export const parseNetStats = (raw: unknown) => parseNumbers<NetStats>(raw, "net.
 export const parseGrenadeStats = (raw: unknown) => parseNumbers<GrenadeStats>(raw, "grenade.json", GRENADE_KEYS);
 export const parseCombatStats = (raw: unknown) => parseNumbers<CombatStats>(raw, "combat.json", COMBAT_KEYS);
 export const parseBotStats = (raw: unknown) => parseNumbers<BotStats>(raw, "bots.json", BOT_KEYS);
+export const parseHudStats = (raw: unknown) => parseNumbers<HudStats>(raw, "hud.json", ["radarRangeMeters"]);
 export const parseMechStats = (raw: unknown) => parseNumbers<MechStats>(raw, "mech.json", MECH_KEYS);
 export const parseWeaponStats = (raw: unknown) => parseNumbers<WeaponStats>(raw, "weapon.json", WEAPON_KEYS);
 export const parseCameraStats = (raw: unknown) => parseNumbers<CameraStats>(raw, "camera.json", CAMERA_KEYS);
