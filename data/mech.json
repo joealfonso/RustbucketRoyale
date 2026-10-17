@@ -24,5 +24,10 @@
   "staminaUnlockFraction": 0.3,
   "mouseSensitivity": 0.1,
   "minPitch": -60,
-  "maxPitch": 30
+  "maxPitch": 30,
+  "dashSpeed": 38,
+  "dashSeconds": 0.18,
+  "dashCooldown": 0.9,
+  "dashStaminaCost": 25,
+  "dashTapSeconds": 0.2
 }

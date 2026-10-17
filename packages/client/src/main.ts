@@ -69,9 +69,9 @@ const thrown = createGrenade();
 const remotes = new RemoteMechs(scene, netStats.interpolationDelayMs, zoneMaxHp);
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
-const input = new Input(canvas, document.getElementById("hint")!);
+const input = new Input(canvas, document.getElementById("hint")!, () => mechStats.dashTapSeconds);
 const panel = new DebugPanel(mechStats, weaponStats, cameraStats);
-panel.onFov = (fov) => { rig.camera.fov = fov; rig.camera.updateProjectionMatrix(); };
+// The rig re-applies the field of view from the tuning value every frame, so the slider needs no callback.
 
 const [spawnX, spawnY, spawnZ] = mapData.spawn;
 // Yaw PI faces +Z, down the long strip.
@@ -244,6 +244,8 @@ function frame(now: number): void {
   mechGroup.rotation.y = mech.bodyYaw;
   remotes.update(performance.now());
 
+  // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.
+  rig.setFovKick(mech.dashTime > 0 ? mech.dashTime / mechStats.dashSeconds : 0, frameTime);
   rig.update(x, y + cameraStats.pivotHeight, z, aim.yaw, aim.pitch, boxes, frameTime);
 
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;

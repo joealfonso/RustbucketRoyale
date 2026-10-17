@@ -19,7 +19,7 @@ export class NetClient {
   // Reused every send so the frame loop does not build a new object each time.
   private message: InputMessage = {
     t: "input", seq: 0, moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0,
-    run: false, jet: false, fire: false, grenade: false, targetX: 0, targetY: 0, targetZ: 0,
+    run: false, jet: false, dash: false, fire: false, grenade: false, targetX: 0, targetY: 0, targetZ: 0,
   };
 
   constructor(url: string) {
@@ -45,7 +45,7 @@ export class NetClient {
     m.seq = seq;
     m.moveX = input.moveX; m.moveY = input.moveY;
     m.aimYaw = input.aimYaw; m.aimPitch = input.aimPitch;
-    m.run = input.run; m.jet = input.jet; m.fire = input.fire; m.grenade = input.grenade;
+    m.run = input.run; m.jet = input.jet; m.dash = input.dash; m.fire = input.fire; m.grenade = input.grenade;
     m.targetX = input.targetX; m.targetY = input.targetY; m.targetZ = input.targetZ;
     this.socket.send(JSON.stringify(m));
   }

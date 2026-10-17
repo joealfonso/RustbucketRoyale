@@ -66,3 +66,6 @@ A blast damages legs, arms and torso together, scaled by distance, so a close on
 ## 2026-10-17: Destroyed mechs respawn after 3 seconds (stopgap until M5)
 Torso at zero destroys the mech. It looks around but cannot move or fire, then returns at its spawn with full health. This keeps playtests rolling until the real match loop and spectating land at M5.
 
+
+## 2026-10-17: Tap Shift to dash, hold Shift to run
+A Shift press shorter than 0.2 s (data/mech.json) dashes when the key comes up, so the dash lands a beat after the tap in exchange for hold-to-run keeping working untouched. The dash is a short fixed burst toward where you steer (straight ahead if you are standing still), costs stamina, and has a cooldown, all in data. It lives in the shared movement step, so the server decides it and prediction replays it exactly. Cost: up to 0.2 s of delay on the dash; if that feels bad, fire on key down and let a held Shift continue into a run.

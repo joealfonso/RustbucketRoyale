@@ -15,6 +15,7 @@ export class ThirdPersonCamera {
   readonly camera: THREE.PerspectiveCamera;
   private currentDistanceFraction = 1;
   private trauma = 0;
+  private fovKick = 0;
 
   constructor(private stats: CameraStats, aspect: number) {
     this.camera = new THREE.PerspectiveCamera(stats.fov, aspect, stats.near, 3000);
@@ -23,6 +24,16 @@ export class ThirdPersonCamera {
   setAspect(aspect: number): void {
     this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
+  }
+
+  // Pushes the field of view out while dashing and eases it back. Uses the camera's own fov as the base.
+  setFovKick(target: number, dt: number): void {
+    this.fovKick += (target - this.fovKick) * Math.min(1, dt * 14);
+    const fov = this.stats.fov + this.fovKick * this.stats.dashFovKick;
+    if (Math.abs(fov - this.camera.fov) > 0.01) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   // Screen shake strength, added by each shot. Decays on its own.

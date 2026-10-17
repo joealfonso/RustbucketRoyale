@@ -31,7 +31,7 @@ describe("Room", () => {
     const client = new Client(room);
     let worst = 0;
     for (let i = 0; i < 300; i++) {
-      client.send(forward({ run: i % 100 < 60, jet: i % 90 > 70 }));
+      client.send(forward({ run: i % 100 < 60, jet: i % 90 > 70, dash: i % 70 === 10 }));
       room.tick();
       const snap = client.snapshots().at(-1);
       if (snap && snap.tick === room["tickCount" as keyof Room]) {
@@ -47,7 +47,7 @@ describe("Room", () => {
     const delayed: Snapshot[][] = [];
     let worst = 0;
     for (let i = 0; i < 400; i++) {
-      client.send(forward({ run: true, jet: i % 120 > 100 }));
+      client.send(forward({ run: true, jet: i % 120 > 100, dash: i % 75 === 20 }));
       room.tick();
       delayed.push(client.snapshots().splice(0));
       client.messages.length = 0;

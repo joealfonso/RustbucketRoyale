@@ -12,6 +12,7 @@ export interface InputMessage {
   aimPitch: number;
   run: boolean;
   jet: boolean;
+  dash: boolean;
   fire: boolean;
   grenade: boolean;
   targetX: number;
@@ -27,6 +28,7 @@ export interface SelfState {
   vx: number; vz: number; vy: number;
   bodyYaw: number;
   grounded: boolean; running: boolean; jetting: boolean;
+  dashTime: number; dashCooldown: number; dashX: number; dashZ: number;
   fuel: number; fuelLocked: boolean; fuelTimer: number;
   stamina: number; staminaLocked: boolean; staminaTimer: number;
 }
@@ -107,7 +109,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 
   const numbers = [m.seq, m.moveX, m.moveY, m.aimYaw, m.aimPitch, m.targetX, m.targetY, m.targetZ];
   if (!numbers.every(finite)) return null;
-  if (typeof m.run !== "boolean" || typeof m.jet !== "boolean" || typeof m.fire !== "boolean" || typeof m.grenade !== "boolean") return null;
+  if (typeof m.run !== "boolean" || typeof m.jet !== "boolean" || typeof m.dash !== "boolean" || typeof m.fire !== "boolean" || typeof m.grenade !== "boolean") return null;
   if (!Number.isInteger(m.seq) || (m.seq as number) < 1) return null;
 
   return {
@@ -119,6 +121,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     aimPitch: clamp(m.aimPitch as number, -Math.PI / 2, Math.PI / 2),
     run: m.run,
     jet: m.jet,
+    dash: m.dash,
     fire: m.fire,
     grenade: m.grenade,
     targetX: m.targetX as number,
@@ -134,6 +137,7 @@ export function toMechInput(message: InputMessage, out: MechInput): void {
   out.aimPitch = message.aimPitch;
   out.run = message.run;
   out.jet = message.jet;
+  out.dash = message.dash;
   out.fire = message.fire;
   out.grenade = message.grenade;
   out.targetX = message.targetX;

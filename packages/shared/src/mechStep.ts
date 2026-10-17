@@ -15,6 +15,9 @@ export interface MechState {
   grounded: boolean;
   running: boolean;
   jetting: boolean;
+  dashTime: number; // seconds of dash left, above 0 while dashing
+  dashCooldown: number;
+  dashX: number; dashZ: number; // dash direction, unit length
   fuel: Meter;
   stamina: Meter;
 }
@@ -22,7 +25,7 @@ export interface MechState {
 export function createMechState(stats: MechStats, x: number, y: number, z: number, yaw: number): MechState {
   return {
     x, y, z, vx: 0, vz: 0, vy: 0, bodyYaw: yaw,
-    grounded: false, running: false, jetting: false,
+    grounded: false, running: false, jetting: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
     fuel: new Meter(stats.fuelMax), stamina: new Meter(stats.staminaMax),
   };
 }
@@ -60,18 +63,43 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   if (s.running) s.stamina.drain(stats.runDrainPerSecond * dt, stats.staminaRegenDelay);
   else s.stamina.regen(stats.staminaRegenPerSecond, dt, stats.staminaUnlockFraction);
 
-  const topSpeed = s.running ? stats.runSpeed : stats.walkSpeed;
-  const rate = (moving ? stats.acceleration : stats.deceleration) * (s.grounded ? 1 : stats.airControl);
-  const toX = wishX * topSpeed - s.vx;
-  const toZ = wishZ * topSpeed - s.vz;
-  const toLength = Math.hypot(toX, toZ);
-  const maxChange = rate * dt;
-  if (toLength <= maxChange) {
-    s.vx = wishX * topSpeed;
-    s.vz = wishZ * topSpeed;
+  // Tapping Shift dashes toward where you are steering, or straight ahead if you are standing still.
+  s.dashCooldown = Math.max(0, s.dashCooldown - dt);
+  if (input.dash && s.dashCooldown <= 0 && s.dashTime <= 0 && s.stamina.canUse && s.stamina.value >= stats.dashStaminaCost) {
+    const wishLength = Math.sqrt(wishLength2);
+    s.dashX = moving ? wishX / wishLength : forwardX;
+    s.dashZ = moving ? wishZ / wishLength : forwardZ;
+    s.dashTime = stats.dashSeconds;
+    s.dashCooldown = stats.dashCooldown;
+    s.stamina.drain(stats.dashStaminaCost, stats.staminaRegenDelay);
+  }
+
+  if (s.dashTime > 0) {
+    s.vx = s.dashX * stats.dashSpeed;
+    s.vz = s.dashZ * stats.dashSpeed;
+    s.dashTime -= dt;
+    if (s.dashTime <= 0) {
+      // Dash over: bleed the extra speed off so the mech slides out of it instead of keeping a 38 m/s run.
+      const speed = Math.hypot(s.vx, s.vz);
+      if (speed > stats.runSpeed) {
+        s.vx *= stats.runSpeed / speed;
+        s.vz *= stats.runSpeed / speed;
+      }
+    }
   } else {
-    s.vx += (toX / toLength) * maxChange;
-    s.vz += (toZ / toLength) * maxChange;
+    const topSpeed = s.running ? stats.runSpeed : stats.walkSpeed;
+    const rate = (moving ? stats.acceleration : stats.deceleration) * (s.grounded ? 1 : stats.airControl);
+    const toX = wishX * topSpeed - s.vx;
+    const toZ = wishZ * topSpeed - s.vz;
+    const toLength = Math.hypot(toX, toZ);
+    const maxChange = rate * dt;
+    if (toLength <= maxChange) {
+      s.vx = wishX * topSpeed;
+      s.vz = wishZ * topSpeed;
+    } else {
+      s.vx += (toX / toLength) * maxChange;
+      s.vz += (toZ / toLength) * maxChange;
+    }
   }
 
   s.jetting = input.jet && s.fuel.canUse;

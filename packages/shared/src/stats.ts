@@ -26,6 +26,11 @@ export interface MechStats {
   mouseSensitivity: number;
   minPitch: number;
   maxPitch: number;
+  dashSpeed: number;
+  dashSeconds: number;
+  dashCooldown: number;
+  dashStaminaCost: number;
+  dashTapSeconds: number; // a Shift press shorter than this is a tap, which dashes
 }
 
 export interface WeaponStats {
@@ -67,6 +72,7 @@ export interface CameraStats {
   radius: number;
   near: number;
   pullOutSpeed: number;
+  dashFovKick: number; // extra degrees of field of view at the start of a dash
 }
 
 export interface NetStats {
@@ -103,12 +109,13 @@ const MECH_KEYS: (keyof MechStats & string)[] = [
   "jetLift", "jetMaxRiseSpeed", "fuelMax", "fuelDrainPerSecond", "fuelRegenPerSecond", "fuelRegenDelay", "fuelUnlockFraction",
   "staminaMax", "runDrainPerSecond", "staminaRegenPerSecond", "staminaRegenDelay", "staminaUnlockFraction",
   "mouseSensitivity", "minPitch", "maxPitch",
+  "dashSpeed", "dashSeconds", "dashCooldown", "dashStaminaCost", "dashTapSeconds",
 ];
 const WEAPON_KEYS: (keyof WeaponStats & string)[] = [
   "shotsPerSecond", "projectileSpeed", "projectileLifetime", "spreadDegrees", "maxAimDistance", "shakeForce", "damage",
 ];
 const CAMERA_KEYS: (keyof CameraStats & string)[] = [
-  "fov", "distance", "shoulderX", "pivotHeight", "radius", "near", "pullOutSpeed",
+  "fov", "distance", "shoulderX", "pivotHeight", "radius", "near", "pullOutSpeed", "dashFovKick",
 ];
 
 const GRENADE_KEYS: (keyof GrenadeStats & string)[] = [

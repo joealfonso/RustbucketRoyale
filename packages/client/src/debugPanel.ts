@@ -36,6 +36,13 @@ export class DebugPanel {
     speed.add(mech, "turnSpeedDegrees", 30, 720).name("body turn speed");
     speed.add(mech, "gravity", 5, 80);
 
+    const dash = this.gui.addFolder("Dash (tap Shift)");
+    dash.add(mech, "dashSpeed", 10, 80);
+    dash.add(mech, "dashSeconds", 0.05, 0.6);
+    dash.add(mech, "dashCooldown", 0.1, 4);
+    dash.add(mech, "dashStaminaCost", 0, 100);
+    dash.add(mech, "dashTapSeconds", 0.05, 0.5).name("tap window (s)");
+
     const jets = this.gui.addFolder("Jump jets");
     jets.add(mech, "jetLift", 5, 150);
     jets.add(mech, "jetMaxRiseSpeed", 2, 40);
@@ -52,7 +59,8 @@ export class DebugPanel {
     look.add(mech, "mouseSensitivity", 0.02, 0.5);
     look.add(cameraStats, "distance", 2, 15);
     look.add(cameraStats, "shoulderX", -2, 2);
-    look.add(cameraStats, "fov", 40, 110).onChange((value: number) => this.onFov?.(value));
+    look.add(cameraStats, "fov", 40, 110);
+    look.add(cameraStats, "dashFovKick", 0, 30);
 
     const gun = this.gui.addFolder("Weapon");
     gun.add(weapon, "shotsPerSecond", 0.5, 30);
@@ -63,8 +71,6 @@ export class DebugPanel {
     this.gui.add({ copy: () => this.copyJson() }, "copy").name("Copy tuning JSON");
     this.gui.hide();
   }
-
-  onFov?: (fov: number) => void;
 
   update(speed: number, grounded: boolean, fps: number, players: number, correction: number): void {
     this.readouts.speed = Math.round(speed * 10) / 10;

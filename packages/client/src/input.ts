@@ -1,5 +1,7 @@
 import type { MechInput } from "@rustbucket/shared";
 
+const isShift = (code: string) => code === "ShiftLeft" || code === "ShiftRight";
+
 // Keyboard and mouse. The mouse only counts while the pointer is locked to the canvas.
 export class Input {
   private keys = new Set<string>();
@@ -8,12 +10,23 @@ export class Input {
   private mouseDown = false;
   locked = false;
 
-  constructor(private canvas: HTMLCanvasElement, private hint: HTMLElement) {
+  private shiftDownAt = 0;
+  private dashQueued = false;
+
+  // `tapSeconds` is read each time, so the tuning panel can change it live.
+  constructor(private canvas: HTMLCanvasElement, private hint: HTMLElement, private tapSeconds: () => number) {
     window.addEventListener("keydown", (e) => {
+      if (isShift(e.code) && !this.keys.has(e.code)) this.shiftDownAt = performance.now();
       this.keys.add(e.code);
       if (e.code === "Space") e.preventDefault();
     });
-    window.addEventListener("keyup", (e) => this.keys.delete(e.code));
+    window.addEventListener("keyup", (e) => {
+      // A short press of Shift is a tap, which dashes. Holding it is running.
+      if (isShift(e.code) && this.locked && performance.now() - this.shiftDownAt <= this.tapSeconds() * 1000) {
+        this.dashQueued = true;
+      }
+      this.keys.delete(e.code);
+    });
     window.addEventListener("blur", () => { this.keys.clear(); this.mouseDown = false; });
 
     window.addEventListener("mousemove", (e) => {
@@ -59,6 +72,9 @@ export class Input {
     out.moveY = active ? (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0) : 0;
     out.run = active && (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight"));
     out.jet = active && this.keys.has("Space");
+    // True for exactly one sim step per tap.
+    out.dash = active && this.dashQueued;
+    this.dashQueued = false;
     out.fire = active && this.mouseDown;
     out.grenade = active && this.keys.has("KeyG");
   }
