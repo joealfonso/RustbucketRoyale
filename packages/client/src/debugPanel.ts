@@ -36,11 +36,12 @@ export class DebugPanel {
     speed.add(mech, "turnSpeedDegrees", 30, 720).name("body turn speed");
     speed.add(mech, "gravity", 5, 80);
 
-    const dash = this.gui.addFolder("Dash (press Shift)");
+    const dash = this.gui.addFolder("Dash (double-press Shift)");
     dash.add(mech, "dashSpeed", 10, 80);
     dash.add(mech, "dashSeconds", 0.05, 0.6);
     dash.add(mech, "dashCooldown", 0.1, 4);
     dash.add(mech, "dashStaminaCost", 0, 100);
+    dash.add(mech, "dashDoubleTapSeconds", 0.1, 0.6).name("double-tap window (s)");
 
     const jets = this.gui.addFolder("Jump jets");
     jets.add(mech, "jetLift", 5, 150);

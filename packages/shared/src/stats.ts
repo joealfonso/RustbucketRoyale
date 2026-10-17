@@ -30,6 +30,7 @@ export interface MechStats {
   dashSeconds: number;
   dashCooldown: number;
   dashStaminaCost: number;
+  dashDoubleTapSeconds: number; // two Shift presses this close together dash
 }
 
 export interface WeaponStats {
@@ -108,7 +109,7 @@ const MECH_KEYS: (keyof MechStats & string)[] = [
   "jetLift", "jetMaxRiseSpeed", "fuelMax", "fuelDrainPerSecond", "fuelRegenPerSecond", "fuelRegenDelay", "fuelUnlockFraction",
   "staminaMax", "runDrainPerSecond", "staminaRegenPerSecond", "staminaRegenDelay", "staminaUnlockFraction",
   "mouseSensitivity", "minPitch", "maxPitch",
-  "dashSpeed", "dashSeconds", "dashCooldown", "dashStaminaCost",
+  "dashSpeed", "dashSeconds", "dashCooldown", "dashStaminaCost", "dashDoubleTapSeconds",
 ];
 const WEAPON_KEYS: (keyof WeaponStats & string)[] = [
   "shotsPerSecond", "projectileSpeed", "projectileLifetime", "spreadDegrees", "maxAimDistance", "shakeForce", "damage",

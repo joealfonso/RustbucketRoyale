@@ -28,5 +28,6 @@
   "dashSpeed": 38,
   "dashSeconds": 0.18,
   "dashCooldown": 0.9,
-  "dashStaminaCost": 25
+  "dashStaminaCost": 25,
+  "dashDoubleTapSeconds": 0.25
 }

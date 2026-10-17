@@ -11,11 +11,22 @@ export class Input {
   locked = false;
 
   private dashQueued = false;
+  private lastShiftPress = -Infinity;
 
-  constructor(private canvas: HTMLCanvasElement, private hint: HTMLElement) {
+  // `doubleTapSeconds` is read each time, so the tuning panel can change it live.
+  constructor(private canvas: HTMLCanvasElement, private hint: HTMLElement, private doubleTapSeconds: () => number) {
     window.addEventListener("keydown", (e) => {
-      // Dash on the press itself, so there is no wait. Key repeat does not count as a new press.
-      if (isShift(e.code) && !this.keys.has(e.code) && this.locked) this.dashQueued = true;
+      // A second Shift press soon after the first dashes at once. One press or a hold is just a run.
+      // Key repeat does not count as a new press, and a third press starts a fresh pair.
+      if (isShift(e.code) && !this.keys.has(e.code) && this.locked) {
+        const now = performance.now();
+        if (now - this.lastShiftPress <= this.doubleTapSeconds() * 1000) {
+          this.dashQueued = true;
+          this.lastShiftPress = -Infinity;
+        } else {
+          this.lastShiftPress = now;
+        }
+      }
       this.keys.add(e.code);
       if (e.code === "Space") e.preventDefault();
     });
