@@ -10,6 +10,8 @@ export interface MechInput {
   dash: boolean; // true for the one step on which Shift was pressed
   fire: boolean;
   grenade: boolean;
+  slot: number; // which weapon slot is wanted in hand, 0 or 1
+  interact: boolean; // E pressed on this step: pick up the weapon in front of you
   // World point under the crosshair. Only used when firing. The server shoots from the barrel toward it.
   targetX: number;
   targetY: number;
@@ -17,5 +19,5 @@ export interface MechInput {
 }
 
 export function createMechInput(): MechInput {
-  return { moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0, run: false, jet: false, dash: false, fire: false, grenade: false, targetX: 0, targetY: 0, targetZ: 0 };
+  return { moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0, run: false, jet: false, dash: false, fire: false, grenade: false, slot: 0, interact: false, targetX: 0, targetY: 0, targetZ: 0 };
 }

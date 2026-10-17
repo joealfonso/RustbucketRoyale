@@ -8,7 +8,7 @@
   "fuseSeconds": 1.5,
   "blastRadius": 8,
   "damage": 60,
-  "cooldownSeconds": 3,
+  "cooldownSeconds": 0.6,
   "shakeRadius": 30,
   "shakeForce": 0.7
 }

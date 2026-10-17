@@ -26,6 +26,8 @@ export interface MechModel {
   armMeshes: THREE.Mesh[];
   baseColors: THREE.Color[];
   zoneMaxHp: number[];
+  plates: THREE.Mesh[][]; // armor plate meshes per zone, shown while that zone has plate points
+  gunMaterial: THREE.MeshStandardMaterial;
 }
 
 const WRECK = new THREE.Color("#262626");
@@ -51,7 +53,30 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[]): M
   part(0, [0.6, 0.8, 0], [0.6, 1.6, 0.7]);
   armMeshes.push(part(1, [-1.2, 2.4, 0], [0.5, 1.2, 0.5]));
   armMeshes.push(part(1, [1.2, 2.4, -0.6], [0.5, 0.6, 1.6]));
-  return { group, zoneMaterials, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp] };
+
+  // The barrel on the gun arm takes the colour of the weapon in hand. Art hook: one model per weapon at V2.
+  const gunMaterial = new THREE.MeshStandardMaterial({ color: "#d9731a", roughness: 0.6 });
+  const barrel = new THREE.Mesh(unitBox, gunMaterial);
+  barrel.position.set(1.2, 2.4, -1.65);
+  barrel.scale.set(0.3, 0.3, 0.6);
+  group.add(barrel);
+
+  // Armor plates bolted on over each zone. Art hook: real plate models with bolts and scratches at V2.
+  const plateMaterial = new THREE.MeshStandardMaterial({ color: "#a9b8c4", roughness: 0.5, metalness: 0.3 });
+  const plate = (center: number[], size: number[]): THREE.Mesh => {
+    const mesh = new THREE.Mesh(unitBox, plateMaterial);
+    mesh.position.set(center[0]!, center[1]!, center[2]!);
+    mesh.scale.set(size[0]!, size[1]!, size[2]!);
+    mesh.visible = false;
+    group.add(mesh);
+    return mesh;
+  };
+  const plates = [
+    [plate([-0.6, 0.9, -0.4], [0.65, 1.0, 0.12]), plate([0.6, 0.9, -0.4], [0.65, 1.0, 0.12])],
+    [plate([-1.48, 2.4, 0], [0.1, 0.9, 0.45]), plate([1.48, 2.4, -0.4], [0.1, 0.5, 0.9])],
+    [plate([0, 2.5, -0.66], [1.5, 1.1, 0.12]), plate([0, 2.5, 0.66], [1.5, 1.1, 0.12])],
+  ];
+  return { group, zoneMaterials, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial };
 }
 
 // Damage you can read on the mech: parts darken as they take hits, a broken arm falls off,
@@ -66,3 +91,13 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
   for (const arm of model.armMeshes) arm.visible = !armsBroken;
   model.group.scale.y = dead ? 0.35 : 1;
 }
+
+// Shows the weapon in hand and the armor still on. A plate disappears the moment its points run out.
+export function setMechGear(model: MechModel, gunColor: string, armor: readonly number[]): void {
+  model.gunMaterial.color.set(gunColor);
+  model.plates.forEach((meshes, zone) => {
+    const on = (armor[zone] ?? 0) > 0;
+    for (const m of meshes) m.visible = on;
+  });
+}
+

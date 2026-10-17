@@ -17,6 +17,8 @@ export interface InputMessage {
   dash: boolean;
   fire: boolean;
   grenade: boolean;
+  slot: number;
+  interact: boolean;
   targetX: number;
   targetY: number;
   targetZ: number;
@@ -55,6 +57,23 @@ export interface OtherState {
   dead: boolean;
   bot: boolean;
   hp: number[]; // legs, arms, torso
+  weapon: number; // index of the weapon in hand, for drawing the right gun
+  armor: number[]; // plate points left on legs, arms, torso, for drawing plates
+}
+
+// What you are carrying. Slots hold a weapon index, or -1 when empty.
+export interface Loadout {
+  slots: [number, number];
+  active: number;
+  grenades: number;
+  armor: number[];
+}
+
+// Something lying on the ground to pick up. `item` indexes the loot item list (see loot.ts).
+export interface PickupState {
+  id: number;
+  item: number;
+  x: number; y: number; z: number;
 }
 
 // A sound heard on the radar. The position is deliberately a little off, never the exact spot. `kind` indexes NOISE_KINDS.
@@ -121,7 +140,7 @@ export type ServerMessage =
   | { t: "refused"; reason: string }
   | { t: "prop"; id: number } // a prop was destroyed
   | { t: "props"; destroyed: number[] } // every prop destroyed so far, sent to someone arriving mid way
-  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[] }
+  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; pickups: PickupState[] }
   | ShotMessage
   | HitMessage
   | GrenadeMessage
@@ -152,7 +171,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 export function sanitizeInput(m: Record<string, unknown>): InputMessage | null {
   const numbers = [m.seq, m.moveX, m.moveY, m.aimYaw, m.aimPitch, m.targetX, m.targetY, m.targetZ];
   if (!numbers.every(finite)) return null;
-  if (typeof m.run !== "boolean" || typeof m.jet !== "boolean" || typeof m.dash !== "boolean" || typeof m.fire !== "boolean" || typeof m.grenade !== "boolean") return null;
+  if (typeof m.run !== "boolean" || typeof m.jet !== "boolean" || typeof m.dash !== "boolean" || typeof m.fire !== "boolean" || typeof m.grenade !== "boolean" || typeof m.interact !== "boolean") return null;
   if (!Number.isInteger(m.seq) || (m.seq as number) < 1) return null;
 
   const lagMs = finite(m.lagMs) ? clamp(m.lagMs, 0, 1000) : undefined;
@@ -171,6 +190,8 @@ export function sanitizeInput(m: Record<string, unknown>): InputMessage | null {
     dash: m.dash,
     fire: m.fire,
     grenade: m.grenade,
+    slot: m.slot === 1 ? 1 : 0,
+    interact: m.interact,
     targetX: m.targetX as number,
     targetY: m.targetY as number,
     targetZ: m.targetZ as number,
@@ -187,6 +208,8 @@ export function toMechInput(message: InputMessage, out: MechInput): void {
   out.dash = message.dash;
   out.fire = message.fire;
   out.grenade = message.grenade;
+  out.slot = message.slot;
+  out.interact = message.interact;
   out.targetX = message.targetX;
   out.targetY = message.targetY;
   out.targetZ = message.targetZ;

@@ -44,6 +44,16 @@ describe("damage", () => {
     expect(hp[ZONE_ARMS]).toBe(0);
   });
 
+  it("lets armor soak damage first and only the rest reach the hit points", () => {
+    const hp = createHealth(set);
+    const armor = [0, 0, 30];
+    expect(applyDamage(hp, set, ZONE_TORSO, 50, armor)).toBe(50);
+    expect(armor[ZONE_TORSO]).toBe(0);
+    expect(hp[ZONE_TORSO]).toBe(80);
+    expect(applyDamage(hp, set, ZONE_TORSO, 10, armor)).toBe(10);
+    expect(hp[ZONE_TORSO]).toBe(70);
+  });
+
   it("the mech is only destroyed when the torso is gone", () => {
     const hp = createHealth(set);
     applyDamage(hp, set, ZONE_LEGS, 999);

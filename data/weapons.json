@@ -1,0 +1,44 @@
+{
+  "start": "autocannon",
+  "weapons": [
+    {
+      "id": "autocannon",
+      "name": "Autocannon",
+      "color": "#d9731a",
+      "shotsPerSecond": 6,
+      "damage": 12,
+      "spreadDegrees": 0.8,
+      "pellets": 1,
+      "maxAimDistance": 300,
+      "projectileSpeed": 300,
+      "projectileLifetime": 3,
+      "shakeForce": 0
+    },
+    {
+      "id": "scattergun",
+      "name": "Scattergun",
+      "color": "#4aa3df",
+      "shotsPerSecond": 1.6,
+      "damage": 9,
+      "spreadDegrees": 6,
+      "pellets": 8,
+      "maxAimDistance": 60,
+      "projectileSpeed": 300,
+      "projectileLifetime": 3,
+      "shakeForce": 0.12
+    },
+    {
+      "id": "spikeDriver",
+      "name": "Spike Driver",
+      "color": "#c94de0",
+      "shotsPerSecond": 0.8,
+      "damage": 55,
+      "spreadDegrees": 0,
+      "pellets": 1,
+      "maxAimDistance": 400,
+      "projectileSpeed": 300,
+      "projectileLifetime": 3,
+      "shakeForce": 0.3
+    }
+  ]
+}

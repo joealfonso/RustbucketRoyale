@@ -1,5 +1,5 @@
 import type { Bot } from "./Bot";
-import type { FireGate, MechInput, MechState, NoiseEvent, ServerMessage } from "@rustbucket/shared";
+import type { FireGate, Loadout, MechInput, MechState, NoiseEvent, ServerMessage } from "@rustbucket/shared";
 
 // One person in a room. Plain data: the room moves it, this file just names the fields.
 export interface Player {
@@ -17,6 +17,9 @@ export interface Player {
   steps: number; // the player's own clock: one step per input processed
   budget: number; // message allowance, refills every tick
   hp: number[];
+  loadout: Loadout;
+  askedSlot: number; // the slot the client last asked for. Only a change of request switches weapons.
+  interactReadyTick: number; // E is ignored until this tick, so it cannot be spammed
   interested: Set<number>;
   watchId: number;
   heard: NoiseEvent[]; // sounds to pass on in the next snapshot

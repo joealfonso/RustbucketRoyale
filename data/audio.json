@@ -50,6 +50,14 @@
     "go": {
       "volume": 0.5,
       "file": null
+    },
+    "pickup": {
+      "volume": 0.45,
+      "file": null
+    },
+    "swap": {
+      "volume": 0.45,
+      "file": null
     }
   }
 }

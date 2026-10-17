@@ -54,4 +54,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: Gate 6a built, waiting for its playtest. Check: crates, junk piles and red barrels in every map; shoot them until they break and vanish (cover really goes away); barrels blow up and set off barrels near them; breaking things is loud on the radar. Soak passes on all tiers with props.
 - 2026-10-17: During the 6a check: added placeholder sound everywhere (Web Audio, M to mute) and made explosions faster and punchier (shorter grenade fuse and barrel delay, bursting fireball and flash).
 - 2026-10-17: Gate 6a passed by Joseph's call, with the new sound and faster explosions. 6b (loot and loadout) not started.
+- 2026-10-17: Gate 6b built, waiting for its playtest. Check: broken crates and junk drop glowing pickups (green grenade, blue plate, coloured weapon); walk over grenades and plates; E takes a weapon (the prompt says what it drops); 1 / 2 or the wheel switch; the Scattergun and Spike Driver feel different; plates show on mechs and soak hits first; grenades count down and stop at zero. Soak passes on all tiers at 36 to 51 kbps.
 

@@ -5,7 +5,7 @@ import type { InputMessage, OtherState, ServerMessage, ShotMessage } from "./pro
 
 type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
 
-const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, bot: true, hp: [60, 33, 100] });
+const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12] });
 const snapshot = (others: OtherState[]): Snapshot => ({
   t: "snapshot", tick: 123456, ack: 99, ackAgeMs: 12.4,
   you: {
@@ -16,6 +16,8 @@ const snapshot = (others: OtherState[]): Snapshot => ({
   match: { state: "active", seconds: 91.5, alive: 7, total: 24 },
   others,
   noises: [],
+  loadout: { slots: [0, -1], active: 0, grenades: 2, armor: [30, 0, 40] },
+  pickups: [],
 });
 
 describe("snapshot wire format", () => {
@@ -34,7 +36,7 @@ describe("snapshot wire format", () => {
     expect(back.others[0]!.id).toBe(7);
     expect(Math.abs(back.others[0]!.x - 412.34)).toBeLessThanOrEqual(0.05 + 1e-9);
     expect(Math.abs(back.others[1]!.x - -999.9)).toBeLessThanOrEqual(0.05 + 1e-9);
-    expect(back.others[0]).toMatchObject({ running: true, jetting: false, dead: false, bot: true, hp: [60, 33, 100] });
+    expect(back.others[0]).toMatchObject({ running: true, jetting: false, dead: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12] });
     expect(back.others[0]!.yaw).toBeCloseTo(5.5, 3);
   });
 
@@ -49,10 +51,21 @@ describe("snapshot wire format", () => {
     expect(encodeSnapshot(s).length - encodeSnapshot(snapshot([other(1, 2)])).length).toBe(10);
   });
 
-  it("is small: under 100 bytes with nobody else near, and 14 bytes per extra mech", () => {
+  it("is small: under 110 bytes with nobody else near, 18 bytes per extra mech, 9 per pickup", () => {
     expect(encodeSnapshot(snapshot([])).length).toBe(snapshotSize(0));
-    expect(snapshotSize(0)).toBeLessThan(100);
-    expect(snapshotSize(10) - snapshotSize(0)).toBe(140);
+    expect(snapshotSize(0)).toBeLessThan(110);
+    expect(snapshotSize(10) - snapshotSize(0)).toBe(180);
+    expect(snapshotSize(0, 0, 10) - snapshotSize(0)).toBe(90);
+  });
+
+  it("carries your loadout and the pickups near you", () => {
+    const s = snapshot([]);
+    s.pickups = [{ id: 40000, item: 5, x: -12.34, y: 0.5, z: 88.8 }, { id: 3, item: 0, x: 0, y: 0, z: 0 }];
+    const back = decodeSnapshot(encodeSnapshot(s))!;
+    expect(back.loadout).toEqual({ slots: [0, -1], active: 0, grenades: 2, armor: [30, 0, 40] });
+    expect(back.pickups).toHaveLength(2);
+    expect(back.pickups[0]).toMatchObject({ id: 40000, item: 5 });
+    expect(Math.abs(back.pickups[0]!.x - -12.34)).toBeLessThanOrEqual(0.05 + 1e-9);
   });
 
   it("works with nobody else, and with the biggest crowd it can hold", () => {
@@ -99,13 +112,20 @@ describe("shot wire format", () => {
 describe("input wire format", () => {
   const base = (extra: Partial<InputMessage> = {}): InputMessage => ({
     t: "input", seq: 77, ...createMechInput(), moveX: 1, moveY: -1, aimYaw: Math.fround(-12.34567), aimPitch: Math.fround(0.4321),
-    run: true, jet: false, dash: true, fire: false, grenade: false, targetX: 0, targetY: 0, targetZ: 0, ...extra,
+    run: true, jet: false, dash: true, fire: false, grenade: false, slot: 0, interact: false, targetX: 0, targetY: 0, targetZ: 0, ...extra,
   });
 
   it("round trips exactly for the values a client really sends", () => {
     const original = base({ fire: true, targetX: Math.fround(10.5), targetY: Math.fround(-2), targetZ: Math.fround(300.125), lagMs: 85 });
     const back = decodeInput(encodeInput(original, true))!;
     expect(back).toEqual({ ...original, watchId: undefined });
+  });
+
+  it("carries the weapon slot wanted and a press of E", () => {
+    const back = decodeInput(encodeInput(base({ slot: 1, interact: true }), false))!;
+    expect(back.slot).toBe(1);
+    expect(back.interact).toBe(true);
+    expect(decodeInput(encodeInput(base(), false))).toMatchObject({ slot: 0, interact: false });
   });
 
   it("carries who a knocked out player is watching", () => {
@@ -119,7 +139,7 @@ describe("input wire format", () => {
     const small = encodeInput(base(), false);
     const big = encodeInput(base({ fire: true }), true);
     expect(small.length).toBeLessThan(big.length);
-    expect(small.length).toBeLessThanOrEqual(19);
+    expect(small.length).toBeLessThanOrEqual(20);
     expect(decodeInput(small)).toMatchObject({ seq: 77, moveX: 1, moveY: -1, run: true, dash: true, fire: false });
   });
 

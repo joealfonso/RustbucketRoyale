@@ -12,6 +12,8 @@ export class Input {
   locked = false;
 
   private dashQueued = false;
+  private interactQueued = false;
+  private slot = 0;
   private clickQueued = false;
   private enterQueued = false;
   private sprint = new Sprint();
@@ -23,6 +25,9 @@ export class Input {
       if (!this.keys.has(e.code) && this.locked) {
         // Shift dashes the instant it goes down, toward where you are steering.
         if (isShift(e.code)) this.dashQueued = true;
+        if (e.code === "Digit1") this.slot = 0;
+        if (e.code === "Digit2") this.slot = 1;
+        if (e.code === "KeyE") this.interactQueued = true;
         // Two quick presses of W start a sprint that lasts while W is held.
         if (e.code === "KeyW") this.sprint.forwardPressed(performance.now(), this.sprintWindowSeconds());
       }
@@ -36,6 +41,8 @@ export class Input {
     });
     window.addEventListener("blur", () => { this.keys.clear(); this.mouseDown = false; this.sprint.forwardReleased(); });
 
+    // The mouse wheel flips between the two weapon slots.
+    window.addEventListener("wheel", (e) => { if (this.locked && e.deltaY !== 0) this.slot = 1 - this.slot; });
     window.addEventListener("mousemove", (e) => {
       if (!this.locked) return;
       this.mouseDx += e.movementX;
@@ -89,6 +96,11 @@ export class Input {
     return pressed;
   }
 
+  // The slot the server says is in hand wins when it disagrees, for example when the slot asked for is empty.
+  setSlot(slot: number): void {
+    this.slot = slot;
+  }
+
   wasPressed(code: string): boolean {
     return this.keys.delete(code);
   }
@@ -105,6 +117,10 @@ export class Input {
     this.dashQueued = false;
     out.fire = active && this.mouseDown;
     out.grenade = active && this.keys.has("KeyG");
+    out.slot = this.slot;
+    // True for exactly one sim step per press of E.
+    out.interact = active && this.interactQueued;
+    this.interactQueued = false;
   }
 
   // Takes the mouse movement since the last call.

@@ -1,4 +1,4 @@
-import type { MatchProgress, RingNow } from "@rustbucket/shared";
+import type { Loadout, MatchProgress, RingNow, WeaponStats } from "@rustbucket/shared";
 
 export interface RoomView {
   code: string;
@@ -23,6 +23,9 @@ export class Hud {
   private results = byId("results");
   private zoneWarning = byId("zoneWarning");
   private lastText = new Map<HTMLElement, string>();
+  private loadoutBox = byId("loadout");
+  private promptBox = byId("prompt");
+  private plateFills = Array.from(document.querySelectorAll<HTMLElement>("#zones .plate"));
 
   constructor(onStart: () => void, onCopy: () => void) {
     this.startButton.addEventListener("click", onStart);
@@ -65,6 +68,26 @@ export class Hud {
   flash(message: string, ms: number): void {
     this.text(this.bigText, message);
     window.setTimeout(() => this.text(this.bigText, ""), ms);
+  }
+
+  // The two weapon slots, the one in hand highlighted, the grenade count, and armor as a thin bar under each zone.
+  setLoadout(l: Loadout, weapons: readonly WeaponStats[], plates: readonly number[]): void {
+    const slot = (i: number) => {
+      const name = l.slots[i]! >= 0 ? weapons[l.slots[i]!]?.name ?? "?" : "empty";
+      return `<div class="${i === l.active ? "on" : ""}">${i + 1}  ${name}</div>`;
+    };
+    const html = `${slot(0)}${slot(1)}<div>G  grenades x${l.grenades}</div>`;
+    if (this.lastText.get(this.loadoutBox) !== html) {
+      this.lastText.set(this.loadoutBox, html);
+      this.loadoutBox.innerHTML = html;
+    }
+    this.plateFills.forEach((fill, zone) => { fill.style.width = `${Math.min(1, (l.armor[zone] ?? 0) / (plates[zone] || 1)) * 100}%`; });
+  }
+
+  // A hint shown near something to interact with, or hidden with an empty string.
+  setPrompt(text: string): void {
+    this.promptBox.style.display = text ? "block" : "none";
+    this.text(this.promptBox, text);
   }
 
   feed(message: string): void {

@@ -67,7 +67,7 @@ describe("Room", () => {
       room.tick();
     }
     const shots = watcher.messages.filter((m) => m.t === "shot");
-    const expected = config.weapon.shotsPerSecond * 2;
+    const expected = config.weapons.weapons[config.weapons.start]!.shotsPerSecond * 2;
     expect(shots.length).toBeGreaterThanOrEqual(expected - 1);
     expect(shots.length).toBeLessThanOrEqual(expected + 1);
     expect(shots.every((s) => s.t === "shot" && s.id === shooter.id)).toBe(true);

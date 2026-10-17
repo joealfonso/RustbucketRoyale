@@ -25,6 +25,11 @@ export class FireGate {
     this.nextShot = time + 1 / shotsPerSecond;
     return true;
   }
+
+  // No firing before `time`, for the moment after changing weapon.
+  holdUntil(time: number): void {
+    this.nextShot = Math.max(this.nextShot, time);
+  }
 }
 
 // Works out a shot from the barrel toward the aim point, plus a little random spread.

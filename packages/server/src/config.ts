@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import {
   World, buildNavGrid, buildRange, generateMap, parseBotConfig, parseChunkSet, parseCombatStats, parseGrenadeStats, parseMatchConfig, parseMechStats,
-  parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseTiers, parseWeaponStats, parseZones, type RangeData,
+  parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseTiers, parseWeapons, parseLootConfig, parseZones, type RangeData,
 } from "@rustbucket/shared";
 import type { MapForRoom, RoomConfig } from "./Room";
 
@@ -21,12 +21,13 @@ export interface ConfigOptions {
 export function loadRoomConfig(options: ConfigOptions = {}): RoomConfig {
   const mech = parseMechStats(readJson("mech.json"));
   const net = parseNetStats(readJson("net.json"));
+  const weapons = parseWeapons(readJson("weapons.json"));
+  const props = parsePropConfig(readJson("props.json"));
   const base = {
-    mech, net,
+    mech, net, weapons, props,
+    loot: parseLootConfig(readJson("loot.json"), weapons, props),
     bots: parseBotConfig(readJson("bots.json")),
     noise: parseNoiseStats(readJson("noise.json")),
-    props: parsePropConfig(readJson("props.json")),
-    weapon: parseWeaponStats(readJson("weapon.json")),
     grenade: parseGrenadeStats(readJson("grenade.json")),
     combat: parseCombatStats(readJson("combat.json")),
     match: parseMatchConfig(readJson("match.json")),

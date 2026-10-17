@@ -1,14 +1,16 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeaponStats, parseZones, throwGrenade,
-  type HealthState, type MatchProgress, type RingNow, type Shot,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, throwGrenade, parseLootConfig, parsePropConfig, itemWeapon,
+  type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import audioJson from "../../../data/audio.json";
 import { Sound, type AudioConfig } from "./audio";
 import { Fireballs } from "./fireballs";
-import weaponJson from "../../../data/weapon.json";
+import weaponsJson from "../../../data/weapons.json";
+import lootJson from "../../../data/loot.json";
+import propsJsonForLoot from "../../../data/props.json";
 import cameraJson from "../../../data/camera.json";
 import netJson from "../../../data/net.json";
 import hudJson from "../../../data/hud.json";
@@ -21,6 +23,8 @@ import { Input } from "./input";
 import { ClientGrenades } from "./grenades";
 import { buildPlayMap, propConfig } from "./loadMap";
 import { PropView } from "./propView";
+import { PickupView } from "./pickupView";
+import { setMechGear } from "./mechModel";
 import { Hud } from "./hud";
 import { addMapMeshes, removeMapMeshes } from "./mapRenderer";
 import { createMechModel, setMechDamage } from "./mechModel";
@@ -35,7 +39,11 @@ import { ThirdPersonCamera } from "./thirdPersonCamera";
 const KILL_HEIGHT = -50;
 
 const mechStats = parseMechStats(mechJson);
-const weaponStats = parseWeaponStats(weaponJson);
+const weaponSet = parseWeapons(weaponsJson);
+const lootConfig = parseLootConfig(lootJson, weaponSet, parsePropConfig(propsJsonForLoot));
+const weaponColors = weaponSet.weapons.map((w) => w.color);
+// The start weapon is what offline practice uses, and what the tuning panel edits.
+const weaponStats = weaponSet.weapons[weaponSet.start]!;
 const cameraStats = parseCameraStats(cameraJson);
 const netStats = parseNetStats(netJson);
 const grenadeStats = parseGrenadeStats(grenadeJson);
@@ -145,6 +153,8 @@ const grenades = new ClientGrenades(scene, 8, grenadeStats);
 const grenadeGate = new FireGate();
 const thrown = createGrenade();
 const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.maxViewDelayMs, netStats.snapshotEvery * STEP * 1000, zoneMaxHp);
+remotes.weaponColors = weaponColors;
+const pickupView = new PickupView(scene, lootConfig.colors, weaponColors);
 if (net) net.viewDelayMs = () => remotes.viewDelayMs;
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
@@ -162,6 +172,12 @@ const look = { dx: 0, dy: 0 };
 const shot: Shot = createShot();
 const gate = new FireGate();
 let health: HealthState = { hp: [...zoneMaxHp], dead: false, respawnIn: 0 };
+// What you carry. Online the server's word is final and arrives with every snapshot. Offline it never changes.
+let loadout: Loadout = { slots: [weaponSet.start, -1], active: 0, grenades: lootConfig.grenadesStart, armor: [0, 0, 0] };
+let serverActive = 0;
+let firingSlot = 0; // the slot this client is firing from, so the switch pause is predicted too
+let pickupsNow: PickupState[] = [];
+const sum = (values: readonly number[]) => values.reduce((a, b) => a + b, 0);
 
 // Match state. Offline there is no match, so this just stays quiet.
 let progress: MatchProgress = { state: "lobby", seconds: 0, alive: 1, total: 1 };
@@ -186,6 +202,7 @@ function swapMap(newSeed: number, newTier: string): void {
   mapGroup = addMapMeshes(scene, map);
   propView = new PropView(map, propConfig);
   scene.add(propView.group);
+  pickupView.clear();
   predictor.setWorld(map.world);
 }
 
@@ -216,11 +233,20 @@ if (net) {
       offX += predictor.correctionX; offY += predictor.correctionY; offZ += predictor.correctionZ;
       prevX -= predictor.correctionX; prevY -= predictor.correctionY; prevZ -= predictor.correctionZ;
     }
-    const before = health.hp.reduce((a, b) => a + b, 0);
+    // Hurt when hit points or armor went down. Picked something up when grenades or armor went up.
+    const before = sum(health.hp) + sum(loadout.armor);
+    const old = loadout;
     progress = snap.match;
     progressAt = performance.now();
     health = snap.health;
-    if (health.hp.reduce((a, b) => a + b, 0) < before) flashHurt();
+    loadout = snap.loadout;
+    if (sum(health.hp) + sum(loadout.armor) < before) flashHurt();
+    if (loadout.grenades > old.grenades || loadout.armor.some((a, zone) => a > old.armor[zone]!)) sound.play("pickup");
+    if (loadout.slots[0] !== old.slots[0] || loadout.slots[1] !== old.slots[1]) sound.play("swap");
+    // When the server changes the weapon in hand itself (taking a weapon into an empty slot), follow it.
+    if (loadout.active !== serverActive) { serverActive = loadout.active; input.setSlot(loadout.active); }
+    pickupsNow = snap.pickups;
+    pickupView.sync(snap.pickups);
     setMechDamage(ownModel, health.hp, health.dead);
     net.noteSnapshot(snap.ack, snap.ackAgeMs, performance.now());
     remotes.push(snap.others, snap.tick, performance.now());
@@ -355,7 +381,11 @@ function frame(now: number): void {
     // Rounded to float precision, which is what the server receives, so both sides run identical numbers.
     mechInput.aimYaw = Math.fround(aim.yaw);
     mechInput.aimPitch = Math.fround(aim.pitch);
-    setAimTarget(rig.camera, map.world, weaponStats.maxAimDistance, mechInput);
+    // The weapon to fire: the slot asked for if it holds one, otherwise the one in hand.
+    const wantedSlot = loadout.slots[mechInput.slot]! >= 0 ? mechInput.slot : loadout.active;
+    if (wantedSlot !== firingSlot) { firingSlot = wantedSlot; gate.holdUntil(simTime + lootConfig.switchSeconds); }
+    const weapon = weaponSet.weapons[loadout.slots[firingSlot]!] ?? weaponStats;
+    setAimTarget(rig.camera, map.world, weapon.maxAimDistance, mechInput);
     mechInput.targetX = Math.fround(mechInput.targetX); mechInput.targetY = Math.fround(mechInput.targetY); mechInput.targetZ = Math.fround(mechInput.targetZ);
     // A destroyed mech can only look around, and nobody moves during the countdown: the same rules the server applies,
     // so prediction does not run ahead and get pulled back.
@@ -376,13 +406,19 @@ function frame(now: number): void {
     if (net === null && mech.y < KILL_HEIGHT) respawnOffline();
 
     simTime += STEP;
-    if (mechInput.fire && gate.tryFire(simTime, weaponStats.shotsPerSecond)) {
-      computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weaponStats, Math.random, shot);
-      shotFx.show(shot);
+    if (mechInput.fire && gate.tryFire(simTime, weapon.shotsPerSecond)) {
+      // Each pellet is drawn at once, with this client's own spread. The server decides what they hit.
+      for (let i = 0; i < weapon.pellets; i++) {
+        computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weapon, Math.random, shot);
+        shotFx.show(shot);
+      }
       sound.play("shot", { x: shot.ox, y: shot.oy, z: shot.oz });
-      rig.addShake(weaponStats.shakeForce);
+      rig.addShake(weapon.shakeForce);
     }
-    if (mechInput.grenade && grenadeGate.tryFire(simTime, 1 / grenadeStats.cooldownSeconds)) {
+    // Online a grenade needs one in the bag. Count it down here so a held key does not throw twice before the server says.
+    const hasGrenade = net === null || loadout.grenades > 0;
+    if (mechInput.grenade && hasGrenade && grenadeGate.tryFire(simTime, 1 / grenadeStats.cooldownSeconds)) {
+      if (net) loadout = { ...loadout, grenades: loadout.grenades - 1 };
       throwGrenade(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, grenadeStats, thrown);
       grenades.spawn(thrown.x, thrown.y, thrown.z, thrown.vx, thrown.vy, thrown.vz);
       sound.play("grenadeThrow", { x: thrown.x, y: thrown.y, z: thrown.z });
@@ -451,6 +487,25 @@ function frame(now: number): void {
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;
   staminaFill.style.width = `${mech.stamina.fraction * 100}%`;
   zoneFills.forEach((fill, zone) => { fill.style.width = `${(health.hp[zone]! / zoneMaxHp[zone]!) * 100}%`; });
+  hud.setLoadout(loadout, weaponSet.weapons, lootConfig.armorPlates);
+  setMechGear(ownModel, weaponColors[loadout.slots[loadout.active]!] ?? weaponStats.color, loadout.armor);
+  pickupView.update(performance.now());
+  // Standing by a weapon, say what E would do.
+  let near: PickupState | null = null;
+  let nearDistance = lootConfig.interactRange;
+  for (const p of pickupsNow) {
+    if (itemWeapon(p.item) < 0) continue;
+    const d = Math.hypot(p.x - mech.x, p.z - mech.z);
+    if (d <= nearDistance) { near = p; nearDistance = d; }
+  }
+  if (near && !health.dead) {
+    const name = weaponSet.weapons[itemWeapon(near.item)]!.name;
+    const full = loadout.slots[0] >= 0 && loadout.slots[1] >= 0;
+    const dropping = full ? weaponSet.weapons[loadout.slots[loadout.active]!]?.name : undefined;
+    hud.setPrompt(dropping ? `E: take ${name} (drops ${dropping})` : `E: take ${name}`);
+  } else {
+    hud.setPrompt("");
+  }
   statusText.textContent = spectating
     ? `${myPlace ? `You placed ${myPlace}. ` : ""}${spectateId ? `Watching ${name(spectateId)}. Click to switch.` : "Nobody left to watch."}`
     : health.dead && progress.state !== "active" ? `Destroyed. Back in ${Math.ceil(health.respawnIn)}...` : "";

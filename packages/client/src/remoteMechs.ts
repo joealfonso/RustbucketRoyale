@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { STEP, type OtherState } from "@rustbucket/shared";
-import { createMechModel, setMechDamage, type MechModel } from "./mechModel";
+import { createMechModel, setMechDamage, setMechGear, type MechModel } from "./mechModel";
 
 interface Sample {
   time: number;
@@ -28,6 +28,9 @@ export class RemoteMechs {
   private offset = 0;
   private jitter = 0;
   private hasClock = false;
+
+  // The colour of each weapon by index, for drawing the gun in hand.
+  weaponColors: string[] = [];
 
   constructor(
     private scene: THREE.Scene,
@@ -95,6 +98,7 @@ export class RemoteMechs {
       remote.seen = true;
       remote.dead = o.dead;
       setMechDamage(remote.model, o.hp, o.dead);
+      setMechGear(remote.model, this.weaponColors[o.weapon] ?? "#d9731a", o.armor);
       remote.samples.push({ time: serverMs, x: o.x, y: o.y, z: o.z, yaw: o.yaw });
       if (remote.samples.length > MAX_SAMPLES) remote.samples.shift();
     }

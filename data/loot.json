@@ -1,0 +1,42 @@
+{
+  "grenadesStart": 1,
+  "grenadesMax": 4,
+  "armorPlates": [
+    30,
+    30,
+    40
+  ],
+  "pickupRadius": 2.5,
+  "interactRange": 3.5,
+  "interactCooldownSeconds": 0.3,
+  "switchSeconds": 0.25,
+  "maxPickups": 200,
+  "colors": {
+    "grenade": "#5fbf3f",
+    "armor": "#7fb3ff"
+  },
+  "drops": {
+    "crate": {
+      "chance": 0.8,
+      "table": {
+        "grenade": 3,
+        "armor": 3,
+        "scattergun": 1,
+        "spikeDriver": 1
+      }
+    },
+    "junk": {
+      "chance": 0.6,
+      "table": {
+        "grenade": 2,
+        "armor": 3,
+        "scattergun": 1,
+        "spikeDriver": 1
+      }
+    },
+    "barrel": {
+      "chance": 0,
+      "table": {}
+    }
+  }
+}

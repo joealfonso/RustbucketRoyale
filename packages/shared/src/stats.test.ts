@@ -1,16 +1,17 @@
 import { describe, expect, it } from "vitest";
 import mechJson from "../../../data/mech.json";
-import weaponJson from "../../../data/weapon.json";
+import weaponsJson from "../../../data/weapons.json";
 import cameraJson from "../../../data/camera.json";
 import grenadeJson from "../../../data/grenade.json";
 import combatJson from "../../../data/combat.json";
 import netJson from "../../../data/net.json";
-import { parseCameraStats, parseCombatStats, parseGrenadeStats, parseMechStats, parseNetStats, parseWeaponStats, secondsToCross } from "./stats";
+import { parseCameraStats, parseCombatStats, parseGrenadeStats, parseMechStats, parseNetStats, parseWeapons, secondsToCross } from "./stats";
 
 describe("stats", () => {
   it("accepts the shipped data files", () => {
     expect(() => parseMechStats(mechJson)).not.toThrow();
-    expect(() => parseWeaponStats(weaponJson)).not.toThrow();
+    expect(() => parseWeapons(weaponsJson)).not.toThrow();
+    expect(parseWeapons(weaponsJson).weapons[parseWeapons(weaponsJson).start]!.id).toBe("autocannon");
     expect(() => parseCameraStats(cameraJson)).not.toThrow();
     expect(() => parseGrenadeStats(grenadeJson)).not.toThrow();
     expect(() => parseCombatStats(combatJson)).not.toThrow();

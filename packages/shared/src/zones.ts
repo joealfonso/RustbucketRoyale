@@ -49,12 +49,19 @@ export function createHealth(set: ZoneSet): number[] {
   return set.zones.map((z) => z.hp);
 }
 
-// Applies damage to one zone and returns how much was actually taken off (after armor, capped by what was left).
-export function applyDamage(hp: number[], set: ZoneSet, zone: number, amount: number): number {
-  const wanted = amount * set.zones[zone]!.damageMultiplier;
+// Applies damage to one zone and returns how much was actually taken off. Armor plates on that zone soak it up
+// first, and only what gets past them reaches the zone's hit points.
+export function applyDamage(hp: number[], set: ZoneSet, zone: number, amount: number, armor?: number[]): number {
+  let wanted = amount * set.zones[zone]!.damageMultiplier;
+  let soaked = 0;
+  if (armor && armor[zone]! > 0) {
+    soaked = Math.min(armor[zone]!, wanted);
+    armor[zone] = armor[zone]! - soaked;
+    wanted -= soaked;
+  }
   const taken = Math.min(hp[zone]!, wanted);
   hp[zone] = hp[zone]! - taken;
-  return taken;
+  return soaked + taken;
 }
 
 export function isDestroyed(hp: readonly number[]): boolean {

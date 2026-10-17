@@ -44,8 +44,8 @@ describe("shots", () => {
     settle(room, shooter, target);
     tick(room, [shooter, target], (c) => (c === shooter ? idle(AT_TARGET) : turnedAway()), 6);
 
-    expect(hits(shooter)[0]).toMatchObject({ t: "hit", targetId: target.id, zone: ZONE_TORSO, damage: config.weapon.damage, killed: false });
-    expect(target.last().health.hp[ZONE_TORSO]).toBe(100 - config.weapon.damage);
+    expect(hits(shooter)[0]).toMatchObject({ t: "hit", targetId: target.id, zone: ZONE_TORSO, damage: config.weapons.weapons[config.weapons.start]!.damage, killed: false });
+    expect(target.last().health.hp[ZONE_TORSO]).toBe(100 - config.weapons.weapons[config.weapons.start]!.damage);
     expect(shooter.messages.find((m) => m.t === "shot")).toMatchObject({ hitMech: true });
   });
 

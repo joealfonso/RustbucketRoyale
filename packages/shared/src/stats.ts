@@ -33,7 +33,12 @@ export interface MechStats {
   sprintDoubleTapSeconds: number; // two presses of W this close together start a sprint
 }
 
+// One weapon's tuning and look. Every gun is just data: balance changes never touch code.
 export interface WeaponStats {
+  id: string;
+  name: string;
+  color: string; // art hook: tints the gun arm until real weapon models exist
+  pellets: number; // shots per trigger pull, spread out (a scattergun fires several)
   shotsPerSecond: number;
   projectileSpeed: number;
   projectileLifetime: number;
@@ -168,7 +173,7 @@ const MECH_KEYS: (keyof MechStats & string)[] = [
   "dashSpeed", "dashSeconds", "dashCooldown", "dashStaminaCost", "sprintDoubleTapSeconds",
 ];
 const WEAPON_KEYS: (keyof WeaponStats & string)[] = [
-  "shotsPerSecond", "projectileSpeed", "projectileLifetime", "spreadDegrees", "maxAimDistance", "shakeForce", "damage",
+  "shotsPerSecond", "projectileSpeed", "projectileLifetime", "spreadDegrees", "maxAimDistance", "shakeForce", "damage", "pellets",
 ];
 const CAMERA_KEYS: (keyof CameraStats & string)[] = [
   "fov", "distance", "shoulderX", "pivotHeight", "radius", "near", "pullOutSpeed", "dashFovKick",
@@ -218,7 +223,24 @@ export function parseBotConfig(raw: unknown): BotConfig {
 }
 export const parseHudStats = (raw: unknown) => parseNumbers<HudStats>(raw, "hud.json", ["radarRangeMeters", "detectRangeMeters"]);
 export const parseMechStats = (raw: unknown) => parseNumbers<MechStats>(raw, "mech.json", MECH_KEYS);
-export const parseWeaponStats = (raw: unknown) => parseNumbers<WeaponStats>(raw, "weapon.json", WEAPON_KEYS);
+export interface WeaponSet {
+  start: number; // index of the weapon everyone begins with
+  weapons: WeaponStats[];
+}
+
+export function parseWeapons(raw: unknown): WeaponSet {
+  const d = raw as { start?: unknown; weapons?: unknown };
+  if (!Array.isArray(d?.weapons) || d.weapons.length === 0) throw new Error("weapons.json: needs weapons");
+  const weapons = (d.weapons as Record<string, unknown>[]).map((w) => {
+    if (typeof w.id !== "string" || typeof w.name !== "string" || typeof w.color !== "string") throw new Error("weapons.json: every weapon needs id, name and color");
+    const numbers = parseNumbers<Omit<WeaponStats, "id" | "name" | "color">>(w, `weapons.json ${w.id}`, WEAPON_KEYS as never);
+    if (!Number.isInteger(numbers.pellets) || numbers.pellets < 1) throw new Error(`weapons.json: ${w.id} pellets must be a whole number of at least 1`);
+    return { ...numbers, id: w.id, name: w.name, color: w.color } as WeaponStats;
+  });
+  const start = weapons.findIndex((w) => w.id === d.start);
+  if (start < 0) throw new Error(`weapons.json: start weapon "${String(d.start)}" is not in the list`);
+  return { start, weapons };
+}
 export const parseCameraStats = (raw: unknown) => parseNumbers<CameraStats>(raw, "camera.json", CAMERA_KEYS);
 
 // The M1 gate asks how long it takes to cross a 2000 m map at run speed.

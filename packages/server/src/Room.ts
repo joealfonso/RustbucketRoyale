@@ -1,14 +1,16 @@
 import {
   FireGate, STEP, ZONE_COUNT, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule,
-  decodeInput, parseClientMessage, ringAt, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
+  decodeInput, parseClientMessage, ringAt, rollLoot, itemWeapon, weaponItem, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
   NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
-  type NavGrid, type WeaponStats, type World, type ZoneSet,
+  type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
 import { AbstractFights, RATINGS, botsNeeded, pickDifficulty, type FarBot } from "./botLod";
 import { Pathfinder } from "./Pathfinder";
+import { activeWeapon, collectSmall, freshLoadout, selectSlot, takeWeapon } from "./loadout";
+import { Pickups } from "./Pickups";
 import type { Player } from "./Player";
 
 const KILL_HEIGHT = -50;
@@ -34,7 +36,8 @@ export interface RoomConfig {
   bots: BotConfig;
   noise: NoiseStats;
   props: PropConfig;
-  weapon: WeaponStats;
+  weapons: WeaponSet;
+  loot: LootConfig;
   grenade: GrenadeStats;
   combat: CombatStats;
   net: NetStats;
@@ -74,6 +77,8 @@ export class Room {
   private ring: RingSchedule | null = null;
   private propHp: Float32Array = new Float32Array(0);
   private destroyedProps: number[] = [];
+  private pickups: Pickups;
+  private pickupScratch: PickupState[] = [];
   private pendingBlasts: { x: number; y: number; z: number; tick: number; owner: Player | null }[] = [];
 
   private botInput = createMechInput();
@@ -88,6 +93,7 @@ export class Room {
   // room topped up to its tier's target size, making room for people as they arrive.
   constructor(readonly code: string, readonly tier: string, private config: RoomConfig, botCount: number | null = 0) {
     this.random = config.random ?? Math.random;
+    this.pickups = new Pickups(config.loot.maxPickups);
     this.historyLength = Math.ceil(config.combat.historyMs / (STEP * 1000));
     this.seed = this.newSeed();
     this.map = config.mapFor(tier, this.seed);
@@ -132,7 +138,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: this.newBot(), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), interested: new Set(), watchId: 0, heard: [], quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interested: new Set(), watchId: 0, heard: [], quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -176,7 +182,7 @@ export class Room {
     const id = this.nextId++;
     const player: Player = {
       id, slot, bot: null, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
-      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), interested: new Set(), watchId: 0, heard: [], quietUntil: new Int32Array(NOISE_KINDS.length),
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interested: new Set(), watchId: 0, heard: [], quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -355,11 +361,14 @@ export class Room {
     this.fillBots();
     this.ring = makeRingSchedule(this.config.ring, this.tier, this.map.meters, this.random);
     this.grenades = [];
+    this.pickups.clear();
     for (const player of this.players.values()) {
       player.participant = true;
       player.eliminated = false;
       player.dead = false;
       player.hp = createHealth(this.config.zones);
+      player.loadout = freshLoadout(this.config.weapons, this.config.loot);
+      player.askedSlot = 0;
       player.state = createMechState(this.config.mech, ...this.spawnFor(player.slot), Math.PI);
       player.queue.length = 0;
     }
@@ -412,6 +421,7 @@ export class Room {
   private respawnForPractice(player: Player): void {
     player.state = createMechState(this.config.mech, ...this.spawnFor(player.slot), Math.PI);
     player.hp = createHealth(this.config.zones);
+    player.loadout = freshLoadout(this.config.weapons, this.config.loot);
     player.dead = false;
     player.respawnTick = 0;
   }
@@ -477,8 +487,19 @@ export class Room {
     if (player.state.jetting) this.makeNoise(player, "jets", player.state.x, player.state.z);
     if (dashBefore <= 0 && player.state.dashTime > 0) this.makeNoise(player, "dash", player.state.x, player.state.z);
 
+    // Weapons switch when the client asks for a different slot than last time, not every step it keeps asking:
+    // the server can change the weapon in hand itself (taking one into an empty slot), and an input already on its
+    // way from before that must not switch it straight back.
+    if (input.slot !== player.askedSlot) {
+      player.askedSlot = input.slot;
+      if (!player.dead && selectSlot(player.loadout, input.slot)) player.gate.holdUntil(player.steps * STEP + this.config.loot.switchSeconds);
+    }
     if (input.fire) this.tryShoot(player, input);
     if (input.grenade) this.tryThrow(player, input);
+    if (!player.dead && player.participant && this.state !== "countdown") {
+      if (input.interact && this.tickCount >= player.interactReadyTick) this.interact(player);
+      this.walkOver(player);
+    }
     if (player.state.y < KILL_HEIGHT && !player.dead) this.fellOffMap(player);
   }
 
@@ -489,9 +510,15 @@ export class Room {
   }
 
   private tryShoot(player: Player, input: MechInput): void {
-    const { weapon } = this.config;
-    if (!player.gate.tryFire(player.steps * STEP, weapon.shotsPerSecond)) return;
+    const weaponIndex = activeWeapon(player.loadout);
+    const weapon = this.config.weapons.weapons[weaponIndex];
+    if (!weapon || !player.gate.tryFire(player.steps * STEP, weapon.shotsPerSecond)) return;
+    // A scattergun fires several pellets with one pull. Each is its own shot, with its own spread and its own hit.
+    for (let i = 0; i < weapon.pellets; i++) this.firePellet(player, input, weapon);
+    this.makeNoise(player, "shot", player.state.x, player.state.z);
+  }
 
+  private firePellet(player: Player, input: MechInput, weapon: WeaponStats): void {
     // The aim point is only a direction hint, so it cannot send a shot faster or from anywhere but the barrel.
     computeShot(player.state, input.targetX, input.targetY, input.targetZ, weapon, this.random, this.shot);
     const s = this.shot;
@@ -505,7 +532,7 @@ export class Room {
     const target = this.state !== "countdown" ? this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach) : null;
     if (target) {
       reach = this.zoneHit.distance;
-      const taken = applyDamage(target.hp, this.config.zones, this.zoneHit.zone, weapon.damage);
+      const taken = applyDamage(target.hp, this.config.zones, this.zoneHit.zone, weapon.damage, target.loadout.armor);
       const killed = !target.dead && isDestroyed(target.hp);
       player.send({
         t: "hit", targetId: target.id, zone: this.zoneHit.zone, damage: taken, killed,
@@ -521,7 +548,6 @@ export class Room {
       t: "shot", id: player.id, ox: s.ox, oy: s.oy, oz: s.oz, dx: s.dx, dy: s.dy, dz: s.dz, length: reach, hitMech: target !== null,
     };
     this.sendNear(s.ox, s.oz, message, player);
-    this.makeNoise(player, "shot", s.ox, s.oz);
   }
 
   // Finds the nearest living mech along the shot, checked at where it stood a moment ago, because
@@ -559,7 +585,9 @@ export class Room {
 
   private tryThrow(player: Player, input: MechInput): void {
     const { grenade } = this.config;
+    if (player.loadout.grenades <= 0) return;
     if (!player.grenadeGate.tryFire(player.steps * STEP, 1 / grenade.cooldownSeconds)) return;
+    player.loadout.grenades--;
     throwGrenade(player.state, input.targetX, input.targetY, input.targetZ, grenade, this.newGrenade);
     const g = this.newGrenade;
     this.grenades.push({ ownerId: player.id, state: { ...g } });
@@ -601,7 +629,7 @@ export class Room {
 
       const amount = damage * (1 - distance / radius);
       let total = 0;
-      for (let zone = 0; zone < ZONE_COUNT; zone++) total += applyDamage(target.hp, zones, zone, amount);
+      for (let zone = 0; zone < ZONE_COUNT; zone++) total += applyDamage(target.hp, zones, zone, amount, target.loadout.armor);
       const killed = isDestroyed(target.hp);
       owner?.send({ t: "hit", targetId: target.id, zone: -1, damage: total, killed, x: target.state.x, y: target.state.y + CHEST_HEIGHT, z: target.state.z });
       if (killed) this.eliminate(target, owner);
@@ -612,6 +640,27 @@ export class Room {
       const distance = Math.hypot(prop.x - bx, prop.y - by, prop.z - bz);
       if (distance < radius) this.damageProp(prop.id, damage * (1 - distance / radius), owner);
     }
+  }
+
+  // ---- pickups
+
+  // Grenades and plates are collected just by walking over them, when they are any use.
+  private walkOver(player: Player): void {
+    for (const p of this.pickups.within(player.state.x, player.state.z, this.config.loot.pickupRadius)) {
+      if (itemWeapon(p.item) >= 0) continue;
+      if (collectSmall(player.loadout, p.item, this.config.loot)) this.pickups.remove(p.id);
+    }
+  }
+
+  // E takes the nearest weapon in reach. The range is checked here, never trusted from the client.
+  private interact(player: Player): void {
+    player.interactReadyTick = this.tickCount + Math.round(this.config.loot.interactCooldownSeconds / STEP);
+    const pickup = this.pickups.nearest(player.state.x, player.state.z, this.config.loot.interactRange, (p) => itemWeapon(p.item) >= 0);
+    if (!pickup) return;
+    this.pickups.remove(pickup.id);
+    const dropped = takeWeapon(player.loadout, pickup.item);
+    if (dropped >= 0) this.pickups.add(weaponItem(dropped), player.state.x, 0.5, player.state.z);
+    player.gate.holdUntil(player.steps * STEP + this.config.loot.switchSeconds);
   }
 
   // ---- props
@@ -635,6 +684,8 @@ export class Room {
     const message: ServerMessage = { t: "prop", id };
     for (const p of this.players.values()) if (!p.bot) p.send(message);
     this.makeNoise(by, "smash", prop.x, prop.z);
+    const item = rollLoot(this.config.loot, this.config.weapons, this.config.props.types[prop.type]!.id, this.random);
+    if (item !== null) this.pickups.add(item, prop.x + (this.random() - 0.5), 0.5, prop.z + (this.random() - 0.5));
     if (this.config.props.types[prop.type]!.explodes) {
       const delay = Math.round(this.config.props.barrelBlast.delaySeconds / STEP);
       this.pendingBlasts.push({ x: prop.x, y: 0, z: prop.z, tick: this.tickCount + delay, owner: by });
@@ -744,6 +795,7 @@ export class Room {
       everyone.push({
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
         running: p.state.running, jetting: p.state.jetting, dead: p.dead, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
+        weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil),
       });
     }
     const match = this.progress();
@@ -766,6 +818,8 @@ export class Room {
         t: "snapshot", tick: this.tickCount, ack: player.lastSeq, ackAgeMs: (this.tickCount - player.ackTick) * STEP * 1000, you: writeSelf(player.state),
         health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn: player.dead && this.state !== "active" ? Math.max(0, (player.respawnTick - this.tickCount) * STEP) : 0 }, match,
         others, noises: player.heard.splice(0),
+        loadout: { ...player.loadout, slots: [player.loadout.slots[0], player.loadout.slots[1]], armor: player.loadout.armor.map(Math.ceil) },
+        pickups: [...this.pickups.near(view.x, view.z, interestRange, this.pickupScratch)],
       });
     }
   }

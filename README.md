@@ -16,7 +16,7 @@ The first Unity prototype is on the `unity-prototype` branch, kept for reference
 npm install
 npm run dev
 ```
-Open http://localhost:5173 and pick "Create room", "Join room" or "Practice offline". Click the page to lock the mouse. WASD move, double-press W to sprint, Shift dashes, Space jets, click fires, G throws a grenade, F1 opens the tuning panel.
+Open http://localhost:5173 and pick "Create room", "Join room" or "Practice offline". Click the page to lock the mouse. WASD move, double-press W to sprint, Shift dashes, Space jets, click fires, 1 / 2 or the mouse wheel switch weapons, E takes a weapon, G throws a grenade, M mutes, F1 opens the tuning panel.
 
 To play with friends, start the server in a second terminal, create a room, and send them the invite link (the room code is in the address):
 ```
