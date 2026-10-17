@@ -7,7 +7,13 @@
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d1f; font-family: system-ui, sans-serif; }
       canvas { display: block; width: 100%; height: 100%; }
-      #crosshair { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.5); pointer-events: none; }
+      #crosshair { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+      #crosshair i { position: absolute; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.7); }
+      #crosshair .h { width: 9px; height: 2px; top: -1px; }
+      #crosshair .v { width: 2px; height: 9px; left: -1px; }
+      #crosshair .l { left: -16px; } #crosshair .r { left: 7px; }
+      #crosshair .t { top: -16px; } #crosshair .b { top: 7px; }
+      #crosshair .dot { width: 2px; height: 2px; left: -1px; top: -1px; }
       .bar { position: fixed; left: 20px; width: 220px; height: 12px; background: rgba(0,0,0,.6); pointer-events: none; }
       .bar > div { height: 100%; width: 100%; }
       #fuel { bottom: 50px; } #fuel > div { background: #ff991a; }
@@ -20,7 +26,7 @@
   </head>
   <body>
     <canvas id="game"></canvas>
-    <div id="crosshair"></div>
+    <div id="crosshair"><i class="h l"></i><i class="h r"></i><i class="v t"></i><i class="v b"></i><i class="dot"></i></div>
     <div id="fuel" class="bar"><div></div></div>
     <div id="stamina" class="bar"><div></div></div>
     <div id="hint">

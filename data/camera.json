@@ -1,8 +1,8 @@
 {
   "fov": 70,
-  "distance": 6,
+  "distance": 7,
   "shoulderX": 0.9,
-  "pivotHeight": 3.2,
+  "pivotHeight": 5.2,
   "radius": 0.3,
   "near": 0.1,
   "pullOutSpeed": 12
