@@ -72,15 +72,34 @@ describe("shots", () => {
     expect(run(500, 0)).toBe(false); // a client cannot ask for more than the server allows
   });
 
-  it("do no harm in the lobby, where nobody has started a match", () => {
+  it("hurt people in the lobby too, so there is something to practise on, and the destroyed mech comes back without ending anything", () => {
     const { room, config } = makeRoom();
     const shooter = new Client(room, config);
     const target = new Client(room, config);
     settle(room, shooter, target);
-    tick(room, [shooter, target], (c) => (c === shooter ? idle(AT_TARGET) : turnedAway()), 30);
+    tick(room, [shooter, target], (c) => (c === shooter ? idle(AT_TARGET) : turnedAway()), 6);
+    expect(target.last().health.hp[ZONE_TORSO]).toBeLessThan(100);
+
+    tick(room, [shooter, target], (c) => (c === shooter ? idle(AT_TARGET) : turnedAway()), 120);
+    expect(target.last().health.dead).toBe(true);
+    expect(target.messages.some((m) => m.t === "eliminated")).toBe(false);
+    expect(room.matchState).toBe("lobby");
+
+    tick(room, [shooter, target], () => idle(), Math.ceil(config.combat.respawnSeconds * 60) + 20);
+    expect(target.last().health.dead).toBe(false);
+    expect(target.last().health.hp[ZONE_TORSO]).toBe(100);
+  });
+
+  it("do no harm during the countdown", () => {
+    const { room, config } = makeRoom((c) => ({ ...c, match: { ...c.match, countdownSeconds: 5 } }));
+    const shooter = new Client(room, config);
+    const target = new Client(room, config);
+    settle(room, shooter, target);
+    room.receive(shooter.id, JSON.stringify({ t: "start" }));
+    tick(room, [shooter, target], (c) => (c === shooter ? idle(AT_TARGET) : turnedAway()), 90);
+    expect(room.matchState).toBe("countdown");
     expect(hits(shooter)).toHaveLength(0);
     expect(target.last().health.hp[ZONE_TORSO]).toBe(100);
-    expect(shooter.messages.some((m) => m.t === "shot")).toBe(true); // the tracer still shows
   });
 });
 

@@ -85,18 +85,13 @@ describe("rooms with bots", () => {
     expect(room.playerCount).toBe(0);
   });
 
-  it("roam and shoot in the lobby without hurting anyone, then fight for real once the match is on", () => {
+  it("take the fight to a person in the lobby, then fight everyone once the match is on", () => {
     const { room, config: c } = makeRoom(undefined, "small", 3);
     const human = new Client(room, c);
     tick(room, [human], 10);
-    const start = human.last().others.map((o) => ({ x: o.x, z: o.z }));
     tick(room, [human], 60 * 40);
 
-    const later = human.last();
-    const moved = later.others.some((o, i) => Math.hypot(o.x - start[i]!.x, o.z - start[i]!.z) > 5);
-    expect(moved).toBe(true);
     expect(human.messages.some((m) => m.t === "shot")).toBe(true);
-    expect(later.others.every((o) => o.hp[2] === 100 && !o.dead)).toBe(true);
     expect(room.matchState).toBe("lobby");
 
     startMatch(room, human);

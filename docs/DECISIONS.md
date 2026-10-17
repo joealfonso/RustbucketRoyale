@@ -112,3 +112,6 @@ Others are drawn on the server's own clock, placed by the tick number on each sn
 ## 2026-10-17: Rooms remember their bots, and new rooms get 5 by default while testing
 Rooms disappear when the server restarts, and reloading a `?room=CODE` link then quietly made a new empty room with no bots, which looked like bots had vanished. The page address now keeps the room's tier and bot count, and the server gives any new room 5 bots unless the link says `&bots=N` (`DEFAULT_BOTS` changes the default, `&bots=0` means none). The countdown is now 5 seconds (`data/match.json`). Cost: during testing every new room is crowded. Drop `DEFAULT_BOTS` to 0 before real players arrive.
 
+## 2026-10-17: Damage works in the lobby too, with a quick respawn, so bots can be tested
+Before, damage only counted in a running match, so shooting a bot in the lobby did nothing and looked broken. Now everything does damage except during the countdown. Outside a match a destroyed mech (a bot or a person) just comes back after 3 seconds with full health, with no knockout, no place, and no effect on the match. In a match nothing changes: out is out. Bots in the lobby shoot at people, so a person standing still will be hit and respawn too. Cost: the lobby is no longer a calm place to wait. Add a safe lobby mode later if friends find it annoying.
+

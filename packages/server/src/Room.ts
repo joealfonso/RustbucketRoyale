@@ -102,7 +102,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: new Bot(this.config.bots, this.random), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), dead: false, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -130,7 +130,7 @@ export class Room {
     const player: Player = {
       id, slot, bot: null, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
       queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones),
-      dead: watching, participant: !watching, eliminated: watching,
+      dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
     this.players.set(id, player);
@@ -188,6 +188,7 @@ export class Room {
 
     if (this.state === "active" && this.ring) ringAt(this.ring, this.elapsedSeconds(), this.ringNow);
     for (const player of this.players.values()) {
+      if (player.respawnTick > 0 && this.tickCount >= player.respawnTick && this.state !== "active") this.respawnForPractice(player);
       if (player.bot) {
         this.runBot(player);
         this.recordHistory(player);
@@ -286,6 +287,11 @@ export class Room {
 
   // Someone is out. Records their place, tells the room, and checks whether the match is over.
   private eliminate(player: Player, killer: Player | null): void {
+    // Outside a running match nothing is lost: a destroyed mech just comes back in a few seconds.
+    if (this.state !== "active") {
+      this.knockOutForPractice(player);
+      return;
+    }
     if (player.eliminated) return;
     player.eliminated = true;
     player.dead = true;
@@ -295,6 +301,20 @@ export class Room {
     const message: ServerMessage = { t: "eliminated", id: player.id, killerId: killer?.id ?? null, place, alive };
     for (const p of this.players.values()) p.send(message);
     this.checkMatchOver();
+  }
+
+  private knockOutForPractice(player: Player): void {
+    if (player.dead) return;
+    player.dead = true;
+    player.hp[ZONE_COUNT - 1] = 0;
+    player.respawnTick = this.tickCount + Math.ceil(this.config.combat.respawnSeconds / STEP);
+  }
+
+  private respawnForPractice(player: Player): void {
+    player.state = createMechState(this.config.mech, ...this.spawnFor(player.slot), Math.PI);
+    player.hp = createHealth(this.config.zones);
+    player.dead = false;
+    player.respawnTick = 0;
   }
 
   private checkMatchOver(): void {
@@ -377,12 +397,12 @@ export class Room {
     let reach = weapon.maxAimDistance;
     if (this.map.world.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.worldHit)) reach = this.worldHit.distance;
 
-    // Shots are only harmful while a match is running.
-    const target = this.state === "active" ? this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach) : null;
+    // Shots do damage in the lobby too, so there is something to practise on. Only the countdown is safe.
+    const target = this.state !== "countdown" ? this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach) : null;
     if (target) {
       reach = this.zoneHit.distance;
       const taken = applyDamage(target.hp, this.config.zones, this.zoneHit.zone, weapon.damage);
-      const killed = !target.eliminated && isDestroyed(target.hp);
+      const killed = !target.dead && isDestroyed(target.hp);
       player.send({
         t: "hit", targetId: target.id, zone: this.zoneHit.zone, damage: taken, killed,
         x: s.ox + s.dx * reach, y: s.oy + s.dy * reach, z: s.oz + s.dz * reach,
@@ -449,14 +469,14 @@ export class Room {
   }
 
   // Splash hits every zone of everyone in range, so a close grenade wrecks parts and makes a story.
-  // Walls block it, and it does nothing outside a running match.
+  // Walls block it, and it does nothing during the countdown.
   private explode(live: LiveGrenade): void {
     const { grenade, zones } = this.config;
     const g = live.state;
     const bx = g.x, by = g.y + BLAST_LIFT, bz = g.z;
     const blast: ServerMessage = { t: "explode", x: g.x, y: g.y, z: g.z };
     for (const p of this.players.values()) p.send(blast);
-    if (this.state !== "active") return;
+    if (this.state === "countdown") return;
 
     const owner = this.players.get(live.ownerId);
     for (const target of this.players.values()) {
@@ -522,7 +542,7 @@ export class Room {
       if (player.bot) continue;
       player.send({
         t: "snapshot", tick: this.tickCount, ack: player.lastSeq, ackAgeMs: (this.tickCount - player.ackTick) * STEP * 1000, you: writeSelf(player.state),
-        health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn: 0 }, match,
+        health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn: player.dead && this.state !== "active" ? Math.max(0, (player.respawnTick - this.tickCount) * STEP) : 0 }, match,
         others: others.filter((o) => o.id !== player.id),
       });
     }

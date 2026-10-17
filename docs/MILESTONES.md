@@ -41,4 +41,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: M5 started on Joseph's go, split into gates 5a (rooms by link, match loop, ring, spectating), 5b (bots, bot fill, nearby-only updates), 5c (radar, soak test, numbers).
 - 2026-10-17: Gate 5a built, waiting for its playtest. To play: `npm run server`, `npm run dev`, open http://localhost:5173, Create room (small is quickest), copy the invite link into a second tab, press Enter in the first tab to start. Check: countdown, ring text, knockout and spectating, results, the next match starting alone with a new map. Bots, radar and the soak test are 5b and 5c.
 - 2026-10-17: Simple bots added early for testing 5a. Menu has a bots choice, or use `?create&tier=small&bots=5`. This is not gate 5b, which still covers path finding, difficulty levels, level of detail and nearby-only updates.
+- 2026-10-17: Damage now works in the lobby too (quick respawn, no effect on matches), so bots can be shot in practice. Only the countdown is safe.
 

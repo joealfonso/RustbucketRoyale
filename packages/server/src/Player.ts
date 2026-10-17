@@ -18,6 +18,7 @@ export interface Player {
   budget: number; // message allowance, refills every tick
   hp: number[];
   dead: boolean;
+  respawnTick: number; // between matches a destroyed mech comes back on this tick
   participant: boolean; // took part in the current match from its start
   eliminated: boolean; // out of the current match, now watching
   // Recent positions, one per tick, so shots can be checked against where a target was a moment ago.
