@@ -219,8 +219,6 @@ export class Room {
       this.botTargets.length = 0;
       for (const other of this.players.values()) {
         if (other === player || !other.participant || other.dead) continue;
-        // Between matches they only go for people, so they come to you instead of squabbling out of sight.
-        if (this.state !== "active" && other.bot) continue;
         this.botTargets.push({ id: other.id, x: other.state.x, y: other.state.y, z: other.state.z });
       }
       player.bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, STEP, input);

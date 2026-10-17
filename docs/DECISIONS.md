@@ -115,3 +115,6 @@ Rooms disappear when the server restarts, and reloading a `?room=CODE` link then
 ## 2026-10-17: Damage works in the lobby too, with a quick respawn, so bots can be tested
 Before, damage only counted in a running match, so shooting a bot in the lobby did nothing and looked broken. Now everything does damage except during the countdown. Outside a match a destroyed mech (a bot or a person) just comes back after 3 seconds with full health, with no knockout, no place, and no effect on the match. In a match nothing changes: out is out. Bots in the lobby shoot at people, so a person standing still will be hit and respawn too. Cost: the lobby is no longer a calm place to wait. Add a safe lobby mode later if friends find it annoying.
 
+## 2026-10-17: Bots fight each other all the time
+First I had bots in the lobby ignore each other so they would come to you. You wanted them fighting each other too, so every bot now targets whoever is nearest, person or bot, in every phase. They still wander toward the nearest person when nobody is in sight, so a room does not scatter out of view. Cost: a quiet lobby can turn into a bot brawl a little way off.
+

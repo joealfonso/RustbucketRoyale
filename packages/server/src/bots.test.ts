@@ -85,7 +85,7 @@ describe("rooms with bots", () => {
     expect(room.playerCount).toBe(0);
   });
 
-  it("take the fight to a person in the lobby, then fight everyone once the match is on", () => {
+  it("fight in the lobby, at people and at each other, and then for real once the match is on", () => {
     const { room, config: c } = makeRoom(undefined, "small", 3);
     const human = new Client(room, c);
     tick(room, [human], 10);
@@ -101,12 +101,12 @@ describe("rooms with bots", () => {
   });
 
   it("come to wherever the people are when the room is quiet, instead of staying out of sight", () => {
-    // The bots take the first three spawns and start 130 m to the side of the human, on open ground, who joins after them.
+    // The one bot takes the first spawn and starts 130 m to the side of the human, on open ground, who joins after them.
     const { room, config: c } = makeRoom((cfg) => {
       const map = cfg.mapFor("small", 0);
-      const spawns: [number, number, number][] = map.spawns.map((sp, i) => (i < 3 ? [sp[0] + 130, sp[1], sp[2]] : sp));
+      const spawns: [number, number, number][] = map.spawns.map((sp, i) => (i < 1 ? [sp[0] + 130, sp[1], sp[2]] : sp));
       return { ...cfg, mapFor: () => ({ ...map, spawns }) };
-    }, "small", 3);
+    }, "small", 1);
     const human = new Client(room, c);
     tick(room, [human], 10);
     const startNearest = Math.min(...human.last().others.map((o) => Math.hypot(o.x - human.last().you.x, o.z - human.last().you.z)));
@@ -146,5 +146,20 @@ describe("rooms with bots", () => {
     const human = new Client(room, c);
     tick(room, [human], 10);
     expect(human.last().others.length).toBe(c.mapFor("small", 0).spawns.length - c.net.maxPlayers);
+  });
+});
+
+describe("bots fighting each other", () => {
+  it("target and damage other bots in the lobby, not just people", () => {
+    const { room, config: c } = makeRoom(undefined, "small", 4);
+    const human = new Client(room, c);
+    let botWasHurt = false;
+    for (let i = 0; i < 60 * 60 && !botWasHurt; i++) {
+      human.send(idle());
+      room.tick();
+      // Only bots show up in `others` here, so any damage on them came from another bot.
+      botWasHurt = human.last()?.others.some((o) => o.dead || o.hp.some((hp, zone) => hp < [60, 60, 100][zone]!)) ?? false;
+    }
+    expect(botWasHurt).toBe(true);
   });
 });
