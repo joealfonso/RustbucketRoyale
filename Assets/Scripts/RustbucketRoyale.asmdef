@@ -1,0 +1,9 @@
+{
+  "name": "RustbucketRoyale",
+  "rootNamespace": "RustbucketRoyale",
+  "references": [
+    "Unity.Cinemachine",
+    "Unity.InputSystem"
+  ],
+  "autoReferenced": true
+}

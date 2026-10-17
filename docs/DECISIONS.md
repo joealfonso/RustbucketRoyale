@@ -19,3 +19,12 @@ AI output is allowed for reference, mood, and blockout. Nothing AI generated shi
 
 ## Open: which wins when the camera ray and the weapon barrel disagree
 Decide at M3 and record it here.
+
+## 2026-10-17: Cinemachine 3 for the camera, direct Input System polling
+Cinemachine's third person follow gives the over-the-shoulder camera, wall avoidance and screen shake (impulse) for free. Input is read straight from Keyboard and Mouse into a MechInput struct, with no action asset, so bots can fill the same struct later. Cost: rebinding keys will need real input actions later.
+
+## 2026-10-17: M1 aim rule is a placeholder
+Shots go from the muzzle to the point the camera ray hits, starting the ray in front of the camera so it skips our own mech. This is a guess for M1 only. The real rule is still the open question below, due at M3.
+
+## 2026-10-17: Grounded comes from Move's collision flags
+`CharacterController.isGrounded` flickered at high frame rates in headless tests, so the mech uses the Below flag returned by Move and sets minMoveDistance to 0.
