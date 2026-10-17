@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M7 (in two gates: 7a broken parts matter; 7b repair)
+Current code milestone: M8 (not started)
 Current visual milestone: V1 (not started)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -63,3 +63,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: Gate 7a built, waiting for its playtest. Check: shoot a mech's legs off and it drops onto stubs and drags along slowly, can still jet but not sprint or dash; with your own legs broken you crawl the same; broken arms send your shots everywhere and G does nothing; damaged parts spark and smoke lightly, broken ones smoke black; the L / A / T bars go yellow when damaged and the track turns red when broken. Pickups are now only sent when they change (a medium match had gone over the bandwidth budget). Soak passes on all tiers at 38 to 51 kbps.
 - 2026-10-17: Gate 7a passed by Joseph's call. 7b (repair) not started.
 - 2026-10-17: Gate 7b built, waiting for its playtest. Check: with a part shot below 40% the prompt says "Hold F: repair legs" (or arms, or torso); hold F standing still for 6 s with a clank every so often and welding sparks; the part comes back to 40% (crawling stops, aim steadies); moving, shooting, jetting, letting go or getting hit starts it over; repairing shows on other people's radar; bots with a broken part stop and repair when nobody is around. Soak passes on all tiers at 36 to 49 kbps.
+- 2026-10-17: Gate 7b passed by Joseph's call. M7 is done: three damage states per part, crawling on broken legs, wild aim with broken arms, sparks and smoke, hold F to repair, bots that repair. M8 not started.

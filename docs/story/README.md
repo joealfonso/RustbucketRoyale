@@ -103,6 +103,13 @@ A knocked-out mech leaves a wreck. Hold E beside it for two seconds and everythi
 
 Hit zones now have three states. A damaged part sparks and smokes a little, a broken one pours black smoke, and the HUD bars go yellow then red. Losing your legs drops the mech onto stubs and it drags itself along slowly, though the jets still lift it. Losing your arms means shots fly everywhere and no grenades. Bandwidth had crept over budget with all the loot, so pickups are now only sent when they change.
 
+## 13. Gate 7b: stop and patch it up
+*Passed 16:58. Commit `1c08566`.*
+
+![Two battered mechs face off with light smoke trailing, a wreck smoking black on the right](13-7b-battered-mechs-and-a-smoking-wreck.jpg)
+
+Hold F, standing still, and in six seconds your worst part is back in running order. Not new: legs walk again, arms aim again, but only to 40%. Move, shoot or get hit and it starts over, and the clanking shows up on everyone's radar, so stopping to repair is a gamble. Bots with a broken part patch themselves up when nobody is around. (The shot doesn't catch anyone mid-repair: welding sparks come off the part being fixed.) That finishes M7.
+
 ---
 
-*Next: gate 7b, repair.*
+*Next: M8, upgrades, a tuning pass, performance and load tests.*
