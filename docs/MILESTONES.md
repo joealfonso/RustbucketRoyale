@@ -25,3 +25,5 @@ Update the two lines above when a gate passes. Claude Code reads this file first
 
 ## Gate log
 Record each gate here: date, what was played, who played, what felt bad.
+
+- 2026-10-17, M1 first look (not the full gate): played by Joseph for a short session. Feels fine for now. Known issue: the camera clips through walls when pressed against them, deferred. Shot camera shake turned off because it made the camera bounce. The one-hour gate is still to do.

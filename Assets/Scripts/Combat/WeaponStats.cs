@@ -15,8 +15,8 @@ namespace RustbucketRoyale
         public float maxAimDistance = 300f;
         [Tooltip("The camera sits behind the mech. The aim ray starts this far in front of the camera so it skips our own body.")]
         public float aimRayStartOffset = 7f;
-        [Tooltip("Screen shake strength per shot.")]
-        public float shakeForce = 0.15f;
+        [Tooltip("Screen shake strength per shot. Off by default: it made the camera bounce while firing.")]
+        public float shakeForce = 0f;
 
         [Header("Art hooks")]
         public GameObject projectilePrefab;

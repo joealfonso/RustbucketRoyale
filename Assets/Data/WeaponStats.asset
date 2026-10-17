@@ -18,7 +18,7 @@ MonoBehaviour:
   spreadDegrees: 0.8
   maxAimDistance: 300
   aimRayStartOffset: 7
-  shakeForce: 0.15
+  shakeForce: 0
   projectilePrefab: {fileID: 3572605335455604367, guid: d49324c4cd8d74cdc8e0af13c9d53b20, type: 3}
   impactPrefab: {fileID: 3531465766080997393, guid: e04734f0dc2ee4a7a93cd311e871d3d1, type: 3}
   muzzleFlashPrefab: {fileID: 8640511487530516134, guid: b55e518d72c8c43d3b0775a92dc6748b, type: 3}
