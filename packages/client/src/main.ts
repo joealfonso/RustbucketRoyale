@@ -86,7 +86,10 @@ try {
     ({ tier, seed } = welcome);
     roomCode = welcome.code;
     // Reloading the page now rejoins this room.
-    history.replaceState(null, "", `?room=${roomCode}`);
+    // Keep the room settings in the address too. If the server restarts, reloading brings the room back the same way.
+    const again = new URLSearchParams({ room: roomCode, tier });
+    if (params.has("bots")) again.set("bots", params.get("bots")!);
+    history.replaceState(null, "", `?${again}`);
   }
   hint.textContent = `Building ${tier} map...`;
   // Let the message paint before the map build holds the thread.

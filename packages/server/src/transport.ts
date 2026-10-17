@@ -15,12 +15,14 @@ export interface RunningServer {
 // WebSocket front door. A connection to ws://host:port/?room=ABCD&tier=medium&bots=5 joins that room, making it
 // if it is new. With no room in the address it makes a fresh room. Every room ticks at 60 Hz.
 // Not done yet: check the Origin header against an allow list before this goes on a public host.
-export function startServer(manager: RoomManager, port: number): Promise<RunningServer> {
+// `defaultBots` is how many bots a new room gets when its link does not say (`&bots=0` asks for none).
+export function startServer(manager: RoomManager, port: number, defaultBots = 0): Promise<RunningServer> {
   const wss = new WebSocketServer({ port, maxPayload: MAX_MESSAGE_BYTES });
 
   wss.on("connection", (socket, request: IncomingMessage) => {
     const query = new URL(request.url ?? "/", "http://localhost").searchParams;
-    const bots = Math.min(MAX_BOTS_REQUESTED, Math.max(0, Math.floor(Number(query.get("bots")) || 0)));
+    const asked = query.get("bots");
+    const bots = asked === null ? defaultBots : Math.min(MAX_BOTS_REQUESTED, Math.max(0, Math.floor(Number(asked) || 0)));
     const joined: Joined | null = manager.join(query.get("room"), query.get("tier"), (message) => {
       if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
     }, bots);

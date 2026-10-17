@@ -1,5 +1,5 @@
 {
-  "countdownSeconds": 10,
+  "countdownSeconds": 5,
   "resultsSeconds": 12,
   "matchSeconds": 480,
   "autoNextMatch": 1

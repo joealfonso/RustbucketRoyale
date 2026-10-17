@@ -81,3 +81,26 @@ describe("websocket server", () => {
     await closed;
   });
 });
+
+describe("bots by link", () => {
+  it("gives a new room the default number of bots when the link does not say, and none when it says bots=0", async () => {
+    const manager = new RoomManager((code, tier, bots) => new Room(code, tier, config, bots), ["small"], "small", 5);
+    const running = await startServer(manager, 0, 3);
+    try {
+      const withDefault = await connect(running.port, "?room=DEFA");
+      const none = await connect(running.port, "?room=NONE&bots=0");
+      const asked = await connect(running.port, "?room=FIVE&bots=2");
+      await wait(150);
+      const others = (c: { messages: ServerMessage[] }) => {
+        const snap = c.messages.filter((m) => m.t === "snapshot").at(-1);
+        return snap?.t === "snapshot" ? snap.others.length : -1;
+      };
+      expect(others(withDefault)).toBe(3);
+      expect(others(none)).toBe(0);
+      expect(others(asked)).toBe(2);
+      for (const c of [withDefault, none, asked]) c.socket.close();
+    } finally {
+      await running.close();
+    }
+  });
+});
