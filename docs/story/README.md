@@ -96,6 +96,13 @@ Broken crates and junk now drop glowing loot: grenades and armor plates you walk
 
 A knocked-out mech leaves a wreck. Hold E beside it for two seconds and everything it carried spills on the ground round it: guns, grenades, plates. It rattles and shows up on everyone's radar, and letting go starts it over. Bots with nobody to fight now go for loot and wrecks too, which is how this shot happened. Maps also check there is loot near every spawn. That finishes M6.
 
+## 12. Gate 7a: broken parts you can see and feel
+*Passed 16:52. Commit `923abf9`.*
+
+![Watching Bot 1 with black smoke pouring off it, the torso bar on the left red](12-7a-smoke-from-a-broken-mech.jpg)
+
+Hit zones now have three states. A damaged part sparks and smokes a little, a broken one pours black smoke, and the HUD bars go yellow then red. Losing your legs drops the mech onto stubs and it drags itself along slowly, though the jets still lift it. Losing your arms means shots fly everywhere and no grenades. Bandwidth had crept over budget with all the loot, so pickups are now only sent when they change.
+
 ---
 
-*Next: M7, part damage, broken states, crawling and repair.*
+*Next: gate 7b, repair.*
