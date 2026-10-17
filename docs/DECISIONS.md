@@ -31,3 +31,9 @@ Shots go from the muzzle to the point the camera ray hits, starting the ray in f
 
 ## 2026-10-17: Gauntlet script as the gate for loops
 `scripts/gauntlet.sh` runs every automated check and prints one verdict. A loop only counts an iteration if it passes. It covers tests only, never fun, so playtest gates stay human. New systems add their checks to it (determinism, map validation, import checker, soak) as they land. Cost: it closes nothing by itself, a weak check list gives a weak gauntlet.
+
+## 2026-10-17: Rebuild for the web, server authoritative (supersedes the Unity and host mode entries)
+The game must be reachable by link and able to scale, which Unity WebGL and a player-hosted browser tab cannot do well. So: TypeScript and Three.js client, Node server per room that is authoritative and runs the bots. Scale by adding rooms and processes. Cost: a server bill, a rewrite of M1, and no Unity tools. The Unity prototype stays on the `unity-prototype` branch.
+
+## 2026-10-17: Not using Arrr.fun for now
+Its ordered tick relay suits lockstep games with a deterministic simulation. Ours is server authoritative with prediction and interest management, and many bots. It is also a young third party dependency. Revisit only if we choose lockstep.

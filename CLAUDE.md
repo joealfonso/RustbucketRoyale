@@ -1,8 +1,10 @@
 # Rustbucket Royale
 
-3D mech battle royale, casual and fun first. Easy to pick up, a blast to play. Unity 6 (C#, URP), Photon Fusion 2 in host mode (one player hosts and is authoritative, bots run on the host). Up to 8 humans plus many more bots, 8 minute matches, maps generated from a seed in three tiers (300 / 1000 / 2000 m). Third person over the shoulder, WASD plus mouse, PC (Windows, Mac, Linux).
+3D mech battle royale, casual and fun first. Easy to pick up, a blast to play, runs in a browser tab with nothing to install. TypeScript, Three.js, a Node game server that is authoritative and runs the bots. Up to 8 humans plus many more bots, 8 minute matches, maps generated from a seed in three tiers (300 / 1000 / 2000 m). Third person over the shoulder, WASD plus mouse, desktop browsers first.
 
 I am a solo developer and a professional product designer. I read code, but we write most of it together. Write it the way a careful human teammate would.
+
+The first version was a Unity prototype. It lives on the `unity-prototype` branch for reference only. The web version replaced it because the game must be reachable by link and able to scale.
 
 ## Read these when the task touches them
 Open these on demand. Do not import them.
@@ -17,7 +19,7 @@ Open these on demand. Do not import them.
 - If my request conflicts with these rules or has a flaw, say so before building it.
 - If a system makes the game more complicated without making it more fun, say so.
 - Do not add features I did not ask for. Do not leave placeholder comments that pretend to be finished work.
-- Plain names, small files, one job per component, no speculative abstractions. Comments explain why, never what. If something is a guess, say so in a comment or in your reply.
+- Plain names, small files, one job per module, no speculative abstractions. Comments explain why, never what. If something is a guess, say so in a comment or in your reply.
 - Every milestone ends with a playtest gate. Tell me when it is ready for the gate. Never start the next milestone on your own.
 
 ## Fun rules
@@ -30,42 +32,35 @@ Open these on demand. Do not import them.
 - Keep an in-game debug panel for changing tuning values live during playtests.
 
 ## Architecture
-- Small components, one job each. No singletons for gameplay state.
-- All tuning values live in ScriptableObjects or data files. No magic numbers in gameplay code.
-- Visuals are separate: use grey-box placeholders and expose every art hook (mesh, VFX, audio) through a clearly named prefab or ScriptableObject slot.
-- Folder layout: `Assets/Scripts/{Core,Net,Mech,Combat,Zone,Bots,Generation,UI}`, editor tools in `Assets/Editor/`.
+- npm workspaces: `packages/shared` (simulation rules, data types, seeded generation, message formats), `packages/client` (Three.js, input, HUD, audio), `packages/server` (rooms, bots, validation). Shared code has no DOM and no Node-only imports, so the client can predict with the exact code the server runs.
+- Small modules, one job each. No global mutable gameplay state.
+- All tuning values live in JSON files under `data/`, validated on load. No magic numbers in gameplay code.
+- Visuals are separate from simulation: grey-box placeholders, with every art hook (model, VFX, audio) exposed through a named entry in a data file.
 - Each non-obvious choice gets two or three lines in `docs/DECISIONS.md`.
 
 ## Networking and security
-- The host is authoritative. Validate fire rate, ammo, fuel, cooldowns, and loot range on the host. Never trust a client.
-- Basic lag handling for hits, nothing elaborate. Interest management: clients only receive nearby data, and bots are never replicated as full players to far clients.
-- Rate limit all RPCs. No anti-cheat in v1.
+- The server is authoritative. It validates fire rate, ammo, fuel, cooldowns, and loot range. Never trust a client.
+- Clients predict their own mech and reconcile against server snapshots. Basic lag handling for hits, nothing elaborate.
+- One match is one room. Scaling means more rooms and more server processes, never a bigger room. Interest management: clients only receive nearby entities, and bots are never sent in full to far clients.
+- Rate limit every message type. No anti-cheat in v1.
 - No secrets or keys in the repo. Use environment variables and CI secrets. Logs never contain tokens or personal data.
 
 ## Performance
-- Budgets: 60 fps on a mid-range GPU for clients, host holds 60 fps on a mid-range PC with its bots on the large tier, 30 Hz network send rate, under 64 kbps per client, map generation under 3 seconds on small and medium.
-- Object pooling for projectiles and VFX. No allocations in Update loops.
+- Budgets live in `docs/PERF.md`. Client targets 60 fps on a mid-range laptop. Download size, server cost per room, and network rate are budgeted there too.
+- Object pooling for projectiles and VFX. No allocations in the frame loop.
 - Profile before optimizing. Record numbers in `docs/PERF.md`.
 
-## Unity rules
-- Never hand-edit `.unity` or `.prefab` files (edits are denied in settings). Create or change scenes and prefabs with editor scripts in `Assets/Editor/`, or tell me what to do in the editor.
-- Never delete or regenerate `.meta` files. Moving a file means moving its `.meta`.
-- `.asset` files (ScriptableObjects): prefer `[CreateAssetMenu]` plus editor scripts that create defaults. If you must edit one by hand, change values only, never GUIDs or fileIDs.
-- Ask before touching `ProjectSettings/` or `Packages/manifest.json`.
-- Code only compiles when the editor or batchmode runs. After changes, run the test script and read `artifacts/` results. Do not assume it compiles.
-- Close the Unity editor before running scripts. Batchmode cannot open a project the editor has open.
-- One working checkout. Do not use worktrees: each needs its own `Library` folder and a full reimport.
-- Generation code uses `SeededRng` only. Never `UnityEngine.Random`, `System.Random`, or anything time based. A hook flags violations.
+## Determinism
+- Generation code uses `SeededRng` only. Never `Math.random`, `Date.now`, or anything time based. An ESLint rule flags violations in `packages/shared/src/generation/`.
+- Placement decisions use integer math. Floats only appear after decisions, for visuals.
 
 ## Commands
-- `./scripts/test.sh editmode` or `playmode` or `all`: run Unity tests headless, results in `artifacts/`.
-- `./scripts/gauntlet.sh`: every check in one pass or fail verdict, for loop-driven work. Add new checks to its `CHECKS` list as systems get tests.
-- `./scripts/build-server.sh`: Linux dedicated server build for CI and soak tests, output in `Builds/LinuxServer/`.
-- Set `UNITY_PATH` if Unity is not at the default Hub location for the version in `ProjectSettings/ProjectVersion.txt`.
+Filled in as the tooling lands (`npm run dev`, `npm test`, `npm run gauntlet`). Until then this section is the checklist to keep current.
 
 ## Testing and CI
-- Edit mode tests for pure logic: damage zones, ring math, upgrade stats, noise radius, bot LOD switching.
+- Vitest for pure logic: damage zones, ring math, upgrade stats, noise radius, bot level of detail, movement and reconciliation.
 - A determinism test generates 1000 seeds twice and compares output.
 - A headless bot-only match per tier runs the full 8 minutes on a random seed and fails on crash, desync, or blown budget. Log the seed on failure.
-- CI (GitHub Actions with GameCI) runs on every PR. Block merges on red. See `.github/workflows/`.
+- `npm run gauntlet` runs every check and prints one pass or fail verdict, for loop-driven work. It covers tests, never fun.
+- CI (GitHub Actions) runs on every PR. Block merges on red.
 - Git: small commits with plain messages, one concern per PR, branch per feature. Binary assets go through Git LFS.
