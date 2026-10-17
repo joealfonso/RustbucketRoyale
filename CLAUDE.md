@@ -59,6 +59,7 @@ Open these on demand. Do not import them.
 
 ## Commands
 - `./scripts/test.sh editmode` or `playmode` or `all`: run Unity tests headless, results in `artifacts/`.
+- `./scripts/gauntlet.sh`: every check in one pass or fail verdict, for loop-driven work. Add new checks to its `CHECKS` list as systems get tests.
 - `./scripts/build-server.sh`: Linux dedicated server build for CI and soak tests, output in `Builds/LinuxServer/`.
 - Set `UNITY_PATH` if Unity is not at the default Hub location for the version in `ProjectSettings/ProjectVersion.txt`.
 

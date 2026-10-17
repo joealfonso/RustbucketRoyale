@@ -28,3 +28,6 @@ Shots go from the muzzle to the point the camera ray hits, starting the ray in f
 
 ## 2026-10-17: Grounded comes from Move's collision flags
 `CharacterController.isGrounded` flickered at high frame rates in headless tests, so the mech uses the Below flag returned by Move and sets minMoveDistance to 0.
+
+## 2026-10-17: Gauntlet script as the gate for loops
+`scripts/gauntlet.sh` runs every automated check and prints one verdict. A loop only counts an iteration if it passes. It covers tests only, never fun, so playtest gates stay human. New systems add their checks to it (determinism, map validation, import checker, soak) as they land. Cost: it closes nothing by itself, a weak check list gives a weak gauntlet.
