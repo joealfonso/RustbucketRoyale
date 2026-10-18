@@ -10,7 +10,7 @@ import { parseDamageFx } from "./damageFx";
 import { createMechModel, setCrawlLook, setMechDamage } from "./mechModel";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import mechKitsJson from "../../../data/mechKits.json";
-import { loadKit, parseKits } from "./mechKit";
+import { loadKit, parseKits, type LoadedKit } from "./mechKit";
 
 // The V1 style test (style.html): one chunk, its props and three mechs in the game's look, seen from 10, 50 and
 // 150 m, so the palette, bands, outline and light can be judged before any real art is made. Keys 1, 2, 3 move the
@@ -22,7 +22,11 @@ const props = parsePropConfig(propsJson);
 const zones = parseZones(zonesJson);
 const zoneMaxHp = zones.zones.map((z) => z.hp);
 setCrawlLook(parseDamageFx(damageFxJson).crawl, zones.damagedBelowFraction);
-const kit = await loadKit("standin", parseKits(mechKitsJson));
+const kitsData = parseKits(mechKitsJson);
+const kit = await loadKit("standin", kitsData);
+// The roster, each mech in its own spot on a second line further out, for judging them side by side (key 4).
+const roster = (await Promise.all((kitsData.roster ?? []).map(async (id) => ({ id, kit: await loadKit(id, kitsData) }))))
+  .filter((r): r is { id: string; kit: LoadedKit } => r.kit !== null);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -69,6 +73,15 @@ if (kitModel) {
   kitModel.group.rotation.y = Math.PI;
   scene.add(kitModel.group);
 }
+const ROSTER_Z = half + 32;
+roster.forEach((r, i) => {
+  const model = createMechModel(i === 0 ? palette.mech.youAccent : palette.mech.othersAccent, zoneMaxHp, toon, palette.mech.body, r.kit, palette.mech.trim);
+  model.group.position.set(i * 6 - ((roster.length - 1) * 6) / 2 + 5, 0, ROSTER_Z);
+  model.group.rotation.y = Math.PI;
+  scene.add(model.group);
+});
+let lookingAtRoster = false;
+
 const showKitDamage = () => kitModel && setMechDamage(kitModel, KIT_DAMAGE[kitDamage]!.map((f, z) => f * zoneMaxHp[z]!), false);
 
 const DISTANCES = [10, 50, 150];
@@ -76,14 +89,18 @@ let distance = DISTANCES[0]!;
 let turn = 0.6;
 const label = document.getElementById("label")!;
 function place(): void {
-  const target = new THREE.Vector3(5, 2, half + 12); // the middle of the line-up
+  // The middle of the line-up being looked at: the damage row, or the roster further out.
+  const target = new THREE.Vector3(5, 2, lookingAtRoster ? ROSTER_Z : half + 12);
   camera.position.set(target.x + Math.sin(turn) * distance, target.y + 1.5 + distance * 0.18, target.z + Math.cos(turn) * distance);
   camera.lookAt(target);
-  label.textContent = `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · behind, left to right: you (clean), then 75%, 40%, 15%, arms and legs broken`;
+  label.textContent = lookingAtRoster
+    ? `Roster: ${roster.map((r) => r.id).join(", ") || "none loaded"} · 1 / 2 / 3: back to the damage row · Q / E: turn`
+    : `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · 4: the roster · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · behind, left to right: you (clean), then 75%, 40%, 15%, arms and legs broken`;
 }
 window.addEventListener("keydown", (e) => {
   const index = ["Digit1", "Digit2", "Digit3"].indexOf(e.code);
-  if (index >= 0) distance = DISTANCES[index]!;
+  if (index >= 0) { distance = DISTANCES[index]!; lookingAtRoster = false; }
+  if (e.code === "Digit4") { distance = 14; lookingAtRoster = true; }
   if (e.code === "KeyQ") turn -= 0.3;
   if (e.code === "KeyE") turn += 0.3;
   if (e.code === "KeyD") { kitDamage = (kitDamage + 1) % KIT_DAMAGE.length; showKitDamage(); }

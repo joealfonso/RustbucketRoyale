@@ -3,6 +3,12 @@
     25,
     80
   ],
+  "roster": [
+    "ironclad",
+    "stiletto",
+    "cataclysm",
+    "arbiter"
+  ],
   "kits": {
     "standin": {
       "folder": "models/mechs/standin",
@@ -68,6 +74,254 @@
         "Arm_R": {
           "zone": "arms",
           "paint": "accent"
+        }
+      }
+    },
+    "arbiter": {
+      "file": "models/mechs/arbiter/Mech_Arbiter.glb",
+      "parts": {
+        "Torso": {
+          "zone": "torso",
+          "paint": "body"
+        },
+        "Torso_Frame": {
+          "zone": "torso",
+          "paint": "trim"
+        },
+        "Chest_Plate": {
+          "zone": "torso",
+          "paint": "accent"
+        },
+        "Sensor": {
+          "zone": "torso",
+          "paint": "body"
+        },
+        "Sensor_Band": {
+          "zone": "torso",
+          "paint": "accent"
+        },
+        "Sensor_Frame": {
+          "zone": "torso",
+          "paint": "trim"
+        },
+        "Mast": {
+          "zone": "torso",
+          "paint": "trim"
+        },
+        "Drones": {
+          "zone": "torso",
+          "paint": "accent"
+        },
+        "Leg_L": {
+          "zone": "legs",
+          "paint": "body"
+        },
+        "Leg_R": {
+          "zone": "legs",
+          "paint": "body"
+        },
+        "Leg_Frame": {
+          "zone": "legs",
+          "paint": "trim"
+        },
+        "Knee_Guards": {
+          "zone": "legs",
+          "paint": "accent"
+        },
+        "Arm_L": {
+          "zone": "arms",
+          "paint": "body"
+        },
+        "Arm_R": {
+          "zone": "arms",
+          "paint": "body"
+        },
+        "Arm_Frame": {
+          "zone": "arms",
+          "paint": "trim"
+        },
+        "Pauldrons": {
+          "zone": "arms",
+          "paint": "accent"
+        },
+        "Gun_R": {
+          "zone": "arms",
+          "paint": "trim"
+        },
+        "Emitter_L": {
+          "zone": "arms",
+          "paint": "accent"
+        }
+      }
+    },
+    "cataclysm": {
+      "file": "models/mechs/cataclysm/Mech_Cataclysm.glb",
+      "parts": {
+        "Torso": {
+          "zone": "torso",
+          "paint": "body"
+        },
+        "Sensor": {
+          "zone": "torso",
+          "paint": "trim"
+        },
+        "Arm_R": {
+          "zone": "arms",
+          "paint": "accent"
+        },
+        "Barrels": {
+          "zone": "arms",
+          "paint": "trim"
+        },
+        "Arm_L": {
+          "zone": "arms",
+          "paint": "accent"
+        },
+        "Leg_FL": {
+          "zone": "legs",
+          "paint": "body"
+        },
+        "Leg_FR": {
+          "zone": "legs",
+          "paint": "body"
+        },
+        "Leg_BL": {
+          "zone": "legs",
+          "paint": "body"
+        },
+        "Leg_BR": {
+          "zone": "legs",
+          "paint": "body"
+        }
+      }
+    },
+    "ironclad": {
+      "file": "models/mechs/ironclad/Mech_Ironclad.glb",
+      "parts": {
+        "Torso": {
+          "zone": "torso",
+          "paint": "body"
+        },
+        "Sensor": {
+          "zone": "torso",
+          "paint": "accent"
+        },
+        "Shoulder_Pods": {
+          "zone": "torso",
+          "paint": "accent"
+        },
+        "Frame": {
+          "zone": "torso",
+          "paint": "trim"
+        },
+        "Jets": {
+          "zone": "torso",
+          "paint": "trim"
+        },
+        "Arm_R": {
+          "zone": "arms",
+          "paint": "accent"
+        },
+        "Autocannon": {
+          "zone": "arms",
+          "paint": "trim"
+        },
+        "Arm_L": {
+          "zone": "arms",
+          "paint": "accent"
+        },
+        "Shield": {
+          "zone": "arms",
+          "paint": "body"
+        },
+        "Pile_Driver": {
+          "zone": "arms",
+          "paint": "trim"
+        },
+        "Leg_R": {
+          "zone": "legs",
+          "paint": "body"
+        },
+        "Leg_L": {
+          "zone": "legs",
+          "paint": "body"
+        },
+        "Feet": {
+          "zone": "legs",
+          "paint": "trim"
+        },
+        "Pistons": {
+          "zone": "legs",
+          "paint": "trim"
+        }
+      }
+    },
+    "stiletto": {
+      "file": "models/mechs/stiletto/Mech_Stiletto.glb",
+      "parts": {
+        "Torso": {
+          "zone": "torso",
+          "paint": "body"
+        },
+        "Frame": {
+          "zone": "torso",
+          "paint": "trim"
+        },
+        "Sensor": {
+          "zone": "torso",
+          "paint": "body"
+        },
+        "Visor": {
+          "zone": "torso",
+          "paint": "trim"
+        },
+        "Fins": {
+          "zone": "torso",
+          "paint": "accent"
+        },
+        "Pack": {
+          "zone": "torso",
+          "paint": "body"
+        },
+        "Jets": {
+          "zone": "torso",
+          "paint": "trim"
+        },
+        "Leg_L": {
+          "zone": "legs",
+          "paint": "body"
+        },
+        "Leg_R": {
+          "zone": "legs",
+          "paint": "body"
+        },
+        "Leg_Frame": {
+          "zone": "legs",
+          "paint": "trim"
+        },
+        "Arm_L": {
+          "zone": "arms",
+          "paint": "body"
+        },
+        "Arm_R": {
+          "zone": "arms",
+          "paint": "body"
+        },
+        "Shoulders": {
+          "zone": "arms",
+          "paint": "accent"
+        },
+        "Arm_Frame": {
+          "zone": "arms",
+          "paint": "trim"
+        },
+        "Blade": {
+          "zone": "arms",
+          "paint": "accent"
+        },
+        "Carbine": {
+          "zone": "arms",
+          "paint": "trim"
         }
       }
     }

@@ -45,6 +45,9 @@ export interface MechModel {
   kitParts: { zone: number; states: (THREE.LOD | null)[] }[]; // intact, damaged, broken; a missing one falls back
   fxAnchors: (THREE.Object3D | null)[];
   gunParts: THREE.Object3D[]; // hidden with the arms when they are broken
+  // A kit's painted materials beyond the one per zone: white body paint and the pilot's accent, each zone its own,
+  // so any part can carry either and still rust with its zone.
+  paints: { zone: number; material: THREE.MeshToonMaterial; base: THREE.Color }[];
 }
 
 // How a crawling mech sits. Read from data/damageFx.json once at startup.
@@ -90,14 +93,25 @@ export function createMechModel(
     return mesh;
   };
   const legMeshes: THREE.Mesh[] = [];
+  const paints: MechModel["paints"] = [];
+  // One rusting material per zone and paint colour, made on first use.
+  const paintFor = (zone: number, color: string): THREE.MeshToonMaterial => {
+    const base = new THREE.Color(color);
+    const found = paints.find((p) => p.zone === zone && p.base.equals(base));
+    if (found) return found.material;
+    const material = toon!.ownMaterial(color, true);
+    paints.push({ zone, material, base });
+    return material;
+  };
   const kitParts: MechModel["kitParts"] = [];
   const fxAnchors: MechModel["fxAnchors"] = [null, null, null];
   let gunMount: THREE.Vector3 | null = null;
   if (kit && toon) {
     // Each part's states are levels-of-detail objects; damage shows one state at a time.
     for (const p of kit.parts) {
-      const mat = p.paint === "trim" ? toon.material(trimColor) : zoneMaterials[p.zone]!;
-      const outlineColor = p.paint === "trim" ? trimColor : `#${baseColors[p.zone]!.getHexString()}`;
+      const paintColor = p.paint === "accent" ? toon.color(accent) : grey;
+      const mat = p.paint === "trim" ? toon.material(trimColor) : paintFor(p.zone, paintColor);
+      const outlineColor = p.paint === "trim" ? trimColor : paintColor;
       const states = p.states.map((state, i) => {
         if (!state) return null;
         const lod = new THREE.LOD();
@@ -156,7 +170,7 @@ export function createMechModel(
   return {
     group, body, legMeshes, zoneMaterials, toon, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
     hp: [...zoneMaxHp], dead: false, repairing: false, upgradeParts: [], fxTimers: [0, 0, 0, 0, 0, 0, 0],
-    kitParts, fxAnchors, gunParts: [barrel],
+    kitParts, fxAnchors, gunParts: [barrel], paints,
   };
 }
 
@@ -177,6 +191,11 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
       scratch.copy(WRECK).lerp(model.baseColors[zone]!, fraction);
     }
     material.color.copy(scratch);
+  }
+  for (const paint of model.paints) {
+    const fraction = Math.max(0, Math.min(1, hp[paint.zone]! / model.zoneMaxHp[paint.zone]!));
+    model.toon?.setRust(paint.material, 1 - fraction);
+    paint.material.color.copy(paint.base).multiplyScalar(dead ? 0.5 : 1);
   }
   const armsBroken = hp[1]! <= 0;
   for (const arm of model.armMeshes) arm.visible = !armsBroken;

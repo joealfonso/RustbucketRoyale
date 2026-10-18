@@ -38,3 +38,15 @@ Mechs start in clean paint (white, navy frame, a pilot accent) and rust as they 
 
 To judge: the red accent for other pilots sits close to rust orange once a mech is rusty. A cooler accent (teal, yellow) may separate better.
 
+## V2c: the first roster
+
+Four mechs from Joseph's brief, each built by a script in `scripts/mechs/` from low-poly shapes: Ironclad-IV (brawler), Stiletto-B (flanker), Cataclysm (four-legged artillery), Arbiter (dome and drones). On `style.html` press 4; in a game add `&kit=roster` and each player gets one by player number.
+
+| What | Screenshot |
+| :- | :- |
+| The roster, left to right: Ironclad-IV (blue: as you), Stiletto-B, Cataclysm, Arbiter | ![roster](v2c-roster.jpg) |
+| Closer, from the side | ![close](v2c-roster-close.jpg) |
+| In a match as Stiletto-B | ![in game](v2c-stiletto-in-game.jpg) |
+
+To judge: the game still adds its own weapon-coloured barrel at each gun mount, which doubles up on mechs whose gun is modelled.
+

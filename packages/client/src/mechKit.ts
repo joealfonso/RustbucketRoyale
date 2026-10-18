@@ -19,6 +19,7 @@ type Paint = "body" | "accent" | "trim";
 
 export interface KitsData {
   lodDistances: number[]; // metres at which the second and then the third level of detail take over
+  roster?: string[]; // the mechs players are dealt, by player number, with ?kit=roster
   kits: Record<string, { file?: string; folder?: string; name?: string; parts: Record<string, { zone: string; paint: Paint }> }>;
 }
 
@@ -135,3 +136,11 @@ export function readPartFile(scene: THREE.Object3D): KitState | null {
   const whole = geometryOf(scene);
   return whole ? { lods: [whole], fx: pointOf(scene, "Fx"), mount: pointOf(scene, "Mount_Gun") } : null;
 }
+
+// Every mech in the roster, loaded together. A player's mech is picked by their id, so every client agrees without
+// the server saying. Kits that fail to load are left out; with none, everyone is the grey-box mech.
+export async function loadRoster(data: KitsData, base = "/"): Promise<(id: number) => LoadedKit | null> {
+  const kits = (await Promise.all((data.roster ?? []).map((id) => loadKit(id, data, base)))).filter((k): k is LoadedKit => k !== null);
+  return (id) => (kits.length > 0 ? kits[id % kits.length]! : null);
+}
+

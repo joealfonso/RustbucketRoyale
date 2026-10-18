@@ -21,7 +21,7 @@ import upgradesJson from "../../../data/upgrades.json";
 import paletteJson from "../../../data/palette.json";
 import lookJson from "../../../data/look.json";
 import mechKitsJson from "../../../data/mechKits.json";
-import { loadKit, parseKits } from "./mechKit";
+import { loadKit, loadRoster, parseKits } from "./mechKit";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import botsJson from "../../../data/bots.json";
 import noiseJson from "../../../data/noise.json";
@@ -146,10 +146,13 @@ scene.add(propView.group);
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
 const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters) : null;
 
-// ?kit=standin draws mechs from a model kit (data/mechKits.json) instead of grey boxes. Off by default until real art.
+// ?kit=standin draws every mech from one model kit (data/mechKits.json) instead of grey boxes; ?kit=roster deals each
+// player one of the roster's mechs by player number. Off by default until the art is settled.
 const kitId = params.get("kit");
-const kit = kitId ? await loadKit(kitId, parseKits(mechKitsJson)) : null;
-const ownModel = createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body, kit, palette.mech.trim);
+const kitsData = parseKits(mechKitsJson);
+const oneKit = kitId && kitId !== "roster" ? await loadKit(kitId, kitsData) : null;
+const kitFor = kitId === "roster" ? await loadRoster(kitsData) : () => oneKit;
+const ownModel = createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body, kitFor(net?.id ?? 0), palette.mech.trim);
 const mechGroup = ownModel.group;
 scene.add(mechGroup);
 
@@ -172,7 +175,7 @@ const damageFx = new DamageFx(scene, damageFxConfig, zoneSet);
 let fxDt = 0;
 const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
 // Everyone else wears the same accent: telling friend from foe is by name and behaviour, not colour.
-const remoteLook = { toon, accent: palette.mech.othersAccent, body: palette.mech.body, kit, trim: palette.mech.trim };
+const remoteLook = { toon, accent: palette.mech.othersAccent, body: palette.mech.body, kitFor, trim: palette.mech.trim };
 const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.maxViewDelayMs, netStats.snapshotEvery * STEP * 1000, zoneMaxHp);
 remotes.weaponColors = weaponColors;
 remotes.upgrades = upgradeSet.upgrades;
