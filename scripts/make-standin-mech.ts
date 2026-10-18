@@ -83,3 +83,20 @@ for (const part of parts) {
   }
 }
 console.log(`Wrote ${parts.length * STATES.length} stand-in parts to ${dir}`);
+
+// The simple form: the whole mech in one file, each part an object named after it, intact only, one level of
+// detail. Each part is centred on its own origin and placed by its node's position, the way Blender exports, so
+// the game's handling of object transforms is tested too.
+const oneDir = join(new URL("..", import.meta.url).pathname, "assets/models/mechs/standin-one");
+mkdirSync(oneDir, { recursive: true });
+const oneNodes: NodeData[] = [];
+for (const part of parts) {
+  const b = part.body;
+  const centre: V3 = [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2];
+  const local: Box = { min: [b.min[0] - centre[0], b.min[1] - centre[1], b.min[2] - centre[2]], max: [b.max[0] - centre[0], b.max[1] - centre[1], b.max[2] - centre[2]] };
+  oneNodes.push({ name: part.name, translation: centre, mesh: mesh([local], 1) });
+  oneNodes.push({ name: `${part.name}_Fx`, translation: top(b) });
+  oneNodes.push(...(part.extra?.(b) ?? []));
+}
+writeFileSync(join(oneDir, "Mech_StandinOne.glb"), writeGlb(oneNodes));
+console.log(`Wrote the one-file stand-in to ${oneDir}`);

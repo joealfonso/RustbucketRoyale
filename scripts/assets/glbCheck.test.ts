@@ -48,9 +48,9 @@ describe("asset checker", () => {
     expect(r.warnings.join()).toMatch(/under the usual 300/);
   });
 
-  it("needs every level of detail on a mech part, and counts only the nearest against the budget", () => {
-    const noLods: GltfJson = { ...model(100), nodes: [{ name: "Body", mesh: 0 }] };
-    expect(checkModel("Mech_Torso_Intact", noLods, rules).problems.join()).toMatch(/LOD0/);
+  it("takes a whole mech in one file with no levels of detail, and counts only the nearest when there are some", () => {
+    const whole: GltfJson = { ...model(4000), nodes: [{ name: "Torso", mesh: 0 }] };
+    expect(checkModel("Mech_Clunker", whole, rules).problems).toEqual([]);
     const lods: GltfJson = {
       nodes: [{ name: "LOD0", mesh: 0 }, { name: "LOD1", mesh: 1 }, { name: "LOD2", mesh: 1 }],
       meshes: [{ primitives: [{ indices: 0, attributes: {} }] }, { primitives: [{ indices: 1, attributes: {} }] }],

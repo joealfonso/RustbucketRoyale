@@ -64,7 +64,7 @@ Open these on demand. Do not import them.
 - `npm test`: Vitest. `npm run typecheck`: TypeScript. `npm run build`: production client build.
 - `npm run gauntlet`: typecheck, the determinism scan, the asset checker (`scripts/check-assets.ts`: models in `assets/models` against `data/assetRules.json`), tests (including a real two-client server test and a full small-tier soak match), and build in one pass or fail verdict. Results in `artifacts/`.
 - http://localhost:5173/style.html with `npm run dev`: the V1 style test, keys 1 / 2 / 3 for 10, 50 and 150 m.
-- `npx tsx scripts/make-standin-mech.ts`: rewrites the stand-in mech kit in `assets/models/mechs/standin/`. Add `&kit=standin` to a game link to draw mechs from a kit (`data/mechKits.json`).
+- `npx tsx scripts/make-standin-mech.ts`: rewrites the stand-in mech kit in `assets/models/mechs/standin/`. Add `&kit=standin` (or `&kit=standin-one`, the one-file form) to a game link to draw mechs from a kit (`data/mechKits.json`).
 - `npm run soak`: a whole match per tier as fast as possible, with checks and budgets. `npm run soak -- large` for one tier, `SEED=123` to replay a failure. Runs nightly in CI.
 - `npx tsx scripts/measure-bandwidth.ts` and `npx tsx scripts/measure-rooms.ts`: bandwidth, tick cost and rooms per process. Record results in `docs/PERF.md`.
 - `npx tsx scripts/load-test.ts [tier] [rooms]`: rooms per process with the real server and real WebSocket clients. `npx tsx scripts/measure-bots.ts [seeds] [tiers]` (with `FILL=medium:28`): how lonely and how fast matches are at a bot count. Record results in `docs/PERF.md`.

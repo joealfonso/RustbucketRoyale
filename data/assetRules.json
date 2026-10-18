@@ -4,12 +4,7 @@
   "kinds": {
     "Mech": {
       "maxTriangles": 10000,
-      "states": [
-        "Intact",
-        "Damaged",
-        "Broken"
-      ],
-      "lods": 3
+      "states": []
     },
     "Prop": {
       "maxTriangles": 2000,

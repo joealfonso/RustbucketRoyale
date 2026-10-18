@@ -42,7 +42,7 @@ export interface MechModel {
   fxTimers: number[]; // per zone: seconds until the next spark, then the next puff of smoke. Last: welding sparks
   // A mech built from a kit: each part's intact, damaged and broken versions (each with its levels of detail), and
   // the point in each hit zone that sparks and smoke come from. Empty for the grey-box mech.
-  kitParts: { zone: number; states: THREE.LOD[] }[];
+  kitParts: { zone: number; states: (THREE.LOD | null)[] }[]; // intact, damaged, broken; a missing one falls back
   fxAnchors: (THREE.Object3D | null)[];
   gunParts: THREE.Object3D[]; // hidden with the arms when they are broken
 }
@@ -96,6 +96,7 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[], to
       const mat = p.paint === "trim" ? toon.material("deepRust") : zoneMaterials[p.zone]!;
       const outlineColor = p.paint === "trim" ? "deepRust" : `#${baseColors[p.zone]!.getHexString()}`;
       const states = p.states.map((state, i) => {
+        if (!state) return null;
         const lod = new THREE.LOD();
         state.lods.forEach((geometry, level) => {
           const holder = new THREE.Group();
@@ -107,7 +108,7 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[], to
         return lod;
       });
       kitParts.push({ zone: p.zone, states });
-      const intact = p.states[0]!;
+      const intact = p.states[0]!; // the loader guarantees every part has its intact version
       if (intact.fx && !fxAnchors[p.zone]) {
         const anchor = new THREE.Object3D();
         anchor.position.copy(intact.fx);
@@ -173,8 +174,11 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
   // A kit mech shows each part in its zone's state: intact, damaged, or broken.
   for (const part of model.kitParts) {
     const fraction = hp[part.zone]! / model.zoneMaxHp[part.zone]!;
-    const state = hp[part.zone]! <= 0 ? 2 : fraction < damagedBelow ? 1 : 0;
-    part.states.forEach((lod, i) => { lod.visible = i === state; });
+    let state = hp[part.zone]! <= 0 ? 2 : fraction < damagedBelow ? 1 : 0;
+    // No damaged version: the intact one stays, darkening, sparking and smoking. No broken version: the part is
+    // gone (an arm shot off; legs gone and the mech crawls on its belly).
+    if (state === 1 && !part.states[1]) state = 0;
+    part.states.forEach((lod, i) => { if (lod) lod.visible = i === state; });
   }
   // Crawling: the body drops onto stubs and tips forward, so a legless mech reads at a distance.
   const crawling = hp[0]! <= 0 && !dead;
