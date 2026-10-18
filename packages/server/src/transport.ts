@@ -17,7 +17,11 @@ export interface RunningServer {
 // Not done yet: check the Origin header against an allow list before this goes on a public host.
 // `defaultBots` is how many bots a new room gets when its link does not say (`&bots=0` asks for none). null keeps
 // the room topped up to its tier's target size.
-export function startServer(manager: RoomManager, port: number, defaultBots: number | null = 0): Promise<RunningServer> {
+// `onTick`, if given, hears how long each tick of every room took (packing and sending included) and how late it
+// started, for load testing.
+export function startServer(
+  manager: RoomManager, port: number, defaultBots: number | null = 0, onTick?: (ms: number, lateMs: number) => void,
+): Promise<RunningServer> {
   const wss = new WebSocketServer({ port, maxPayload: MAX_MESSAGE_BYTES });
 
   wss.on("connection", (socket, request: IncomingMessage) => {
@@ -50,7 +54,9 @@ export function startServer(manager: RoomManager, port: number, defaultBots: num
     const now = performance.now();
     let ticks = 0;
     while (next <= now && ticks < MAX_CATCH_UP_TICKS) {
+      const started = performance.now();
       manager.tick();
+      onTick?.(performance.now() - started, started - next);
       next += STEP * 1000;
       ticks++;
     }

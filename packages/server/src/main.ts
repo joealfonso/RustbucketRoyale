@@ -14,5 +14,17 @@ const defaultBots = process.env.DEFAULT_BOTS === undefined ? null : Number(proce
 const devTuning = process.env.DEV_TUNING === "1";
 const config = { ...loadRoomConfig({ maps: "generated" }), ...(devTuning ? { tuningRaws: loadTuningRaws() } : {}) };
 const manager = new RoomManager((code, tier, bots) => new Room(code, tier, config, bots), tierNames(), defaultTier, maxRooms);
-const server = await startServer(manager, port, defaultBots);
+// LOAD_STATS=1 prints a line of tick timings every 5 s, for scripts/load-test.ts.
+const tickTimes: number[] = [], lateTimes: number[] = [];
+const onTick = process.env.LOAD_STATS === "1" ? (ms: number, late: number) => { tickTimes.push(ms); lateTimes.push(late); } : undefined;
+if (onTick) {
+  setInterval(() => {
+    const p99 = (v: number[]) => [...v].sort((a, b) => a - b)[Math.floor(v.length * 0.99)] ?? 0;
+    const mean = tickTimes.reduce((a, b) => a + b, 0) / Math.max(1, tickTimes.length);
+    console.log(`LOAD ${JSON.stringify({ rooms: manager.roomCount, ticks: tickTimes.length, meanMs: mean, p99Ms: p99(tickTimes), lateP99Ms: p99(lateTimes) })}`);
+    tickTimes.length = 0;
+    lateTimes.length = 0;
+  }, 5000);
+}
+const server = await startServer(manager, port, defaultBots, onTick);
 console.log(`Rustbucket Royale server listening on ws://localhost:${server.port} (default ${defaultTier}, up to ${maxRooms} rooms, ${defaultBots === null ? "bots fill to the tier size" : `${defaultBots} bots by default`}${devTuning ? ", live tuning ON" : ""})`);

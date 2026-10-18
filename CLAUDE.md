@@ -65,6 +65,7 @@ Open these on demand. Do not import them.
 - `npm run gauntlet`: typecheck, the determinism scan, tests (including a real two-client server test and a full small-tier soak match), and build in one pass or fail verdict. Results in `artifacts/`.
 - `npm run soak`: a whole match per tier as fast as possible, with checks and budgets. `npm run soak -- large` for one tier, `SEED=123` to replay a failure. Runs nightly in CI.
 - `npx tsx scripts/measure-bandwidth.ts` and `npx tsx scripts/measure-rooms.ts`: bandwidth, tick cost and rooms per process. Record results in `docs/PERF.md`.
+- `npx tsx scripts/load-test.ts [tier] [rooms]`: rooms per process with the real server and real WebSocket clients. `npx tsx scripts/measure-bots.ts [seeds] [tiers]` (with `FILL=medium:28`): how lonely and how fast matches are at a bot count. Record results in `docs/PERF.md`.
 
 ## Testing and CI
 - Vitest for pure logic: damage zones, ring math, upgrade stats, noise radius, bot level of detail, movement and reconciliation.

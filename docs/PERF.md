@@ -90,3 +90,38 @@ With gate 7a one medium seed reached 65 kbps, so pickups are now sent only when 
 
 So roughly 40 medium rooms or 10 large rooms per process on this machine, keeping half the tick spare. A cloud core is usually slower than this laptop, so plan on about half that until it is measured on the real host.
 
+### Bot counts from soak data (2026-10-17, MacBook, Node 25)
+`npx tsx scripts/measure-bots.ts [seeds] [tiers]`, with `FILL=medium:28` to try a count. Each run is a whole soak match with three headless players. "Alone" is the share of a headless player's living time with no other mech within 150 m (radar range). Seeds 1000 and up.
+
+| Tier | Fill | Seeds | Match s (median) | Knockouts a minute | Alone | First contact s |
+| :- | :- | :- | :- | :- | :- | :- |
+| arena | 8 | 6 | 58 | 11.9 | 0% | 0 |
+| small | 12 | 6 | 78 | 10.1 | 2% | 0 |
+| small | 8 | 6 | 52 | 8.2 | 25% | 0 |
+| medium | 24 | 8 | 308 | 4.6 | 65% | 0 |
+| medium | 28 | 8 | 311 | 5.4 | 52% | 0 |
+| medium | 30 | 8 | 366 | 5.1 | 36% | 0 (2 of 8 over 64 kbps) |
+| medium | 36 | 6 | 389 | 5.4 | 35% | 0 (2 of 6 over 64 kbps) |
+| large | 40 | 6 | 435 | 5.5 | 78% | 40 |
+| large | 56 | 6 | 444 | 7.4 | 76% | 28 |
+
+Medium moves from 24 to 28: a quarter less time alone, inside the bandwidth budget on every seed. Bandwidth, not server time, is what stops it going higher. Small stays at 12: fewer bots made matches shorter, not longer, so its short matches come from how hard bots fight, not how many there are. Large stays at 40: 56 (every spawn) barely changes the loneliness, because 2000 m is simply a lot of ground, and it costs more. If large feels empty in play, the fix is the map or the ring, not more bots.
+
+### Rooms per process with real WebSocket clients (2026-10-17, MacBook, Node 25)
+`npx tsx scripts/load-test.ts [tier] [room counts]`. Starts the real server as its own process with `LOAD_STATS=1`, then connects two players per room over WebSocket, each walking, turning and shooting at 60 inputs a second; bots fill each room. Timings are the server's own, over 5 s after 15 s of settling, and include packing and sending every message. "Late start" is how far behind schedule a tick began: if it stays small, the game keeps time.
+
+| Tier | Rooms | People | Mean ms per tick (all rooms) | 99th percentile ms | 99th percentile late start ms | kbps per person | p99 under 8 ms |
+| :- | :- | :- | :- | :- | :- | :- | :- |
+| medium | 5 | 10 | 1.37 | 5.34 | 1.35 | 29 | yes |
+| medium | 10 | 20 | 1.54 | 5.23 | 1.37 | 31 | yes |
+| medium | 20 | 40 | 2.51 | 5.91 | 1.48 | 31 | yes |
+| medium | 40 | 80 | 4.06 | 7.90 | 1.60 | 34 | yes |
+| medium | 50 | 100 | 5.01 | 8.86 | 5.89 | 35 | no |
+| medium | 60 | 120 | 4.83 | 9.10 | 1.53 | 36 | no |
+| large | 5 | 10 | 2.54 | 12.48 | 1.41 | 22 | no |
+| large | 10 | 20 | 3.68 | 9.37 | 1.44 | 24 | no |
+| large | 15 | 30 | 4.37 | 12.33 | 1.35 | 24 | no |
+| large | 20 | 40 | 5.27 | 11.46 | 1.32 | 25 | no |
+
+About 40 medium rooms per process on this laptop. Large has slow ticks (9 to 12 ms in the worst 1%) from 5 rooms up, yet ticks never start more than about 1.5 ms late and the average stays at 2.5 to 5 ms even with 20 rooms. So the process keeps up, but something on large spikes now and then. That has not been profiled yet (likely suspects: garbage from building each snapshot's lists, and long route searches for bots). Until it is, plan on 10 large rooms per process, and half these numbers on a cloud core.
+
