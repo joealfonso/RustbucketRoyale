@@ -147,7 +147,19 @@ describe("rooms with bots", () => {
     const { room, config: c } = makeRoom(undefined, "small", 99);
     const human = new Client(room, c);
     tick(room, [human], 10);
-    expect(human.last().others.length).toBe(c.mapFor("small", 0).spawns.length - c.net.maxPlayers);
+    expect(human.last().others.length).toBe(c.mapFor("small", 0).spawns.length - 1);
+  });
+
+  it("start with a fixed count even when the map only has spawns for a full room of people", () => {
+    const { room, config: c } = makeRoom((cfg) => ({ ...cfg, mapFor: loadRoomConfig({ maps: "generated" }).mapFor }), "arena", 7);
+    expect(c.mapFor("arena", 1).spawns.length).toBe(c.net.maxPlayers);
+    const first = new Client(room, c);
+    tick(room, [first], 10);
+    expect(first.last().others.filter((o) => o.bot).length).toBe(7);
+
+    const second = new Client(room, c);
+    tick(room, [first, second], 10);
+    expect(first.last().others.filter((o) => o.bot).length).toBe(6);
   });
 });
 

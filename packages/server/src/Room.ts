@@ -89,16 +89,16 @@ export class Room {
   private botInput = createMechInput();
   private botTargets: BotTarget[] = [];
   private finder: Pathfinder;
-  private autoFill: boolean;
+  private fixedBots: number | null; // null when the room tops itself up to the tier size
   private fights = new AbstractFights();
   private farBots: FarBot[] = [];
   private anchors: Player[] = []; // the people bots keep full AI near
 
-  // `botCount` is how many computer players to start with, up to what the map has spawns for. `null` means keep the
-  // room topped up to its tier's target size, making room for people as they arrive.
   private tuningRaws: TuningRaws | null = null;
   private tunes: Extract<ServerMessage, { t: "tuned" }>[] = []; // every change so far, replayed to people who join later
 
+  // `botCount` is how many computer players to keep, up to the spawns the people present leave free. `null` means keep
+  // the room topped up to its tier's target size. Either way a bot gives up its spawn to a person arriving in the lobby.
   constructor(readonly code: string, readonly tier: string, private config: RoomConfig, botCount: number | null = 0) {
     if (config.tuningRaws) {
       this.tuningRaws = JSON.parse(JSON.stringify(config.tuningRaws)) as TuningRaws;
@@ -113,16 +113,14 @@ export class Room {
     this.map = config.mapFor(tier, this.seed);
     this.resetProps();
     this.finder = new Pathfinder(this.map.nav, config.bots.path);
-    this.autoFill = botCount === null;
-    if (botCount === null) this.fillBots();
-    else for (let i = 0; i < Math.min(botCount, Math.max(0, this.map.spawns.length - config.net.maxPlayers)); i++) this.addBot();
+    this.fixedBots = botCount;
+    this.fillBots();
   }
 
-  // Adds or removes bots so people plus bots match the tier's target, when the room is set to fill itself.
+  // Adds or removes bots so people plus bots match the tier's target, or the fixed bot count, within the spawns.
   private fillBots(): void {
-    if (!this.autoFill) return;
     const humans = this.humans().length;
-    const target = this.config.bots.fill[this.tier] ?? 12;
+    const target = this.fixedBots === null ? this.config.bots.fill[this.tier] ?? 12 : this.fixedBots + humans;
     const wanted = botsNeeded(target, humans, this.map.spawns.length);
     const bots = [...this.players.values()].filter((p) => p.bot).sort((a, b) => a.id - b.id);
     while (bots.length > wanted) this.players.delete(bots.pop()!.id);
