@@ -145,6 +145,13 @@ The first step from grey boxes toward the real look, on a test page of its own. 
 
 The style test became the game: every wall, crate, mech and pickup in the toon look, your mech in blue and everyone else in bone, the zone ring in magenta. Outlines doubled what the graphics card draws, and it still holds 60 fps. The playtest found that shots aimed at an arm never landed: the crosshair aimed at the wall behind the mech, so shots crossed it a metre off. Now it aims at the mech itself, and every hit pops tick marks and says what it struck. A checker in the test run now holds any real 3D model to the budgets and naming rules, ready for the first one.
 
+## 19. Gate V2a: a mech made of parts
+*Passed 08:57. Commit `9bb64e7`.*
+
+![Spectating a stand-in kit mech: rust jets on its back, a sensor on top](19-v2a-kit-mechs-in-a-match.jpg)
+
+Before any real mech is modelled, the game learned to build one from a kit of parts: torso, jets, sensor, legs, arms. Each part comes as an intact, a dented and a broken piece, each in three levels of detail for near and far, with marked points for sparks, smoke and the gun. Damage now swaps the real pieces, so a blown-off leg is the art's own stub. A script made a stand-in kit out of boxes to prove it all, so the first real mech can drop straight in.
+
 ---
 
-*Next: V2, the mech kit, which starts with paper thumbnails.*
+*Next: the first real mech, starting with three paper thumbnails.*

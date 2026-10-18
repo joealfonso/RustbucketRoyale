@@ -81,3 +81,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Gate V1b passed by Joseph's call. The V1 code is done. Still open from V1: three paper thumbnails of the first mech, scanned into docs/style/, before any Blender work. V2 (mech kit) not started.
 - 2026-10-18: V2 started on Joseph's go, with the code first (V2a) since the paper thumbnails, needed before any modelling, are not in yet.
 - 2026-10-18: Gate V2a built, waiting for its check. Check: on style.html the front mech is the stand-in kit; press D to step through whole, damaged (dented parts), arms broken (stub arm, no gun), legs broken (stubs, crawl); press 2 and 3 to see the far levels of detail take over; in a game add `&kit=standin` to the room link and everyone is drawn from the kit. Gauntlet checks all 21 stand-in parts.
+- 2026-10-18: Gate V2a passed by Joseph's call. V2b (the first real mech) waits for the paper thumbnails and a docs/MECHS.md entry.
