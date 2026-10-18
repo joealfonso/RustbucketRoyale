@@ -280,6 +280,7 @@ export class Room {
     if (this.state === "active" && this.ring) ringAt(this.ring, this.elapsedSeconds(), this.ringNow);
     this.anchors = this.humans().filter((p) => p.participant && !p.dead);
     this.farBots.length = 0;
+    this.finder.newTick();
     for (const player of this.players.values()) {
       if (player.respawnTick > 0 && this.tickCount >= player.respawnTick && this.state !== "active") this.respawnForPractice(player);
       if (player.bot) {

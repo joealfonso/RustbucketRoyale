@@ -13,6 +13,7 @@ export class Pathfinder {
   private originX: number;
   private originZ: number;
   private blocked: Uint8Array;
+  private region: Int32Array; // open cells that can reach each other share a number, blocked cells are -1
 
   // Scratch space, reused by every search. A stamp stands in for clearing the arrays each time.
   private g: Float32Array;
@@ -22,8 +23,10 @@ export class Pathfinder {
   private closedStamp: Int32Array;
   private stamp = 0;
   private heap: number[] = [];
+  private searchesLeft: number;
 
   constructor(nav: NavGrid, private stats: BotPathStats) {
+    this.searchesLeft = stats.searchesPerTick;
     const factor = Math.max(1, Math.round(stats.cellMeters / nav.cell));
     this.cell = nav.cell * factor;
     this.cols = Math.ceil(nav.cols / factor);
@@ -42,6 +45,39 @@ export class Pathfinder {
     this.parent = new Int32Array(n);
     this.seenStamp = new Int32Array(n);
     this.closedStamp = new Int32Array(n);
+    this.region = this.findRegions();
+  }
+
+  // Labels each patch of open cells that can be walked between, with the same moves the search makes.
+  // The large map has hundreds of small sealed pockets, and a search for a goal in one would look at every cell
+  // it can reach before giving up.
+  private findRegions(): Int32Array {
+    const region = new Int32Array(this.cols * this.rows).fill(-1);
+    const stack = this.parent; // free until the first search
+    let next = 0;
+    for (let first = 0; first < region.length; first++) {
+      if (this.blocked[first] || region[first]! >= 0) continue;
+      region[first] = next;
+      let top = 0;
+      stack[top++] = first;
+      while (top > 0) {
+        const c = stack[--top]!;
+        const cx = c % this.cols, cz = Math.floor(c / this.cols);
+        for (let dz = -1; dz <= 1; dz++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = cx + dx, nz = cz + dz;
+            if (nx < 0 || nz < 0 || nx >= this.cols || nz >= this.rows) continue;
+            const n = nz * this.cols + nx;
+            if (this.blocked[n] || region[n]! >= 0) continue;
+            if (dx !== 0 && dz !== 0 && (this.blocked[cz * this.cols + nx] || this.blocked[nz * this.cols + cx])) continue;
+            region[n] = next;
+            stack[top++] = n;
+          }
+        }
+      }
+      next++;
+    }
+    return region;
   }
 
   private cellOf(x: number, z: number): number {
@@ -56,6 +92,17 @@ export class Pathfinder {
 
   private centreZ(c: number): number {
     return this.originZ + (Math.floor(c / this.cols) + 0.5) * this.cell;
+  }
+
+  // On the 2000 m map one search can look at thousands of cells, and several bots asking on the same tick made the
+  // slow ticks. So a room runs only a few searches per tick and the other bots keep their old route a tick longer.
+  // The room calls this once per tick.
+  newTick(): void {
+    this.searchesLeft = this.stats.searchesPerTick;
+  }
+
+  canSearch(): boolean {
+    return this.searchesLeft > 0;
   }
 
   isBlocked(x: number, z: number): boolean {
@@ -79,14 +126,40 @@ export class Pathfinder {
     return -1;
   }
 
+  // The nearest cell to this one that is in the given region: square rings outwards, and the closest cell of the
+  // first ring that has any. There is always one, since the region is not empty.
+  private nearestInRegion(c: number, region: number): number {
+    const cx = c % this.cols, cz = Math.floor(c / this.cols);
+    const most = Math.max(this.cols, this.rows);
+    for (let r = 1; r < most; r++) {
+      let best = -1, bestSquared = Infinity;
+      for (let dz = -r; dz <= r; dz++) {
+        const z = cz + dz;
+        if (z < 0 || z >= this.rows) continue;
+        const step = Math.abs(dz) === r ? 1 : 2 * r; // whole top and bottom rows, only the ends of the others
+        for (let dx = -r; dx <= r; dx += step) {
+          const x = cx + dx;
+          if (x < 0 || x >= this.cols || this.region[z * this.cols + x] !== region) continue;
+          if (dx * dx + dz * dz < bestSquared) { best = z * this.cols + x; bestSquared = dx * dx + dz * dz; }
+        }
+      }
+      if (best >= 0) return best;
+    }
+    return c;
+  }
+
   // Fills `out` with x, z, x, z... for the waypoints from here to the goal, not counting the start.
   // Returns false only when no route towards the goal could be found at all.
   findPath(startX: number, startZ: number, goalX: number, goalZ: number, out: number[]): boolean {
     out.length = 0;
+    this.searchesLeft--;
     const start = this.nearestOpen(this.cellOf(startX, startZ));
-    const goal = this.nearestOpen(this.cellOf(goalX, goalZ));
+    let goal = this.nearestOpen(this.cellOf(goalX, goalZ));
     if (start < 0 || goal < 0) return false;
-    if (start === goal) { out.push(goalX, goalZ); return true; }
+    // A goal that cannot be reached from here: go to the nearest spot that can.
+    const exact = this.region[goal] === this.region[start];
+    if (!exact) goal = this.nearestInRegion(goal, this.region[start]!);
+    if (start === goal) { out.push(exact ? goalX : this.centreX(goal), exact ? goalZ : this.centreZ(goal)); return true; }
 
     this.stamp++;
     const stamp = this.stamp;
@@ -141,7 +214,7 @@ export class Pathfinder {
 
     const points: number[] = [startX, startZ];
     for (let i = 1; i < cells.length; i++) points.push(this.centreX(cells[i]!), this.centreZ(cells[i]!));
-    if (reached) points[points.length - 2] = goalX, points[points.length - 1] = goalZ;
+    if (reached && exact) points[points.length - 2] = goalX, points[points.length - 1] = goalZ;
     this.pull(points, out);
     return true;
   }
