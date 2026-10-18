@@ -123,5 +123,18 @@ Medium moves from 24 to 28: a quarter less time alone, inside the bandwidth budg
 | large | 15 | 30 | 4.37 | 12.33 | 1.35 | 24 | no |
 | large | 20 | 40 | 5.27 | 11.46 | 1.32 | 25 | no |
 
-About 40 medium rooms per process on this laptop. Large has slow ticks (9 to 12 ms in the worst 1%) from 5 rooms up, yet ticks never start more than about 1.5 ms late and the average stays at 2.5 to 5 ms even with 20 rooms. So the process keeps up, but something on large spikes now and then. That has not been profiled yet (likely suspects: garbage from building each snapshot's lists, and long route searches for bots). Until it is, plan on 10 large rooms per process, and half these numbers on a cloud core.
+About 40 medium rooms per process on this laptop. Large has slow ticks (9 to 12 ms in the worst 1%) from 5 rooms up, yet ticks never start more than about 1.5 ms late and the average stays at 2.5 to 5 ms even with 20 rooms. So the process keeps up, but something on large spikes now and then. Profiled below. Until the rest is fixed, plan on 10 large rooms per process, and half these numbers on a cloud core.
+
+#### Large tier slow ticks, profiled (2026-10-17)
+`--trace-gc` and `--cpu-prof` on the server under `load-test.ts large 5`, plus timing every route search inside each slow tick. Garbage collection is not the cause: the young generation is swept every 100 to 200 ms but each sweep pauses only 0.1 to 0.4 ms. Route searches are: they are about three quarters of all room tick time on large, and every tick over 6 ms held 4 to 11 searches of 1 to 2 ms each. On the 250 by 250 cell search grid (40% blocked) a search looks at about 2000 cells, and 12% use the full 6000-cell cap, two thirds of those because the goal sits in a sealed pocket. Snapshot building did not show up. Two changes (see DECISIONS.md): at most one search per room per tick (`searchesPerTick` in `data/bots.json`), and goals in unreachable pockets are swapped for the nearest reachable cell.
+
+Before and after, run alternately on the same afternoon. The laptop was busier than for the table above (late starts of about 2.4 ms rather than 1.4), so compare within this table only. 99th percentile ms per tick, three runs each:
+
+| Rooms | Before | After |
+| :- | :- | :- |
+| 5 | 10.2, 11.9, 11.1 | 7.3, 6.9, 6.4 |
+| 10 | 10.1, 7.1, 10.5 | 9.1, 7.3, 9.1 |
+| 20 | 10.5, 15.1, 11.4 | 12.5, 9.1, 11.1 |
+
+The spikes in a single room are gone: 5 rooms now fit 8 ms. From 10 rooms up it helps little. Each room can still run its one search on the same tick as every other room, so the worst tick grows with the number of rooms. What remains is plain search volume: bots replan every 2 s whether they need to or not. Doubling `replanSeconds` to 4 made no clear difference in a quick try, and spreading the searches over more rooms on one cache was not the issue either (one pathfinder and twenty used in turn cost the same, 0.38 ms a search). The next step would be cheaper searches, such as one shared route field to the ring centre per ring stage, or a coarser grid for long routes. Still plan on 10 large rooms per process.
 

@@ -44,6 +44,7 @@ export class Bot {
   private pathGoalX = 0;
   private pathGoalZ = 0;
   private replanIn = 0;
+  private needsPlan = true; // no route for the current goal yet
   private heading = { x: 0, z: 0 };
   private heardX = 0;
   private heardZ = 0;
@@ -85,6 +86,7 @@ export class Bot {
   setFinder(finder: Pathfinder | null): void {
     this.finder = finder;
     this.path.length = 0;
+    this.needsPlan = true;
   }
 
   think(self: MechState, targets: readonly BotTarget[], ring: RingNow | null, world: World, dt: number, out: MechInput): void {
@@ -194,7 +196,9 @@ export class Bot {
 
     if (this.finder && straight > this.pathStats.minPathDistance) {
       const goalMoved = Math.hypot(goalX - this.pathGoalX, goalZ - this.pathGoalZ) > this.pathStats.goalMoveReplan;
-      if (this.path.length === 0 || this.replanIn <= 0 || goalMoved) {
+      // A failed search waits for the next replan too, rather than trying again every tick.
+      if ((this.needsPlan || this.replanIn <= 0 || goalMoved) && this.finder.canSearch()) {
+        this.needsPlan = false;
         this.pathIndex = 0;
         this.pathGoalX = goalX; this.pathGoalZ = goalZ;
         this.replanIn = this.pathStats.replanSeconds * (0.8 + this.random() * 0.4);
@@ -207,6 +211,7 @@ export class Bot {
       }
     } else {
       this.path.length = 0;
+      this.needsPlan = true;
     }
 
     const dx = tx - self.x, dz = tz - self.z;

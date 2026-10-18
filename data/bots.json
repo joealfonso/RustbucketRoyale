@@ -80,7 +80,8 @@
     "replanSeconds": 2,
     "waypointReach": 4,
     "minPathDistance": 20,
-    "goalMoveReplan": 15
+    "goalMoveReplan": 15,
+    "searchesPerTick": 1
   },
   "loot": {
     "searchMeters": 40,

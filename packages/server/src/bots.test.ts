@@ -193,6 +193,7 @@ describe("bots with a route", () => {
     const input = createMechInput();
     let crossedAt: number | null = null;
     for (let i = 0; i < 60 * 70; i++) {
+      finder?.newTick();
       bot.think(self, [], ring, world, DT, input);
       input.jet = false; // no hopping over a 30 m wall, so only a route can get it across
       stepMech(self, input, config.mech, DT, world);

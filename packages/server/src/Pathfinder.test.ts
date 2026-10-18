@@ -70,7 +70,19 @@ describe("Pathfinder", () => {
     const ok = finder(ring).findPath(-80, 0, 0, 0, path);
     expect(ok).toBe(true);
     const last = [path.at(-2)!, path.at(-1)!];
-    expect(Math.hypot(last[0]! - 0, last[1]! - 0)).toBeLessThan(Math.hypot(-80, 0)); // closer than where it began
+    expect(Math.hypot(last[0]! - 0, last[1]! - 0)).toBeLessThan(45); // right outside the walls, which end 34 m out
+  });
+
+  it("allows a set number of searches per tick, then more on the next", () => {
+    const f = finder([]);
+    const path: number[] = [];
+    for (let i = 0; i < pathStats.searchesPerTick; i++) {
+      expect(f.canSearch()).toBe(true);
+      f.findPath(-80, -80, 80, 70, path);
+    }
+    expect(f.canSearch()).toBe(false);
+    f.newTick();
+    expect(f.canSearch()).toBe(true);
   });
 
   it("is quick on a real large map, across the whole of it, and nearly always finds a way", () => {
