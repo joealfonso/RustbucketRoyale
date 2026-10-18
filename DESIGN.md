@@ -25,6 +25,7 @@ Detail density is uneven on purpose: big calm shapes, a few focused details.
 Parts have visible seams, hinges, and panel breaks. No melted blends.
 Surfaces are flat toon bands with visible brush marks. No gloss, airbrush gradients, or baked lighting.
 No gibberish text. Use none, or real text hand set in the chosen fonts. Pick one licensed monospace font for the HUD and one stencil or hand lettered font for decals, and record both here.
+Chosen fonts (2026-10-17): HUD, IBM Plex Mono (SIL Open Font License). Decals, Big Shoulders Stencil (SIL Open Font License). Both get a row in docs/ASSETS.md when their files enter the repo.
 Banned looks: teal and orange grading, neon rim glow, purple to blue gradients, god rays, lens flare, bokeh, hex grid decoration, glowing eye visors, glass cards, soft glow panels, stock icon packs, emoji icons.
 Wear follows logic: rust where water pools, scuffs where parts rub, chips along edges.
 Each mech is built from named junk, shows its repairs, and has a backstory line in docs/MECHS.md. Asymmetry needs a reason (a patch, a swapped part), never randomness.

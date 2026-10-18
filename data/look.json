@@ -1,0 +1,13 @@
+{
+  "bands": [0.45, 0.75, 1.0],
+  "bandEdges": [0.2, 0.6],
+  "rim": { "strength": 0.35, "width": 0.25, "color": "warmLight" },
+  "outline": { "widthMeters": 0.06, "darken": 0.35 },
+  "light": {
+    "key": { "color": "warmLight", "intensity": 2.2, "direction": [-0.5, 1.0, 0.35] },
+    "fillSky": "#8FA3AD",
+    "fillGround": "soot",
+    "fillIntensity": 0.9,
+    "fog": { "color": "#B5B7A8", "near": 120, "far": 900 }
+  }
+}

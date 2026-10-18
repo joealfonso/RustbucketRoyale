@@ -1,0 +1,32 @@
+{
+  "colors": {
+    "rustOrange": "#C4622D",
+    "deepRust": "#7A3B1E",
+    "moss": "#5E7F3A",
+    "darkMoss": "#3B5230",
+    "scrapSteel": "#6E7B80",
+    "soot": "#2A2F2E",
+    "warmLight": "#F2E3C0",
+    "sparkYellow": "#FFC93C",
+    "zoneMagenta": "#E83F8B"
+  },
+  "mech": {
+    "body": "scrapSteel",
+    "trim": "deepRust",
+    "youAccent": "#2E8FD6",
+    "othersAccent": "#E8E4D8"
+  },
+  "world": {
+    "ground": "moss",
+    "sky": "#A9B6B4",
+    "remap": {
+      "#8a5a3c": "deepRust",
+      "#7a4a42": "rustOrange",
+      "#80735f": "scrapSteel",
+      "#5f6b73": "scrapSteel",
+      "#9a7b4f": "warmLight",
+      "#6d6a5f": "scrapSteel",
+      "#c0392b": "sparkYellow"
+    }
+  }
+}

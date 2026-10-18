@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none (M1 to M8 done)
-Current visual milestone: V1 (not started)
+Current visual milestone: V1 (in two gates: V1a the look in a style test page; V1b the look across the game, plus the asset checker)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -16,7 +16,7 @@ Update the two lines above when a gate passes. Claude Code reads this file first
 - M8: upgrades, tuning pass with the debug panel, perf pass, bot count tuning from soak data, first load test for rooms per server.
 
 ## Visual
-- V1 style test: one grey-box mech and one chunk in the browser with the toon shader, outline, palette, and lighting. Gate: screenshots at 10 m, 50 m, and 150 m read well on a mid-range laptop before any more assets get made. Draw three thumbnail silhouettes of the first mech on paper before opening Blender, and keep the scan of the chosen one in the repo next to the screenshots. Also build the asset import checker (`Assets/Editor/Import/`) that fails an import over the triangle budget, with the wrong naming, or without the master toon material.
+- V1 style test: one grey-box mech and one chunk in the browser with the toon shader, outline, palette, and lighting. Gate: screenshots at 10 m, 50 m, and 150 m read well on a mid-range laptop before any more assets get made. Draw three thumbnail silhouettes of the first mech on paper before opening Blender, and keep the scan of the chosen one in the repo next to the screenshots. Also build the asset import checker (`scripts/check-assets.ts`, run by the gauntlet; it was a Unity editor script before the move to the web) that fails a glTF model over the triangle budget, with the wrong naming, or without the master toon material.
 - V2 mech kit: modular parts, three damage states each, LODs, VFX hooks.
 - V3 junkyard chunk kit and destructible props.
 - V4 HUD and radar.
@@ -72,3 +72,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 \n- 2026-10-17: Gate 8c in progress. Done: frame time, work time, draw calls and triangles in the F1 panel; client measured in the browser pane (0.5 ms work per frame, 60 fps on large and in a busy arena) and download size (172 KB gzipped), both in PERF.md. Not done: bot counts from soak data, the real WebSocket load test, and a frame-rate reading on a mid-range laptop.\n
 - 2026-10-17: Gate 8c built, waiting for its check. Measured and recorded in PERF.md: client cost (0.5 ms work a frame, 60 fps in the browser pane on large and in a busy arena), download (172 KB gzipped), bot counts over many seeds (medium raised from 24 to 28, the others kept), and rooms per process with real WebSocket clients (about 40 medium; large keeps time but has slow-tick spikes worth profiling, so plan on 10). Check: read the F1 Performance folder on your laptop on the large tier and say the work and frame numbers; play a medium match and see whether it feels busier.
 - 2026-10-17: Gate 8c passed by Joseph's call. M8 is done, and with it every code milestone (M1 to M8). Next is the visual track, V1 style test, not started.
+- 2026-10-17: V1 started on Joseph's go, in gates V1a (master toon material, outline, palette, lighting, on a style test page with 10 / 50 / 150 m views) and V1b (the look across the whole game, a cost check on large, the asset import checker). Fonts recorded in DESIGN.md: IBM Plex Mono for the HUD, Big Shoulders Stencil for decals.
+- 2026-10-17: Gate V1a built, waiting for its playtest. Check: open http://localhost:5173/style.html and press 1, 2, 3 (Q / E to turn); screenshots and notes in docs/style/. Judge the bands, the outline, the palette and the light at 10 and 50 m. At 150 m grey-box mechs are only a few pixels tall, so the broken-leg read at that range waits for real silhouettes. Still to do outside the code: three paper thumbnails of the first mech, scanned into docs/style/.

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { UpgradeDef } from "@rustbucket/shared";
+import type { Toon } from "./toonMaterial";
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const materials = new Map<string, THREE.MeshStandardMaterial>();
@@ -25,12 +26,13 @@ export interface MechModel {
   body: THREE.Group; // everything above the feet, lowered and tipped forward when the mech crawls
   legMeshes: THREE.Mesh[];
   // One material per hit zone (legs, arms, torso), owned by this mech so damage tints only it.
-  zoneMaterials: THREE.MeshStandardMaterial[];
+  zoneMaterials: (THREE.MeshStandardMaterial | THREE.MeshToonMaterial)[];
+  toon: Toon | null; // the toon look, when this mech is drawn with it
   armMeshes: THREE.Mesh[];
   baseColors: THREE.Color[];
   zoneMaxHp: number[];
   plates: THREE.Mesh[][]; // armor plate meshes per zone, shown while that zone has plate points
-  gunMaterial: THREE.MeshStandardMaterial;
+  gunMaterial: THREE.MeshStandardMaterial | THREE.MeshToonMaterial;
   // The last damage shown, kept so the spark and smoke effects can read it each frame.
   hp: number[];
   dead: boolean;
@@ -54,20 +56,24 @@ const WRECK = new THREE.Color("#262626");
 const scratch = new THREE.Color();
 
 // Grey-box mech. Art hook: replace this with a loaded model, keep the zone mapping so damage still shows.
-export function createMechModel(accent: string, zoneMaxHp: readonly number[]): MechModel {
+// With `toon`, it is drawn in the game's look: palette colours, the master toon material and outlines.
+export function createMechModel(accent: string, zoneMaxHp: readonly number[], toon: Toon | null = null, bodyColor = "#738087"): MechModel {
   const group = new THREE.Group();
   const body = new THREE.Group();
   group.add(body);
-  const grey = "#738087";
-  const baseColors = [new THREE.Color(grey), new THREE.Color(accent), new THREE.Color(grey)];
-  const zoneMaterials = baseColors.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1 }));
+  const grey = toon ? toon.color(bodyColor) : bodyColor;
+  const baseColors = [new THREE.Color(grey), new THREE.Color(toon ? toon.color(accent) : accent), new THREE.Color(grey)];
+  const zoneMaterials = baseColors.map((c) => (toon ? toon.ownMaterial(`#${c.getHexString()}`) : new THREE.MeshStandardMaterial({ color: c, roughness: 1 })));
   const armMeshes: THREE.Mesh[] = [];
+  // Every box gets an outline in the toon look, tinted from the colour it starts with.
+  const outline = (mesh: THREE.Mesh, color: string) => { if (toon) toon.outlineChild(mesh, color); };
 
   const part = (zone: number, center: number[], size: number[]): THREE.Mesh => {
     const mesh = new THREE.Mesh(unitBox, zoneMaterials[zone]!);
     mesh.position.set(center[0]!, center[1]!, center[2]!);
     mesh.scale.set(size[0]!, size[1]!, size[2]!);
     body.add(mesh);
+    outline(mesh, `#${baseColors[zone]!.getHexString()}`);
     return mesh;
   };
   part(2, [0, 2.4, 0], [1.8, 1.6, 1.2]);
@@ -81,20 +87,22 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[]): M
   armMeshes.push(part(1, [1.2, 2.4, -0.6], [0.5, 0.6, 1.6]));
 
   // The barrel on the gun arm takes the colour of the weapon in hand. Art hook: one model per weapon at V2.
-  const gunMaterial = new THREE.MeshStandardMaterial({ color: "#d9731a", roughness: 0.6 });
+  const gunMaterial = toon ? toon.ownMaterial("#d9731a") : new THREE.MeshStandardMaterial({ color: "#d9731a", roughness: 0.6 });
   const barrel = new THREE.Mesh(unitBox, gunMaterial);
   barrel.position.set(1.2, 2.4, -1.65);
   barrel.scale.set(0.3, 0.3, 0.6);
   body.add(barrel);
+  outline(barrel, "soot");
 
   // Armor plates bolted on over each zone. Art hook: real plate models with bolts and scratches at V2.
-  const plateMaterial = new THREE.MeshStandardMaterial({ color: "#a9b8c4", roughness: 0.5, metalness: 0.3 });
+  const plateMaterial = toon ? toon.material("#a9b8c4") : new THREE.MeshStandardMaterial({ color: "#a9b8c4", roughness: 0.5, metalness: 0.3 });
   const plate = (center: number[], size: number[]): THREE.Mesh => {
     const mesh = new THREE.Mesh(unitBox, plateMaterial);
     mesh.position.set(center[0]!, center[1]!, center[2]!);
     mesh.scale.set(size[0]!, size[1]!, size[2]!);
     mesh.visible = false;
     body.add(mesh);
+    outline(mesh, "#a9b8c4");
     return mesh;
   };
   const plates = [
@@ -103,7 +111,7 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[]): M
     [plate([0, 2.5, -0.66], [1.5, 1.1, 0.12]), plate([0, 2.5, 0.66], [1.5, 1.1, 0.12])],
   ];
   return {
-    group, body, legMeshes, zoneMaterials, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
+    group, body, legMeshes, zoneMaterials, toon, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
     hp: [...zoneMaxHp], dead: false, repairing: false, upgradeParts: [], fxTimers: [0, 0, 0, 0, 0, 0, 0],
   };
 }
@@ -130,6 +138,7 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
     const length = crawling ? 1.6 * crawlLook.legStubScale : 1.6;
     leg.scale.y = length;
     leg.position.y = 1.6 - length / 2;
+    model.toon?.refit(leg);
   }
   model.group.scale.y = dead ? 0.35 : 1;
 }
@@ -161,10 +170,11 @@ export function setMechUpgrades(model: MechModel, upgrades: readonly number[], d
     if (!part && fitted) {
       const def = defs[u]!;
       const mount = UPGRADE_MOUNTS[def.id] ?? OTHER_MOUNT;
-      part = new THREE.Mesh(unitBox, material(def.color));
+      part = new THREE.Mesh(unitBox, model.toon ? model.toon.material(def.color) : material(def.color));
       part.position.set(mount.center[0]!, mount.center[1]!, mount.center[2]!);
       part.scale.set(mount.size[0]!, mount.size[1]!, mount.size[2]!);
       model.body.add(part);
+      model.toon?.outlineChild(part, def.color);
       model.upgradeParts[u] = part;
     }
     if (part) part.visible = fitted;
