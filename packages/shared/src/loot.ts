@@ -5,10 +5,11 @@ import type { WeaponSet } from "./stats";
 export const ITEM_GRENADE = 0;
 export const ITEM_ARMOR_FIRST = 1; // legs, arms, torso: one plate item per hit zone
 export const ITEM_WEAPON_FIRST = 4;
+export const ITEM_UPGRADE_FIRST = 64; // weapons fit in between, upgrades after
 
 export interface LootDrop {
   chance: number;
-  table: Record<string, number>; // "grenade", "armor" (a plate for a random zone) or a weapon id, by weight
+  table: Record<string, number>; // "grenade", "armor" (a plate for a random zone), "upgrade" (a random one) or a weapon id, by weight
 }
 
 export interface LootConfig {
@@ -39,18 +40,22 @@ export function parseLootConfig(raw: unknown, weapons: WeaponSet, props: PropCon
     // Map validation counts loot props from props.json, so the two files have to agree on which props drop anything.
     if (prop.dropsLoot !== drop.chance > 0) throw new Error(`loot.json: ${prop.id} drop chance disagrees with dropsLoot in props.json`);
     for (const name of Object.keys(drop.table)) {
-      if (name !== "grenade" && name !== "armor" && !weapons.weapons.some((w) => w.id === name)) throw new Error(`loot.json: ${prop.id} drops unknown item "${name}"`);
+      if (name !== "grenade" && name !== "armor" && name !== "upgrade" && !weapons.weapons.some((w) => w.id === name)) throw new Error(`loot.json: ${prop.id} drops unknown item "${name}"`);
     }
   }
   return d as unknown as LootConfig;
 }
 
 export const weaponItem = (weapon: number) => ITEM_WEAPON_FIRST + weapon;
-export const itemWeapon = (item: number) => (item >= ITEM_WEAPON_FIRST ? item - ITEM_WEAPON_FIRST : -1);
+export const itemWeapon = (item: number) => (item >= ITEM_WEAPON_FIRST && item < ITEM_UPGRADE_FIRST ? item - ITEM_WEAPON_FIRST : -1);
+export const upgradeItem = (upgrade: number) => ITEM_UPGRADE_FIRST + upgrade;
+export const itemUpgrade = (item: number) => (item >= ITEM_UPGRADE_FIRST ? item - ITEM_UPGRADE_FIRST : -1);
+// Weapons and upgrades are taken with E. Everything else is walked over.
+export const takenWithE = (item: number) => item >= ITEM_WEAPON_FIRST;
 export const itemArmorZone = (item: number) => (item >= ITEM_ARMOR_FIRST && item < ITEM_WEAPON_FIRST ? item - ITEM_ARMOR_FIRST : -1);
 
 // Picks what a broken prop drops, if anything. `random` returns a number from 0 up to but not including 1.
-export function rollLoot(loot: LootConfig, weapons: WeaponSet, propId: string, random: () => number): number | null {
+export function rollLoot(loot: LootConfig, weapons: WeaponSet, upgradeCount: number, propId: string, random: () => number): number | null {
   const drop = loot.drops[propId];
   if (!drop || random() >= drop.chance) return null;
   const entries = Object.entries(drop.table);
@@ -62,6 +67,7 @@ export function rollLoot(loot: LootConfig, weapons: WeaponSet, propId: string, r
     if (roll >= 0) continue;
     if (name === "grenade") return ITEM_GRENADE;
     if (name === "armor") return ITEM_ARMOR_FIRST + Math.floor(random() * 3);
+    if (name === "upgrade") return upgradeItem(Math.floor(random() * upgradeCount));
     return weaponItem(weapons.weapons.findIndex((w) => w.id === name));
   }
   return null;

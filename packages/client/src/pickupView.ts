@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ITEM_GRENADE, itemArmorZone, itemWeapon, type PickupState } from "@rustbucket/shared";
+import { ITEM_GRENADE, itemArmorZone, itemUpgrade, itemWeapon, type PickupState } from "@rustbucket/shared";
 
 const SPIN = 1.6; // radians a second
 const BOB = 0.15; // metres up and down
@@ -17,7 +17,7 @@ export class PickupView {
   private geometry = new THREE.BoxGeometry(1, 1, 1);
   private materials = new Map<string, THREE.MeshStandardMaterial>();
 
-  constructor(private scene: THREE.Scene, private colors: { grenade: string; armor: string }, private weaponColors: string[]) {}
+  constructor(private scene: THREE.Scene, private colors: { grenade: string; armor: string }, private weaponColors: string[], private upgradeColors: string[]) {}
 
   private material(color: string): THREE.MeshStandardMaterial {
     let m = this.materials.get(color);
@@ -34,10 +34,13 @@ export class PickupView {
       let s = this.shown.get(p.id);
       if (!s) {
         const weapon = itemWeapon(p.item);
-        const color = p.item === ITEM_GRENADE ? this.colors.grenade : itemArmorZone(p.item) >= 0 ? this.colors.armor : (this.weaponColors[weapon] ?? "#ffffff");
+        const upgrade = itemUpgrade(p.item);
+        const color = p.item === ITEM_GRENADE ? this.colors.grenade : itemArmorZone(p.item) >= 0 ? this.colors.armor
+          : upgrade >= 0 ? (this.upgradeColors[upgrade] ?? "#ffffff") : (this.weaponColors[weapon] ?? "#ffffff");
         const mesh = new THREE.Mesh(this.geometry, this.material(color));
         if (p.item === ITEM_GRENADE) mesh.scale.set(0.5, 0.5, 0.5);
         else if (weapon >= 0) mesh.scale.set(0.4, 0.35, 1.6);
+        else if (upgrade >= 0) { mesh.scale.set(0.7, 0.7, 0.7); mesh.rotation.x = Math.PI / 4; } // a tumbling cube, bigger than a grenade
         else mesh.scale.set(0.9, 0.15, 0.9);
         mesh.position.set(p.x, p.y, p.z);
         this.scene.add(mesh);

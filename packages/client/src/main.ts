@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, throwGrenade, zoneState, partToRepair, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
   type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
@@ -17,6 +17,7 @@ import hudJson from "../../../data/hud.json";
 import grenadeJson from "../../../data/grenade.json";
 import zonesJson from "../../../data/zones.json";
 import damageFxJson from "../../../data/damageFx.json";
+import upgradesJson from "../../../data/upgrades.json";
 import { DamageFx, parseDamageFx } from "./damageFx";
 import { setAimTarget } from "./aimTarget";
 import { DebugPanel } from "./debugPanel";
@@ -29,7 +30,7 @@ import { PickupView } from "./pickupView";
 import { setMechGear } from "./mechModel";
 import { Hud } from "./hud";
 import { addMapMeshes, removeMapMeshes } from "./mapRenderer";
-import { createMechModel, setCrawlLook, setMechDamage, type MechModel } from "./mechModel";
+import { createMechModel, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
 import { NetClient } from "./net";
 import { Projectiles } from "./projectiles";
 import { Radar } from "./radar";
@@ -44,6 +45,7 @@ const mechStats = parseMechStats(mechJson);
 const weaponSet = parseWeapons(weaponsJson);
 const lootConfig = parseLootConfig(lootJson, weaponSet, parsePropConfig(propsJsonForLoot));
 const weaponColors = weaponSet.weapons.map((w) => w.color);
+const upgradeSet = parseUpgrades(upgradesJson);
 // The start weapon is what offline practice uses, and what the tuning panel edits.
 const weaponStats = weaponSet.weapons[weaponSet.start]!;
 const cameraStats = parseCameraStats(cameraJson);
@@ -161,7 +163,8 @@ let fxDt = 0;
 const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
 const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.maxViewDelayMs, netStats.snapshotEvery * STEP * 1000, zoneMaxHp);
 remotes.weaponColors = weaponColors;
-const pickupView = new PickupView(scene, lootConfig.colors, weaponColors);
+remotes.upgrades = upgradeSet.upgrades;
+const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgradeSet.upgrades.map((u) => u.color));
 if (net) net.viewDelayMs = () => remotes.viewDelayMs;
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
@@ -180,7 +183,7 @@ const shot: Shot = createShot();
 const gate = new FireGate();
 let health: HealthState = { hp: [...zoneMaxHp], dead: false, respawnIn: 0 };
 // What you carry. Online the server's word is final and arrives with every snapshot. Offline it never changes.
-let loadout: Loadout = { slots: [weaponSet.start, -1], active: 0, grenades: lootConfig.grenadesStart, armor: [0, 0, 0] };
+let loadout: Loadout = { slots: [weaponSet.start, -1], active: 0, grenades: lootConfig.grenadesStart, armor: [0, 0, 0], upgrades: [-1, -1] };
 let serverActive = 0;
 let firingSlot = 0; // the slot this client is firing from, so the switch pause is predicted too
 let pickupsNow: PickupState[] = [];
@@ -425,7 +428,7 @@ function frame(now: number): void {
     if (net === null && mech.y < KILL_HEIGHT) respawnOffline();
 
     simTime += STEP;
-    if (mechInput.fire && gate.tryFire(simTime, weapon.shotsPerSecond)) {
+    if (mechInput.fire && gate.tryFire(simTime, weapon.shotsPerSecond * upgradeScale(loadout, upgradeSet, "fireRate"))) {
       // Each pellet is drawn at once, with this client's own spread. The server decides what they hit.
       for (let i = 0; i < weapon.pellets; i++) {
         computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weapon, Math.random, shot, armsBroken() ? zoneSet.brokenArmsSpreadMultiplier : 1);
@@ -515,18 +518,25 @@ function frame(now: number): void {
   damageFx.emitFrom(ownModel, frameTime);
   remotes.forEachModel(emitDamage);
   damageFx.update(frameTime);
-  hud.setLoadout(loadout, weaponSet.weapons, lootConfig.armorPlates);
+  hud.setLoadout(loadout, weaponSet.weapons, lootConfig.armorPlates, upgradeSet.upgrades);
+  setMechUpgrades(ownModel, loadout.upgrades, upgradeSet.upgrades);
+  radar?.setRangeScale(upgradeScale(loadout, upgradeSet, "radarRange"));
   setMechGear(ownModel, weaponColors[loadout.slots[loadout.active]!] ?? weaponStats.color, loadout.armor);
   pickupView.update(performance.now());
   // Standing by a weapon, say what E would do.
   let near: PickupState | null = null;
   let nearDistance = lootConfig.interactRange;
+  // The same choice the server makes: the nearest weapon or upgrade not already fitted.
   for (const p of pickupsNow) {
-    if (itemWeapon(p.item) < 0) continue;
+    if (itemWeapon(p.item) < 0 && (itemUpgrade(p.item) < 0 || loadout.upgrades.includes(itemUpgrade(p.item)))) continue;
     const d = Math.hypot(p.x - mech.x, p.z - mech.z);
     if (d <= nearDistance) { near = p; nearDistance = d; }
   }
-  if (near && !health.dead) {
+  if (near && !health.dead && itemUpgrade(near.item) >= 0) {
+    const name = upgradeSet.upgrades[itemUpgrade(near.item)]!.name;
+    const full = loadout.upgrades[0] >= 0 && loadout.upgrades[1] >= 0;
+    hud.setPrompt(full ? `E: fit ${name} (drops ${upgradeSet.upgrades[loadout.upgrades[0]]!.name})` : `E: fit ${name}`);
+  } else if (near && !health.dead) {
     const name = weaponSet.weapons[itemWeapon(near.item)]!.name;
     const full = loadout.slots[0] >= 0 && loadout.slots[1] >= 0;
     const dropping = full ? weaponSet.weapons[loadout.slots[loadout.active]!]?.name : undefined;

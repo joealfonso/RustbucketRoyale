@@ -1,0 +1,33 @@
+{
+  "slots": 2,
+  "upgrades": [
+    {
+      "id": "bigTanks",
+      "name": "Big Tanks",
+      "color": "#3fa7d6",
+      "effects": { "fuel": 1.6 },
+      "model": null
+    },
+    {
+      "id": "quickHands",
+      "name": "Quick Hands",
+      "color": "#f2c14e",
+      "effects": { "repairSpeed": 2, "lootSpeed": 2 },
+      "model": null
+    },
+    {
+      "id": "bigEars",
+      "name": "Big Ears",
+      "color": "#b48ce0",
+      "effects": { "hearing": 1.6, "radarRange": 2 },
+      "model": null
+    },
+    {
+      "id": "overclock",
+      "name": "Overclock",
+      "color": "#ff5a4a",
+      "effects": { "fireRate": 1.25 },
+      "model": null
+    }
+  ]
+}

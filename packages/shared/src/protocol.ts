@@ -46,6 +46,7 @@ export interface SelfState {
   dashTime: number; dashCooldown: number; dashX: number; dashZ: number;
   fuel: number; fuelLocked: boolean; fuelTimer: number;
   stamina: number; staminaLocked: boolean; staminaTimer: number;
+  fuelScale: number;
 }
 
 // All a client needs to draw somebody else.
@@ -62,11 +63,13 @@ export interface OtherState {
   hp: number[]; // legs, arms, torso
   weapon: number; // index of the weapon in hand, for drawing the right gun
   armor: number[]; // plate points left on legs, arms, torso, for drawing plates
+  upgrades: number[]; // the two upgrades fitted, -1 for none, for drawing the parts bolted on
 }
 
 // What you are carrying. Slots hold a weapon index, or -1 when empty.
 export interface Loadout {
   slots: [number, number];
+  upgrades: [number, number]; // upgrade indexes fitted, -1 for an empty socket. The first fitted is the first to go.
   active: number;
   grenades: number;
   armor: number[];

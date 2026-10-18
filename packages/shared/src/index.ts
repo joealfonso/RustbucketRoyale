@@ -17,3 +17,4 @@ export * from "./wire";
 export * from "./props";
 export * from "./rangeMap";
 export * from "./loot";
+export * from "./upgrades";

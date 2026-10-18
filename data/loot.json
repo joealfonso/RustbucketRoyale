@@ -24,7 +24,8 @@
         "grenade": 3,
         "armor": 3,
         "scattergun": 1,
-        "spikeDriver": 1
+        "spikeDriver": 1,
+        "upgrade": 0.6
       }
     },
     "junk": {
@@ -33,7 +34,8 @@
         "grenade": 2,
         "armor": 3,
         "scattergun": 1,
-        "spikeDriver": 1
+        "spikeDriver": 1,
+        "upgrade": 0.5
       }
     },
     "barrel": {

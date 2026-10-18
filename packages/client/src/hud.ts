@@ -1,4 +1,4 @@
-import type { Loadout, MatchProgress, RingNow, WeaponStats } from "@rustbucket/shared";
+import type { Loadout, MatchProgress, RingNow, UpgradeDef, WeaponStats } from "@rustbucket/shared";
 
 export interface RoomView {
   code: string;
@@ -71,12 +71,13 @@ export class Hud {
   }
 
   // The two weapon slots, the one in hand highlighted, the grenade count, and armor as a thin bar under each zone.
-  setLoadout(l: Loadout, weapons: readonly WeaponStats[], plates: readonly number[]): void {
+  setLoadout(l: Loadout, weapons: readonly WeaponStats[], plates: readonly number[], upgrades: readonly UpgradeDef[]): void {
     const slot = (i: number) => {
       const name = l.slots[i]! >= 0 ? weapons[l.slots[i]!]?.name ?? "?" : "empty";
       return `<div class="${i === l.active ? "on" : ""}">${i + 1}  ${name}</div>`;
     };
-    const html = `${slot(0)}${slot(1)}<div>G  grenades x${l.grenades}</div>`;
+    const fitted = l.upgrades.filter((u) => u >= 0).map((u) => `<span style="color:${upgrades[u]?.color ?? "#fff"}">${upgrades[u]?.name ?? "?"}</span>`);
+    const html = `${slot(0)}${slot(1)}<div>G  grenades x${l.grenades}</div>${fitted.length ? `<div>+ ${fitted.join(", ")}</div>` : ""}`;
     if (this.lastText.get(this.loadoutBox) !== html) {
       this.lastText.set(this.loadoutBox, html);
       this.loadoutBox.innerHTML = html;

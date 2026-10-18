@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import lootJson from "../../../data/loot.json";
 import propsJson from "../../../data/props.json";
 import weaponsJson from "../../../data/weapons.json";
-import { ITEM_GRENADE, itemArmorZone, itemWeapon, parseLootConfig, rollLoot } from "./loot";
+import { ITEM_GRENADE, itemArmorZone, itemUpgrade, itemWeapon, parseLootConfig, rollLoot } from "./loot";
 import { parsePropConfig } from "./props";
 import { parseWeapons } from "./stats";
 
@@ -21,10 +21,11 @@ describe("loot rolls", () => {
     let drops = 0;
     const kinds = new Set<string>();
     for (let i = 0; i < 4000; i++) {
-      const item = rollLoot(loot, weapons, "crate", random);
+      const item = rollLoot(loot, weapons, 4, "crate", random);
       if (item === null) continue;
       drops++;
-      kinds.add(item === ITEM_GRENADE ? "grenade" : itemArmorZone(item) >= 0 ? "armor" : weapons.weapons[itemWeapon(item)]!.id);
+      kinds.add(item === ITEM_GRENADE ? "grenade" : itemArmorZone(item) >= 0 ? "armor" : itemUpgrade(item) >= 0 ? "upgrade" : weapons.weapons[itemWeapon(item)]!.id);
+      if (itemUpgrade(item) >= 0) expect(itemUpgrade(item)).toBeLessThan(4);
     }
     expect(drops / 4000).toBeCloseTo(loot.drops.crate!.chance, 1);
     expect([...kinds].sort()).toEqual(Object.keys(loot.drops.crate!.table).sort());
@@ -32,7 +33,7 @@ describe("loot rolls", () => {
 
   it("barrels drop nothing", () => {
     const random = lcg(4);
-    for (let i = 0; i < 200; i++) expect(rollLoot(loot, weapons, "barrel", random)).toBeNull();
+    for (let i = 0; i < 200; i++) expect(rollLoot(loot, weapons, 4, "barrel", random)).toBeNull();
   });
 
   it("rejects a table naming something that does not exist", () => {

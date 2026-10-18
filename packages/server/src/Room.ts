@@ -4,12 +4,13 @@ import {
   decodeInput, parseClientMessage, ringAt, rollLoot, itemWeapon, weaponItem, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
   NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
+  takenWithE, itemUpgrade, upgradeItem, upgradeScale, type UpgradeSet,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
 import { AbstractFights, RATINGS, botsNeeded, pickDifficulty, type FarBot } from "./botLod";
 import { Pathfinder } from "./Pathfinder";
-import { activeWeapon, collectSmall, freshLoadout, selectSlot, spillItems, takeWeapon, wantsItem } from "./loadout";
+import { activeWeapon, collectSmall, freshLoadout, selectSlot, spillItems, takeUpgrade, takeWeapon, wantsItem } from "./loadout";
 import { Pickups } from "./Pickups";
 import type { Player } from "./Player";
 
@@ -38,6 +39,7 @@ export interface RoomConfig {
   props: PropConfig;
   weapons: WeaponSet;
   loot: LootConfig;
+  upgrades: UpgradeSet;
   grenade: GrenadeStats;
   combat: CombatStats;
   net: NetStats;
@@ -516,6 +518,7 @@ export class Room {
     }
     const dashBefore = player.state.dashTime;
     player.state.crawling = player.hp[ZONE_LEGS]! <= 0;
+    player.state.fuelScale = upgradeScale(player.loadout, this.config.upgrades, "fuel");
     stepMech(player.state, input, this.config.mech, dt, this.map.world);
     player.steps += Math.round(dt / STEP);
     if (player.state.running) this.makeNoise(player, "run", player.state.x, player.state.z);
@@ -552,7 +555,7 @@ export class Room {
   private tryShoot(player: Player, input: MechInput): void {
     const weaponIndex = activeWeapon(player.loadout);
     const weapon = this.config.weapons.weapons[weaponIndex];
-    if (!weapon || !player.gate.tryFire(player.steps * STEP, weapon.shotsPerSecond)) return;
+    if (!weapon || !player.gate.tryFire(player.steps * STEP, weapon.shotsPerSecond * upgradeScale(player.loadout, this.config.upgrades, "fireRate"))) return;
     // A scattergun fires several pellets with one pull. Each is its own shot, with its own spread and its own hit.
     for (let i = 0; i < weapon.pellets; i++) this.firePellet(player, input, weapon);
     this.makeNoise(player, "shot", player.state.x, player.state.z);
@@ -704,13 +707,13 @@ export class Room {
     if (!held) return this.stopLooting(player);
     if (pressed && this.tickCount >= player.interactReadyTick) {
       player.interactReadyTick = this.tickCount + Math.round(loot.interactCooldownSeconds / STEP);
-      if (this.takeWeaponInReach(player)) return this.stopLooting(player);
+      if (this.takeInReach(player)) return this.stopLooting(player);
     }
 
     const wreck = this.nearestWreck(player, loot.interactRange);
     if (!wreck) return this.stopLooting(player);
     if (wreck.id !== player.lootingId) { player.lootingId = wreck.id; player.lootSeconds = 0; }
-    player.lootSeconds += dt;
+    player.lootSeconds += dt * upgradeScale(player.loadout, this.config.upgrades, "lootSpeed");
     this.makeNoise(player, "loot", player.state.x, player.state.z);
     if (player.lootSeconds < loot.wreckLootSeconds) return;
     this.spill(wreck);
@@ -730,7 +733,7 @@ export class Room {
     if (!input.repair || !still || hurt || zone < 0) return this.stopRepair(player);
 
     if (zone !== player.repairZone) { player.repairZone = zone; player.repairSeconds = 0; }
-    player.repairSeconds += dt;
+    player.repairSeconds += dt * upgradeScale(player.loadout, this.config.upgrades, "repairSpeed");
     this.makeNoise(player, "repair", player.state.x, player.state.z);
     if (player.repairSeconds < zones.repairSeconds) return;
     player.hp[zone] = zones.zones[zone]!.hp * zones.repairToFraction;
@@ -747,12 +750,22 @@ export class Room {
     player.lootSeconds = 0;
   }
 
-  private takeWeaponInReach(player: Player): boolean {
-    const pickup = this.pickups.nearest(player.state.x, player.state.z, this.config.loot.interactRange, (p) => itemWeapon(p.item) >= 0);
+  // The nearest weapon or upgrade in reach that can be taken (not an upgrade already fitted). What it replaces drops
+  // at your feet.
+  private takeInReach(player: Player): boolean {
+    const l = player.loadout;
+    const pickup = this.pickups.nearest(player.state.x, player.state.z, this.config.loot.interactRange,
+      (p) => takenWithE(p.item) && (itemUpgrade(p.item) < 0 || !l.upgrades.includes(itemUpgrade(p.item))));
     if (!pickup) return false;
     this.pickups.remove(pickup.id);
-    const dropped = takeWeapon(player.loadout, pickup.item);
-    if (dropped >= 0) this.pickups.add(weaponItem(dropped), player.state.x, 0.5, player.state.z);
+    const { x, z } = player.state;
+    if (itemUpgrade(pickup.item) >= 0) {
+      const dropped = takeUpgrade(l, pickup.item);
+      if (dropped !== null && dropped >= 0) this.pickups.add(upgradeItem(dropped), x, 0.5, z);
+      return true;
+    }
+    const dropped = takeWeapon(l, pickup.item);
+    if (dropped >= 0) this.pickups.add(weaponItem(dropped), x, 0.5, z);
     player.gate.holdUntil(player.steps * STEP + this.config.loot.switchSeconds);
     return true;
   }
@@ -767,7 +780,7 @@ export class Room {
       this.pickups.add(item, wreck.state.x + Math.cos(angle) * r, wreck.state.y + 0.5, wreck.state.z + Math.sin(angle) * r);
     });
     wreck.looted = true;
-    wreck.loadout = { slots: [-1, -1], active: 0, grenades: 0, armor: [0, 0, 0] };
+    wreck.loadout = { slots: [-1, -1], active: 0, grenades: 0, armor: [0, 0, 0], upgrades: [-1, -1] };
   }
 
   // ---- props
@@ -791,7 +804,7 @@ export class Room {
     const message: ServerMessage = { t: "prop", id };
     for (const p of this.players.values()) if (!p.bot) p.send(message);
     this.makeNoise(by, "smash", prop.x, prop.z);
-    const item = rollLoot(this.config.loot, this.config.weapons, this.config.props.types[prop.type]!.id, this.random);
+    const item = rollLoot(this.config.loot, this.config.weapons, this.config.upgrades.upgrades.length, this.config.props.types[prop.type]!.id, this.random);
     if (item !== null) this.pickups.add(item, prop.x + (this.random() - 0.5), 0.5, prop.z + (this.random() - 0.5));
     if (this.config.props.types[prop.type]!.explodes) {
       const delay = Math.round(this.config.props.barrelBlast.delaySeconds / STEP);
@@ -866,7 +879,7 @@ export class Room {
       if (p === source) continue;
       const ear = p.bot ? p.state : this.viewFrom(p);
       const distance = Math.hypot(ear.x - x, ear.z - z);
-      if (distance > radius) continue;
+      if (distance > radius * upgradeScale(p.loadout, this.config.upgrades, "hearing")) continue;
       const off = Math.min(noise.fuzzMaxMeters, distance * noise.fuzzFraction) * Math.sqrt(this.random());
       const angle = this.random() * Math.PI * 2;
       const fx = x + Math.cos(angle) * off, fz = z + Math.sin(angle) * off;
@@ -912,7 +925,7 @@ export class Room {
       everyone.push({
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
         running: p.state.running, jetting: p.state.jetting, dead: p.dead, looted: p.looted, repairing: p.repairZone >= 0, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
-        weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil),
+        weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil), upgrades: p.loadout.upgrades,
       });
     }
     const match = this.progress();
@@ -935,7 +948,10 @@ export class Room {
         t: "snapshot", tick: this.tickCount, ack: player.lastSeq, ackAgeMs: (this.tickCount - player.ackTick) * STEP * 1000, you: writeSelf(player.state),
         health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn: player.dead && this.state !== "active" ? Math.max(0, (player.respawnTick - this.tickCount) * STEP) : 0 }, match,
         others, noises: player.heard.splice(0),
-        loadout: { ...player.loadout, slots: [player.loadout.slots[0], player.loadout.slots[1]], armor: player.loadout.armor.map(Math.ceil) },
+        loadout: {
+          ...player.loadout, slots: [player.loadout.slots[0], player.loadout.slots[1]], armor: player.loadout.armor.map(Math.ceil),
+          upgrades: [player.loadout.upgrades[0], player.loadout.upgrades[1]],
+        },
         looting: player.lootingId ? player.lootSeconds / this.config.loot.wreckLootSeconds : 0,
         repairing: player.repairZone >= 0 ? player.repairSeconds / this.config.zones.repairSeconds : 0,
         pickups: this.pickupsChanged(player, this.pickups.near(view.x, view.z, interestRange, this.pickupScratch)),

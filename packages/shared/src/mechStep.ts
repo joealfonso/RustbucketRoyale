@@ -15,6 +15,7 @@ export interface MechState {
   grounded: boolean;
   running: boolean;
   jetting: boolean;
+  fuelScale: number; // tank size from upgrades, 1 for the standard tank. Set by the server from the loadout.
   crawling: boolean; // legs broken: slow, no sprint or dash, jets still work. Set by the server from hit points.
   dashTime: number; // seconds of dash left, above 0 while dashing
   dashCooldown: number;
@@ -26,7 +27,7 @@ export interface MechState {
 export function createMechState(stats: MechStats, x: number, y: number, z: number, yaw: number): MechState {
   return {
     x, y, z, vx: 0, vz: 0, vy: 0, bodyYaw: yaw,
-    grounded: false, running: false, jetting: false, crawling: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
+    grounded: false, running: false, jetting: false, fuelScale: 1, crawling: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
     fuel: new Meter(stats.fuelMax), stamina: new Meter(stats.staminaMax),
   };
 }
@@ -41,7 +42,7 @@ export function moveTowardsAngle(current: number, target: number, maxDelta: numb
 // One fixed step of the mech. Weight comes from acceleration and the slow body turn, not slow top speed.
 // Same code runs on the client now and the server at M2, so prediction matches.
 export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: number, world: World): void {
-  s.fuel.setMax(stats.fuelMax);
+  s.fuel.setMax(stats.fuelMax * s.fuelScale);
   s.stamina.setMax(stats.staminaMax);
 
   // 0 means the body always faces where you look. Above 0 it swings round at that many degrees a second, which feels heavier.

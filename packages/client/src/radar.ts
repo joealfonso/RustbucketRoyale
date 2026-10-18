@@ -25,13 +25,25 @@ export class Radar {
   private ctx: CanvasRenderingContext2D;
   private scale: number;
 
+  private baseRange: number;
+  private baseDetect: number;
+
   constructor(private rangeMeters: number, private detectMeters: number) {
+    this.baseRange = rangeMeters;
+    this.baseDetect = detectMeters;
     this.canvas.width = SIZE;
     this.canvas.height = SIZE;
     Object.assign(this.canvas.style, { position: "fixed", right: "16px", bottom: "16px", width: `${SIZE}px`, height: `${SIZE}px`, pointerEvents: "none" });
     document.body.appendChild(this.canvas);
     this.ctx = this.canvas.getContext("2d")!;
     this.scale = SIZE / 2 / rangeMeters;
+  }
+
+  // An upgrade can stretch the radar: both how far it shows and how close mechs show without a sound.
+  setRangeScale(scale: number): void {
+    this.rangeMeters = this.baseRange * scale;
+    this.detectMeters = this.baseDetect * scale;
+    this.scale = SIZE / 2 / this.rangeMeters;
   }
 
   // `outside` turns the zone arrow red and makes it pulse. `nowMs` drives the pulse.

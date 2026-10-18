@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { UpgradeDef } from "@rustbucket/shared";
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const materials = new Map<string, THREE.MeshStandardMaterial>();
@@ -34,6 +35,7 @@ export interface MechModel {
   hp: number[];
   dead: boolean;
   repairing: boolean; // shown with welding sparks
+  upgradeParts: THREE.Mesh[]; // one per upgrade, made the first time it is fitted, shown while fitted
   fxTimers: number[]; // per zone: seconds until the next spark, then the next puff of smoke. Last: welding sparks
 }
 
@@ -102,7 +104,7 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[]): M
   ];
   return {
     group, body, legMeshes, zoneMaterials, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
-    hp: [...zoneMaxHp], dead: false, repairing: false, fxTimers: [0, 0, 0, 0, 0, 0, 0],
+    hp: [...zoneMaxHp], dead: false, repairing: false, upgradeParts: [], fxTimers: [0, 0, 0, 0, 0, 0, 0],
   };
 }
 
@@ -141,3 +143,30 @@ export function setMechGear(model: MechModel, gunColor: string, armor: readonly 
   });
 }
 
+// Where each upgrade bolts on, in the body frame: centre and size. Grey-box parts. Art hook: `model` in
+// data/upgrades.json for a real part.
+const UPGRADE_MOUNTS: Record<string, { center: number[]; size: number[] }> = {
+  bigTanks: { center: [0, 2.6, 0.9], size: [1.3, 1.0, 0.6] }, // fat tanks on the back
+  quickHands: { center: [-1.15, 1.5, 0.1], size: [0.5, 0.45, 0.8] }, // toolbox on the hip
+  bigEars: { center: [0.45, 3.75, 0.2], size: [0.12, 1.1, 0.12] }, // antenna on the shoulder
+  overclock: { center: [1.2, 2.95, -0.6], size: [0.6, 0.35, 0.9] }, // coil on top of the gun arm
+};
+const OTHER_MOUNT = { center: [0, 3.4, 0.4], size: [0.6, 0.4, 0.6] };
+
+// Shows the parts for the upgrades fitted, so anyone can see what a mech is carrying.
+export function setMechUpgrades(model: MechModel, upgrades: readonly number[], defs: readonly UpgradeDef[]): void {
+  for (let u = 0; u < defs.length; u++) {
+    const fitted = upgrades.includes(u);
+    let part = model.upgradeParts[u];
+    if (!part && fitted) {
+      const def = defs[u]!;
+      const mount = UPGRADE_MOUNTS[def.id] ?? OTHER_MOUNT;
+      part = new THREE.Mesh(unitBox, material(def.color));
+      part.position.set(mount.center[0]!, mount.center[1]!, mount.center[2]!);
+      part.scale.set(mount.size[0]!, mount.size[1]!, mount.size[2]!);
+      model.body.add(part);
+      model.upgradeParts[u] = part;
+    }
+    if (part) part.visible = fitted;
+  }
+}

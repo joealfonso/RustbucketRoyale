@@ -165,6 +165,6 @@ describe("weapons", () => {
     startMatch(room, a);
     run(room, [a], () => idle(), 10);
     expect(pickups(a)).toHaveLength(0);
-    expect(a.last().loadout).toEqual({ slots: [config.weapons.start, -1], active: 0, grenades: config.loot.grenadesStart, armor: [0, 0, 0] });
+    expect(a.last().loadout).toEqual({ slots: [config.weapons.start, -1], active: 0, grenades: config.loot.grenadesStart, armor: [0, 0, 0], upgrades: [-1, -1] });
   });
 });

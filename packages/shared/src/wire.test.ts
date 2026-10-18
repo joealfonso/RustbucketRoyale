@@ -5,18 +5,18 @@ import type { InputMessage, OtherState, ServerMessage, ShotMessage } from "./pro
 
 type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
 
-const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12] });
+const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12], upgrades: [3, -1] });
 const snapshot = (others: OtherState[]): Snapshot => ({
   t: "snapshot", tick: 123456, ack: 99, ackAgeMs: 12.4,
   you: {
     x: -321.123456, y: 4.5, z: 888.25, vx: 3.5, vz: -2.25, vy: 0.5, bodyYaw: 2.75, grounded: true, running: false, jetting: true, crawling: true,
-    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0,
+    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0, fuelScale: 1.6,
   },
   health: { hp: [60, 12, 88], dead: false, respawnIn: 0 },
   match: { state: "active", seconds: 91.5, alive: 7, total: 24 },
   others,
   noises: [],
-  loadout: { slots: [0, -1], active: 0, grenades: 2, armor: [30, 0, 40] },
+  loadout: { slots: [0, -1], active: 0, grenades: 2, armor: [30, 0, 40], upgrades: [-1, 1] },
   looting: 0,
   repairing: 0,
   pickups: [],
@@ -38,7 +38,8 @@ describe("snapshot wire format", () => {
     expect(back.others[0]!.id).toBe(7);
     expect(Math.abs(back.others[0]!.x - 412.34)).toBeLessThanOrEqual(0.05 + 1e-9);
     expect(Math.abs(back.others[1]!.x - -999.9)).toBeLessThanOrEqual(0.05 + 1e-9);
-    expect(back.others[0]).toMatchObject({ running: true, jetting: false, dead: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12] });
+    expect(back.others[0]).toMatchObject({ running: true, jetting: false, dead: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12], upgrades: [3, -1] });
+    expect(back.you.fuelScale).toBeCloseTo(1.6, 5);
     expect(back.others[0]!.yaw).toBeCloseTo(5.5, 3);
   });
 
@@ -64,10 +65,10 @@ describe("snapshot wire format", () => {
     expect(encodeSnapshot(s).length - encodeSnapshot(snapshot([other(1, 2)])).length).toBe(10);
   });
 
-  it("is small: under 110 bytes with nobody else near, 18 bytes per extra mech, 9 per pickup", () => {
+  it("is small: under 110 bytes with nobody else near, 20 bytes per extra mech, 9 per pickup", () => {
     expect(encodeSnapshot(snapshot([])).length).toBe(snapshotSize(0));
     expect(snapshotSize(0)).toBeLessThan(110);
-    expect(snapshotSize(10) - snapshotSize(0)).toBe(180);
+    expect(snapshotSize(10) - snapshotSize(0)).toBe(200);
     expect(snapshotSize(0, 0, 10) - snapshotSize(0)).toBe(90);
   });
 
@@ -75,7 +76,7 @@ describe("snapshot wire format", () => {
     const s = snapshot([]);
     s.pickups = [{ id: 40000, item: 5, x: -12.34, y: 0.5, z: 88.8 }, { id: 3, item: 0, x: 0, y: 0, z: 0 }];
     const back = decodeSnapshot(encodeSnapshot(s))!;
-    expect(back.loadout).toEqual({ slots: [0, -1], active: 0, grenades: 2, armor: [30, 0, 40] });
+    expect(back.loadout).toEqual({ slots: [0, -1], active: 0, grenades: 2, armor: [30, 0, 40], upgrades: [-1, 1] });
     expect(back.pickups).toHaveLength(2);
     expect(back.pickups![0]).toMatchObject({ id: 40000, item: 5 });
     expect(Math.abs(back.pickups![0]!.x - -12.34)).toBeLessThanOrEqual(0.05 + 1e-9);

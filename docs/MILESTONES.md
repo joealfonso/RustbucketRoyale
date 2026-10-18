@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M8 (not started)
+Current code milestone: M8 (in three gates: 8a upgrades; 8b live tuning; 8c performance, bot counts, load test)
 Current visual milestone: V1 (not started)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -64,3 +64,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: Gate 7a passed by Joseph's call. 7b (repair) not started.
 - 2026-10-17: Gate 7b built, waiting for its playtest. Check: with a part shot below 40% the prompt says "Hold F: repair legs" (or arms, or torso); hold F standing still for 6 s with a clank every so often and welding sparks; the part comes back to 40% (crawling stops, aim steadies); moving, shooting, jetting, letting go or getting hit starts it over; repairing shows on other people's radar; bots with a broken part stop and repair when nobody is around. Soak passes on all tiers at 36 to 49 kbps.
 - 2026-10-17: Gate 7b passed by Joseph's call. M7 is done: three damage states per part, crawling on broken legs, wild aim with broken arms, sparks and smoke, hold F to repair, bots that repair. M8 not started.
+- 2026-10-17: M8 started on Joseph's go, in gates 8a (four upgrades, two sockets, E to take), 8b (live tuning through a dev-only server flag, copy as JSON), 8c (client frame rate on large, bot counts from soak data, a real load test with WebSocket clients).
+- 2026-10-17: Gate 8a built, waiting for its playtest. Check: broken crates and junk now and then drop a big tumbling coloured cube (an upgrade); E fits it ("E: fit Big Tanks"), the part shows on your mech and the HUD lists it; a third one swaps out the first fitted and drops it; Big Tanks gives a longer jet, Quick Hands repairs and loots in half the time, Big Ears stretches the radar and lets you hear further, Overclock fires faster; wrecks spill upgrades; bots fit them too. Soak passes on all tiers at 37 to 56 kbps.
