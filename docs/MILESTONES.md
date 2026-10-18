@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none (M1 to M8 done)
-Current visual milestone: V3 (V3a an overgrown junkyard; V3b props worth breaking)
+Current visual milestone: V3 done (junkyard dressing, props). V4 (HUD and radar) not started
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -94,3 +94,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Gate V3a built, waiting for its playtest. Check: walk any map and see containers, corrugated walls, broken concrete, rocks, scrap piles and the tower near you, with tyres and grass on the ground, moss on tops and rust streaks on walls; farther away they stay plain boxes. Watch for hitches when running between chunks, and say how it runs on your laptop (F1, Performance).
 - 2026-10-18: Gate V3a passed by Joseph's call. V3b (props with destroyed versions and debris) not started.
 - 2026-10-18: Gate V3b built, waiting for its playtest. Check: shoot a crate, a junk pile and a barrel; each bursts into chunks in its colours and leaves low debris you can walk over, and the cover is really gone; crates read as loot (straps, cross), barrels as explosive. On style.html press 5 to see each standing and broken.
+- 2026-10-18: Gate V3b passed by Joseph's call. V3 is done. Open: updating the roster to docs/MECH_ROSTER.md (per-mech paint, glowing sensors), now allowed by DESIGN.md. V4 not started.

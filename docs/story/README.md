@@ -173,6 +173,13 @@ The grey boxes got real company. From a one-page brief and a reference picture, 
 
 The world stopped being boxes. Near you, every wall, rock and pile is now drawn as the junk it stands for: ribbed shipping containers, corrugated walls on steel posts, broken concrete with rebar, faceted boulders, heaps of scrap and tyres, a concrete tower. It's all built on the fly from each box's real size, so nothing is stretched, and collision never changes. A shader grows moss on everything facing up and runs rust down the walls, and the ground is littered with tyres, pipes, plates and grass. Four helpers wrote the builders side by side against one shared set of rules, and the frame cost stayed around a millisecond.
 
+## 23. Gate V3b: props worth breaking
+*Passed 12:52. Commit `bf17597`.*
+
+![From above: a strapped crate beside its scattered planks, a junk pile beside its flattened spread, a yellow hazard barrel beside its burst black shell](23-v3b-props-worth-breaking.jpg)
+
+The things you shoot for loot got faces. Crates are strapped wooden boxes with a painted cross, so you learn that's where the goodies are. Junk piles are heaps of cabinets, drums and tyres. Barrels are hazard yellow with black bands and a warning diamond, so you learn to keep away. Breaking one throws chunks in its colours and leaves low debris on the spot, so the cover really goes. That finishes V3.
+
 ---
 
-*Next: gate V3b, props worth breaking.*
+*Next: per-mech looks from the roster brief, or V4, the HUD and radar.*
