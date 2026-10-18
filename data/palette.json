@@ -16,7 +16,15 @@
     "body": "paintWhite",
     "trim": "frameNavy",
     "youAccent": "#2E8FD6",
-    "othersAccent": "#D9453B"
+    "othersAccent": "#D9453B",
+    "pilotAccents": [
+      "#D9453B",
+      "#FFC93C",
+      "#7BD148",
+      "#F2E3C0",
+      "#9B6BFF",
+      "#FF8A1F"
+    ]
   },
   "world": {
     "ground": "moss",

@@ -1,0 +1,113 @@
+{
+  "scheme": {
+    "white": "#E8EAEE",
+    "blue": "#2F6FD0",
+    "frame": "#22303F",
+    "visorGlow": "#5CFF7A",
+    "conduitGlow": "#FF8A1F",
+    "bladeGlow": "#4FC3FF"
+  },
+  "parts": {
+    "Torso": {
+      "zone": "torso",
+      "paint": "white"
+    },
+    "Torso_Camo": {
+      "zone": "torso",
+      "paint": "blue"
+    },
+    "Frame": {
+      "zone": "torso",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Sensor": {
+      "zone": "torso",
+      "paint": "white"
+    },
+    "Fin": {
+      "zone": "torso",
+      "paint": "blue"
+    },
+    "Visor": {
+      "zone": "torso",
+      "paint": "visorGlow",
+      "glow": true
+    },
+    "Pack": {
+      "zone": "torso",
+      "paint": "white"
+    },
+    "Pack_Camo": {
+      "zone": "torso",
+      "paint": "blue"
+    },
+    "Jets": {
+      "zone": "torso",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Leg_L": {
+      "zone": "legs",
+      "paint": "white"
+    },
+    "Leg_R": {
+      "zone": "legs",
+      "paint": "white"
+    },
+    "Leg_Camo": {
+      "zone": "legs",
+      "paint": "blue"
+    },
+    "Leg_Frame": {
+      "zone": "legs",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Leg_Conduits": {
+      "zone": "legs",
+      "paint": "conduitGlow",
+      "glow": true
+    },
+    "Thigh_Band": {
+      "zone": "legs",
+      "paint": "accent"
+    },
+    "Arm_L": {
+      "zone": "arms",
+      "paint": "white"
+    },
+    "Arm_R": {
+      "zone": "arms",
+      "paint": "white"
+    },
+    "Arm_Camo": {
+      "zone": "arms",
+      "paint": "blue"
+    },
+    "Arm_Frame": {
+      "zone": "arms",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Arm_Conduits": {
+      "zone": "arms",
+      "paint": "conduitGlow",
+      "glow": true
+    },
+    "Emitter": {
+      "zone": "arms",
+      "paint": "weapon"
+    },
+    "Blade": {
+      "zone": "arms",
+      "paint": "bladeGlow",
+      "glow": true
+    },
+    "Carbine": {
+      "zone": "arms",
+      "paint": "frame",
+      "rusts": false
+    }
+  }
+}

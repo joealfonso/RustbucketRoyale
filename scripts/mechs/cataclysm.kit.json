@@ -1,0 +1,41 @@
+{
+  "scheme": {
+    "tan": "#C9A66B",
+    "rustBrown": "#8A4B2A",
+    "scorch": "#2E2A26",
+    "frame": "#3A342C",
+    "lensGlow": "#FF6A3D",
+    "laserGlow": "#FF3B30"
+  },
+  "parts": {
+    "Torso": { "zone": "torso", "paint": "tan" },
+    "Hull_Camo": { "zone": "torso", "paint": "rustBrown" },
+    "Hull_Scorch": { "zone": "torso", "paint": "scorch" },
+    "Frame": { "zone": "torso", "paint": "frame", "rusts": false },
+    "Sensor": { "zone": "torso", "paint": "rustBrown" },
+    "Sensor_Lenses": { "zone": "torso", "paint": "lensGlow", "glow": true },
+    "Turret_Ring": { "zone": "arms", "paint": "frame", "rusts": false },
+    "Turret_Band": { "zone": "arms", "paint": "accent" },
+    "Turret": { "zone": "arms", "paint": "tan" },
+    "Turret_Camo": { "zone": "arms", "paint": "rustBrown" },
+    "Turret_Scorch": { "zone": "arms", "paint": "scorch" },
+    "Barrels": { "zone": "arms", "paint": "rustBrown" },
+    "Barrel_Sleeves": { "zone": "arms", "paint": "frame", "rusts": false },
+    "Arm_L": { "zone": "arms", "paint": "tan" },
+    "Arm_R": { "zone": "arms", "paint": "tan" },
+    "PD_Emitters": { "zone": "arms", "paint": "laserGlow", "glow": true },
+    "Side_Gun": { "zone": "arms", "paint": "weapon" },
+    "Leg_FL": { "zone": "legs", "paint": "tan" },
+    "Leg_FL_Shin": { "zone": "legs", "paint": "rustBrown" },
+    "Leg_FL_Hydraulics": { "zone": "legs", "paint": "frame", "rusts": false },
+    "Leg_FR": { "zone": "legs", "paint": "rustBrown" },
+    "Leg_FR_Shin": { "zone": "legs", "paint": "tan" },
+    "Leg_FR_Hydraulics": { "zone": "legs", "paint": "frame", "rusts": false },
+    "Leg_BL": { "zone": "legs", "paint": "rustBrown" },
+    "Leg_BL_Shin": { "zone": "legs", "paint": "tan" },
+    "Leg_BL_Hydraulics": { "zone": "legs", "paint": "frame", "rusts": false },
+    "Leg_BR": { "zone": "legs", "paint": "tan" },
+    "Leg_BR_Shin": { "zone": "legs", "paint": "rustBrown" },
+    "Leg_BR_Hydraulics": { "zone": "legs", "paint": "frame", "rusts": false }
+  }
+}

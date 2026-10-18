@@ -69,3 +69,14 @@ The three breakable props are models now, each with debris left behind when it b
 | Standing and broken, left to right: crate, junk pile, barrel | ![props](v3b-props-standing-and-broken.jpg) |
 | Crates in a match | ![crates](v3b-crates-in-a-match.jpg) |
 
+## The roster to the brief (docs/MECH_ROSTER.md)
+
+Each mech in its own factory paint with its glowing sensors and accents: Ironclad-IV dark grey with hazard stripes and a red eye, Stiletto-B blue and white camouflage with a green visor, orange conduits and a blue blade, Cataclysm tan and rust-brown desert camouflage with a lens array and point-defence emitters, Arbiter white and teal with a blue dome and four drones on pylons. On style.html press 4.
+
+| What | Screenshot |
+| :- | :- |
+| Left to right: Ironclad-IV, Stiletto-B, Cataclysm, Arbiter | ![roster](roster-brief.jpg) |
+| Closer, from the side | ![close](roster-brief-close.jpg) |
+
+Left out for now: the serial numbers (01, 07, 03, 04), which need real text in the decal font and a decal system.
+

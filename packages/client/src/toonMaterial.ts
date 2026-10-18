@@ -6,7 +6,9 @@ import * as THREE from "three";
 
 export interface Palette {
   colors: Record<string, string>;
-  mech: { body: string; trim: string; youAccent: string; othersAccent: string };
+  // youAccent marks your own mech; everyone else gets one of pilotAccents by player number, so two of the same
+  // mech can be told apart. othersAccent is the fallback.
+  mech: { body: string; trim: string; youAccent: string; othersAccent: string; pilotAccents?: string[] };
   world: { ground: string; sky: string; remap: Record<string, string> };
 }
 

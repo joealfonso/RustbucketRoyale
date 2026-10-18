@@ -48,6 +48,7 @@ export interface MechModel {
   // A kit's painted materials beyond the one per zone: white body paint and the pilot's accent, each zone its own,
   // so any part can carry either and still rust with its zone.
   paints: { zone: number; material: THREE.MeshToonMaterial; base: THREE.Color }[];
+  glows: { material: THREE.MeshBasicMaterial; base: THREE.Color }[]; // sensors and energy accents, dark once the torso breaks
 }
 
 // How a crawling mech sits. Read from data/damageFx.json once at startup.
@@ -97,6 +98,7 @@ export function createMechModel(
   const gunMaterial = toon ? toon.ownMaterial("#d9731a") : new THREE.MeshStandardMaterial({ color: "#d9731a", roughness: 0.6 });
   let hasModelledGun = false;
   const paints: MechModel["paints"] = [];
+  const glows: MechModel["glows"] = [];
   // One rusting material per zone and paint colour, made on first use.
   const paintFor = (zone: number, color: string): THREE.MeshToonMaterial => {
     const base = new THREE.Color(color);
@@ -112,10 +114,17 @@ export function createMechModel(
   if (kit && toon) {
     // Each part's states are levels-of-detail objects; damage shows one state at a time.
     for (const p of kit.parts) {
-      const paintColor = p.paint === "accent" ? toon.color(accent) : grey;
       if (p.paint === "weapon") hasModelledGun = true;
-      const mat = p.paint === "weapon" ? gunMaterial : p.paint === "trim" ? toon.material(trimColor) : paintFor(p.zone, paintColor);
-      const outlineColor = p.paint === "trim" || p.paint === "weapon" ? trimColor : paintColor;
+      const paintColor = p.color ? toon.color(p.color) : p.paint === "accent" ? toon.color(accent) : p.paint === "trim" ? toon.color(trimColor) : grey;
+      let mat: THREE.Material;
+      if (p.paint === "weapon") mat = gunMaterial;
+      else if (p.glow) {
+        const glow = new THREE.MeshBasicMaterial({ color: paintColor });
+        glows.push({ material: glow, base: new THREE.Color(paintColor) });
+        mat = glow;
+      } else if (p.rusts) mat = paintFor(p.zone, paintColor);
+      else mat = toon.material(paintColor);
+      const outlineColor = p.paint === "weapon" ? trimColor : paintColor;
       const states = p.states.map((state, i) => {
         if (!state) return null;
         const lod = new THREE.LOD();
@@ -177,7 +186,7 @@ export function createMechModel(
   return {
     group, body, legMeshes, zoneMaterials, toon, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
     hp: [...zoneMaxHp], dead: false, repairing: false, upgradeParts: [], fxTimers: [0, 0, 0, 0, 0, 0, 0],
-    kitParts, fxAnchors, gunParts, paints,
+    kitParts, fxAnchors, gunParts, paints, glows,
   };
 }
 
@@ -204,6 +213,9 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
     model.toon?.setRust(paint.material, 1 - fraction);
     paint.material.color.copy(paint.base).multiplyScalar(dead ? 0.5 : 1);
   }
+  // Sensors and energy accents go dark when the torso is gone, so a dead mech reads at a glance.
+  const lightsOut = dead || hp[2]! <= 0;
+  for (const glow of model.glows) glow.material.color.copy(glow.base).multiplyScalar(lightsOut ? 0.12 : 1);
   const armsBroken = hp[1]! <= 0;
   for (const arm of model.armMeshes) arm.visible = !armsBroken;
   for (const gun of model.gunParts) gun.visible = !armsBroken;

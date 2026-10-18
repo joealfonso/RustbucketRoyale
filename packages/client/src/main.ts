@@ -186,7 +186,9 @@ const damageFx = new DamageFx(scene, damageFxConfig, zoneSet);
 let fxDt = 0;
 const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
 // Everyone else wears the same accent: telling friend from foe is by name and behaviour, not colour.
-const remoteLook = { toon, accent: palette.mech.othersAccent, body: palette.mech.body, kitFor, trim: palette.mech.trim };
+const pilotAccents = palette.mech.pilotAccents ?? [];
+const accentFor = (id: number) => (pilotAccents.length > 0 ? pilotAccents[id % pilotAccents.length]! : palette.mech.othersAccent);
+const remoteLook = { toon, accentFor, body: palette.mech.body, kitFor, trim: palette.mech.trim };
 const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.maxViewDelayMs, netStats.snapshotEvery * STEP * 1000, zoneMaxHp);
 remotes.weaponColors = weaponColors;
 remotes.upgrades = upgradeSet.upgrades;

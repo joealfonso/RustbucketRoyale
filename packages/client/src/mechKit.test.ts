@@ -16,7 +16,7 @@ const standin = kits.kits.standin!;
 async function loadStandin(): Promise<LoadedKit> {
   const loader = new GLTFLoader();
   const parts = await Promise.all(Object.entries(standin.parts).map(async ([name, p]) => ({
-    name, zone: { legs: 0, arms: 1, torso: 2 }[p.zone]!, paint: p.paint,
+    name, zone: { legs: 0, arms: 1, torso: 2 }[p.zone]!, paint: p.paint, color: null, glow: false, rusts: p.paint !== "trim" && p.paint !== "weapon",
     states: await Promise.all(STATES.map(async (state) => {
       const file = new URL(`../../../assets/${standin.folder}/Mech_${standin.name}_${name}_${state}.glb`, import.meta.url);
       const bytes = readFileSync(file);
@@ -80,7 +80,7 @@ describe("mech kit", () => {
     const bytes = readFileSync(new URL(`../../../assets/${kits.kits["standin-one"]!.file}`, import.meta.url));
     const gltf = await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), "");
     const parts = Object.entries(kits.kits["standin-one"]!.parts).map(([name, p]) => ({
-      name, zone: { legs: 0, arms: 1, torso: 2 }[p.zone]!, paint: p.paint, states: readOneFileStates(gltf.scene, name),
+      name, zone: { legs: 0, arms: 1, torso: 2 }[p.zone]!, paint: p.paint, color: null, glow: false, rusts: p.paint !== "trim" && p.paint !== "weapon", states: readOneFileStates(gltf.scene, name),
     }));
     const toon = new Toon(parseLook(lookJson), parsePalette(paletteJson));
     const model = createMechModel("#ffffff", [60, 60, 100], toon, "scrapSteel", { parts, lodDistances: kits.lodDistances });

@@ -15,16 +15,20 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 export const STATES = ["Intact", "Damaged", "Broken"] as const;
 const ZONE_INDEX: Record<string, number> = { legs: 0, arms: 1, torso: 2 };
 
-// body: white paint that rusts; accent: the pilot's colour, rusts too; trim: navy frame, never rusts; weapon: takes the
-// colour of the weapon in hand, so a modelled gun shows what you are holding (and the game adds no barrel of its own).
-type Paint = "body" | "accent" | "trim" | "weapon";
+// A part's paint: a colour name from the kit's own `scheme` (its factory paint, docs/MECH_ROSTER.md), or one of:
+// body (the default white), accent (the pilot's marking colour), trim (the default dark frame), weapon (the colour of
+// the weapon in hand, so a modelled gun shows what you hold and the game adds no barrel of its own).
+// Painted parts rust with their zone unless `rusts: false` (frames and joints). `glow` parts are flat lit colour
+// (sensors, visors, energy accents): they never rust and go dark when the torso breaks.
+type Paint = string;
 
 export interface KitsData {
   lodDistances: number[]; // metres at which the second and then the third level of detail take over
   roster?: string[]; // the mechs players are dealt, by player number, with ?kit=roster
   // `noHit` parts (floating drones) get no hit box; `hitboxes` is written by scripts/make-hitboxes.ts.
   kits: Record<string, {
-    file?: string; folder?: string; name?: string; parts: Record<string, { zone: string; paint: Paint; noHit?: boolean }>;
+    file?: string; folder?: string; name?: string; scheme?: Record<string, string>;
+    parts: Record<string, { zone: string; paint: Paint; noHit?: boolean; glow?: boolean; rusts?: boolean }>;
     hitboxes?: Record<string, { center: number[]; size: number[] }[]>;
   }>;
 }
@@ -39,6 +43,9 @@ export interface KitPart {
   name: string;
   zone: number;
   paint: Paint;
+  color: string | null; // the paint's colour from the kit's scheme, or null for body, accent, trim and weapon
+  glow: boolean;
+  rusts: boolean;
   states: (KitState | null)[]; // intact (always there), damaged, broken
 }
 
@@ -54,7 +61,7 @@ export function parseKits(raw: unknown): KitsData {
     if (!kit.file && !(kit.folder && kit.name)) throw new Error(`mechKits.json: ${id} needs a file, or a folder and a name`);
     for (const [part, p] of Object.entries(kit.parts)) {
       if (!(p.zone in ZONE_INDEX)) throw new Error(`mechKits.json: ${id} ${part} has unknown zone "${p.zone}"`);
-      if (!["body", "accent", "trim", "weapon"].includes(p.paint)) throw new Error(`mechKits.json: ${id} ${part} has unknown paint "${p.paint}"`);
+      if (!["body", "accent", "trim", "weapon"].includes(p.paint) && !kit.scheme?.[p.paint]) throw new Error(`mechKits.json: ${id} ${part} has paint "${p.paint}", which is not in its scheme`);
     }
   }
   return d;
@@ -106,10 +113,10 @@ export async function loadKit(id: string, data: KitsData, base = "/"): Promise<L
     let parts: KitPart[];
     if (kit.file) {
       const scene = await load(kit.file);
-      parts = Object.entries(kit.parts).map(([name, p]) => ({ name, zone: ZONE_INDEX[p.zone]!, paint: p.paint, states: readOneFileStates(scene, name) }));
+      parts = Object.entries(kit.parts).map(([name, p]) => ({ name, ...partLook(kit.scheme, p), states: readOneFileStates(scene, name) }));
     } else {
       parts = await Promise.all(Object.entries(kit.parts).map(async ([name, p]) => ({
-        name, zone: ZONE_INDEX[p.zone]!, paint: p.paint,
+        name, ...partLook(kit.scheme, p),
         states: await Promise.all(STATES.map(async (state, i) => {
           const file = `${kit.folder}/Mech_${kit.name}_${name}_${state}.glb`;
           // Only the intact part has to exist; a missing damaged or broken file falls back.
@@ -148,5 +155,13 @@ export function readPartFile(scene: THREE.Object3D): KitState | null {
 export async function loadRoster(data: KitsData, base = "/"): Promise<(id: number) => LoadedKit | null> {
   const kits = (await Promise.all((data.roster ?? []).map((id) => loadKit(id, data, base)))).filter((k): k is LoadedKit => k !== null);
   return (id) => (kits.length > 0 ? kits[id % kits.length]! : null);
+}
+
+// How a part is painted and which zone it belongs to, from its kit entry.
+function partLook(scheme: Record<string, string> | undefined, p: { zone: string; paint: Paint; glow?: boolean; rusts?: boolean }) {
+  return {
+    zone: ZONE_INDEX[p.zone]!, paint: p.paint, color: scheme?.[p.paint] ?? null,
+    glow: p.glow === true, rusts: p.glow !== true && p.paint !== "weapon" && p.rusts !== false,
+  };
 }
 

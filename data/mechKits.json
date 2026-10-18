@@ -171,203 +171,304 @@
     },
     "arbiter": {
       "file": "models/mechs/arbiter/Mech_Arbiter.glb",
+      "scheme": {
+        "white": "#F0F0EE",
+        "teal": "#1FB8B0",
+        "frame": "#2C3640",
+        "dome": "#3F8FE0",
+        "tealGlow": "#3FF0E0",
+        "domeGlow": "#9FD8FF"
+      },
       "parts": {
         "Torso": {
           "zone": "torso",
-          "paint": "body"
+          "paint": "white"
         },
         "Torso_Frame": {
           "zone": "torso",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
         },
-        "Chest_Plate": {
+        "Torso_Trim": {
           "zone": "torso",
-          "paint": "accent"
+          "paint": "teal"
+        },
+        "Torso_Glow": {
+          "zone": "torso",
+          "paint": "tealGlow",
+          "glow": true
         },
         "Sensor": {
           "zone": "torso",
-          "paint": "body"
+          "paint": "dome",
+          "rusts": false
         },
-        "Sensor_Band": {
+        "Sensor_Ring": {
           "zone": "torso",
-          "paint": "accent"
+          "paint": "domeGlow",
+          "glow": true,
+          "rusts": false
         },
         "Sensor_Frame": {
           "zone": "torso",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
         },
         "Mast": {
           "zone": "torso",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
         },
         "Drones": {
           "zone": "torso",
-          "paint": "accent",
+          "paint": "white",
+          "noHit": true
+        },
+        "Drone_Eyes": {
+          "zone": "torso",
+          "paint": "tealGlow",
+          "glow": true,
+          "noHit": true
+        },
+        "Drone_Pylons": {
+          "zone": "torso",
+          "paint": "frame",
+          "rusts": false,
           "noHit": true
         },
         "Leg_L": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "white"
         },
         "Leg_R": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "white"
         },
         "Leg_Frame": {
           "zone": "legs",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
         },
-        "Knee_Guards": {
+        "Leg_Glow": {
           "zone": "legs",
-          "paint": "accent"
+          "paint": "tealGlow",
+          "glow": true
         },
         "Arm_L": {
           "zone": "arms",
-          "paint": "body"
+          "paint": "white"
         },
         "Arm_R": {
           "zone": "arms",
-          "paint": "body"
+          "paint": "white"
         },
-        "Arm_Frame": {
+        "Arm_Frame_L": {
           "zone": "arms",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
         },
-        "Pauldrons": {
+        "Arm_Frame_R": {
+          "zone": "arms",
+          "paint": "frame",
+          "rusts": false
+        },
+        "Arm_Glow_L": {
+          "zone": "arms",
+          "paint": "tealGlow",
+          "glow": true
+        },
+        "Arm_Glow_R": {
+          "zone": "arms",
+          "paint": "tealGlow",
+          "glow": true
+        },
+        "Arm_Accent": {
           "zone": "arms",
           "paint": "accent"
+        },
+        "Pauldron_L": {
+          "zone": "arms",
+          "paint": "teal"
+        },
+        "Pauldron_R": {
+          "zone": "arms",
+          "paint": "teal"
         },
         "Gun_R": {
           "zone": "arms",
           "paint": "weapon"
-        },
-        "Emitter_L": {
-          "zone": "arms",
-          "paint": "accent"
         }
       },
       "hitboxes": {
         "legs": [
           {
             "center": [
-              -0.36,
-              0.73,
-              -0.08
+              -0.42,
+              0.84,
+              -0.07
             ],
             "size": [
-              0.32,
-              1.46,
-              0.62
+              0.42,
+              1.57,
+              0.81
             ]
           },
           {
             "center": [
-              0.36,
-              0.73,
-              -0.08
+              0.42,
+              0.84,
+              -0.07
             ],
             "size": [
-              0.32,
-              1.46,
-              0.62
-            ]
-          },
-          {
-            "center": [
-              0,
-              0.86,
-              0
-            ],
-            "size": [
-              1.02,
-              1.51,
-              0.36
+              0.42,
+              1.57,
+              0.81
             ]
           },
           {
             "center": [
               0,
-              0.9,
-              -0.15
+              0.83,
+              -0.02
+            ],
+            "size": [
+              1.32,
+              1.66,
+              0.71
+            ]
+          },
+          {
+            "center": [
+              0,
+              0.67,
+              -0.1
             ],
             "size": [
               0.92,
-              0.24,
-              0.1
+              0.3,
+              0.24
             ]
           }
         ],
         "arms": [
           {
             "center": [
-              -1.12,
-              2.24,
-              -0.08
+              -1.04,
+              2.51,
+              -0.29
             ],
             "size": [
-              0.21,
-              0.97,
-              0.36
+              0.25,
+              0.61,
+              0.83
             ]
           },
           {
             "center": [
-              1.13,
-              2.48,
-              -0.41
+              1.05,
+              2.53,
+              -0.32
             ],
             "size": [
-              0.28,
-              0.5,
-              1.06
+              0.29,
+              0.61,
+              0.91
             ]
           },
           {
             "center": [
-              0.01,
-              1.99,
-              -0.15
+              -1.06,
+              2.33,
+              -0.6
             ],
             "size": [
-              2.46,
-              0.78,
-              0.55
+              0.3,
+              0.25,
+              1.4
             ]
           },
           {
             "center": [
-              0.03,
-              2.84,
+              1.02,
+              2.3,
               0
             ],
             "size": [
-              2.43,
-              0.32,
-              0.5
+              0.24,
+              0.22,
+              0.22
+            ]
+          },
+          {
+            "center": [
+              -1.06,
+              2.46,
+              -0.26
+            ],
+            "size": [
+              0.06,
+              0.06,
+              0.3
+            ]
+          },
+          {
+            "center": [
+              1.08,
+              2.48,
+              -0.42
+            ],
+            "size": [
+              0.07,
+              0.06,
+              0.4
+            ]
+          },
+          {
+            "center": [
+              -1.06,
+              2.32,
+              -0.52
+            ],
+            "size": [
+              0.24,
+              0.26,
+              0.1
+            ]
+          },
+          {
+            "center": [
+              -0.9,
+              2.96,
+              0.02
+            ],
+            "size": [
+              0.31,
+              0.25,
+              0.42
+            ]
+          },
+          {
+            "center": [
+              0.92,
+              2.98,
+              0.02
+            ],
+            "size": [
+              0.36,
+              0.29,
+              0.46
             ]
           },
           {
             "center": [
               1.2,
-              2.34,
-              -1.23
+              2.33,
+              -1.2
             ],
             "size": [
-              0.22,
-              0.4,
-              0.84
-            ]
-          },
-          {
-            "center": [
-              -1.12,
-              2.05,
-              -0.32
-            ],
-            "size": [
-              0.44,
-              0.42,
-              0.12
+              0.18,
+              0.34,
+              0.9
             ]
           }
         ],
@@ -375,85 +476,97 @@
           {
             "center": [
               0,
-              2.47,
+              2.52,
+              -0.06
+            ],
+            "size": [
+              1.1,
+              1.24,
+              0.71
+            ]
+          },
+          {
+            "center": [
+              0,
+              2.33,
+              0.21
+            ],
+            "size": [
+              1.56,
+              1.4,
+              0.68
+            ]
+          },
+          {
+            "center": [
+              0.01,
+              2.53,
+              0.21
+            ],
+            "size": [
+              0.86,
+              0.58,
+              0.76
+            ]
+          },
+          {
+            "center": [
+              0.01,
+              2.41,
+              -0.3
+            ],
+            "size": [
+              0.49,
+              0.66,
+              0.06
+            ]
+          },
+          {
+            "center": [
+              0,
+              3.75,
               0
             ],
             "size": [
-              0.96,
-              1.15,
-              0.6
-            ]
-          },
-          {
-            "center": [
-              0,
-              2.27,
-              0.2
-            ],
-            "size": [
-              1.5,
               1.36,
-              0.7
-            ]
-          },
-          {
-            "center": [
-              0.06,
-              2.45,
-              -0.33
-            ],
-            "size": [
-              0.5,
-              0.5,
-              0.15
+              1.09,
+              1.36
             ]
           },
           {
             "center": [
               0,
-              3.47,
-              0.02
-            ],
-            "size": [
-              1.48,
-              0.58,
-              1.24
-            ]
-          },
-          {
-            "center": [
-              0,
-              3.36,
-              0.02
-            ],
-            "size": [
-              1.54,
-              0.08,
-              1.54
-            ]
-          },
-          {
-            "center": [
-              0,
-              3.27,
-              -0.23
-            ],
-            "size": [
-              0.42,
-              0.58,
-              0.82
-            ]
-          },
-          {
-            "center": [
-              -0.77,
               3.68,
-              0.3
+              0
             ],
             "size": [
-              0.58,
-              1.51,
-              0.2
+              1.42,
+              0.07,
+              1.42
+            ]
+          },
+          {
+            "center": [
+              0,
+              3.2,
+              0.02
+            ],
+            "size": [
+              0.88,
+              0.18,
+              0.88
+            ]
+          },
+          {
+            "center": [
+              -0.66,
+              3.79,
+              0.38
+            ],
+            "size": [
+              0.38,
+              1.29,
+              0.26
             ]
           }
         ]
@@ -461,130 +574,419 @@
     },
     "cataclysm": {
       "file": "models/mechs/cataclysm/Mech_Cataclysm.glb",
+      "scheme": {
+        "tan": "#C9A66B",
+        "rustBrown": "#8A4B2A",
+        "scorch": "#2E2A26",
+        "frame": "#3A342C",
+        "lensGlow": "#FF6A3D",
+        "laserGlow": "#FF3B30"
+      },
       "parts": {
         "Torso": {
           "zone": "torso",
-          "paint": "body"
+          "paint": "tan"
+        },
+        "Hull_Camo": {
+          "zone": "torso",
+          "paint": "rustBrown"
+        },
+        "Hull_Scorch": {
+          "zone": "torso",
+          "paint": "scorch"
+        },
+        "Frame": {
+          "zone": "torso",
+          "paint": "frame",
+          "rusts": false
         },
         "Sensor": {
           "zone": "torso",
-          "paint": "trim"
+          "paint": "rustBrown"
         },
-        "Arm_R": {
+        "Sensor_Lenses": {
+          "zone": "torso",
+          "paint": "lensGlow",
+          "glow": true
+        },
+        "Turret_Ring": {
+          "zone": "arms",
+          "paint": "frame",
+          "rusts": false
+        },
+        "Turret_Band": {
           "zone": "arms",
           "paint": "accent"
+        },
+        "Turret": {
+          "zone": "arms",
+          "paint": "tan"
+        },
+        "Turret_Camo": {
+          "zone": "arms",
+          "paint": "rustBrown"
+        },
+        "Turret_Scorch": {
+          "zone": "arms",
+          "paint": "scorch"
         },
         "Barrels": {
           "zone": "arms",
-          "paint": "weapon"
+          "paint": "rustBrown"
+        },
+        "Barrel_Sleeves": {
+          "zone": "arms",
+          "paint": "frame",
+          "rusts": false
         },
         "Arm_L": {
           "zone": "arms",
-          "paint": "accent"
+          "paint": "tan"
+        },
+        "Arm_R": {
+          "zone": "arms",
+          "paint": "tan"
+        },
+        "PD_Emitters": {
+          "zone": "arms",
+          "paint": "laserGlow",
+          "glow": true
+        },
+        "Side_Gun": {
+          "zone": "arms",
+          "paint": "weapon"
         },
         "Leg_FL": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "tan"
+        },
+        "Leg_FL_Shin": {
+          "zone": "legs",
+          "paint": "rustBrown"
+        },
+        "Leg_FL_Hydraulics": {
+          "zone": "legs",
+          "paint": "frame",
+          "rusts": false
         },
         "Leg_FR": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "rustBrown"
+        },
+        "Leg_FR_Shin": {
+          "zone": "legs",
+          "paint": "tan"
+        },
+        "Leg_FR_Hydraulics": {
+          "zone": "legs",
+          "paint": "frame",
+          "rusts": false
         },
         "Leg_BL": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "rustBrown"
+        },
+        "Leg_BL_Shin": {
+          "zone": "legs",
+          "paint": "tan"
+        },
+        "Leg_BL_Hydraulics": {
+          "zone": "legs",
+          "paint": "frame",
+          "rusts": false
         },
         "Leg_BR": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "tan"
+        },
+        "Leg_BR_Shin": {
+          "zone": "legs",
+          "paint": "rustBrown"
+        },
+        "Leg_BR_Hydraulics": {
+          "zone": "legs",
+          "paint": "frame",
+          "rusts": false
         }
       },
       "hitboxes": {
         "legs": [
           {
             "center": [
-              -1.52,
-              1.33,
-              -1.09
+              -1.47,
+              1.23,
+              -1.16
             ],
             "size": [
-              1.11,
-              2.65,
+              0.93,
+              2.46,
+              0.87
+            ]
+          },
+          {
+            "center": [
+              -1.6,
+              1.67,
+              -1.27
+            ],
+            "size": [
+              0.61,
+              1.03,
+              0.47
+            ]
+          },
+          {
+            "center": [
+              -1.55,
+              1.31,
+              -1.22
+            ],
+            "size": [
+              1,
+              2.61,
               1.08
             ]
           },
           {
             "center": [
-              1.52,
-              1.33,
-              -1.09
+              1.47,
+              1.23,
+              -1.16
             ],
             "size": [
-              1.11,
-              2.65,
+              0.93,
+              2.46,
+              0.87
+            ]
+          },
+          {
+            "center": [
+              1.6,
+              1.67,
+              -1.27
+            ],
+            "size": [
+              0.61,
+              1.03,
+              0.47
+            ]
+          },
+          {
+            "center": [
+              1.55,
+              1.31,
+              -1.22
+            ],
+            "size": [
+              1,
+              2.61,
               1.08
             ]
           },
           {
             "center": [
-              -1.52,
-              1.33,
+              -1.47,
+              1.23,
+              1.16
+            ],
+            "size": [
+              0.93,
+              2.46,
+              0.87
+            ]
+          },
+          {
+            "center": [
+              -1.6,
+              1.67,
+              1.27
+            ],
+            "size": [
+              0.61,
+              1.03,
+              0.47
+            ]
+          },
+          {
+            "center": [
+              -1.6,
+              1.5,
               1.09
             ],
             "size": [
-              1.11,
-              2.65,
-              1.08
+              0.91,
+              2.22,
+              0.82
             ]
           },
           {
             "center": [
-              1.52,
-              1.33,
+              1.47,
+              1.23,
+              1.16
+            ],
+            "size": [
+              0.93,
+              2.46,
+              0.87
+            ]
+          },
+          {
+            "center": [
+              1.6,
+              1.67,
+              1.27
+            ],
+            "size": [
+              0.61,
+              1.03,
+              0.47
+            ]
+          },
+          {
+            "center": [
+              1.6,
+              1.5,
               1.09
             ],
             "size": [
-              1.11,
-              2.65,
-              1.08
+              0.91,
+              2.22,
+              0.82
             ]
           }
         ],
         "arms": [
           {
             "center": [
-              0.29,
-              2.69,
-              -0.3
+              0,
+              2.51,
+              0.35
             ],
             "size": [
-              2.08,
-              0.88,
-              2.7
+              1.44,
+              0.22,
+              1.44
             ]
           },
           {
             "center": [
               0,
-              3.47,
-              -0.41
+              2.53,
+              0.35
             ],
             "size": [
-              1.08,
-              1.9,
-              2.89
+              1.52,
+              0.1,
+              1.52
             ]
           },
           {
             "center": [
-              -0.55,
-              2.62,
-              -1.05
+              0,
+              2.79,
+              0.38
+            ],
+            "size": [
+              1.24,
+              0.33,
+              1.35
+            ]
+          },
+          {
+            "center": [
+              0,
+              3.02,
+              0.55
+            ],
+            "size": [
+              1.24,
+              0.33,
+              0.8
+            ]
+          },
+          {
+            "center": [
+              0,
+              2.82,
+              -0.18
+            ],
+            "size": [
+              1,
+              0.36,
+              0.38
+            ]
+          },
+          {
+            "center": [
+              0,
+              3.46,
+              -0.37
+            ],
+            "size": [
+              0.92,
+              1.76,
+              2.95
+            ]
+          },
+          {
+            "center": [
+              0,
+              3.54,
+              -0.5
+            ],
+            "size": [
+              1.36,
+              1.46,
+              2.49
+            ]
+          },
+          {
+            "center": [
+              -0.9,
+              2.59,
+              -0.76
+            ],
+            "size": [
+              0.34,
+              0.37,
+              0.68
+            ]
+          },
+          {
+            "center": [
+              1.03,
+              2.51,
+              -0.81
             ],
             "size": [
               0.6,
-              0.43,
-              1
+              0.52,
+              0.78
+            ]
+          },
+          {
+            "center": [
+              0,
+              2.65,
+              -1.14
+            ],
+            "size": [
+              1.93,
+              0.11,
+              0.08
+            ]
+          },
+          {
+            "center": [
+              1.2,
+              2.4,
+              -1.42
+            ],
+            "size": [
+              0.18,
+              0.18,
+              0.46
             ]
           }
         ],
@@ -592,25 +994,73 @@
           {
             "center": [
               0,
-              1.94,
-              0.06
+              1.99,
+              0.03
             ],
             "size": [
-              2.42,
-              1.1,
-              2.71
+              2.46,
+              0.98,
+              2.81
             ]
           },
           {
             "center": [
-              -0.72,
-              2.77,
-              0.85
+              0,
+              2.08,
+              0
             ],
             "size": [
-              0.42,
+              2.46,
+              0.81,
+              2.76
+            ]
+          },
+          {
+            "center": [
+              0,
+              2.35,
+              -0.52
+            ],
+            "size": [
+              2.37,
+              0.3,
+              1.4
+            ]
+          },
+          {
+            "center": [
+              0,
+              1.77,
+              0
+            ],
+            "size": [
+              2.89,
               0.66,
-              0.42
+              2.4
+            ]
+          },
+          {
+            "center": [
+              0,
+              2.5,
+              -0.93
+            ],
+            "size": [
+              0.8,
+              0.45,
+              0.67
+            ]
+          },
+          {
+            "center": [
+              0,
+              2.41,
+              -1.2
+            ],
+            "size": [
+              0.59,
+              0.12,
+              0.08
             ]
           }
         ]
@@ -618,30 +1068,43 @@
     },
     "ironclad": {
       "file": "models/mechs/ironclad/Mech_Ironclad.glb",
+      "scheme": {
+        "hull": "#4A5056",
+        "hazard": "#FFC93C",
+        "hazardBlack": "#1E2224",
+        "frame": "#2A2F33",
+        "sensorGlow": "#FF3B30"
+      },
       "parts": {
         "Torso": {
           "zone": "torso",
-          "paint": "body"
+          "paint": "hull"
+        },
+        "Head": {
+          "zone": "torso",
+          "paint": "frame"
         },
         "Sensor": {
           "zone": "torso",
-          "paint": "accent"
+          "paint": "sensorGlow",
+          "glow": true
         },
-        "Shoulder_Pods": {
+        "Missile_Pods": {
+          "zone": "torso",
+          "paint": "hull"
+        },
+        "Accent_Band": {
           "zone": "torso",
           "paint": "accent"
         },
         "Frame": {
           "zone": "torso",
-          "paint": "trim"
-        },
-        "Jets": {
-          "zone": "torso",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
         },
         "Arm_R": {
           "zone": "arms",
-          "paint": "accent"
+          "paint": "hull"
         },
         "Autocannon": {
           "zone": "arms",
@@ -649,31 +1112,57 @@
         },
         "Arm_L": {
           "zone": "arms",
-          "paint": "accent"
+          "paint": "hull"
         },
         "Shield": {
           "zone": "arms",
-          "paint": "body"
+          "paint": "hull"
         },
         "Pile_Driver": {
           "zone": "arms",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
+        },
+        "Arm_Frame": {
+          "zone": "arms",
+          "paint": "frame",
+          "rusts": false,
+          "noHit": true
+        },
+        "Shoulder_Stripes": {
+          "zone": "arms",
+          "paint": "hazard",
+          "noHit": true
+        },
+        "Shoulder_Stripes_Black": {
+          "zone": "arms",
+          "paint": "hazardBlack",
+          "noHit": true
         },
         "Leg_R": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "hull"
         },
         "Leg_L": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "hull"
         },
         "Feet": {
           "zone": "legs",
-          "paint": "trim"
+          "paint": "frame"
         },
         "Pistons": {
           "zone": "legs",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
+        },
+        "Shin_Stripes": {
+          "zone": "legs",
+          "paint": "hazard"
+        },
+        "Shin_Stripes_Black": {
+          "zone": "legs",
+          "paint": "hazardBlack"
         }
       },
       "hitboxes": {
@@ -682,110 +1171,134 @@
             "center": [
               0.57,
               0.9,
-              -0.07
+              0.03
             ],
             "size": [
-              0.5,
-              1.3,
-              0.7
+              0.57,
+              1.48,
+              0.86
             ]
           },
           {
             "center": [
               -0.57,
               0.9,
-              -0.07
+              0.03
             ],
             "size": [
-              0.5,
-              1.3,
-              0.7
+              0.57,
+              1.48,
+              0.86
             ]
           },
           {
             "center": [
               0,
-              0.19,
-              -0.09
+              0.15,
+              -0.12
             ],
             "size": [
               1.76,
-              0.38,
-              1.02
+              0.3,
+              1.28
             ]
           },
           {
             "center": [
               0,
-              0.99,
-              0.13
+              0.93,
+              0.14
             ],
             "size": [
-              1.92,
-              1.38,
-              0.61
+              1.94,
+              1.45,
+              0.68
+            ]
+          },
+          {
+            "center": [
+              0,
+              0.73,
+              -0.15
+            ],
+            "size": [
+              1.54,
+              0.43,
+              0.27
+            ]
+          },
+          {
+            "center": [
+              0,
+              0.72,
+              -0.13
+            ],
+            "size": [
+              1.54,
+              0.43,
+              0.26
             ]
           }
         ],
         "arms": [
           {
             "center": [
-              1.27,
-              2.57,
-              -0.3
+              1.28,
+              2.65,
+              -0.29
             ],
             "size": [
-              0.7,
-              0.86,
-              1.3
+              0.76,
+              1.06,
+              1.42
             ]
           },
           {
             "center": [
               1.2,
               2.4,
-              -1.29
+              -1.32
             ],
             "size": [
-              0.42,
-              0.42,
-              0.72
+              0.46,
+              0.46,
+              0.66
             ]
           },
           {
             "center": [
-              -1.24,
-              2.42,
-              -0.12
+              -1.26,
+              2.54,
+              -0.21
             ],
             "size": [
-              0.63,
-              1.15,
-              0.95
+              0.72,
+              1.28,
+              1.26
             ]
           },
           {
             "center": [
-              -1.35,
-              2.45,
-              -0.82
+              -1.4,
+              2.39,
+              -1.04
             ],
             "size": [
-              1.06,
-              1.5,
-              0.32
+              1.18,
+              1.78,
+              0.48
             ]
           },
           {
             "center": [
-              -1.2,
-              2.14,
-              -0.27
+              -1.38,
+              2.5,
+              -0.47
             ],
             "size": [
-              0.36,
-              0.52,
-              1.53
+              0.44,
+              0.4,
+              2.09
             ]
           }
         ],
@@ -793,61 +1306,73 @@
           {
             "center": [
               0,
-              2.48,
-              -0.06
+              2.5,
+              0.06
             ],
             "size": [
-              1.84,
-              1.45,
-              1.12
+              1.9,
+              1.6,
+              1.48
             ]
           },
           {
             "center": [
               0,
-              3.22,
-              -0.23
+              2.97,
+              -0.16
             ],
             "size": [
-              0.56,
-              0.47,
-              0.5
+              0.52,
+              0.34,
+              0.56
             ]
           },
           {
             "center": [
               0,
-              3.31,
-              0.03
+              3.02,
+              -0.48
             ],
             "size": [
-              3.1,
-              0.58,
-              0.98
+              0.14,
+              0.14,
+              0.1
             ]
           },
           {
             "center": [
               0,
-              2.43,
-              -0.11
+              3.15,
+              -0.32
             ],
             "size": [
-              2.96,
-              2.16,
-              0.82
+              1.8,
+              0.46,
+              0.75
+            ]
+          },
+          {
+            "center": [
+              0.65,
+              3.19,
+              -0.36
+            ],
+            "size": [
+              0.54,
+              0.45,
+              0.12
             ]
           },
           {
             "center": [
               0,
-              2.35,
-              0.66
+              2.32,
+              0.04
             ],
             "size": [
-              1.24,
-              1.1,
-              0.36
+              1.69,
+              1.98,
+              1.55
             ]
           }
         ]
@@ -855,182 +1380,254 @@
     },
     "stiletto": {
       "file": "models/mechs/stiletto/Mech_Stiletto.glb",
+      "scheme": {
+        "white": "#E8EAEE",
+        "blue": "#2F6FD0",
+        "frame": "#22303F",
+        "visorGlow": "#5CFF7A",
+        "conduitGlow": "#FF8A1F",
+        "bladeGlow": "#4FC3FF"
+      },
       "parts": {
         "Torso": {
           "zone": "torso",
-          "paint": "body"
+          "paint": "white"
+        },
+        "Torso_Camo": {
+          "zone": "torso",
+          "paint": "blue"
         },
         "Frame": {
           "zone": "torso",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
         },
         "Sensor": {
           "zone": "torso",
-          "paint": "body"
+          "paint": "white"
+        },
+        "Fin": {
+          "zone": "torso",
+          "paint": "blue"
         },
         "Visor": {
           "zone": "torso",
-          "paint": "trim"
-        },
-        "Fins": {
-          "zone": "torso",
-          "paint": "accent"
+          "paint": "visorGlow",
+          "glow": true
         },
         "Pack": {
           "zone": "torso",
-          "paint": "body"
+          "paint": "white"
+        },
+        "Pack_Camo": {
+          "zone": "torso",
+          "paint": "blue"
         },
         "Jets": {
           "zone": "torso",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
         },
         "Leg_L": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "white"
         },
         "Leg_R": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "white"
+        },
+        "Leg_Camo": {
+          "zone": "legs",
+          "paint": "blue"
         },
         "Leg_Frame": {
           "zone": "legs",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
+        },
+        "Leg_Conduits": {
+          "zone": "legs",
+          "paint": "conduitGlow",
+          "glow": true
+        },
+        "Thigh_Band": {
+          "zone": "legs",
+          "paint": "accent"
         },
         "Arm_L": {
           "zone": "arms",
-          "paint": "body"
+          "paint": "white"
         },
         "Arm_R": {
           "zone": "arms",
-          "paint": "body"
+          "paint": "white"
         },
-        "Shoulders": {
+        "Arm_Camo": {
           "zone": "arms",
-          "paint": "accent"
+          "paint": "blue",
+          "noHit": true
         },
         "Arm_Frame": {
           "zone": "arms",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false,
+          "noHit": true
         },
-        "Blade": {
+        "Arm_Conduits": {
+          "zone": "arms",
+          "paint": "conduitGlow",
+          "glow": true,
+          "noHit": true
+        },
+        "Emitter": {
           "zone": "arms",
           "paint": "weapon"
         },
+        "Blade": {
+          "zone": "arms",
+          "paint": "bladeGlow",
+          "glow": true
+        },
         "Carbine": {
           "zone": "arms",
-          "paint": "trim"
+          "paint": "frame",
+          "rusts": false
         }
       },
       "hitboxes": {
         "legs": [
           {
             "center": [
-              -0.45,
-              0.87,
-              -0.1
+              -0.42,
+              0.88,
+              -0.05
             ],
             "size": [
-              0.37,
-              1.63,
+              0.3,
+              1.61,
+              0.73
+            ]
+          },
+          {
+            "center": [
+              0.42,
+              0.88,
+              -0.11
+            ],
+            "size": [
+              0.3,
+              1.61,
               0.84
             ]
           },
           {
             "center": [
-              0.46,
-              0.87,
-              -0.1
+              0.05,
+              0.88,
+              -0.18
             ],
             "size": [
-              0.37,
-              1.63,
-              0.84
+              1.17,
+              1.23,
+              0.7
             ]
           },
           {
             "center": [
               0,
               0.86,
-              -0.07
+              -0.13
             ],
             "size": [
-              1.33,
-              1.72,
-              1.11
+              1.34,
+              1.71,
+              1
+            ]
+          },
+          {
+            "center": [
+              0,
+              1.29,
+              -0.15
+            ],
+            "size": [
+              1.22,
+              0.75,
+              0.42
+            ]
+          },
+          {
+            "center": [
+              -0.42,
+              1.36,
+              -0.12
+            ],
+            "size": [
+              0.31,
+              0.24,
+              0.35
             ]
           }
         ],
         "arms": [
           {
             "center": [
-              -1.01,
-              2.55,
-              -0.14
+              -0.98,
+              2.65,
+              -0.1
             ],
             "size": [
-              0.54,
-              0.69,
-              0.6
+              0.59,
+              0.87,
+              0.74
             ]
           },
           {
             "center": [
-              1.05,
-              2.58,
-              -0.3
-            ],
-            "size": [
-              0.62,
-              0.62,
-              0.9
-            ]
-          },
-          {
-            "center": [
-              0,
-              2.93,
-              0.02
-            ],
-            "size": [
-              2.36,
-              0.27,
-              0.52
-            ]
-          },
-          {
-            "center": [
-              0.03,
+              1.01,
               2.6,
-              -0.35
+              -0.27
             ],
             "size": [
-              2.57,
-              0.73,
-              1.05
+              0.65,
+              0.63,
+              0.88
             ]
           },
           {
             "center": [
               1.2,
-              2.4,
-              -1.33
+              2.42,
+              -0.84
             ],
             "size": [
-              0.09,
-              0.29,
-              0.94
+              0.24,
+              0.3,
+              0.31
+            ]
+          },
+          {
+            "center": [
+              1.2,
+              2.42,
+              -1.38
+            ],
+            "size": [
+              0.08,
+              0.17,
+              0.8
             ]
           },
           {
             "center": [
               -1.2,
-              2.18,
-              -0.73
+              2.13,
+              -0.69
             ],
             "size": [
               0.2,
-              0.52,
-              1.06
+              0.48,
+              1
             ]
           }
         ],
@@ -1038,85 +1635,109 @@
           {
             "center": [
               0,
-              2.82,
-              -0.12
+              2.78,
+              -0.05
             ],
             "size": [
-              1.2,
-              0.94,
-              0.99
+              1.1,
+              0.96,
+              0.8
+            ]
+          },
+          {
+            "center": [
+              -0.08,
+              2.84,
+              -0.2
+            ],
+            "size": [
+              0.96,
+              0.84,
+              0.75
             ]
           },
           {
             "center": [
               0,
-              2.47,
+              2.48,
               0.02
             ],
             "size": [
-              0.66,
-              1.75,
-              0.44
+              0.6,
+              1.78,
+              0.42
             ]
           },
           {
             "center": [
               0,
-              3.43,
-              -0.25
+              3.45,
+              -0.29
             ],
             "size": [
-              0.4,
-              0.3,
-              0.62
+              0.38,
+              0.31,
+              0.82
             ]
           },
           {
             "center": [
               0,
-              3.44,
+              3.77,
+              0.21
+            ],
+            "size": [
+              0.08,
+              0.49,
+              0.9
+            ]
+          },
+          {
+            "center": [
+              0,
+              3.45,
               -0.32
             ],
             "size": [
-              0.42,
-              0.12,
-              0.24
+              0.43,
+              0.11,
+              0.45
             ]
           },
           {
             "center": [
               0,
-              3.61,
-              0.19
+              2.78,
+              0.54
             ],
             "size": [
-              0.73,
-              0.61,
+              0.66,
+              0.76,
+              0.4
+            ]
+          },
+          {
+            "center": [
+              0,
+              3.22,
+              0.69
+            ],
+            "size": [
+              1.18,
+              1.45,
+              0.66
+            ]
+          },
+          {
+            "center": [
+              0,
+              2.33,
               0.73
-            ]
-          },
-          {
-            "center": [
-              0,
-              2.75,
-              0.52
             ],
             "size": [
-              0.72,
-              0.7,
-              0.36
-            ]
-          },
-          {
-            "center": [
-              0,
-              2.53,
-              0.75
-            ],
-            "size": [
-              1.11,
-              0.94,
-              0.46
+              0.98,
+              0.67,
+              0.43
             ]
           }
         ]
