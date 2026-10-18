@@ -2,7 +2,7 @@
 
 The four launch mechs, as Joseph described them (17 October 2026). This is the visual brief each mech's model is built and checked against. It sits alongside `DESIGN.md` (the rules for everything) and `docs/MECHS.md` (each mech's junk, repairs and backstory).
 
-Where a design here clashes with a rule in `DESIGN.md`, it is listed at the end under **Open questions**. Until Joseph decides, `DESIGN.md` wins for anything that ships.
+On 18 October Joseph decided these designs win over the older rules: `DESIGN.md` now allows their glowing sensors, energy accents, per-mech paint schemes and factory look. What is still open is listed at the end.
 
 ---
 
@@ -60,13 +60,13 @@ Where the mechs are shown off, such as a menu or loadout screen backdrop. Not bu
 
 ---
 
-## Open questions (clashes with DESIGN.md)
-These need Joseph's call. Each one either changes the design above or changes a rule in `DESIGN.md`.
+## Settled (18 October 2026)
+- Glowing sensors, visors and small energy accents on mechs are allowed, as flat emissive colour with no bloom halo.
+- Each mech has its own factory paint scheme; each pilot adds one small accent marking.
+- The mechs are clean Aegis Dynamics factory machines that leave a match as rustbuckets, not machines built from junk.
 
-1. **Glowing eyes and visors.** `DESIGN.md` bans "glowing eye visors" and "neon rim glow". Ironclad's red sensor, Stiletto's green visor, Arbiter's blue dome, Stiletto's blue plasma blade and orange conduits, and Arbiter's teal accents and drones all glow.
-2. **Teal and holograms.** Banned: "teal and orange grading", "soft glow panels", "hex grid decoration". Arbiter is white and teal with holographic decoys. The hangar has a hexagonal grid, glowing light strips and holographic displays.
-3. **Paint scheme.** The rule is paint white and frame navy for every mech, plus one accent colour per pilot, so a fresh mech pops against the rust and moss world and a player is told apart by accent. Here each mech has its own scheme: dark grey with hazard stripes, blue and white urban camouflage, desert camouflage, white and teal.
-4. **Junk versus factory.** The rule is that every mech is built from named junk and shows its repairs. These read as clean factory machines from one company. One way they fit: they arrive shiny from Aegis Dynamics and end every match as rustbuckets, which is the vision in `DESIGN.md`. If so, the "built from junk" line in `docs/MECHS.md` changes.
-5. **Weapons and abilities.** The game has an autocannon, a scattergun, a spike driver and grenades, all usable by any mech. The designs carry a Gatling, shield and pile driver, missiles, a plasma blade, a laser carbine, a rail mortar, point-defense lasers, drones with decoys and repair beams, and a jump pack. In the game today these are looks only (gate V2c). Making any of them work is new gameplay, and the drones' repair overlaps with repair at M7.
-6. **Four legs.** Cataclysm walks on four legs. Hit zones are legs, arms and torso, so it works, but its legs need a look that reads as broken when the leg zone breaks.
-7. **Brand name.** "AEGIS DYNAMICS" is a made-up company, so no trademark worry, but its logo and the serial numbers are real text and must use the decal font (Big Shoulders Stencil).
+## Still open
+1. **The hangar.** Its hexagonal grid, glowing light strips and holographic displays still clash with the bans on hex grid decoration and soft glow panels. There is no hangar scene yet, so this waits until one is planned.
+2. **Weapons and abilities.** The game has an autocannon, a scattergun, a spike driver and grenades, usable by any mech. The designs carry a Gatling, shield and pile driver, missiles, a plasma blade, a laser carbine, a rail mortar, point-defense lasers, drones with decoys and repair beams, and a jump pack. In the game these are looks only (gate V2c). Making any of them work is new gameplay, and the drones' repair overlaps with repair at M7.
+3. **Four legs.** Cataclysm walks on four legs. Hit zones are legs, arms and torso, so it works, but its legs need a broken look that reads when the leg zone breaks.
+4. **Text.** The AEGIS DYNAMICS logo and the serial numbers are real text and must use the decal font (Big Shoulders Stencil).

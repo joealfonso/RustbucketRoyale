@@ -14,7 +14,7 @@ Shiny, freshly painted mechs drop into an overgrown junkyard, and the ones that 
 - Spark yellow: #FFC93C
 - Zone magenta: #E83F8B (used only for the zone ring)
 - HUD amber: #FFB000 on soot, warning red #FF4D3D
-- Mech paint (clean, before any damage): paint white #E6E2D6, frame navy #2B3A55, then one accent per pilot. Clean paint against a rust and moss world is what makes a fresh mech pop and a hurt one sink into the junk.
+- Mech paint (clean, before any damage): each mech wears its own factory scheme from `docs/MECH_ROSTER.md` (Ironclad-IV dark grey with yellow and black hazard stripes, Stiletto-B blue and white urban camouflage, Cataclysm tan and rust-brown desert camouflage, Arbiter polished white with teal). On top of that, each pilot gets one accent colour as a small marking (a shoulder band or a stripe), so two of the same mech can be told apart. Clean factory paint against a rust and moss world is what makes a fresh mech pop and a hurt one sink into the junk.
 Player accent colors must contrast with both moss green and rust orange. Enemy and player mechs must be told apart at 150 m by silhouette and accent, never by guessing hues.
 
 ## Shapes
@@ -28,9 +28,10 @@ Parts have visible seams, hinges, and panel breaks. No melted blends.
 Surfaces are flat toon bands with visible brush marks. No gloss, airbrush gradients, or baked lighting.
 No gibberish text. Use none, or real text hand set in the chosen fonts. Pick one licensed monospace font for the HUD and one stencil or hand lettered font for decals, and record both here.
 Chosen fonts (2026-10-17): HUD, IBM Plex Mono (SIL Open Font License). Decals, Big Shoulders Stencil (SIL Open Font License). Both get a row in docs/ASSETS.md when their files enter the repo.
-Banned looks: teal and orange grading, neon rim glow, purple to blue gradients, god rays, lens flare, bokeh, hex grid decoration, glowing eye visors, glass cards, soft glow panels, stock icon packs, emoji icons.
+Banned looks: teal and orange grading, neon rim glow, purple to blue gradients, god rays, lens flare, bokeh, hex grid decoration, glass cards, soft glow panels, stock icon packs, emoji icons.
+Allowed on mechs (from the roster designs): glowing sensors and visors, and small emissive energy accents on weapons, conduits and drones, in each mech's own colours. They are flat emissive toon colour, never a bloom halo or a rim glow round the whole mech. A mech's sensor goes dark when its torso breaks, which makes a destroyed mech read at a glance.
 Wear follows logic: rust where water pools, scuffs where parts rub, chips along edges.
-Each mech is built from named junk, shows its repairs, and has a backstory line in docs/MECHS.md. Asymmetry needs a reason (a patch, a swapped part), never randomness.
+Each mech is a factory machine from Aegis Dynamics that arrives clean and leaves the match a rustbucket. It has a backstory line in docs/MECHS.md. Asymmetry needs a reason (a shield arm, a weapon arm, an electronics mast), never randomness.
 Every hero asset starts as hand drawn thumbnail silhouettes.
 Review test: show a screenshot to someone who hasn't seen the game and ask what looks off. If they say AI, find the tell.
 
