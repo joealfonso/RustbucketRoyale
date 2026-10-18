@@ -11,6 +11,8 @@ import { createMechModel, setCrawlLook, setMechDamage } from "./mechModel";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import mechKitsJson from "../../../data/mechKits.json";
 import { loadKit, parseKits, type LoadedKit } from "./mechKit";
+import { PROP_MODELS } from "./props";
+import { toGeometry } from "./dressing/dressing";
 
 // The V1 style test (style.html): one chunk, its props and three mechs in the game's look, seen from 10, 50 and
 // 150 m, so the palette, bands, outline and light can be judged before any real art is made. Keys 1, 2, 3 move the
@@ -44,8 +46,21 @@ const template = chunks.templates.find((t) => t.id === "containers") ?? chunks.t
 const half = chunks.size / 2;
 for (const b of template.boxes) toon.box(scene, [b.center[0] - half, b.center[1], b.center[2] - half], b.size, chunks.palette[b.colorIndex]!);
 
-// One of each prop, just past the chunk's edge.
-props.types.forEach((t, i) => toon.box(scene, [-4 + i * 5, t.size[1] / 2, half + 4], t.size, t.color));
+// One of each prop just past the chunk's edge, standing, with its debris beside it (V3b).
+props.types.forEach((t, i) => {
+  const builder = PROP_MODELS[t.id];
+  if (!builder) { toon.box(scene, [-4 + i * 7, t.size[1] / 2, half + 4], t.size, t.color); return; }
+  const model = builder(t.size, i);
+  ([[model.intact, -4 + i * 7], [model.destroyed, -1 + i * 7]] as const).forEach(([pieces, x]) => {
+    for (const p of pieces) {
+      const geometry = toGeometry([p.mesh]);
+      const intact = new THREE.Mesh(geometry, toon.world(p.paint)), hull = new THREE.Mesh(geometry, toon.shellOutline(p.paint));
+      intact.position.set(x, 0, half + 4);
+      hull.position.copy(intact.position);
+      scene.add(intact, hull);
+    }
+  });
+});
 
 // From clean to rustbucket, left to right: you (fresh paint), then someone else at 75%, 40%, 15% of every zone,
 // and finally with arms and legs broken.
@@ -81,6 +96,7 @@ roster.forEach((r, i) => {
   scene.add(model.group);
 });
 let lookingAtRoster = false;
+let lookingAtProps = false; // key 5: the props row, from above and in front, where the mechs do not block it
 
 const showKitDamage = () => kitModel && setMechDamage(kitModel, KIT_DAMAGE[kitDamage]!.map((f, z) => f * zoneMaxHp[z]!), false);
 
@@ -90,17 +106,21 @@ let turn = 0.6;
 const label = document.getElementById("label")!;
 function place(): void {
   // The middle of the line-up being looked at: the damage row, or the roster further out.
-  const target = new THREE.Vector3(5, 2, lookingAtRoster ? ROSTER_Z : half + 12);
-  camera.position.set(target.x + Math.sin(turn) * distance, target.y + 1.5 + distance * 0.18, target.z + Math.cos(turn) * distance);
+  const target = lookingAtProps ? new THREE.Vector3(3, 0.5, half + 4) : new THREE.Vector3(5, 2, lookingAtRoster ? ROSTER_Z : half + 12);
+  const lift = lookingAtProps ? 0.9 : 0.18; // looking down onto the props, over the mechs
+  camera.position.set(target.x + Math.sin(turn) * distance, target.y + 1.5 + distance * lift, target.z + Math.cos(turn) * distance);
   camera.lookAt(target);
-  label.textContent = lookingAtRoster
+  label.textContent = lookingAtProps
+    ? "Props, standing and broken: crate, junk pile, barrel · 1 / 2 / 3: back to the damage row · Q / E: turn"
+    : lookingAtRoster
     ? `Roster: ${roster.map((r) => r.id).join(", ") || "none loaded"} · 1 / 2 / 3: back to the damage row · Q / E: turn`
-    : `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · 4: the roster · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · behind, left to right: you (clean), then 75%, 40%, 15%, arms and legs broken`;
+    : `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · 4: the roster · 5: the props · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · behind, left to right: you (clean), then 75%, 40%, 15%, arms and legs broken`;
 }
 window.addEventListener("keydown", (e) => {
   const index = ["Digit1", "Digit2", "Digit3"].indexOf(e.code);
-  if (index >= 0) { distance = DISTANCES[index]!; lookingAtRoster = false; }
-  if (e.code === "Digit4") { distance = 14; lookingAtRoster = true; }
+  if (index >= 0) { distance = DISTANCES[index]!; lookingAtRoster = false; lookingAtProps = false; }
+  if (e.code === "Digit4") { distance = 14; lookingAtRoster = true; lookingAtProps = false; }
+  if (e.code === "Digit5") { distance = 9; lookingAtProps = true; lookingAtRoster = false; }
   if (e.code === "KeyQ") turn -= 0.3;
   if (e.code === "KeyE") turn += 0.3;
   if (e.code === "KeyD") { kitDamage = (kitDamage + 1) % KIT_DAMAGE.length; showKitDamage(); }

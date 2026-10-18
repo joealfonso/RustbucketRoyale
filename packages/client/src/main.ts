@@ -39,6 +39,9 @@ import { setMechGear } from "./mechModel";
 import { Hud } from "./hud";
 import { MapMeshes } from "./mapRenderer";
 import { BUILDERS, Dressing, scatter } from "./dressing";
+import { PROP_MODELS } from "./props";
+import { BreakFx } from "./props/breakFx";
+import propFxJson from "../../../data/propFx.json";
 import dressingJson from "../../../data/dressing.json";
 import chunksJsonForDressing from "../../../data/chunks.json";
 import { createMechModel, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
@@ -148,7 +151,8 @@ let mapMeshes = new MapMeshes(scene, map, toon);
 const dressingConfig = { ...dressingJson, chunkMeters: chunksJsonForDressing.size };
 const makeDressing = () => new Dressing(scene, toon, map, mapMeshes, BUILDERS, scatter, dressingConfig);
 let dressing = makeDressing();
-let propView = new PropView(map, propConfig, toon);
+let propView = new PropView(map, propConfig, toon, PROP_MODELS);
+const breakFx = new BreakFx(scene, toon, propFxJson);
 scene.add(propView.group);
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
 const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters) : null;
@@ -259,7 +263,7 @@ function swapMap(newSeed: number, newTier: string): void {
   mapMeshes = new MapMeshes(scene, map, toon);
   dressing.dispose();
   dressing = makeDressing();
-  propView = new PropView(map, propConfig, toon);
+  propView = new PropView(map, propConfig, toon, PROP_MODELS);
   scene.add(propView.group);
   pickupView.clear();
   predictor.setWorld(map.world);
@@ -344,6 +348,7 @@ if (net) {
     map.world.disable(prop.boxIndex);
     propView.destroy(id);
     debris.spawn(prop.x, prop.y, prop.z, 0.3);
+    breakFx.burst(propConfig.types[prop.type]!.id, prop.x, prop.y, prop.z);
     sound.play("smash", { x: prop.x, y: prop.y, z: prop.z });
   };
   net.onRoom = (r) => {
@@ -513,6 +518,7 @@ function frame(now: number): void {
     shotFx.update(STEP, map.world);
     blasts.update(STEP);
     debris.update(STEP);
+    breakFx.update(STEP);
     // Offline there is no server to send the blast, so it goes off when the fuse ends.
     grenades.update(STEP, map.world, net === null ? showBlast : undefined);
     accumulator -= STEP;

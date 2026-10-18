@@ -60,3 +60,12 @@ Near you, map boxes are drawn as junkyard models of their kind (containers, corr
 | Small: faceted rocks with moss tops, tyres, a drum, grass | ![rocks](v3a-rocks-and-scatter.jpg) |
 | Medium: containers and scatter (small render) | ![medium](v3a-medium-containers.jpg) |
 
+## V3b: props worth breaking
+
+The three breakable props are models now, each with debris left behind when it breaks: a strapped wooden crate with a painted cross (the loot box), a junk pile, and a hazard-yellow barrel that bursts into a black shell. Breaking one throws chunks in its colours. On style.html press 5.
+
+| What | Screenshot |
+| :- | :- |
+| Standing and broken, left to right: crate, junk pile, barrel | ![props](v3b-props-standing-and-broken.jpg) |
+| Crates in a match | ![crates](v3b-crates-in-a-match.jpg) |
+

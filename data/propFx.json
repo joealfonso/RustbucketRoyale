@@ -1,0 +1,11 @@
+{
+  "chunks": 12,
+  "speed": 7,
+  "lifeSeconds": 1.2,
+  "size": 0.28,
+  "colors": {
+    "crate": ["rustOrange", "sparkYellow", "deepRust"],
+    "junk": ["scrapSteel", "rustOrange", "soot"],
+    "barrel": ["sparkYellow", "soot"]
+  }
+}

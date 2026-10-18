@@ -163,7 +163,8 @@ export class Dressing {
   }
 }
 
-function toGeometry(meshes: MeshData[]): THREE.BufferGeometry {
+// Many meshes as one three.js geometry (positions, normals, one index).
+export function toGeometry(meshes: MeshData[]): THREE.BufferGeometry {
   let vertices = 0, indices = 0;
   for (const m of meshes) { vertices += m.positions.length; indices += m.indices.length; }
   const positions = new Float32Array(vertices), normals = new Float32Array(vertices);
