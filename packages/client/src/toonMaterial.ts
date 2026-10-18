@@ -46,6 +46,7 @@ export class Toon {
   private materials = new Map<string, THREE.MeshToonMaterial>();
   private groundMaterials = new Map<string, THREE.MeshToonMaterial>();
   private outlines = new Map<string, THREE.MeshBasicMaterial>();
+  private shellOutlines = new Map<string, THREE.MeshBasicMaterial>();
   private rimColor: THREE.Color;
 
   constructor(private look: LookConfig, private palette: Palette) {
@@ -124,6 +125,23 @@ export class Toon {
     if (!m) {
       m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(this.look.outline.darken), side: THREE.BackSide });
       this.outlines.set(hex, m);
+    }
+    return m;
+  }
+
+  // The outline for a real model: the same mesh drawn from the inside with every vertex pushed out along its normal.
+  // Works for any shape; on hard-edged boxes the faces part slightly at the corners, which smooth-shaded art does not.
+  shellOutline(name: string): THREE.MeshBasicMaterial {
+    const hex = this.color(name);
+    let m = this.shellOutlines.get(hex);
+    if (!m) {
+      m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(this.look.outline.darken), side: THREE.BackSide });
+      const width = this.look.outline.widthMeters;
+      m.onBeforeCompile = (shader) => {
+        shader.vertexShader = shader.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>\n  transformed += normalize(normal) * ${width.toFixed(4)};`);
+      };
+      m.customProgramCacheKey = () => `shell-${width}`;
+      this.shellOutlines.set(hex, m);
     }
     return m;
   }

@@ -17,3 +17,13 @@ Thumbnails: three paper silhouettes of the first mech go here (`thumb-1.jpg` ...
 | Small tier, lobby, looking away from the sun | ![small](v1b-small-in-game.jpg) | Facing away from the key light everything sits in the darker bands, so it reads dim. Band brightness and light strength are in `data/look.json`. |
 | Large tier with the F1 panel | ![large](v1b-large-with-panel.jpg) | 31 draw calls, 419k triangles, 1.0 ms of work a frame, 60 fps (browser pane). Outlines doubled the triangles, as expected. |
 
+## V2a: the mech kit pipeline, with the stand-in
+
+On `style.html` the stand-in kit mech stands in front of the others; D steps it through whole, damaged, arms broken, legs broken. In the game, add `&kit=standin` to a room link.
+
+| What | Screenshot |
+| :- | :- |
+| Kit mech (left edge) with damaged arms: the dented arm part | ![damaged](v2a-kit-arm-damaged.jpg) |
+| Arms broken: the stub part | ![broken](v2a-kit-arm-broken.jpg) |
+| In a match with `&kit=standin`: jets on the back, sensor on top | ![in game](v2a-kit-in-game.jpg) |
+

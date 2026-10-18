@@ -9,6 +9,8 @@ import damageFxJson from "../../../data/damageFx.json";
 import { parseDamageFx } from "./damageFx";
 import { createMechModel, setCrawlLook, setMechDamage } from "./mechModel";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
+import mechKitsJson from "../../../data/mechKits.json";
+import { loadKit, parseKits } from "./mechKit";
 
 // The V1 style test (style.html): one chunk, its props and three mechs in the game's look, seen from 10, 50 and
 // 150 m, so the palette, bands, outline and light can be judged before any real art is made. Keys 1, 2, 3 move the
@@ -19,7 +21,8 @@ const chunks = parseChunkSet(chunksJson);
 const props = parsePropConfig(propsJson);
 const zones = parseZones(zonesJson);
 const zoneMaxHp = zones.zones.map((z) => z.hp);
-setCrawlLook(parseDamageFx(damageFxJson).crawl);
+setCrawlLook(parseDamageFx(damageFxJson).crawl, zones.damagedBelowFraction);
+const kit = await loadKit("standin", parseKits(mechKitsJson));
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -54,21 +57,33 @@ for (const m of mechs) {
   scene.add(model.group);
 }
 
+// The stand-in kit mech (V2a), a step in front of the others. D steps it through damage: whole, damaged, arms broken, legs broken.
+const KIT_DAMAGE = [[1, 1, 1], [0.4, 0.4, 0.4], [0.4, 0, 0.4], [0, 0, 0.4]];
+let kitDamage = 0;
+const kitModel = kit ? createMechModel(palette.mech.othersAccent, zoneMaxHp, toon, palette.mech.body, kit) : null;
+if (kitModel) {
+  kitModel.group.position.set(2.5, 0, half + 17);
+  kitModel.group.rotation.y = Math.PI;
+  scene.add(kitModel.group);
+}
+const showKitDamage = () => kitModel && setMechDamage(kitModel, KIT_DAMAGE[kitDamage]!.map((f, z) => f * zoneMaxHp[z]!), false);
+
 const DISTANCES = [10, 50, 150];
 let distance = DISTANCES[0]!;
 let turn = 0.6;
 const label = document.getElementById("label")!;
 function place(): void {
-  const target = new THREE.Vector3(5, 2, half + 12);
+  const target = new THREE.Vector3(2.5, 2, half + 12); // the middle of the line-up
   camera.position.set(target.x + Math.sin(turn) * distance, target.y + 1.5 + distance * 0.18, target.z + Math.cos(turn) * distance);
   camera.lookAt(target);
-  label.textContent = `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · Q / E: turn · left: you, middle: someone else, right: broken legs`;
+  label.textContent = `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · then you, someone else, broken legs`;
 }
 window.addEventListener("keydown", (e) => {
   const index = ["Digit1", "Digit2", "Digit3"].indexOf(e.code);
   if (index >= 0) distance = DISTANCES[index]!;
   if (e.code === "KeyQ") turn -= 0.3;
   if (e.code === "KeyE") turn += 0.3;
+  if (e.code === "KeyD") { kitDamage = (kitDamage + 1) % KIT_DAMAGE.length; showKitDamage(); }
   place();
 });
 window.addEventListener("resize", () => {

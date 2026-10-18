@@ -5,10 +5,12 @@
 export interface AssetRules {
   modelsDir: string;
   material: string;
-  kinds: Record<string, { maxTriangles: number; minTriangles?: number; states: string[] }>;
+  // `lods`: how many levels of detail a model of this kind must hold, as nodes named LOD0, LOD1, ...
+  kinds: Record<string, { maxTriangles: number; minTriangles?: number; states: string[]; lods?: number }>;
 }
 
 export interface GltfJson {
+  nodes?: { name?: string; mesh?: number }[];
   meshes?: { name?: string; primitives: { indices?: number; attributes: { POSITION?: number }; material?: number; mode?: number }[] }[];
   accessors?: { count: number }[];
   materials?: { name?: string }[];
@@ -34,9 +36,13 @@ export function readGltfJson(bytes: Uint8Array): GltfJson {
   return JSON.parse(new TextDecoder().decode(bytes)) as GltfJson; // a plain .gltf
 }
 
+// Triangles in the near view: with levels of detail, only LOD0 counts (the budget is for the nearest model), plus
+// any mesh that is not a level of detail at all.
 export function countTriangles(gltf: GltfJson): number {
   let total = 0;
-  for (const mesh of gltf.meshes ?? []) {
+  const lodMeshes = new Set((gltf.nodes ?? []).filter((n) => /^LOD[1-9]/.test(n.name ?? "") && n.mesh !== undefined).map((n) => n.mesh!));
+  for (const [index, mesh] of (gltf.meshes ?? []).entries()) {
+    if (lodMeshes.has(index)) continue;
     for (const p of mesh.primitives) {
       if ((p.mode ?? TRIANGLES) !== TRIANGLES) continue;
       const accessor = p.indices !== undefined ? gltf.accessors?.[p.indices] : p.attributes.POSITION !== undefined ? gltf.accessors?.[p.attributes.POSITION] : undefined;
@@ -59,6 +65,11 @@ export function checkModel(name: string, gltf: GltfJson, rules: AssetRules): Che
   const triangles = countTriangles(gltf);
   if (kind && triangles > kind.maxTriangles) problems.push(`${triangles} triangles, over the ${kind.maxTriangles} budget`);
   if (kind?.minTriangles !== undefined && triangles < kind.minTriangles) warnings.push(`${triangles} triangles, under the usual ${kind.minTriangles}`);
+
+  if (kind?.lods) {
+    const names = new Set((gltf.nodes ?? []).map((n) => n.name));
+    for (let i = 0; i < kind.lods; i++) if (!names.has(`LOD${i}`)) problems.push(`has no LOD${i} node (needs LOD0 to LOD${kind.lods - 1})`);
+  }
 
   for (const m of gltf.materials ?? []) if (m.name !== rules.material) problems.push(`uses material "${m.name ?? "unnamed"}"; only ${rules.material} is allowed`);
   return { problems, warnings, triangles };

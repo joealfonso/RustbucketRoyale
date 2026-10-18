@@ -6,3 +6,4 @@ Rules: AI output is allowed for reference, mood, and blockout only. Nothing AI g
 
 | Asset | Source (pack, hand made, other) | License | AI used? (none, reference, blockout) | What was changed |
 | :- | :- | :- | :- | :- |
+| Stand-in mech kit (`assets/models/mechs/standin/`, 21 parts) | Made by `scripts/make-standin-mech.ts` from boxes | Own work | none | Generated, not drawn. Proves the kit pipeline; replaced by the first real mech, never shipped as art. |

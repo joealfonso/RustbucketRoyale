@@ -6,6 +6,7 @@ const rules = rulesJson as AssetRules;
 
 // A model with one triangle list of `triangles` triangles in the given material.
 const model = (triangles: number, material = "MasterToon"): GltfJson => ({
+  nodes: [{ name: "LOD0", mesh: 0 }, { name: "LOD1" }, { name: "LOD2" }],
   meshes: [{ primitives: [{ indices: 0, attributes: { POSITION: 1 }, material: 0 }] }],
   accessors: [{ count: triangles * 3 }, { count: triangles * 2 }],
   materials: [{ name: material }],
@@ -46,4 +47,17 @@ describe("asset checker", () => {
     expect(r.problems).toEqual([]);
     expect(r.warnings.join()).toMatch(/under the usual 300/);
   });
+
+  it("needs every level of detail on a mech part, and counts only the nearest against the budget", () => {
+    const noLods: GltfJson = { ...model(100), nodes: [{ name: "Body", mesh: 0 }] };
+    expect(checkModel("Mech_Torso_Intact", noLods, rules).problems.join()).toMatch(/LOD0/);
+    const lods: GltfJson = {
+      nodes: [{ name: "LOD0", mesh: 0 }, { name: "LOD1", mesh: 1 }, { name: "LOD2", mesh: 1 }],
+      meshes: [{ primitives: [{ indices: 0, attributes: {} }] }, { primitives: [{ indices: 1, attributes: {} }] }],
+      accessors: [{ count: 9000 * 3 }, { count: 5000 * 3 }],
+      materials: [{ name: "MasterToon" }],
+    };
+    expect(checkModel("Mech_Torso_Intact", lods, rules)).toMatchObject({ problems: [], triangles: 9000 });
+  });
 });
+

@@ -20,6 +20,8 @@ import damageFxJson from "../../../data/damageFx.json";
 import upgradesJson from "../../../data/upgrades.json";
 import paletteJson from "../../../data/palette.json";
 import lookJson from "../../../data/look.json";
+import mechKitsJson from "../../../data/mechKits.json";
+import { loadKit, parseKits } from "./mechKit";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import botsJson from "../../../data/bots.json";
 import noiseJson from "../../../data/noise.json";
@@ -61,7 +63,7 @@ const hudStats = parseHudStats(hudJson);
 const zoneSet = parseZones(zonesJson);
 const zoneMaxHp = zoneSet.zones.map((z) => z.hp);
 const damageFxConfig = parseDamageFx(damageFxJson);
-setCrawlLook(damageFxConfig.crawl);
+setCrawlLook(damageFxConfig.crawl, zoneSet.damagedBelowFraction);
 
 // How to play is chosen in the address:
 //   (nothing)                    the start menu
@@ -113,6 +115,7 @@ try {
     // Keep the room settings in the address too. If the server restarts, reloading brings the room back the same way.
     const again = new URLSearchParams({ room: roomCode, tier });
     if (params.has("bots")) again.set("bots", params.get("bots")!);
+    if (params.has("kit")) again.set("kit", params.get("kit")!);
     history.replaceState(null, "", `?${again}`);
   }
   hint.textContent = `Building ${tier} map...`;
@@ -143,7 +146,10 @@ scene.add(propView.group);
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
 const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters) : null;
 
-const ownModel = createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body);
+// ?kit=standin draws mechs from a model kit (data/mechKits.json) instead of grey boxes. Off by default until real art.
+const kitId = params.get("kit");
+const kit = kitId ? await loadKit(kitId, parseKits(mechKitsJson)) : null;
+const ownModel = createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body, kit);
 const mechGroup = ownModel.group;
 scene.add(mechGroup);
 
@@ -166,7 +172,7 @@ const damageFx = new DamageFx(scene, damageFxConfig, zoneSet);
 let fxDt = 0;
 const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
 // Everyone else wears the same accent: telling friend from foe is by name and behaviour, not colour.
-const remoteLook = { toon, accent: palette.mech.othersAccent, body: palette.mech.body };
+const remoteLook = { toon, accent: palette.mech.othersAccent, body: palette.mech.body, kit };
 const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.maxViewDelayMs, netStats.snapshotEvery * STEP * 1000, zoneMaxHp);
 remotes.weaponColors = weaponColors;
 remotes.upgrades = upgradeSet.upgrades;

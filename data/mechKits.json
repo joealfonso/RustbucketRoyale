@@ -1,0 +1,18 @@
+{
+  "lodDistances": [25, 80],
+  "kits": {
+    "standin": {
+      "folder": "models/mechs/standin",
+      "name": "Standin",
+      "parts": {
+        "Torso": { "zone": "torso", "paint": "body" },
+        "Jets": { "zone": "torso", "paint": "trim" },
+        "Sensor": { "zone": "torso", "paint": "trim" },
+        "Leg_L": { "zone": "legs", "paint": "body" },
+        "Leg_R": { "zone": "legs", "paint": "body" },
+        "Arm_L": { "zone": "arms", "paint": "accent" },
+        "Arm_R": { "zone": "arms", "paint": "accent" }
+      }
+    }
+  }
+}

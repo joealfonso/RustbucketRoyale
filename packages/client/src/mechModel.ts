@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { UpgradeDef } from "@rustbucket/shared";
 import type { Toon } from "./toonMaterial";
+import type { LoadedKit } from "./mechKit";
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const materials = new Map<string, THREE.MeshStandardMaterial>();
@@ -39,6 +40,11 @@ export interface MechModel {
   repairing: boolean; // shown with welding sparks
   upgradeParts: THREE.Mesh[]; // one per upgrade, made the first time it is fitted, shown while fitted
   fxTimers: number[]; // per zone: seconds until the next spark, then the next puff of smoke. Last: welding sparks
+  // A mech built from a kit: each part's intact, damaged and broken versions (each with its levels of detail), and
+  // the point in each hit zone that sparks and smoke come from. Empty for the grey-box mech.
+  kitParts: { zone: number; states: THREE.LOD[] }[];
+  fxAnchors: (THREE.Object3D | null)[];
+  gunParts: THREE.Object3D[]; // hidden with the arms when they are broken
 }
 
 // How a crawling mech sits. Read from data/damageFx.json once at startup.
@@ -48,8 +54,10 @@ export interface CrawlLook {
   legStubScale: number;
 }
 let crawlLook: CrawlLook = { dropMeters: 1.3, tiltDegrees: 12, legStubScale: 0.3 };
-export function setCrawlLook(look: CrawlLook): void {
+let damagedBelow = 0.5; // a zone under this share of its hit points shows its damaged parts, from zones.json
+export function setCrawlLook(look: CrawlLook, damagedBelowFraction = damagedBelow): void {
   crawlLook = look;
+  damagedBelow = damagedBelowFraction;
 }
 
 const WRECK = new THREE.Color("#262626");
@@ -57,7 +65,9 @@ const scratch = new THREE.Color();
 
 // Grey-box mech. Art hook: replace this with a loaded model, keep the zone mapping so damage still shows.
 // With `toon`, it is drawn in the game's look: palette colours, the master toon material and outlines.
-export function createMechModel(accent: string, zoneMaxHp: readonly number[], toon: Toon | null = null, bodyColor = "#738087"): MechModel {
+// With `kit` (and `toon`, which a kit needs), the body is the kit's parts instead of grey boxes; everything else
+// (damage tint, plates, gun, upgrades, effects) works the same.
+export function createMechModel(accent: string, zoneMaxHp: readonly number[], toon: Toon | null = null, bodyColor = "#738087", kit: LoadedKit | null = null): MechModel {
   const group = new THREE.Group();
   const body = new THREE.Group();
   group.add(body);
@@ -76,20 +86,49 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[], to
     outline(mesh, `#${baseColors[zone]!.getHexString()}`);
     return mesh;
   };
-  part(2, [0, 2.4, 0], [1.8, 1.6, 1.2]);
-  // Legs hang from the hips (pivot at the top) so a broken one can shrink to a stub under the body.
   const legMeshes: THREE.Mesh[] = [];
-  for (const x of [-0.6, 0.6]) {
-    const leg = part(0, [x, 0.8, 0], [0.6, 1.6, 0.7]);
-    legMeshes.push(leg);
+  const kitParts: MechModel["kitParts"] = [];
+  const fxAnchors: MechModel["fxAnchors"] = [null, null, null];
+  let gunMount: THREE.Vector3 | null = null;
+  if (kit && toon) {
+    // Each part's states are levels-of-detail objects; damage shows one state at a time.
+    for (const p of kit.parts) {
+      const mat = p.paint === "trim" ? toon.material("deepRust") : zoneMaterials[p.zone]!;
+      const outlineColor = p.paint === "trim" ? "deepRust" : `#${baseColors[p.zone]!.getHexString()}`;
+      const states = p.states.map((state, i) => {
+        const lod = new THREE.LOD();
+        state.lods.forEach((geometry, level) => {
+          const holder = new THREE.Group();
+          holder.add(new THREE.Mesh(geometry, mat), new THREE.Mesh(geometry, toon.shellOutline(outlineColor)));
+          lod.addLevel(holder, level === 0 ? 0 : kit.lodDistances[level - 1]!);
+        });
+        lod.visible = i === 0;
+        body.add(lod);
+        return lod;
+      });
+      kitParts.push({ zone: p.zone, states });
+      const intact = p.states[0]!;
+      if (intact.fx && !fxAnchors[p.zone]) {
+        const anchor = new THREE.Object3D();
+        anchor.position.copy(intact.fx);
+        body.add(anchor);
+        fxAnchors[p.zone] = anchor;
+      }
+      if (intact.mount) gunMount = intact.mount;
+    }
+  } else {
+    part(2, [0, 2.4, 0], [1.8, 1.6, 1.2]);
+    // Legs hang from the hips (pivot at the top) so a broken one can shrink to a stub under the body.
+    for (const x of [-0.6, 0.6]) legMeshes.push(part(0, [x, 0.8, 0], [0.6, 1.6, 0.7]));
+    armMeshes.push(part(1, [-1.2, 2.4, 0], [0.5, 1.2, 0.5]));
+    armMeshes.push(part(1, [1.2, 2.4, -0.6], [0.5, 0.6, 1.6]));
   }
-  armMeshes.push(part(1, [-1.2, 2.4, 0], [0.5, 1.2, 0.5]));
-  armMeshes.push(part(1, [1.2, 2.4, -0.6], [0.5, 0.6, 1.6]));
 
   // The barrel on the gun arm takes the colour of the weapon in hand. Art hook: one model per weapon at V2.
   const gunMaterial = toon ? toon.ownMaterial("#d9731a") : new THREE.MeshStandardMaterial({ color: "#d9731a", roughness: 0.6 });
   const barrel = new THREE.Mesh(unitBox, gunMaterial);
-  barrel.position.set(1.2, 2.4, -1.65);
+  if (gunMount) barrel.position.copy(gunMount);
+  else barrel.position.set(1.2, 2.4, -1.65);
   barrel.scale.set(0.3, 0.3, 0.6);
   body.add(barrel);
   outline(barrel, "soot");
@@ -113,6 +152,7 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[], to
   return {
     group, body, legMeshes, zoneMaterials, toon, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
     hp: [...zoneMaxHp], dead: false, repairing: false, upgradeParts: [], fxTimers: [0, 0, 0, 0, 0, 0, 0],
+    kitParts, fxAnchors, gunParts: [barrel],
   };
 }
 
@@ -129,6 +169,13 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
   }
   const armsBroken = hp[1]! <= 0;
   for (const arm of model.armMeshes) arm.visible = !armsBroken;
+  for (const gun of model.gunParts) gun.visible = !armsBroken;
+  // A kit mech shows each part in its zone's state: intact, damaged, or broken.
+  for (const part of model.kitParts) {
+    const fraction = hp[part.zone]! / model.zoneMaxHp[part.zone]!;
+    const state = hp[part.zone]! <= 0 ? 2 : fraction < damagedBelow ? 1 : 0;
+    part.states.forEach((lod, i) => { lod.visible = i === state; });
+  }
   // Crawling: the body drops onto stubs and tips forward, so a legless mech reads at a distance.
   const crawling = hp[0]! <= 0 && !dead;
   model.body.position.y = crawling ? -crawlLook.dropMeters : 0;

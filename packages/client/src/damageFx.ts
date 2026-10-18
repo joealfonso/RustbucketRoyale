@@ -70,18 +70,14 @@ export class DamageFx {
     const welding = model.repairing && !model.dead ? partToRepair(model.hp, this.zones) : -1;
     if (welding >= 0 && (model.fxTimers[6] = model.fxTimers[6]! - dt) <= 0) {
       model.fxTimers[6] = sparks.repairEverySeconds;
-      const anchor = ANCHORS[welding]!;
-      this.at.set(anchor[0], anchor[1], anchor[2]);
-      model.body.localToWorld(this.at);
+      this.anchor(model, welding);
       for (let i = 0; i < sparks.count; i++) this.spark();
     }
     for (let zone = 0; zone < ZONE_COUNT; zone++) {
       const state = zoneState(model.hp, this.zones, zone);
       if (state === ZONE_INTACT) continue;
       const broken = state === ZONE_BROKEN;
-      const anchor = ANCHORS[zone]!;
-      this.at.set(anchor[0], anchor[1], anchor[2]);
-      model.body.localToWorld(this.at);
+      this.anchor(model, zone);
 
       // Dead mechs only smoke: sparks are for something still running.
       if (!model.dead && (model.fxTimers[zone * 2] = model.fxTimers[zone * 2]! - dt) <= 0) {
@@ -93,6 +89,15 @@ export class DamageFx {
         this.puff(broken);
       }
     }
+  }
+
+  // Where a zone's effects start: the model's own effect point when it has one (a kit), otherwise a fixed spot.
+  private anchor(model: MechModel, zone: number): void {
+    const own = model.fxAnchors[zone];
+    if (own) { own.getWorldPosition(this.at); return; }
+    const a = ANCHORS[zone]!;
+    this.at.set(a[0], a[1], a[2]);
+    model.body.localToWorld(this.at);
   }
 
   update(dt: number): void {
