@@ -124,6 +124,13 @@ Crates and wrecks now and then give up an upgrade: a big tumbling coloured cube 
 
 The tuning panel used to change numbers only in your own browser, which online did nothing to the server and made your mech fight it. Now a change goes to the server, gets checked like loading the file, and lands for everyone in the room at once. Every gameplay file is there, and Copy puts a file's numbers on the clipboard, so a good value goes straight into `data/`. It only works on a server started for testing.
 
+## 16. Gate 8c: measured, not guessed
+*Passed 21:12. Commit `2cc1cfe`.*
+
+![The 2000 m map at 60 fps, with the panel showing 0.7 ms of work a frame and 23 draw calls](16-8c-large-map-performance.jpg)
+
+Before going further, the game got measured. In a browser it needs well under a millisecond a frame on the biggest map, and the whole game is a 172 KB download. Match data from dozens of simulated games moved medium rooms from 24 to 28 mechs, so players spend less time alone. A load test with real connections found one server process holds about 40 medium rooms. That finishes M8, the last of the code milestones: everything in the design now exists in grey boxes.
+
 ---
 
-*Next: gate 8c, performance, bot counts and a load test.*
+*Next: the visual milestones, starting with V1, the style test.*
