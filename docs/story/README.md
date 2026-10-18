@@ -110,6 +110,13 @@ Hit zones now have three states. A damaged part sparks and smokes a little, a br
 
 Hold F, standing still, and in six seconds your worst part is back in running order. Not new: legs walk again, arms aim again, but only to 40%. Move, shoot or get hit and it starts over, and the clanking shows up on everyone's radar, so stopping to repair is a gamble. Bots with a broken part patch themselves up when nobody is around. (The shot doesn't catch anyone mid-repair: welding sparks come off the part being fixed.) That finishes M7.
 
+## 14. Gate 8a: upgrades
+*Passed 20:24. Commit `bd4c981`.*
+
+![End of an Arena match: "Bot 1 wins", wrecks smoking and sparks flying off the winner](14-8a-bot-1-wins.jpg)
+
+Crates and wrecks now and then give up an upgrade: a big tumbling coloured cube you fit with E. Four of them, each one big change: Big Tanks for longer jets, Quick Hands to repair and loot twice as fast, Big Ears to hear further and stretch the radar, Overclock to fire faster. Two sockets, so a third means giving one up. Each bolts a part onto the mech, so you can see what someone is carrying. (The shot is the end of a match, where it's hard to spot the parts at this size.)
+
 ---
 
-*Next: M8, upgrades, a tuning pass, performance and load tests.*
+*Next: gate 8b, tuning live.*
