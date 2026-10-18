@@ -6,7 +6,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { MeshData, NodeData } from "../assets/glbWrite";
 import { writeGlb } from "../assets/glbWrite";
-import { box, convex, cylinder, merge, mirrorX, prism, triangles, turn, wedge, type V3 } from "../assets/shapes";
+import { box, convex, cylinder, merge, mirrorX, prism, triangles, turn, wedge, type V3 } from "../../packages/client/src/dressing/shapes";
 
 // A flattened lens: a dome of `up` metres above the rim and a shallow bowl of `down` metres below it, elliptical in
 // plan (rx across, rz front to back). Rings follow a quarter circle so the dome reads round with few faces.

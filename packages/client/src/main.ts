@@ -37,7 +37,10 @@ import { PropView } from "./propView";
 import { PickupView } from "./pickupView";
 import { setMechGear } from "./mechModel";
 import { Hud } from "./hud";
-import { addMapMeshes, removeMapMeshes } from "./mapRenderer";
+import { MapMeshes } from "./mapRenderer";
+import { BUILDERS, Dressing, scatter } from "./dressing";
+import dressingJson from "../../../data/dressing.json";
+import chunksJsonForDressing from "../../../data/chunks.json";
 import { createMechModel, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
 import { NetClient } from "./net";
 import { Projectiles } from "./projectiles";
@@ -140,7 +143,11 @@ const scene = new THREE.Scene();
 toon.light(scene);
 if (params.has("overview")) scene.fog = null;
 
-let mapGroup = addMapMeshes(scene, map, toon);
+let mapMeshes = new MapMeshes(scene, map, toon);
+// Near you, map boxes are drawn as junkyard models of their kind and open ground gets scattered junk (data/dressing.json).
+const dressingConfig = { ...dressingJson, chunkMeters: chunksJsonForDressing.size };
+const makeDressing = () => new Dressing(scene, toon, map, mapMeshes, BUILDERS, scatter, dressingConfig);
+let dressing = makeDressing();
 let propView = new PropView(map, propConfig, toon);
 scene.add(propView.group);
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
@@ -245,11 +252,13 @@ function copyInviteLink(): void {
 
 // Every match brings a new map. Swap it in and point the sim at it.
 function swapMap(newSeed: number, newTier: string): void {
-  removeMapMeshes(scene, mapGroup);
+  mapMeshes.dispose();
   scene.remove(propView.group);
   propView.dispose();
   map = buildPlayMap(newTier, newSeed, mechStats);
-  mapGroup = addMapMeshes(scene, map, toon);
+  mapMeshes = new MapMeshes(scene, map, toon);
+  dressing.dispose();
+  dressing = makeDressing();
   propView = new PropView(map, propConfig, toon);
   scene.add(propView.group);
   pickupView.clear();
@@ -537,6 +546,7 @@ function frame(now: number): void {
   }
   mechGroup.visible = !(spectating && myPlace === null); // someone who never had a mech has nothing to show
   rig.update(viewX, viewY + cameraStats.pivotHeight, viewZ, aim.yaw, aim.pitch, map.world, frameTime);
+  dressing.update(viewX, viewZ);
 
   const matchSeconds = progress.state === "active" ? progress.seconds + (performance.now() - progressAt) / 1000 : 0;
   const ring: RingNow | null = ringView.update(matchSeconds);

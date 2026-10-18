@@ -1,7 +1,12 @@
-// Low-poly building blocks for model scripts (scripts/mechs/*.ts): bevelled boxes, cylinders, wedges and any convex
+// Low-poly building blocks for model scripts (scripts/mechs/*.ts) and the junkyard dressing built in the game: bevelled boxes, cylinders, wedges and any convex
 // prism, placed and turned freely, mirrored for left and right parts, and merged into one mesh per part. Faces are
 // flat-shaded, which is the toon look, and always wound to face outward so outlines drawn from the inside work.
-import type { MeshData } from "./glbWrite";
+// Positions, normals and triangle indices: one mesh, ready to write to a .glb or to turn into three.js geometry.
+export interface MeshData {
+  positions: number[]; // x, y, z per vertex
+  normals: number[];
+  indices: number[]; // three per triangle
+}
 
 export type V3 = [number, number, number];
 type Axis = "x" | "y" | "z";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MeshData } from "./glbWrite";
+import type { MeshData } from "./shapes";
 import { box, cylinder, merge, mirrorX, prism, triangles, turn, wedge } from "./shapes";
 
 // Every triangle's winding agrees with its stored normal, and points away from the solid's centre.

@@ -1,11 +1,8 @@
 // Writes a small glTF binary (.glb) by hand: enough for box-built stand-in models, with no dependency.
 // Every mesh uses one material, MasterToon, the only one the asset rules allow.
 
-export interface MeshData {
-  positions: number[]; // x, y, z per vertex
-  normals: number[];
-  indices: number[]; // three per triangle
-}
+import type { MeshData } from "../../packages/client/src/dressing/shapes";
+export type { MeshData };
 
 export interface NodeData {
   name: string;

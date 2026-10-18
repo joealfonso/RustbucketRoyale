@@ -16,6 +16,8 @@ export interface PlayMap {
   boxes: Box[];
   colors: number[]; // palette index of each box
   palette: string[];
+  kinds: Int8Array; // what each box is dressed as (index into kindNames), or -1 for a plain box
+  kindNames: string[];
   spawn: [number, number, number];
   props: PropInstance[];
   propOfBox: Int32Array;
@@ -36,11 +38,14 @@ export function buildPlayMap(tier: string, seed: number, mech: MechStats): PlayM
       const found = palette.indexOf(c);
       return found >= 0 ? found : palette.push(c) - 1;
     });
-    return { tier, seed, meters: 600, world: new World(range.boxes), boxes: range.boxes, colors, palette, spawn: data.spawn, props: range.props, propOfBox: range.propOfBox };
+    return {
+      tier, seed, meters: 600, world: new World(range.boxes), boxes: range.boxes, colors, palette, kinds: new Int8Array(range.boxes.length).fill(-1), kindNames: [],
+      spawn: data.spawn, props: range.props, propOfBox: range.propOfBox,
+    };
   }
   const map = generateMap(seed, tier, chunks, tiers, mech, propConfig);
   return {
-    tier, seed, meters: map.meters, world: map.world, boxes: map.boxes, colors: map.colors, palette: map.palette, spawn: map.spawns[0]!,
+    tier, seed, meters: map.meters, world: map.world, boxes: map.boxes, colors: map.colors, palette: map.palette, kinds: map.kinds, kindNames: map.kindNames, spawn: map.spawns[0]!,
     props: map.props, propOfBox: map.propOfBox,
   };
 }

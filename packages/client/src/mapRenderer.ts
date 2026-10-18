@@ -1,36 +1,56 @@
 import * as THREE from "three";
 import type { PlayMap } from "./loadMap";
-import type { Toon } from "./toonMaterial";
+import type { Toon, ToonInstances } from "./toonMaterial";
 
-// Draws the whole map in the toon look with one instanced mesh per colour plus one for its outlines, so thousands of
-// boxes cost a handful of draw calls. The floor (colour 0) gets the bands with no rim or outline.
-// Art hook: swap a colour's material, or replace this with real chunk models at V3.
-export function addMapMeshes(scene: THREE.Scene, map: PlayMap, toon: Toon): THREE.Group {
-  const group = new THREE.Group();
-  const byColor = new Map<number, number[]>();
-  map.colors.forEach((color, box) => {
-    if (map.propOfBox[box]! >= 0) return; // props are drawn by PropView, so they can disappear
-    const list = byColor.get(color);
-    if (list) list.push(box);
-    else byColor.set(color, [box]);
-  });
+// The map's boxes, drawn in the toon look with one instanced mesh per colour plus one for its outlines, so thousands
+// of boxes cost a handful of draw calls. The floor (colour 0) gets the bands with no rim or outline. A box can be
+// hidden while the junkyard dressing stands in for it nearby (see dressing/dressing.ts).
+export class MapMeshes {
+  readonly group = new THREE.Group();
+  private slot: { boxes: ToonInstances; instance: number }[] = [];
+  private all: ToonInstances[] = [];
 
-  for (const [color, indices] of byColor) {
-    const boxes = toon.instances(map.palette[color]!, indices.length, color === 0);
-    indices.forEach((boxIndex, instance) => {
-      const b = map.boxes[boxIndex]!;
-      boxes.set(instance, (b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, (b.minZ + b.maxZ) / 2, b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ);
+  constructor(private scene: THREE.Scene, private map: PlayMap, toon: Toon) {
+    const byColor = new Map<number, number[]>();
+    map.colors.forEach((color, box) => {
+      if (map.propOfBox[box]! >= 0) return; // props are drawn by PropView, so they can disappear
+      const list = byColor.get(color);
+      if (list) list.push(box);
+      else byColor.set(color, [box]);
     });
-    boxes.commit();
-    boxes.addTo(group);
+    for (const [color, indices] of byColor) {
+      const boxes = toon.instances(map.palette[color]!, indices.length, color === 0);
+      indices.forEach((boxIndex, instance) => {
+        this.place(boxes, instance, boxIndex);
+        this.slot[boxIndex] = { boxes, instance };
+      });
+      boxes.commit();
+      boxes.addTo(this.group);
+      this.all.push(boxes);
+    }
+    scene.add(this.group);
   }
-  scene.add(group);
-  return group;
-}
 
-// Takes a map out of the scene and frees its meshes, so building a new one each match does not leak. The materials
-// are the toon look's shared ones and stay.
-export function removeMapMeshes(scene: THREE.Scene, group: THREE.Group): void {
-  scene.remove(group);
-  for (const child of group.children) (child as THREE.InstancedMesh).dispose();
+  private place(boxes: ToonInstances, instance: number, boxIndex: number): void {
+    const b = this.map.boxes[boxIndex]!;
+    boxes.set(instance, (b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, (b.minZ + b.maxZ) / 2, b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ);
+  }
+
+  // Shows or hides one box. Changes are sent to the graphics card on the next `commit`.
+  setVisible(boxIndex: number, visible: boolean): void {
+    const s = this.slot[boxIndex];
+    if (!s) return;
+    if (visible) this.place(s.boxes, s.instance, boxIndex);
+    else s.boxes.hideOnly(s.instance);
+  }
+
+  commit(): void {
+    for (const boxes of this.all) boxes.commit();
+  }
+
+  // Takes the map out of the scene and frees its meshes. The materials are the toon look's shared ones and stay.
+  dispose(): void {
+    this.scene.remove(this.group);
+    for (const boxes of this.all) boxes.dispose();
+  }
 }

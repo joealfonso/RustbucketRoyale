@@ -2,6 +2,7 @@ export interface ChunkBox {
   center: [number, number, number];
   size: [number, number, number];
   colorIndex: number;
+  kindIndex: number; // what the box is dressed as (container, sheet wall, ...), an index into ChunkSet.kinds
 }
 
 export interface ChunkTemplate {
@@ -15,6 +16,7 @@ export interface ChunkTemplate {
 export interface ChunkSet {
   size: number; // metres, chunks are square
   palette: string[];
+  kinds: string[]; // box kinds for dressing; a box's own "kind" wins over its template's, "plain" otherwise
   templates: ChunkTemplate[];
 }
 
@@ -29,6 +31,7 @@ export function parseChunkSet(raw: unknown): ChunkSet {
   const size = data.size;
 
   const palette: string[] = [];
+  const kinds: string[] = [];
   const templates = (data.templates as Record<string, unknown>[]).map((t): ChunkTemplate => {
     const id = String(t.id);
     if (typeof t.weight !== "number" || !Number.isInteger(t.weight) || t.weight <= 0) throw new Error(`chunks.json: ${id} weight must be a whole number above 0`);
@@ -40,11 +43,14 @@ export function parseChunkSet(raw: unknown): ChunkSet {
       if (cx - sx / 2 < 0 || cx + sx / 2 > size || cz - sz / 2 < 0 || cz + sz / 2 > size) throw new Error(`chunks.json: ${id} has a box outside the chunk`);
       let colorIndex = palette.indexOf(b.color);
       if (colorIndex < 0) colorIndex = palette.push(b.color) - 1;
-      return { center: b.center, size: b.size, colorIndex };
+      const kind = typeof b.kind === "string" ? b.kind : typeof t.kind === "string" ? t.kind : "plain";
+      let kindIndex = kinds.indexOf(kind);
+      if (kindIndex < 0) kindIndex = kinds.push(kind) - 1;
+      return { center: b.center, size: b.size, colorIndex, kindIndex };
     });
     return { id, weight: t.weight, spawnable: t.spawnable === true, dense: t.dense === true, boxes };
   });
-  return { size, palette, templates };
+  return { size, palette, kinds, templates };
 }
 
 // Turns a chunk box to one of the 8 ways a chunk can sit: 0 to 3 quarter turns, optionally mirrored.

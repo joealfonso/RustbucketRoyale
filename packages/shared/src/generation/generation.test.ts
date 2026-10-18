@@ -77,7 +77,7 @@ describe("chunk data", () => {
   });
 
   it("four quarter turns bring a box home, and a double mirror too", () => {
-    const box = { center: [12, 3, 7] as [number, number, number], size: [4, 2, 9] as [number, number, number], colorIndex: 0 };
+    const box = { center: [12, 3, 7] as [number, number, number], size: [4, 2, 9] as [number, number, number], colorIndex: 0, kindIndex: 0 };
     const out = { center: [0, 0, 0] as [number, number, number], size: [0, 0, 0] as [number, number, number] };
     orient(box, 50, 4, false, out);
     expect(out).toEqual({ center: box.center, size: box.size });

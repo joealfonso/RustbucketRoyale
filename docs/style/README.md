@@ -50,3 +50,13 @@ Four mechs from Joseph's brief, each built by a script in `scripts/mechs/` from 
 
 To judge: the game still adds its own weapon-coloured barrel at each gun mount, which doubles up on mechs whose gun is modelled.
 
+## V3a: an overgrown junkyard
+
+Near you, map boxes are drawn as junkyard models of their kind (containers, corrugated walls, broken concrete, rocks, scrap piles, the tower) and open ground gets scattered tyres, pipes, plates, drums and grass. Everything is weathered by the world shader: moss on what faces up, rust streaks down walls, grime at the foot. Collision is unchanged.
+
+| What | Screenshot |
+| :- | :- |
+| Large: corrugated walls with posts, the concrete tower behind | ![large](v3a-large-walls-and-tower.jpg) |
+| Small: faceted rocks with moss tops, tyres, a drum, grass | ![rocks](v3a-rocks-and-scatter.jpg) |
+| Medium: containers and scatter (small render) | ![medium](v3a-medium-containers.jpg) |
+

@@ -5,7 +5,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { writeGlb, type MeshData, type NodeData } from "../assets/glbWrite";
-import { box, cylinder, merge, mirrorX, prism, turn, wedge, type V3 } from "../assets/shapes";
+import { box, cylinder, merge, mirrorX, prism, turn, wedge, type V3 } from "../../packages/client/src/dressing/shapes";
 
 const out = join(new URL("../..", import.meta.url).pathname, "assets/models/mechs/cataclysm/Mech_Cataclysm.glb");
 const deg = Math.PI / 180;

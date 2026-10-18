@@ -59,6 +59,7 @@ Read from the new Performance readouts in the F1 panel. "Work" is the time spent
 | Large tier, 40 bots, 2 mechs in view | 16.7 / 17.8 | 0.5 / 1.2 | 17 | 206k |
 | Arena, 8 mechs fighting, smoke and sparks | 16.7 / 17.7 | 0.5 / 1.5 | 65 to 76 | 4.5k |
 | Large tier after V1b (toon look, outlines) | 16.7 / 17.7 | 1.0 / 1.9 | 31 | 419k |
+| Large tier after V3a (junkyard dressing near you) | 16.7 / 18.7 | 1.2 / 2.9 | 69 | 623k |
 
 The V1b row is after the toon look: outlines are a second, slightly bigger box drawn from the inside, so triangles and draw calls roughly double; work per frame went from 0.5 to 1.0 ms and it still holds 60 fps here. Nothing to fix on these numbers: the map is already one instanced mesh per colour, and the extra draw calls in a fight are smoke puffs. Not yet measured on a mid-range laptop: Joseph to read the panel there. Download: one 662 KB script, 172 KB gzipped, against a 15 MB budget.
 
@@ -138,4 +139,7 @@ Before and after, run alternately on the same afternoon. The laptop was busier t
 | 20 | 10.5, 15.1, 11.4 | 12.5, 9.1, 11.1 |
 
 The spikes in a single room are gone: 5 rooms now fit 8 ms. From 10 rooms up it helps little. Each room can still run its one search on the same tick as every other room, so the worst tick grows with the number of rooms. What remains is plain search volume: bots replan every 2 s whether they need to or not. Doubling `replanSeconds` to 4 made no clear difference in a quick try, and spreading the searches over more rooms on one cache was not the issue either (one pathfinder and twenty used in turn cost the same, 0.38 ms a search). The next step would be cheaper searches, such as one shared route field to the ring centre per ring stage, or a coarser grid for long routes. Still plan on 10 large rooms per process.
+
+### Junkyard dressing builds (2026-10-18, MacBook, Node 25, large map seed 5)
+Timed outside the browser on the real map with the real builders. The first build of the 25 or so chunks within 120 m takes 110 ms, once, at spawn while the map is loading. Crossing into a new chunk costs 4 to 6 ms (the merge), because the chunks just beyond are built ahead, one per quiet frame, at up to 7 ms each. Before building ahead, a crossing cost 17 to 25 ms, a dropped frame every few seconds at a sprint.
 

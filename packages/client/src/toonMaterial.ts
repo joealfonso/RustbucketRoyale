@@ -19,6 +19,13 @@ export interface LookConfig {
   // rim `rim` wide (in noise units) round each patch.
   // `spread` below 1 makes the first hits show: the share of damage is raised to this power before it becomes cover.
   rust: { color: string; dark: string; scale: number; maxCover: number; rim: number; spread: number };
+  // The junkyard's weathering on map boxes and dressing: moss patches on upward faces (`minUp` is how upward), rust
+  // streaks running down walls, and grime along the foot of walls up to `height` metres.
+  world: {
+    moss: { color: string; dark: string; scale: number; cover: number; rim: number; minUp: number };
+    streaks: { color: string; scale: number; cover: number; strength: number };
+    grime: { color: string; height: number; strength: number };
+  };
   light: {
     key: { color: string; intensity: number; direction: [number, number, number] };
     fillSky: string;
@@ -45,10 +52,21 @@ export function parseLook(raw: unknown): LookConfig {
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const RAMP_SIZE = 64;
 
+// Smooth 3D value noise in [0, 1], shared by the rust and weathering patterns.
+const NOISE_GLSL = `
+  float rustHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+  float rustNoise(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(rustHash(i), rustHash(i + vec3(1, 0, 0)), f.x), mix(rustHash(i + vec3(0, 1, 0)), rustHash(i + vec3(1, 1, 0)), f.x), f.y),
+               mix(mix(rustHash(i + vec3(0, 0, 1)), rustHash(i + vec3(1, 0, 1)), f.x), mix(rustHash(i + vec3(0, 1, 1)), rustHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+  }`;
+
 export class Toon {
   private ramp: THREE.DataTexture;
   private materials = new Map<string, THREE.MeshToonMaterial>();
   private groundMaterials = new Map<string, THREE.MeshToonMaterial>();
+  private worldMaterials = new Map<string, THREE.MeshToonMaterial>();
   private outlines = new Map<string, THREE.MeshBasicMaterial>();
   private shellOutlines = new Map<string, THREE.MeshBasicMaterial>();
   private rimColor: THREE.Color;
@@ -111,7 +129,19 @@ export class Toon {
     if (uniform) uniform.value = Math.max(0, Math.min(1, damage)) ** this.look.rust.spread * this.look.rust.maxCover;
   }
 
-  private make(hex: string, rusts = false): THREE.MeshToonMaterial {
+  // The map's version of the master material: moss on what faces up, rust streaks down walls, grime at the foot
+  // (see DESIGN.md, World kit). Shared per colour, like `material`.
+  world(name: string): THREE.MeshToonMaterial {
+    const hex = this.color(name);
+    let m = this.worldMaterials.get(hex);
+    if (!m) {
+      m = this.make(hex, false, true);
+      this.worldMaterials.set(hex, m);
+    }
+    return m;
+  }
+
+  private make(hex: string, rusts = false, weathered = false): THREE.MeshToonMaterial {
     const m = new THREE.MeshToonMaterial({ color: hex, gradientMap: this.ramp });
     const { strength, width } = this.look.rim;
     const rim = this.rimColor;
@@ -121,10 +151,11 @@ export class Toon {
     // A hard rim of warm light where a surface turns away from the camera, so shapes separate from what is behind.
     // Rust: a value-noise pattern fixed to the part (in its own frame, scaled to metres, so it moves with the mech)
     // decides which bits of paint go first; everything under `rustCover` is rust, with a dark band at the edge.
+    // Weathering: the same noise in world space, so it lines up across neighbouring boxes and never moves.
     m.onBeforeCompile = (shader) => {
       shader.uniforms.rimColor = { value: rim };
       let fragment = shader.fragmentShader
-        .replace("void main() {", `uniform vec3 rimColor;\nvoid main() {`)
+        .replace("void main() {", `uniform vec3 rimColor;\n${NOISE_GLSL}\nvoid main() {`)
         .replace("#include <opaque_fragment>", `
           float facing = max(dot(normalize(normal), normalize(vViewPosition)), 0.0);
           outgoingLight += rimColor * ${strength.toFixed(3)} * step(1.0 - ${width.toFixed(3)}, 1.0 - facing) * diffuseColor.rgb;
@@ -138,18 +169,7 @@ export class Toon {
           .replace("#include <begin_vertex>", `#include <begin_vertex>
             vRustPos = position * vec3(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz), length(modelMatrix[2].xyz));`);
         fragment = fragment
-          .replace("void main() {", `varying vec3 vRustPos;
-            uniform float rustCover;
-            uniform vec3 rustColor;
-            uniform vec3 rustDark;
-            float rustHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-            float rustNoise(vec3 p) {
-              vec3 i = floor(p), f = fract(p);
-              f = f * f * (3.0 - 2.0 * f);
-              return mix(mix(mix(rustHash(i), rustHash(i + vec3(1, 0, 0)), f.x), mix(rustHash(i + vec3(0, 1, 0)), rustHash(i + vec3(1, 1, 0)), f.x), f.y),
-                         mix(mix(rustHash(i + vec3(0, 0, 1)), rustHash(i + vec3(1, 0, 1)), f.x), mix(rustHash(i + vec3(0, 1, 1)), rustHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
-            }
-            void main() {`)
+          .replace("void main() {", "varying vec3 vRustPos;\nuniform float rustCover;\nuniform vec3 rustColor;\nuniform vec3 rustDark;\nvoid main() {")
           .replace("#include <color_fragment>", `#include <color_fragment>
             if (rustCover > 0.0) {
               vec3 rp = vRustPos * ${rust.scale.toFixed(3)};
@@ -157,9 +177,39 @@ export class Toon {
               if (n < rustCover) diffuseColor.rgb = n > rustCover - ${rust.rim.toFixed(3)} ? rustDark : rustColor;
             }`);
       }
+      if (weathered) {
+        const { moss, streaks, grime } = this.look.world;
+        shader.uniforms.mossColor = { value: new THREE.Color(this.color(moss.color)) };
+        shader.uniforms.mossDark = { value: new THREE.Color(this.color(moss.dark)) };
+        shader.uniforms.streakColor = { value: new THREE.Color(this.color(streaks.color)) };
+        shader.uniforms.grimeColor = { value: new THREE.Color(this.color(grime.color)) };
+        shader.vertexShader = shader.vertexShader
+          .replace("void main() {", "varying vec3 vWorldPos;\nvarying vec3 vWorldN;\nvoid main() {")
+          .replace("#include <begin_vertex>", `#include <begin_vertex>
+            vec4 wPos = vec4(transformed, 1.0);
+            vec3 wN = objectNormal;
+            #ifdef USE_INSTANCING
+              wPos = instanceMatrix * wPos;
+              wN = mat3(instanceMatrix) * wN;
+            #endif
+            vWorldPos = (modelMatrix * wPos).xyz;
+            vWorldN = normalize(mat3(modelMatrix) * wN);`);
+        fragment = fragment
+          .replace("void main() {", "varying vec3 vWorldPos;\nvarying vec3 vWorldN;\nuniform vec3 mossColor;\nuniform vec3 mossDark;\nuniform vec3 streakColor;\nuniform vec3 grimeColor;\nvoid main() {")
+          .replace("#include <color_fragment>", `#include <color_fragment>
+            if (vWorldN.y > ${moss.minUp.toFixed(3)}) {
+              float n = rustNoise(vec3(vWorldPos.xz * ${moss.scale.toFixed(3)}, 3.0)) * 0.7 + rustNoise(vec3(vWorldPos.xz * ${(moss.scale * 3).toFixed(3)}, 9.0)) * 0.3;
+              if (n < ${moss.cover.toFixed(3)}) diffuseColor.rgb = n > ${(moss.cover - moss.rim).toFixed(3)} ? mossDark : mossColor;
+            } else if (abs(vWorldN.y) < 0.4) {
+              float along = vWorldPos.x + vWorldPos.z;
+              float n = rustNoise(vec3(along * ${streaks.scale.toFixed(3)}, vWorldPos.y * ${(streaks.scale * 0.12).toFixed(3)}, 5.0));
+              if (n < ${streaks.cover.toFixed(3)}) diffuseColor.rgb = mix(diffuseColor.rgb, streakColor, ${streaks.strength.toFixed(3)});
+              if (vWorldPos.y < ${grime.height.toFixed(3)}) diffuseColor.rgb = mix(diffuseColor.rgb, grimeColor, ${grime.strength.toFixed(3)});
+            }`);
+      }
       shader.fragmentShader = fragment;
     };
-    m.customProgramCacheKey = () => `toon-rim-${strength}-${width}${rusts ? "-rust" : ""}`;
+    m.customProgramCacheKey = () => `toon-rim-${strength}-${width}${rusts ? "-rust" : ""}${weathered ? "-world" : ""}`;
     return m;
   }
 
@@ -262,7 +312,7 @@ export class ToonInstances {
 
   // `ground` draws the bands with no rim and no outline, for the floor.
   constructor(toon: Toon, name: string, count: number, private outlineWidth: number, ground = false) {
-    this.mesh = new THREE.InstancedMesh(unitBox, ground ? toon.ground(name) : toon.material(name), count);
+    this.mesh = new THREE.InstancedMesh(unitBox, ground ? toon.ground(name) : toon.world(name), count);
     this.hull = ground ? null : new THREE.InstancedMesh(unitBox, toon.outlineMaterial(name), count);
   }
 
@@ -273,9 +323,14 @@ export class ToonInstances {
   }
 
   hide(i: number): void {
+    this.hideOnly(i);
+    this.commit();
+  }
+
+  // Hides one without sending the change yet, for hiding many at once followed by one `commit`.
+  hideOnly(i: number): void {
     this.mesh.setMatrixAt(i, gone);
     this.hull?.setMatrixAt(i, gone);
-    this.commit();
   }
 
   commit(): void {

@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none (M1 to M8 done)
-Current visual milestone: V2 done (kit pipeline, clean to rust, first roster). V3 (junkyard chunk kit and props) not started
+Current visual milestone: V3 (V3a an overgrown junkyard; V3b props worth breaking)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -90,3 +90,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Gate V2c passed by Joseph's call. V2 is done. Still open from it: the roster is opt-in (`&kit=roster`), the doubled weapon barrel, per-mech hit boxes, and whether the brief's loadouts become play. V3 not started.
 - 2026-10-18: Roster polish on Joseph's call: the roster is the default (`?kit=grey` for grey boxes); modelled guns take the weapon colour and the extra barrel is gone; each mech has its own measured hit boxes on the server and in the crosshair. Soak passes on all tiers with them.
 - 2026-10-18: Roster polish confirmed by Joseph in play.
+- 2026-10-18: V3 started on Joseph's go, in gates V3a (dress the junkyard: world shader, box kinds with models built from each box's size, seeded scatter, detail near you) and V3b (props with destroyed versions and debris).
+- 2026-10-18: Gate V3a built, waiting for its playtest. Check: walk any map and see containers, corrugated walls, broken concrete, rocks, scrap piles and the tower near you, with tyres and grass on the ground, moss on tops and rust streaks on walls; farther away they stay plain boxes. Watch for hitches when running between chunks, and say how it runs on your laptop (F1, Performance).

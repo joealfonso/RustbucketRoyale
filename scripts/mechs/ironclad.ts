@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeGlb, type MeshData, type NodeData } from "../assets/glbWrite";
-import { box, cylinder, merge, mirrorX, wedge, type V3 } from "../assets/shapes";
+import { box, cylinder, merge, mirrorX, wedge, type V3 } from "../../packages/client/src/dressing/shapes";
 
 // Both sides of a pair from the right-hand (+X) version.
 const pair = (right: MeshData) => merge(right, mirrorX(right));

@@ -43,5 +43,26 @@
     "maxCover": 0.85,
     "rim": 0.05,
     "spread": 0.6
+  },
+  "world": {
+    "moss": {
+      "color": "moss",
+      "dark": "darkMoss",
+      "scale": 0.35,
+      "cover": 0.5,
+      "rim": 0.05,
+      "minUp": 0.7
+    },
+    "streaks": {
+      "color": "deepRust",
+      "scale": 1.4,
+      "cover": 0.26,
+      "strength": 0.35
+    },
+    "grime": {
+      "color": "soot",
+      "height": 0.5,
+      "strength": 0.4
+    }
   }
 }

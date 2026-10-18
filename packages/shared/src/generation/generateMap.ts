@@ -14,6 +14,8 @@ export interface GeneratedMap {
   boxes: Box[];
   colors: number[]; // palette index of each box
   palette: string[];
+  kinds: Int8Array; // what each box is dressed as, an index into kindNames, or -1 (ground, edge walls, props)
+  kindNames: string[];
   spawns: [number, number, number][];
   props: PropInstance[];
   propOfBox: Int32Array; // for each box, the prop it belongs to, or -1
@@ -80,6 +82,7 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   }
 
   const palette = [tiers.groundColor, ...chunks.palette];
+  const boxKind: number[] = []; // visual only: never read by any placement decision
   const boxes: Box[] = [];
   const colors: number[] = [];
   const add = (cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, color: number) => {
@@ -145,6 +148,7 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
       for (const b of template.boxes) {
         orient(b, chunks.size, turnsOf[cell]!, mirrorOf[cell] === 1, oriented);
         add(originX + oriented.center[0], oriented.center[1], originZ + oriented.center[2], oriented.size[0], oriented.size[1], oriented.size[2], b.colorIndex + 1);
+        boxKind[boxes.length - 1] = b.kindIndex;
       }
       placeProps(firstBox, originX, originZ, template.spawnable);
       if (template.spawnable) spawnCandidates.push(cell);
@@ -166,7 +170,9 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
 
   const propOfBox = new Int32Array(boxes.length).fill(-1);
   for (const p of props) propOfBox[p.boxIndex] = p.id;
-  return { tier, meters: def.meters, boxes, colors, palette, spawns, props, propOfBox };
+  const kinds = new Int8Array(boxes.length).fill(-1);
+  boxKind.forEach((kind, i) => { kinds[i] = kind; });
+  return { tier, meters: def.meters, boxes, colors, palette, kinds, kindNames: chunks.kinds, spawns, props, propOfBox };
 }
 
 const nearby: number[] = [];
