@@ -28,7 +28,8 @@ export class NetClient {
   onClose?: (reason: string) => void;
 
   // Resolves with the map to build once the server says hello, or rejects if it never does.
-  readonly welcome: Promise<{ seed: number; tier: string; code: string }>;
+  readonly welcome: Promise<{ seed: number; tier: string; code: string; tuning: boolean }>;
+  onTuned?: (file: string, path: string, value: number) => void;
   // The round trip to the server, with the time it held the input before answering taken off.
   rttMs = 0;
   // Set by the game so each input can say how far behind its view of other mechs is.
@@ -44,7 +45,7 @@ export class NetClient {
   };
 
   constructor(url: string) {
-    let welcomed: (map: { seed: number; tier: string; code: string }) => void = () => {};
+    let welcomed: (map: { seed: number; tier: string; code: string; tuning: boolean }) => void = () => {};
     let failed: (reason: Error) => void = () => {};
     this.welcome = new Promise((resolve, reject) => { welcomed = resolve; failed = reject; });
     this.socket = new WebSocket(url);
@@ -56,7 +57,8 @@ export class NetClient {
       // Snapshots and shots arrive packed, everything else as text.
       const message = event.data instanceof ArrayBuffer ? decodeServerBinary(new Uint8Array(event.data)) : (JSON.parse(event.data as string) as ServerMessage);
       if (!message) return;
-      if (message.t === "welcome") { this.id = message.id; welcomed({ seed: message.seed, tier: message.tier, code: message.code }); }
+      if (message.t === "welcome") { this.id = message.id; welcomed({ seed: message.seed, tier: message.tier, code: message.code, tuning: message.tuning }); }
+      else if (message.t === "tuned") this.onTuned?.(message.file, message.path, message.value);
       else if (message.t === "snapshot") this.onSnapshot?.(message);
       else if (message.t === "shot") this.onShot?.(message);
       else if (message.t === "room") { this.latestRoom = message; this.roomHandler?.(message); }
@@ -69,6 +71,11 @@ export class NetClient {
       else if (message.t === "explode") this.onExplode?.(message);
       else if (message.t === "refused") { failed(new Error(message.reason)); this.onClose?.(message.reason); }
     };
+  }
+
+  // Dev only: asks the server to change one number in a data file for this room.
+  sendTune(file: string, path: string, value: number): void {
+    if (this.open) this.socket.send(JSON.stringify({ t: "tune", file, path, value }));
   }
 
   sendStart(): void {

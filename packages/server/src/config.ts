@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import {
   World, buildNavGrid, buildRange, generateMap, parseBotConfig, parseChunkSet, parseCombatStats, parseGrenadeStats, parseMatchConfig, parseMechStats,
-  parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseTiers, parseWeapons, parseLootConfig, parseUpgrades, parseZones, type RangeData,
+  parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseTiers, parseWeapons, parseLootConfig, parseUpgrades, parseZones, TUNABLE_FILES, type RangeData, type TuningRaws,
 } from "@rustbucket/shared";
 import type { MapForRoom, RoomConfig } from "./Room";
 
@@ -57,4 +57,11 @@ export function loadRoomConfig(options: ConfigOptions = {}): RoomConfig {
 
 export function tierNames(): string[] {
   return Object.keys(parseTiers(readJson("tiers.json")).tiers);
+}
+
+// The raw tunable data files, for live tuning in development.
+export function loadTuningRaws(): TuningRaws {
+  const raws: Record<string, unknown> = { props: readJson("props.json") };
+  for (const file of TUNABLE_FILES) raws[file] = readJson(`${file}.json`);
+  return raws as TuningRaws;
 }

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
   type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
@@ -18,6 +18,9 @@ import grenadeJson from "../../../data/grenade.json";
 import zonesJson from "../../../data/zones.json";
 import damageFxJson from "../../../data/damageFx.json";
 import upgradesJson from "../../../data/upgrades.json";
+import botsJson from "../../../data/bots.json";
+import noiseJson from "../../../data/noise.json";
+import combatJson from "../../../data/combat.json";
 import { DamageFx, parseDamageFx } from "./damageFx";
 import { setAimTarget } from "./aimTarget";
 import { DebugPanel } from "./debugPanel";
@@ -169,7 +172,23 @@ if (net) net.viewDelayMs = () => remotes.viewDelayMs;
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
 const input = new Input(canvas, hint, () => mechStats.sprintDoubleTapSeconds);
-const panel = new DebugPanel(mechStats, weaponStats, cameraStats);
+// Live tuning works on copies of the raw data files. A change is checked and parsed like loading the file, then
+// copied into the live values in place, so everything already holding them sees it.
+const tuningRaws = JSON.parse(JSON.stringify({
+  mech: mechJson, weapons: weaponsJson, grenade: grenadeJson, zones: zonesJson, loot: lootJson, upgrades: upgradesJson,
+  bots: botsJson, noise: noiseJson, combat: combatJson, props: propsJsonForLoot,
+})) as TuningRaws;
+const liveData: Partial<Record<TunableFile, unknown>> = { mech: mechStats, weapons: weaponSet, grenade: grenadeStats, zones: zoneSet, loot: lootConfig, upgrades: upgradeSet };
+const applyLocally = (file: string, path: string, value: number) => {
+  const parsed = applyTune(tuningRaws, file, path, value);
+  if (parsed !== null) assignDeep(liveData[file as TunableFile], parsed);
+};
+// Offline a change applies at once. Online it goes to the server, which sends it back to everyone, this client too.
+const panel = new DebugPanel(mechStats, tuningRaws, cameraStats, (file, path, value) => (net ? net.sendTune(file, path, value) : applyLocally(file, path, value)));
+if (net) {
+  net.onTuned = (file, path, value) => { applyLocally(file, path, value); panel.refresh(); };
+  void net.welcome.then((w) => panel.setServerTuning(w.tuning), () => {});
+}
 // The rig re-applies the field of view from the tuning value every frame, so the slider needs no callback.
 
 const [spawnX, spawnY, spawnZ] = map.spawn;

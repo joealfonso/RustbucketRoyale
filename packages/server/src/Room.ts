@@ -4,7 +4,7 @@ import {
   decodeInput, parseClientMessage, ringAt, rollLoot, itemWeapon, weaponItem, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
   NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
-  takenWithE, itemUpgrade, upgradeItem, upgradeScale, type UpgradeSet,
+  takenWithE, itemUpgrade, upgradeItem, upgradeScale, applyTune, assignDeep, parseTunable, TUNABLE_FILES, type TuningRaws, type UpgradeSet,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
@@ -49,6 +49,9 @@ export interface RoomConfig {
   // Builds the map for a tier and seed. The room asks for a fresh one at the start of every match.
   mapFor: (tier: string, seed: number) => MapForRoom;
   random?: () => number;
+  // Dev only (DEV_TUNING=1): the raw data files, so players in a room can change numbers live. Each room tunes its
+  // own copy, so a playtest in one room never changes another.
+  tuningRaws?: TuningRaws;
 }
 
 // One room: a lobby that runs match after match. Transport free: it only sees parsed messages and a send
@@ -93,7 +96,16 @@ export class Room {
 
   // `botCount` is how many computer players to start with, up to what the map has spawns for. `null` means keep the
   // room topped up to its tier's target size, making room for people as they arrive.
+  private tuningRaws: TuningRaws | null = null;
+  private tunes: Extract<ServerMessage, { t: "tuned" }>[] = []; // every change so far, replayed to people who join later
+
   constructor(readonly code: string, readonly tier: string, private config: RoomConfig, botCount: number | null = 0) {
+    if (config.tuningRaws) {
+      this.tuningRaws = JSON.parse(JSON.stringify(config.tuningRaws)) as TuningRaws;
+      const own: Record<string, unknown> = { ...config };
+      for (const file of TUNABLE_FILES) own[file] = parseTunable(file, this.tuningRaws);
+      this.config = config = own as unknown as RoomConfig;
+    }
     this.random = config.random ?? Math.random;
     this.pickups = new Pickups(config.loot.maxPickups);
     this.historyLength = Math.ceil(config.combat.historyMs / (STEP * 1000));
@@ -193,7 +205,8 @@ export class Room {
 
     // In the lobby a person arriving takes a bot's place. Mid match nothing changes.
     if (this.state === "lobby") this.fillBots();
-    send({ t: "welcome", id, code: this.code, seed: this.seed, tier: this.tier });
+    send({ t: "welcome", id, code: this.code, seed: this.seed, tier: this.tier, tuning: this.tuningRaws !== null });
+    for (const tuned of this.tunes) send(tuned);
     if (this.destroyedProps.length > 0) send({ t: "props", destroyed: [...this.destroyedProps] });
     this.broadcastRoom();
     return id;
@@ -227,6 +240,10 @@ export class Room {
       if (id === this.hostId && this.state === "lobby") this.beginCountdown();
       return true;
     }
+    if (message.t === "tune") {
+      this.tune(message.file, message.path, message.value);
+      return true;
+    }
 
     if (message.lagMs !== undefined) player.lagMs = message.lagMs;
     player.watchId = message.watchId ?? 0;
@@ -237,6 +254,19 @@ export class Room {
     toMechInput(message, input);
     player.queue.push({ seq: message.seq, input });
     return true;
+  }
+
+  // A playtester changed a number. It goes through the same checks as loading the file, then into the live values
+  // (keeping every object in place, so bots and everything else holding them see it), and out to everyone here.
+  // Refused without DEV_TUNING, or when the value fails the file's checks.
+  private tune(file: string, path: string, value: number): void {
+    if (!this.tuningRaws) return;
+    const parsed = applyTune(this.tuningRaws, file, path, value);
+    if (parsed === null) return;
+    assignDeep((this.config as unknown as Record<string, unknown>)[file], parsed);
+    const message: Extract<ServerMessage, { t: "tuned" }> = { t: "tuned", file, path, value };
+    this.tunes.push(message);
+    for (const p of this.players.values()) p.send(message);
   }
 
   // One server tick. The caller runs this 60 times a second.

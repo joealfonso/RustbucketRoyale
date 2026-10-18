@@ -35,7 +35,15 @@ export interface StartMessage {
   t: "start";
 }
 
-export type ClientMessage = InputMessage | StartMessage;
+// Dev only: change one number in a data file for this room. The server only listens when started with DEV_TUNING=1.
+export interface TuneMessage {
+  t: "tune";
+  file: string;
+  path: string;
+  value: number;
+}
+
+export type ClientMessage = InputMessage | StartMessage | TuneMessage;
 
 // The full state a client needs to rewind and replay its own mech.
 export interface SelfState {
@@ -136,7 +144,8 @@ export interface MatchProgress {
 }
 
 export type ServerMessage =
-  | { t: "welcome"; id: number; code: string; seed: number; tier: string }
+  | { t: "welcome"; id: number; code: string; seed: number; tier: string; tuning: boolean }
+  | { t: "tuned"; file: string; path: string; value: number } // a number in a data file changed for this room
   | {
       t: "room"; code: string; tier: string; state: MatchState; seed: number; hostId: number;
       players: number; ring: RingSchedule | null; matchSeconds: number;
@@ -166,6 +175,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (typeof data !== "object" || data === null) return null;
   const m = data as Record<string, unknown>;
   if (m.t === "start") return { t: "start" };
+  if (m.t === "tune") {
+    if (typeof m.file !== "string" || typeof m.path !== "string" || m.path.length > 80 || !finite(m.value)) return null;
+    return { t: "tune", file: m.file, path: m.path, value: m.value };
+  }
 
   if (m.t !== "input") return null;
 
