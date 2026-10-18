@@ -159,6 +159,13 @@ Before any real mech is modelled, the game learned to build one from a kit of pa
 
 A reference screenshot of clean white, navy and red mecha set the game's story: mechs now drop into the junkyard freshly painted, and the survivors leave as rustbuckets. Every hit eats paint away to rust in hard-edged patches with dark rims, a few spots at first and almost all rust near the end, so you can read a mech's whole fight on its body from across the map. It's done in the shader, so every model gets it with no extra art, including the AI-made mechs that are now allowed.
 
+## 21. Gate V2c: the first roster
+*Passed 09:46. Commit `762be17`.*
+
+![Four mechs in the toon look: a chunky blue brawler, a slim bird-legged flanker, a four-legged mortar platform and a dome-headed commander with floating drones](21-v2c-the-first-roster.jpg)
+
+The grey boxes got real company. From a one-page brief and a reference picture, four helpers worked side by side, each writing a program that builds one mech out of bevelled low-poly blocks: Ironclad-IV, the shielded brawler; Stiletto-B, the bird-legged flanker; Cataclysm, four-legged walking artillery; and Arbiter, the dome-headed commander with its drones. Each player is dealt one, they all start in clean paint, and they all rust the same way. For now they play alike: the shields, blades and mortars are only looks.
+
 ---
 
-*Next: V2c, the first real mech.*
+*Next: V3, the junkyard chunks and props, or turning the roster's looks into play.*

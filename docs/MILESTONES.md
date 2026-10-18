@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none (M1 to M8 done)
-Current visual milestone: V2 (V2a the kit pipeline and V2b clean to rust, done; V2c the first roster)
+Current visual milestone: V2 done (kit pipeline, clean to rust, first roster). V3 (junkyard chunk kit and props) not started
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -87,3 +87,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Gate V2b built, waiting for its check. Check: style.html shows a row from clean to broken (keys 1 / 2 to compare 10 and 50 m); in any match, mechs start white with a navy frame and rust where they are hit. Judge the red accent for other pilots against rust orange.
 - 2026-10-18: Gate V2b passed by Joseph's call. V2c (the first real mech) is next, waiting on a model: one .glb with the seven named parts.
 - 2026-10-18: Gate V2c built, waiting for its check. Four mechs from Joseph's brief, built by scripts: Ironclad-IV, Stiletto-B, Cataclysm, Arbiter. Check: style.html, press 4 for the roster; a game with `&kit=roster` deals each player one. Their loadouts are looks only; every mech plays the same. Judge: shapes, the doubled weapon barrel at each gun mount, and how far Cataclysm's legs stick outside the hit boxes.
+- 2026-10-18: Gate V2c passed by Joseph's call. V2 is done. Still open from it: the roster is opt-in (`&kit=roster`), the doubled weapon barrel, per-mech hit boxes, and whether the brief's loadouts become play. V3 not started.
