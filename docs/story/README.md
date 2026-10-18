@@ -131,6 +131,13 @@ The tuning panel used to change numbers only in your own browser, which online d
 
 Before going further, the game got measured. In a browser it needs well under a millisecond a frame on the biggest map, and the whole game is a 172 KB download. Match data from dozens of simulated games moved medium rooms from 24 to 28 mechs, so players spend less time alone. A load test with real connections found one server process holds about 40 medium rooms. That finishes M8, the last of the code milestones: everything in the design now exists in grey boxes.
 
+## 17. Gate V1a: the first look
+*Passed 21:45. Commit `3e82aa1`.*
+
+![Three grey-box mechs in the toon look: flat bands of light, dark outlines, rust containers on moss, a yellow barrel](17-v1a-first-toon-look.jpg)
+
+The first step from grey boxes toward the real look, on a test page of its own. One toon material for everything: light falls in three flat bands, a warm rim picks out edges, and every box has an outline in a darker shade of its own colour. The colours come from the palette in DESIGN.md (rust, moss, scrap steel), with blue for you, bone white for everyone else, and hazard yellow for barrels. The HUD and decal fonts were chosen too: IBM Plex Mono and Big Shoulders Stencil.
+
 ---
 
-*Next: the visual milestones, starting with V1, the style test.*
+*Next: gate V1b, the look across the whole game.*
