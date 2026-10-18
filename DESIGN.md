@@ -40,6 +40,9 @@ Toon ramp with 3 bands plus a rim light. One master toon material for everything
 ## Textures
 One shared 2048 atlas for props and chunks, 1024 per mech set. Painted brush marks, rust streaks, and tape or patch details live in the atlas. Vertex color adds variation. No unique per asset textures except hero mech sets.
 
+## Mech roster
+The four launch mechs (Ironclad-IV, Stiletto-B, Cataclysm, Arbiter) and the hangar are described in `docs/MECH_ROSTER.md`. Where those designs clash with this file, they are listed there under Open questions, and this file wins until they are settled.
+
 ## Mech anatomy and damage
 Parts: legs, arms, torso, jets, sensor, weapon mounts. States per hit zone: intact, damaged, broken.
 Rust: as a zone loses hit points its paint is eaten away to rust in hard-edged toon patches with a dark rim, from a few spots to most of the part when broken. It is a shader effect on the master material, so every model gets it with no extra art.

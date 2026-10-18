@@ -11,6 +11,7 @@ Open these on demand. Do not import them.
 - `docs/MILESTONES.md`: the current milestone and its gate. Read it first every session.
 - `docs/GDD.md`: mechanics, world generation, bots, noise, part damage.
 - `DESIGN.md`: palette, shading, damage states, HUD, asset intake. Read before any art, shader, VFX, or UI work.
+- `docs/MECH_ROSTER.md`: the four launch mechs and the hangar. Read before any mech model work.
 - `docs/DECISIONS.md`, `docs/PERF.md`, `docs/ASSETS.md`, `docs/MECHS.md`.
 
 ## How to work
