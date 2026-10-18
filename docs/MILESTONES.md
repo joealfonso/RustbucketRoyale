@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none (M1 to M8 done)
-Current visual milestone: V1 (in two gates: V1a the look in a style test page; V1b the look across the game, plus the asset checker)
+Current visual milestone: V1 code done; waiting for the paper thumbnails (Joseph) before V2
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -77,3 +77,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-17: Gate V1a passed by Joseph's call. V1b (the look across the game, cost check, asset checker) not started. The paper thumbnails are still to come.
 - 2026-10-17: Merged the side-session fixes into main: fixed bot counts work in the Arena, and large rooms plan at most one bot route per tick (slow ticks on 5 large rooms from about 11 to 7 ms).
 - 2026-10-17: Gate V1b built, waiting for its playtest. Check: play any tier and see the toon look everywhere (map, props, mechs, pickups); your mech blue, everyone else bone; the zone ring magenta; read the F1 Performance numbers on large on your laptop (here: 1.0 ms work, 60 fps); `npm run gauntlet` now checks models in assets/models (none yet). Still to come outside the code: the paper thumbnails.
+- 2026-10-18: During the V1b check: arm shots never landed because the crosshair aimed at the map behind a mech; it now aims at the mech under it. Hit tick marks and a part-and-damage label on every hit.
+- 2026-10-18: Gate V1b passed by Joseph's call. The V1 code is done. Still open from V1: three paper thumbnails of the first mech, scanned into docs/style/, before any Blender work. V2 (mech kit) not started.

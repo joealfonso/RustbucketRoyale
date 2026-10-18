@@ -138,6 +138,13 @@ Before going further, the game got measured. In a browser it needs well under a 
 
 The first step from grey boxes toward the real look, on a test page of its own. One toon material for everything: light falls in three flat bands, a warm rim picks out edges, and every box has an outline in a darker shade of its own colour. The colours come from the palette in DESIGN.md (rust, moss, scrap steel), with blue for you, bone white for everyone else, and hazard yellow for barrels. The HUD and decal fonts were chosen too: IBM Plex Mono and Big Shoulders Stencil.
 
+## 18. Gate V1b: the look, everywhere
+*Passed 08:46. Commit `7e7932b`.*
+
+![The large map in the toon look: your blue-armed mech, rust and steel walls with outlines, the tuning panel showing 60 fps](18-v1b-the-look-in-game.jpg)
+
+The style test became the game: every wall, crate, mech and pickup in the toon look, your mech in blue and everyone else in bone, the zone ring in magenta. Outlines doubled what the graphics card draws, and it still holds 60 fps. The playtest found that shots aimed at an arm never landed: the crosshair aimed at the wall behind the mech, so shots crossed it a metre off. Now it aims at the mech itself, and every hit pops tick marks and says what it struck. A checker in the test run now holds any real 3D model to the budgets and naming rules, ready for the first one.
+
 ---
 
-*Next: gate V1b, the look across the whole game.*
+*Next: V2, the mech kit, which starts with paper thumbnails.*
