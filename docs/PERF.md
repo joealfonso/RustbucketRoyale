@@ -51,6 +51,16 @@ One person in a running match, the other seats filled with bots to the tier's si
 
 Before the packed format and nearby-only updates the same rooms measured 272, 673 and 1279 kbps. The numbers move between runs because bots wander randomly: large is right at the 64 kbps budget when many bots happen to be near the person. Upstream, a client sends about 19 bytes per input (34 when shooting) 60 times a second, around 12 to 20 kbps. Server cost per room is tiny next to the 16.7 ms tick, so one process should hold many rooms, but that is not measured yet: next is a run with 20 rooms at once.
 
+### Client frame cost (2026-10-17, MacBook, Claude browser pane, 60 Hz display)
+Read from the new Performance readouts in the F1 panel. "Work" is the time spent on a frame before the GPU takes over, the headroom a locked 60 fps hides.
+
+| Scene | Frame ms median / worst | Work ms median / worst | Draw calls | Triangles |
+| :- | :- | :- | :- | :- |
+| Large tier, 40 bots, 2 mechs in view | 16.7 / 17.8 | 0.5 / 1.2 | 17 | 206k |
+| Arena, 8 mechs fighting, smoke and sparks | 16.7 / 17.7 | 0.5 / 1.5 | 65 to 76 | 4.5k |
+
+Nothing to fix on these numbers: the map is already one instanced mesh per colour, and the extra draw calls in a fight are smoke puffs. Not yet measured on a mid-range laptop: Joseph to read the panel there. Download: one 662 KB script, 172 KB gzipped, against a 15 MB budget.
+
 ### Soak: a whole match per tier (2026-10-17, MacBook, Node 25)
 `npm run soak`. The room fills with bots, and three headless players join that act like browsers (packed messages, prediction, replay). Three runs per tier on random seeds, all passing:
 

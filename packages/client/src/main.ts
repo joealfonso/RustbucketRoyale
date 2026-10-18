@@ -23,7 +23,7 @@ import noiseJson from "../../../data/noise.json";
 import combatJson from "../../../data/combat.json";
 import { DamageFx, parseDamageFx } from "./damageFx";
 import { setAimTarget } from "./aimTarget";
-import { DebugPanel } from "./debugPanel";
+import { DebugPanel, FrameTimes } from "./debugPanel";
 import { TimedEffects } from "./effects";
 import { Input } from "./input";
 import { ClientGrenades } from "./grenades";
@@ -184,6 +184,8 @@ const applyLocally = (file: string, path: string, value: number) => {
   if (parsed !== null) assignDeep(liveData[file as TunableFile], parsed);
 };
 // Offline a change applies at once. Online it goes to the server, which sends it back to everyone, this client too.
+const frameMs = new FrameTimes(240);
+const workMs = new FrameTimes(240); // time spent on the frame before the GPU takes over: the headroom a locked 60 fps hides
 const panel = new DebugPanel(mechStats, tuningRaws, cameraStats, (file, path, value) => (net ? net.sendTune(file, path, value) : applyLocally(file, path, value)));
 if (net) {
   net.onTuned = (file, path, value) => { applyLocally(file, path, value); panel.refresh(); };
@@ -396,6 +398,7 @@ let last = performance.now();
 let fps = 60;
 
 function frame(now: number): void {
+  const workStarted = performance.now();
   const frameTime = Math.min((now - last) / 1000, 0.1);
   last = now;
   fps += (1 / Math.max(frameTime, 1e-4) - fps) * 0.1;
@@ -579,6 +582,9 @@ function frame(now: number): void {
   if (panel.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection, net?.rttMs ?? 0, net ? remotes.viewDelayMs : 0);
 
   renderer.render(scene, rig.camera);
+  frameMs.record(frameTime * 1000);
+  workMs.record(performance.now() - workStarted);
+  if (panel.visible) panel.updateRender(frameMs, workMs, renderer.info.render.calls, renderer.info.render.triangles);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

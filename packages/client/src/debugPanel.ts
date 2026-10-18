@@ -13,6 +13,35 @@ export interface Readouts {
 
 const CROSS_METERS = 2000;
 
+// The last few seconds of frame times, for the performance readouts. Fixed size, so it allocates nothing per frame.
+export class FrameTimes {
+  private times: Float32Array;
+  private sorted: Float32Array;
+  private next = 0;
+  private filled = 0;
+
+  constructor(size: number) {
+    this.times = new Float32Array(size);
+    this.sorted = new Float32Array(size);
+  }
+
+  record(ms: number): void {
+    this.times[this.next] = ms;
+    this.next = (this.next + 1) % this.times.length;
+    this.filled = Math.min(this.filled + 1, this.times.length);
+  }
+
+  // Median and worst of what is recorded, in ms.
+  summary(out: { median: number; worst: number }): void {
+    const n = this.filled;
+    if (n === 0) { out.median = 0; out.worst = 0; return; }
+    this.sorted.set(this.times.subarray(0, n));
+    const view = this.sorted.subarray(0, n).sort();
+    out.median = view[n >> 1]!;
+    out.worst = view[n - 1]!;
+  }
+}
+
 // Hand-picked sliders for the numbers that matter most to feel. Everything else is under "Data files".
 const FEEL: { folder: string; keys: [string, number, number, string?][] }[] = [
   { folder: "Speed", keys: [["walkSpeed", 1, 30], ["runSpeed", 1, 60], ["crawlSpeedMultiplier", 0, 1], ["acceleration", 1, 150], ["deceleration", 1, 150], ["airControl", 0, 1], ["turnSpeedDegrees", 0, 720, "body turn speed (0 = instant)"], ["gravity", 5, 80]] },
@@ -28,6 +57,8 @@ export class DebugPanel {
   readonly gui = new GUI({ title: "Tuning (F1)" });
   readonly readouts: Readouts = { speed: 0, grounded: false, fps: 0, players: 1, correction: 0, ping: 0, viewDelay: 0 };
   private crossReadout = { seconds: 0 };
+  private render = { frameMedian: 0, frameWorst: 0, workMedian: 0, workWorst: 0, drawCalls: 0, triangles: 0 };
+  private frame = { median: 0, worst: 0 };
   private status = { note: "offline: changes apply at once" };
   private gameplay: GUI[] = [];
 
@@ -46,6 +77,13 @@ export class DebugPanel {
     info.add(this.readouts, "ping").name("Ping ms").listen().disable();
     info.add(this.readouts, "viewDelay").name("Others shown behind (ms)").listen().disable();
     info.add(this.crossReadout, "seconds").name(`Cross ${CROSS_METERS} m (s)`).listen().disable();
+    const perf = this.gui.addFolder("Performance");
+    perf.add(this.render, "frameMedian").name("Frame ms, median (4 s)").listen().disable();
+    perf.add(this.render, "frameWorst").name("Frame ms, worst (4 s)").listen().disable();
+    perf.add(this.render, "workMedian").name("Work ms, median").listen().disable();
+    perf.add(this.render, "workWorst").name("Work ms, worst").listen().disable();
+    perf.add(this.render, "drawCalls").name("Draw calls").listen().disable();
+    perf.add(this.render, "triangles").name("Triangles").listen().disable();
     this.gui.add(this.status, "note").name("Tuning").disable();
 
     const rawMech = raws.mech as Record<string, number>;
@@ -114,6 +152,17 @@ export class DebugPanel {
     this.readouts.viewDelay = Math.round(viewDelay);
     this.readouts.correction = Math.round(correction * 1000) / 1000;
     this.crossReadout.seconds = Math.round(secondsToCross(this.mech, CROSS_METERS));
+  }
+
+  updateRender(frames: FrameTimes, work: FrameTimes, drawCalls: number, triangles: number): void {
+    frames.summary(this.frame);
+    this.render.frameMedian = Math.round(this.frame.median * 10) / 10;
+    this.render.frameWorst = Math.round(this.frame.worst * 10) / 10;
+    work.summary(this.frame);
+    this.render.workMedian = Math.round(this.frame.median * 10) / 10;
+    this.render.workWorst = Math.round(this.frame.worst * 10) / 10;
+    this.render.drawCalls = drawCalls;
+    this.render.triangles = triangles;
   }
 
   get visible(): boolean {
