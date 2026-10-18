@@ -85,3 +85,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Made mech kits simpler on Joseph's call: one .glb with seven named parts is enough; damaged and broken versions and levels of detail are optional (later). Try `&kit=standin-one`.
 - 2026-10-18: Joseph chose the direction "clean mechs that become rustbuckets as they get hurt". Vision and mech paint updated in DESIGN.md. The first real mech moves to V2c.
 - 2026-10-18: Gate V2b built, waiting for its check. Check: style.html shows a row from clean to broken (keys 1 / 2 to compare 10 and 50 m); in any match, mechs start white with a navy frame and rust where they are hit. Judge the red accent for other pilots against rust orange.
+- 2026-10-18: Gate V2b passed by Joseph's call. V2c (the first real mech) is next, waiting on a model: one .glb with the seven named parts.

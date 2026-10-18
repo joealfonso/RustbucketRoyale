@@ -152,6 +152,13 @@ The style test became the game: every wall, crate, mech and pickup in the toon l
 
 Before any real mech is modelled, the game learned to build one from a kit of parts: torso, jets, sensor, legs, arms. Each part comes as an intact, a dented and a broken piece, each in three levels of detail for near and far, with marked points for sparks, smoke and the gun. Damage now swaps the real pieces, so a blown-off leg is the art's own stub. A script made a stand-in kit out of boxes to prove it all, so the first real mech can drop straight in.
 
+## 20. Gate V2b: clean paint, rusty endings
+*Passed 09:25. Commit `f1482f8`.*
+
+![A line of mechs from clean white paint to almost all rust, with the clean stand-in kit mech in front](20-v2b-clean-to-rust.jpg)
+
+A reference screenshot of clean white, navy and red mecha set the game's story: mechs now drop into the junkyard freshly painted, and the survivors leave as rustbuckets. Every hit eats paint away to rust in hard-edged patches with dark rims, a few spots at first and almost all rust near the end, so you can read a mech's whole fight on its body from across the map. It's done in the shader, so every model gets it with no extra art, including the AI-made mechs that are now allowed.
+
 ---
 
-*Next: the first real mech, starting with three paper thumbnails.*
+*Next: V2c, the first real mech.*
