@@ -92,3 +92,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Roster polish confirmed by Joseph in play.
 - 2026-10-18: V3 started on Joseph's go, in gates V3a (dress the junkyard: world shader, box kinds with models built from each box's size, seeded scatter, detail near you) and V3b (props with destroyed versions and debris).
 - 2026-10-18: Gate V3a built, waiting for its playtest. Check: walk any map and see containers, corrugated walls, broken concrete, rocks, scrap piles and the tower near you, with tyres and grass on the ground, moss on tops and rust streaks on walls; farther away they stay plain boxes. Watch for hitches when running between chunks, and say how it runs on your laptop (F1, Performance).
+- 2026-10-18: Gate V3a passed by Joseph's call. V3b (props with destroyed versions and debris) not started.

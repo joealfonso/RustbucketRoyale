@@ -166,6 +166,13 @@ A reference screenshot of clean white, navy and red mecha set the game's story: 
 
 The grey boxes got real company. From a one-page brief and a reference picture, four helpers worked side by side, each writing a program that builds one mech out of bevelled low-poly blocks: Ironclad-IV, the shielded brawler; Stiletto-B, the bird-legged flanker; Cataclysm, four-legged walking artillery; and Arbiter, the dome-headed commander with its drones. Each player is dealt one, they all start in clean paint, and they all rust the same way. For now they play alike: the shields, blades and mortars are only looks.
 
+## 22. Gate V3a: an overgrown junkyard
+*Passed 12:31. Commit `79296bb`.*
+
+![A mech walking between corrugated metal walls with posts, a concrete tower block behind](22-v3a-an-overgrown-junkyard.jpg)
+
+The world stopped being boxes. Near you, every wall, rock and pile is now drawn as the junk it stands for: ribbed shipping containers, corrugated walls on steel posts, broken concrete with rebar, faceted boulders, heaps of scrap and tyres, a concrete tower. It's all built on the fly from each box's real size, so nothing is stretched, and collision never changes. A shader grows moss on everything facing up and runs rust down the walls, and the ground is littered with tyres, pipes, plates and grass. Four helpers wrote the builders side by side against one shared set of rules, and the frame cost stayed around a millisecond.
+
 ---
 
-*Next: V3, the junkyard chunks and props, or turning the roster's looks into play.*
+*Next: gate V3b, props worth breaking.*
