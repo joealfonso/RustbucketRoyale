@@ -1,7 +1,7 @@
 # DESIGN.md: Rustbucket Royale
 
 ## Vision
-Scrappy mechs duct taped together in an overgrown junkyard. Funny, chunky, readable. If a design choice makes the game look cooler but harder to read, readability wins.
+Shiny, freshly painted mechs drop into an overgrown junkyard, and the ones that survive leave as rustbuckets. Every hit strips paint to rust, plates fall off, parts smoke, and by the end of a match you can read each mech's whole fight on its body. Funny, chunky, readable. If a design choice makes the game look cooler but harder to read, readability wins.
 
 ## Palette (starting values, verify in engine at 10 m, 50 m, 150 m)
 - Rust orange: #C4622D
@@ -14,6 +14,7 @@ Scrappy mechs duct taped together in an overgrown junkyard. Funny, chunky, reada
 - Spark yellow: #FFC93C
 - Zone magenta: #E83F8B (used only for the zone ring)
 - HUD amber: #FFB000 on soot, warning red #FF4D3D
+- Mech paint (clean, before any damage): paint white #E6E2D6, frame navy #2B3A55, then one accent per pilot. Clean paint against a rust and moss world is what makes a fresh mech pop and a hurt one sink into the junk.
 Player accent colors must contrast with both moss green and rust orange. Enemy and player mechs must be told apart at 150 m by silhouette and accent, never by guessing hues.
 
 ## Shapes
@@ -41,7 +42,8 @@ One shared 2048 atlas for props and chunks, 1024 per mech set. Painted brush mar
 
 ## Mech anatomy and damage
 Parts: legs, arms, torso, jets, sensor, weapon mounts. States per hit zone: intact, damaged, broken.
-Damaged: dents, sparks at intervals, light smoke.
+Rust: as a zone loses hit points its paint is eaten away to rust in hard-edged toon patches with a dark rim, from a few spots to most of the part when broken. It is a shader effect on the master material, so every model gets it with no extra art.
+Damaged: rust, dents, sparks at intervals, light smoke.
 Broken: missing or bent part, heavy smoke or leaking fluid, silhouette clearly changes.
 A mech with a broken leg must be recognizable at 150 m.
 

@@ -43,26 +43,29 @@ for (const b of template.boxes) toon.box(scene, [b.center[0] - half, b.center[1]
 // One of each prop, just past the chunk's edge.
 props.types.forEach((t, i) => toon.box(scene, [-4 + i * 5, t.size[1] / 2, half + 4], t.size, t.color));
 
-// You, someone else, and someone whose legs are gone, side by side.
+// From clean to rustbucket, left to right: you (fresh paint), then someone else at 75%, 40%, 15% of every zone,
+// and finally with arms and legs broken.
 const mechs = [
-  { accent: palette.mech.youAccent, x: 0, broken: false },
-  { accent: palette.mech.othersAccent, x: 5, broken: false },
-  { accent: palette.mech.othersAccent, x: 10, broken: true },
+  { accent: palette.mech.youAccent, x: -5, health: [1, 1, 1] },
+  { accent: palette.mech.othersAccent, x: 0, health: [0.75, 0.75, 0.75] },
+  { accent: palette.mech.othersAccent, x: 5, health: [0.4, 0.4, 0.4] },
+  { accent: palette.mech.othersAccent, x: 10, health: [0.15, 0.15, 0.15] },
+  { accent: palette.mech.othersAccent, x: 15, health: [0, 0, 0.3] },
 ];
 for (const m of mechs) {
-  const model = createMechModel(m.accent, zoneMaxHp, toon, palette.mech.body);
+  const model = createMechModel(m.accent, zoneMaxHp, toon, palette.mech.body, null, palette.mech.trim);
   model.group.position.set(m.x, 0, half + 12);
   model.group.rotation.y = Math.PI;
-  if (m.broken) setMechDamage(model, [0, zoneMaxHp[1]!, zoneMaxHp[2]! * 0.6], false);
+  setMechDamage(model, m.health.map((f, z) => f * zoneMaxHp[z]!), false);
   scene.add(model.group);
 }
 
 // The stand-in kit mech (V2a), a step in front of the others. D steps it through damage: whole, damaged, arms broken, legs broken.
 const KIT_DAMAGE = [[1, 1, 1], [0.4, 0.4, 0.4], [0.4, 0, 0.4], [0, 0, 0.4]];
 let kitDamage = 0;
-const kitModel = kit ? createMechModel(palette.mech.othersAccent, zoneMaxHp, toon, palette.mech.body, kit) : null;
+const kitModel = kit ? createMechModel(palette.mech.othersAccent, zoneMaxHp, toon, palette.mech.body, kit, palette.mech.trim) : null;
 if (kitModel) {
-  kitModel.group.position.set(2.5, 0, half + 17);
+  kitModel.group.position.set(5, 0, half + 17);
   kitModel.group.rotation.y = Math.PI;
   scene.add(kitModel.group);
 }
@@ -73,10 +76,10 @@ let distance = DISTANCES[0]!;
 let turn = 0.6;
 const label = document.getElementById("label")!;
 function place(): void {
-  const target = new THREE.Vector3(2.5, 2, half + 12); // the middle of the line-up
+  const target = new THREE.Vector3(5, 2, half + 12); // the middle of the line-up
   camera.position.set(target.x + Math.sin(turn) * distance, target.y + 1.5 + distance * 0.18, target.z + Math.cos(turn) * distance);
   camera.lookAt(target);
-  label.textContent = `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · then you, someone else, broken legs`;
+  label.textContent = `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · behind, left to right: you (clean), then 75%, 40%, 15%, arms and legs broken`;
 }
 window.addEventListener("keydown", (e) => {
   const index = ["Digit1", "Digit2", "Digit3"].indexOf(e.code);

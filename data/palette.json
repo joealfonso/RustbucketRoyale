@@ -8,13 +8,15 @@
     "soot": "#2A2F2E",
     "warmLight": "#F2E3C0",
     "sparkYellow": "#FFC93C",
-    "zoneMagenta": "#E83F8B"
+    "zoneMagenta": "#E83F8B",
+    "paintWhite": "#E6E2D6",
+    "frameNavy": "#2B3A55"
   },
   "mech": {
-    "body": "scrapSteel",
-    "trim": "deepRust",
+    "body": "paintWhite",
+    "trim": "frameNavy",
     "youAccent": "#2E8FD6",
-    "othersAccent": "#E8E4D8"
+    "othersAccent": "#D9453B"
   },
   "world": {
     "ground": "moss",

@@ -27,3 +27,14 @@ On `style.html` the stand-in kit mech stands in front of the others; D steps it 
 | Arms broken: the stub part | ![broken](v2a-kit-arm-broken.jpg) |
 | In a match with `&kit=standin`: jets on the back, sensor on top | ![in game](v2a-kit-in-game.jpg) |
 
+## V2b: clean to rust
+
+Mechs start in clean paint (white, navy frame, a pilot accent) and rust as they are hurt. Behind, left to right: you (clean), then 75%, 40%, 15%, then arms and legs broken. In front: the stand-in kit mech, clean.
+
+| Distance | Screenshot |
+| :- | :- |
+| 10 m | ![10 m](v2b-clean-to-rust-10m.jpg) |
+| 50 m | ![50 m](v2b-clean-to-rust-50m.jpg) |
+
+To judge: the red accent for other pilots sits close to rust orange once a mech is rusty. A cooler accent (teal, yellow) may separate better.
+

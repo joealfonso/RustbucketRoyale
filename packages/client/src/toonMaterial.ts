@@ -15,6 +15,10 @@ export interface LookConfig {
   bandEdges: number[]; // where one band turns into the next, 0 (facing away from the light) to 1 (facing it)
   rim: { strength: number; width: number; color: string };
   outline: { widthMeters: number; darken: number };
+  // Damage eats paint to rust: `cover` share of a part at zero hit points, in patches `scale` per metre, with a dark
+  // rim `rim` wide (in noise units) round each patch.
+  // `spread` below 1 makes the first hits show: the share of damage is raised to this power before it becomes cover.
+  rust: { color: string; dark: string; scale: number; maxCover: number; rim: number; spread: number };
   light: {
     key: { color: string; intensity: number; direction: [number, number, number] };
     fillSky: string;
@@ -96,25 +100,66 @@ export class Toon {
   }
 
   // A material of its own, for something whose colour changes on its own (a mech zone darkening with damage).
-  ownMaterial(name: string): THREE.MeshToonMaterial {
-    return this.make(this.color(name));
+  // With `rusts`, `setRust` eats its paint away to rust (see DESIGN.md, "Rust").
+  ownMaterial(name: string, rusts = false): THREE.MeshToonMaterial {
+    return this.make(this.color(name), rusts);
   }
 
-  private make(hex: string): THREE.MeshToonMaterial {
+  // How much of a rusting material's paint is gone: 0 for clean paint, 1 for a part at zero hit points.
+  setRust(material: THREE.Material, damage: number): void {
+    const uniform = material.userData.rustCover as { value: number } | undefined;
+    if (uniform) uniform.value = Math.max(0, Math.min(1, damage)) ** this.look.rust.spread * this.look.rust.maxCover;
+  }
+
+  private make(hex: string, rusts = false): THREE.MeshToonMaterial {
     const m = new THREE.MeshToonMaterial({ color: hex, gradientMap: this.ramp });
     const { strength, width } = this.look.rim;
     const rim = this.rimColor;
+    const rust = this.look.rust;
+    const rustCover = { value: 0 };
+    if (rusts) m.userData.rustCover = rustCover;
     // A hard rim of warm light where a surface turns away from the camera, so shapes separate from what is behind.
+    // Rust: a value-noise pattern fixed to the part (in its own frame, scaled to metres, so it moves with the mech)
+    // decides which bits of paint go first; everything under `rustCover` is rust, with a dark band at the edge.
     m.onBeforeCompile = (shader) => {
       shader.uniforms.rimColor = { value: rim };
-      shader.fragmentShader = shader.fragmentShader
+      let fragment = shader.fragmentShader
         .replace("void main() {", `uniform vec3 rimColor;\nvoid main() {`)
         .replace("#include <opaque_fragment>", `
           float facing = max(dot(normalize(normal), normalize(vViewPosition)), 0.0);
           outgoingLight += rimColor * ${strength.toFixed(3)} * step(1.0 - ${width.toFixed(3)}, 1.0 - facing) * diffuseColor.rgb;
           #include <opaque_fragment>`);
+      if (rusts) {
+        shader.uniforms.rustCover = rustCover;
+        shader.uniforms.rustColor = { value: new THREE.Color(this.color(rust.color)) };
+        shader.uniforms.rustDark = { value: new THREE.Color(this.color(rust.dark)) };
+        shader.vertexShader = shader.vertexShader
+          .replace("void main() {", "varying vec3 vRustPos;\nvoid main() {")
+          .replace("#include <begin_vertex>", `#include <begin_vertex>
+            vRustPos = position * vec3(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz), length(modelMatrix[2].xyz));`);
+        fragment = fragment
+          .replace("void main() {", `varying vec3 vRustPos;
+            uniform float rustCover;
+            uniform vec3 rustColor;
+            uniform vec3 rustDark;
+            float rustHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+            float rustNoise(vec3 p) {
+              vec3 i = floor(p), f = fract(p);
+              f = f * f * (3.0 - 2.0 * f);
+              return mix(mix(mix(rustHash(i), rustHash(i + vec3(1, 0, 0)), f.x), mix(rustHash(i + vec3(0, 1, 0)), rustHash(i + vec3(1, 1, 0)), f.x), f.y),
+                         mix(mix(rustHash(i + vec3(0, 0, 1)), rustHash(i + vec3(1, 0, 1)), f.x), mix(rustHash(i + vec3(0, 1, 1)), rustHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+            }
+            void main() {`)
+          .replace("#include <color_fragment>", `#include <color_fragment>
+            if (rustCover > 0.0) {
+              vec3 rp = vRustPos * ${rust.scale.toFixed(3)};
+              float n = rustNoise(rp) * 0.65 + rustNoise(rp * 2.7 + 17.0) * 0.35;
+              if (n < rustCover) diffuseColor.rgb = n > rustCover - ${rust.rim.toFixed(3)} ? rustDark : rustColor;
+            }`);
+      }
+      shader.fragmentShader = fragment;
     };
-    m.customProgramCacheKey = () => `toon-rim-${strength}-${width}`;
+    m.customProgramCacheKey = () => `toon-rim-${strength}-${width}${rusts ? "-rust" : ""}`;
     return m;
   }
 

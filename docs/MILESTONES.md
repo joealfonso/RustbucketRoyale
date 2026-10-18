@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none (M1 to M8 done)
-Current visual milestone: V2 (V2a the kit pipeline with a stand-in; V2b the real first mech, after the paper thumbnails)
+Current visual milestone: V2 (V2a the kit pipeline, done; V2b clean to rust; V2c the first real mech)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -83,3 +83,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Gate V2a built, waiting for its check. Check: on style.html the front mech is the stand-in kit; press D to step through whole, damaged (dented parts), arms broken (stub arm, no gun), legs broken (stubs, crawl); press 2 and 3 to see the far levels of detail take over; in a game add `&kit=standin` to the room link and everyone is drawn from the kit. Gauntlet checks all 21 stand-in parts.
 - 2026-10-18: Gate V2a passed by Joseph's call. V2b (the first real mech) waits for the paper thumbnails and a docs/MECHS.md entry.
 - 2026-10-18: Made mech kits simpler on Joseph's call: one .glb with seven named parts is enough; damaged and broken versions and levels of detail are optional (later). Try `&kit=standin-one`.
+- 2026-10-18: Joseph chose the direction "clean mechs that become rustbuckets as they get hurt". Vision and mech paint updated in DESIGN.md. The first real mech moves to V2c.
+- 2026-10-18: Gate V2b built, waiting for its check. Check: style.html shows a row from clean to broken (keys 1 / 2 to compare 10 and 50 m); in any match, mechs start white with a navy frame and rust where they are hit. Judge the red accent for other pilots against rust orange.

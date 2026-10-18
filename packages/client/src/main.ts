@@ -149,7 +149,7 @@ const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMet
 // ?kit=standin draws mechs from a model kit (data/mechKits.json) instead of grey boxes. Off by default until real art.
 const kitId = params.get("kit");
 const kit = kitId ? await loadKit(kitId, parseKits(mechKitsJson)) : null;
-const ownModel = createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body, kit);
+const ownModel = createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body, kit, palette.mech.trim);
 const mechGroup = ownModel.group;
 scene.add(mechGroup);
 
@@ -172,7 +172,7 @@ const damageFx = new DamageFx(scene, damageFxConfig, zoneSet);
 let fxDt = 0;
 const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
 // Everyone else wears the same accent: telling friend from foe is by name and behaviour, not colour.
-const remoteLook = { toon, accent: palette.mech.othersAccent, body: palette.mech.body, kit };
+const remoteLook = { toon, accent: palette.mech.othersAccent, body: palette.mech.body, kit, trim: palette.mech.trim };
 const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.maxViewDelayMs, netStats.snapshotEvery * STEP * 1000, zoneMaxHp);
 remotes.weaponColors = weaponColors;
 remotes.upgrades = upgradeSet.upgrades;

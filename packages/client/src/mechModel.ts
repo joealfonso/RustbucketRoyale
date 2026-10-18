@@ -67,13 +67,16 @@ const scratch = new THREE.Color();
 // With `toon`, it is drawn in the game's look: palette colours, the master toon material and outlines.
 // With `kit` (and `toon`, which a kit needs), the body is the kit's parts instead of grey boxes; everything else
 // (damage tint, plates, gun, upgrades, effects) works the same.
-export function createMechModel(accent: string, zoneMaxHp: readonly number[], toon: Toon | null = null, bodyColor = "#738087", kit: LoadedKit | null = null): MechModel {
+export function createMechModel(
+  accent: string, zoneMaxHp: readonly number[], toon: Toon | null = null, bodyColor = "#738087", kit: LoadedKit | null = null, trimColor = "deepRust",
+): MechModel {
   const group = new THREE.Group();
   const body = new THREE.Group();
   group.add(body);
   const grey = toon ? toon.color(bodyColor) : bodyColor;
   const baseColors = [new THREE.Color(grey), new THREE.Color(toon ? toon.color(accent) : accent), new THREE.Color(grey)];
-  const zoneMaterials = baseColors.map((c) => (toon ? toon.ownMaterial(`#${c.getHexString()}`) : new THREE.MeshStandardMaterial({ color: c, roughness: 1 })));
+  // In the toon look each zone's paint rusts away with damage; the plain look darkens instead.
+  const zoneMaterials = baseColors.map((c) => (toon ? toon.ownMaterial(`#${c.getHexString()}`, true) : new THREE.MeshStandardMaterial({ color: c, roughness: 1 })));
   const armMeshes: THREE.Mesh[] = [];
   // Every box gets an outline in the toon look, tinted from the colour it starts with.
   const outline = (mesh: THREE.Mesh, color: string) => { if (toon) toon.outlineChild(mesh, color); };
@@ -93,8 +96,8 @@ export function createMechModel(accent: string, zoneMaxHp: readonly number[], to
   if (kit && toon) {
     // Each part's states are levels-of-detail objects; damage shows one state at a time.
     for (const p of kit.parts) {
-      const mat = p.paint === "trim" ? toon.material("deepRust") : zoneMaterials[p.zone]!;
-      const outlineColor = p.paint === "trim" ? "deepRust" : `#${baseColors[p.zone]!.getHexString()}`;
+      const mat = p.paint === "trim" ? toon.material(trimColor) : zoneMaterials[p.zone]!;
+      const outlineColor = p.paint === "trim" ? trimColor : `#${baseColors[p.zone]!.getHexString()}`;
       const states = p.states.map((state, i) => {
         if (!state) return null;
         const lod = new THREE.LOD();
@@ -165,8 +168,15 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
   model.dead = dead;
   for (let zone = 0; zone < model.zoneMaterials.length; zone++) {
     const fraction = Math.max(0, Math.min(1, hp[zone]! / model.zoneMaxHp[zone]!));
-    scratch.copy(WRECK).lerp(model.baseColors[zone]!, fraction);
-    model.zoneMaterials[zone]!.color.copy(scratch);
+    const material = model.zoneMaterials[zone]!;
+    if (model.toon) {
+      // Paint gives way to rust as the zone is hurt (DESIGN.md: clean mechs leave as rustbuckets). A wreck goes dark.
+      model.toon.setRust(material, 1 - fraction);
+      scratch.copy(model.baseColors[zone]!).multiplyScalar(dead ? 0.5 : 1);
+    } else {
+      scratch.copy(WRECK).lerp(model.baseColors[zone]!, fraction);
+    }
+    material.color.copy(scratch);
   }
   const armsBroken = hp[1]! <= 0;
   for (const arm of model.armMeshes) arm.visible = !armsBroken;
