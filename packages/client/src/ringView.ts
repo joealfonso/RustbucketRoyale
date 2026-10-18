@@ -8,9 +8,10 @@ export class RingView {
   private schedule: RingSchedule | null = null;
   readonly now: RingNow = createRingNow();
 
-  constructor(scene: THREE.Scene) {
+  // `color` is the zone magenta: the only magenta in the world, so the ring can never be mistaken for anything else.
+  constructor(scene: THREE.Scene, color: string) {
     const geometry = new THREE.CylinderGeometry(1, 1, 400, 96, 1, true);
-    const material = new THREE.MeshBasicMaterial({ color: "#3a8dff", transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false });
+    const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false });
     this.wall = new THREE.Mesh(geometry, material);
     this.wall.visible = false;
     this.wall.position.y = 150;

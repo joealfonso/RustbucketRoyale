@@ -58,8 +58,9 @@ Read from the new Performance readouts in the F1 panel. "Work" is the time spent
 | :- | :- | :- | :- | :- |
 | Large tier, 40 bots, 2 mechs in view | 16.7 / 17.8 | 0.5 / 1.2 | 17 | 206k |
 | Arena, 8 mechs fighting, smoke and sparks | 16.7 / 17.7 | 0.5 / 1.5 | 65 to 76 | 4.5k |
+| Large tier after V1b (toon look, outlines) | 16.7 / 17.7 | 1.0 / 1.9 | 31 | 419k |
 
-Nothing to fix on these numbers: the map is already one instanced mesh per colour, and the extra draw calls in a fight are smoke puffs. Not yet measured on a mid-range laptop: Joseph to read the panel there. Download: one 662 KB script, 172 KB gzipped, against a 15 MB budget.
+The V1b row is after the toon look: outlines are a second, slightly bigger box drawn from the inside, so triangles and draw calls roughly double; work per frame went from 0.5 to 1.0 ms and it still holds 60 fps here. Nothing to fix on these numbers: the map is already one instanced mesh per colour, and the extra draw calls in a fight are smoke puffs. Not yet measured on a mid-range laptop: Joseph to read the panel there. Download: one 662 KB script, 172 KB gzipped, against a 15 MB budget.
 
 ### Soak: a whole match per tier (2026-10-17, MacBook, Node 25)
 `npm run soak`. The room fills with bots, and three headless players join that act like browsers (packed messages, prediction, replay). Three runs per tier on random seeds, all passing:

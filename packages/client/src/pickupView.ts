@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { Toon } from "./toonMaterial";
 import { ITEM_GRENADE, itemArmorZone, itemUpgrade, itemWeapon, type PickupState } from "@rustbucket/shared";
 
 const SPIN = 1.6; // radians a second
@@ -15,14 +16,21 @@ interface Shown {
 export class PickupView {
   private shown = new Map<number, Shown>();
   private geometry = new THREE.BoxGeometry(1, 1, 1);
-  private materials = new Map<string, THREE.MeshStandardMaterial>();
+  private materials = new Map<string, THREE.MeshStandardMaterial | THREE.MeshToonMaterial>();
 
-  constructor(private scene: THREE.Scene, private colors: { grenade: string; armor: string }, private weaponColors: string[], private upgradeColors: string[]) {}
+  constructor(private scene: THREE.Scene, private colors: { grenade: string; armor: string }, private weaponColors: string[], private upgradeColors: string[], private toon: Toon | null = null) {}
 
-  private material(color: string): THREE.MeshStandardMaterial {
+  // In the toon look a pickup still glows a little, so loot stands out from the scrap round it.
+  private material(color: string): THREE.MeshStandardMaterial | THREE.MeshToonMaterial {
     let m = this.materials.get(color);
     if (!m) {
-      m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.35, roughness: 0.5 });
+      if (this.toon) {
+        m = this.toon.ownMaterial(color);
+        m.emissive.set(color);
+        m.emissiveIntensity = 0.35;
+      } else {
+        m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.35, roughness: 0.5 });
+      }
       this.materials.set(color, m);
     }
     return m;

@@ -1,0 +1,9 @@
+{
+  "modelsDir": "assets/models",
+  "material": "MasterToon",
+  "kinds": {
+    "Mech": { "maxTriangles": 10000, "states": ["Intact", "Damaged", "Broken"] },
+    "Prop": { "maxTriangles": 2000, "minTriangles": 300, "states": ["Intact", "Destroyed"] },
+    "Chunk": { "maxTriangles": 20000, "states": [] }
+  }
+}

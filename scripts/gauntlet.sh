@@ -9,10 +9,11 @@ mkdir -p artifacts
 
 check_typecheck() { npm run --silent typecheck > artifacts/typecheck.log 2>&1 || { tail -n 15 artifacts/typecheck.log; return 1; }; }
 check_determinism() { npx tsx scripts/check-determinism.ts > artifacts/lint.log 2>&1 || { tail -n 20 artifacts/lint.log; return 1; }; }
+check_assets() { npx tsx scripts/check-assets.ts > artifacts/assets.log 2>&1 || { tail -n 20 artifacts/assets.log; return 1; }; }
 check_test() { npm test --silent > artifacts/test.log 2>&1 || { tail -n 25 artifacts/test.log; return 1; }; }
 check_build() { npm run --silent build > artifacts/build.log 2>&1 || { tail -n 15 artifacts/build.log; return 1; }; }
 
-CHECKS=(check_typecheck check_determinism check_test check_build)
+CHECKS=(check_typecheck check_determinism check_assets check_test check_build)
 
 : > artifacts/gauntlet.txt
 verdict=0

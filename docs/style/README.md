@@ -9,3 +9,11 @@ Screenshots of `style.html` (run `npm run dev`, open http://localhost:5173/style
 | 150 m | ![150 m](v1a-150m.jpg) | At this size the mechs are a few pixels tall. Grey boxes cannot pass DESIGN.md's "broken leg recognisable at 150 m" by shading alone: that needs the real silhouettes (V2) and is worth checking on your bigger screen. |
 
 Thumbnails: three paper silhouettes of the first mech go here (`thumb-1.jpg` ...), with the chosen one marked, before any Blender work. Joseph draws these.
+
+## V1b: the look across the game
+
+| Where | Screenshot | Notes |
+| :- | :- | :- |
+| Small tier, lobby, looking away from the sun | ![small](v1b-small-in-game.jpg) | Facing away from the key light everything sits in the darker bands, so it reads dim. Band brightness and light strength are in `data/look.json`. |
+| Large tier with the F1 panel | ![large](v1b-large-with-panel.jpg) | 31 draw calls, 419k triangles, 1.0 ms of work a frame, 60 fps (browser pane). Outlines doubled the triangles, as expected. |
+

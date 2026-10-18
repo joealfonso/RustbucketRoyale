@@ -18,6 +18,9 @@ import grenadeJson from "../../../data/grenade.json";
 import zonesJson from "../../../data/zones.json";
 import damageFxJson from "../../../data/damageFx.json";
 import upgradesJson from "../../../data/upgrades.json";
+import paletteJson from "../../../data/palette.json";
+import lookJson from "../../../data/look.json";
+import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import botsJson from "../../../data/bots.json";
 import noiseJson from "../../../data/noise.json";
 import combatJson from "../../../data/combat.json";
@@ -127,22 +130,20 @@ const canvas = document.getElementById("game") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
+// The game's look (V1): palette, toon bands and outlines, warm key light, fog. See DESIGN.md and toonMaterial.ts.
+const palette = parsePalette(paletteJson);
+const toon = new Toon(parseLook(lookJson), palette);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color("#9fb4c4");
-scene.fog = new THREE.Fog("#9fb4c4", 300, 1500);
+toon.light(scene);
 if (params.has("overview")) scene.fog = null;
-scene.add(new THREE.HemisphereLight("#ffffff", "#5b5a52", 1.4));
-const sun = new THREE.DirectionalLight("#fff4e0", 2);
-sun.position.set(80, 150, 40);
-scene.add(sun);
 
-let mapGroup = addMapMeshes(scene, map);
-let propView = new PropView(map, propConfig);
+let mapGroup = addMapMeshes(scene, map, toon);
+let propView = new PropView(map, propConfig, toon);
 scene.add(propView.group);
-const ringView = new RingView(scene);
+const ringView = new RingView(scene, toon.color("zoneMagenta"));
 const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters) : null;
 
-const ownModel = createMechModel("#d9731a", zoneMaxHp);
+const ownModel = createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body);
 const mechGroup = ownModel.group;
 scene.add(mechGroup);
 
@@ -164,10 +165,13 @@ const thrown = createGrenade();
 const damageFx = new DamageFx(scene, damageFxConfig, zoneSet);
 let fxDt = 0;
 const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
+// Everyone else wears the same accent: telling friend from foe is by name and behaviour, not colour.
+const remoteLook = { toon, accent: palette.mech.othersAccent, body: palette.mech.body };
 const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.maxViewDelayMs, netStats.snapshotEvery * STEP * 1000, zoneMaxHp);
 remotes.weaponColors = weaponColors;
 remotes.upgrades = upgradeSet.upgrades;
-const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgradeSet.upgrades.map((u) => u.color));
+remotes.look = remoteLook;
+const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgradeSet.upgrades.map((u) => u.color), toon);
 if (net) net.viewDelayMs = () => remotes.viewDelayMs;
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
@@ -232,8 +236,8 @@ function swapMap(newSeed: number, newTier: string): void {
   scene.remove(propView.group);
   propView.dispose();
   map = buildPlayMap(newTier, newSeed, mechStats);
-  mapGroup = addMapMeshes(scene, map);
-  propView = new PropView(map, propConfig);
+  mapGroup = addMapMeshes(scene, map, toon);
+  propView = new PropView(map, propConfig, toon);
   scene.add(propView.group);
   pickupView.clear();
   predictor.setWorld(map.world);

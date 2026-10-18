@@ -164,6 +164,10 @@ export class Toon {
     hull.scale.set(1 + w / mesh.scale.x, 1 + w / mesh.scale.y, 1 + w / mesh.scale.z);
   }
 
+  instances(name: string, count: number, ground = false): ToonInstances {
+    return new ToonInstances(this, name, count, this.look.outline.widthMeters, ground);
+  }
+
   // Lights, fog and sky for a scene.
   light(scene: THREE.Scene): void {
     const { light } = this.look;
@@ -180,4 +184,49 @@ export interface ToonBox {
   group: THREE.Group;
   mesh: THREE.Mesh;
   hull: THREE.Mesh;
+}
+
+const placed = new THREE.Matrix4();
+const at = new THREE.Vector3();
+const sized = new THREE.Vector3();
+const noTurn = new THREE.Quaternion();
+const gone = new THREE.Matrix4().makeScale(0, 0, 0);
+
+// Many boxes of one colour in two draw calls: the boxes, and their outlines. For the map and the props.
+export class ToonInstances {
+  readonly mesh: THREE.InstancedMesh;
+  readonly hull: THREE.InstancedMesh | null;
+
+  // `ground` draws the bands with no rim and no outline, for the floor.
+  constructor(toon: Toon, name: string, count: number, private outlineWidth: number, ground = false) {
+    this.mesh = new THREE.InstancedMesh(unitBox, ground ? toon.ground(name) : toon.material(name), count);
+    this.hull = ground ? null : new THREE.InstancedMesh(unitBox, toon.outlineMaterial(name), count);
+  }
+
+  set(i: number, x: number, y: number, z: number, sx: number, sy: number, sz: number): void {
+    this.mesh.setMatrixAt(i, placed.compose(at.set(x, y, z), noTurn, sized.set(sx, sy, sz)));
+    const w = this.outlineWidth * 2;
+    this.hull?.setMatrixAt(i, placed.compose(at, noTurn, sized.set(sx + w, sy + w, sz + w)));
+  }
+
+  hide(i: number): void {
+    this.mesh.setMatrixAt(i, gone);
+    this.hull?.setMatrixAt(i, gone);
+    this.commit();
+  }
+
+  commit(): void {
+    this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.hull) this.hull.instanceMatrix.needsUpdate = true;
+  }
+
+  addTo(parent: THREE.Object3D): void {
+    parent.add(this.mesh);
+    if (this.hull) parent.add(this.hull);
+  }
+
+  dispose(): void {
+    this.mesh.dispose();
+    this.hull?.dispose();
+  }
 }

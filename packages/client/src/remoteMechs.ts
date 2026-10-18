@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { STEP, type OtherState } from "@rustbucket/shared";
 import { createMechModel, setMechDamage, setMechGear, setMechUpgrades, type MechModel } from "./mechModel";
 import type { UpgradeDef } from "@rustbucket/shared";
+import type { Toon } from "./toonMaterial";
 
 interface Sample {
   time: number;
@@ -34,6 +35,8 @@ export class RemoteMechs {
   // The colour of each weapon by index, for drawing the gun in hand.
   weaponColors: string[] = [];
   upgrades: UpgradeDef[] = [];
+  // The toon look and colours for other mechs. Without it they are drawn as plain grey boxes.
+  look: { toon: Toon; accent: string; body: string } | null = null;
 
   constructor(
     private scene: THREE.Scene,
@@ -107,7 +110,7 @@ export class RemoteMechs {
     for (const o of others) {
       let remote = this.remotes.get(o.id);
       if (!remote) {
-        const model = createMechModel("#2f7fd0", this.zoneMaxHp);
+        const model = this.look ? createMechModel(this.look.accent, this.zoneMaxHp, this.look.toon, this.look.body) : createMechModel("#2f7fd0", this.zoneMaxHp);
         this.scene.add(model.group);
         remote = { model, dead: false, looted: false, bot: o.bot, samples: [], seen: true };
         this.remotes.set(o.id, remote);
