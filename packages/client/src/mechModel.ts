@@ -93,6 +93,9 @@ export function createMechModel(
     return mesh;
   };
   const legMeshes: THREE.Mesh[] = [];
+  // The weapon in hand's colour: on a kit's own gun parts, or on the plain barrel added below.
+  const gunMaterial = toon ? toon.ownMaterial("#d9731a") : new THREE.MeshStandardMaterial({ color: "#d9731a", roughness: 0.6 });
+  let hasModelledGun = false;
   const paints: MechModel["paints"] = [];
   // One rusting material per zone and paint colour, made on first use.
   const paintFor = (zone: number, color: string): THREE.MeshToonMaterial => {
@@ -110,8 +113,9 @@ export function createMechModel(
     // Each part's states are levels-of-detail objects; damage shows one state at a time.
     for (const p of kit.parts) {
       const paintColor = p.paint === "accent" ? toon.color(accent) : grey;
-      const mat = p.paint === "trim" ? toon.material(trimColor) : paintFor(p.zone, paintColor);
-      const outlineColor = p.paint === "trim" ? trimColor : paintColor;
+      if (p.paint === "weapon") hasModelledGun = true;
+      const mat = p.paint === "weapon" ? gunMaterial : p.paint === "trim" ? toon.material(trimColor) : paintFor(p.zone, paintColor);
+      const outlineColor = p.paint === "trim" || p.paint === "weapon" ? trimColor : paintColor;
       const states = p.states.map((state, i) => {
         if (!state) return null;
         const lod = new THREE.LOD();
@@ -142,14 +146,17 @@ export function createMechModel(
     armMeshes.push(part(1, [1.2, 2.4, -0.6], [0.5, 0.6, 1.6]));
   }
 
-  // The barrel on the gun arm takes the colour of the weapon in hand. Art hook: one model per weapon at V2.
-  const gunMaterial = toon ? toon.ownMaterial("#d9731a") : new THREE.MeshStandardMaterial({ color: "#d9731a", roughness: 0.6 });
-  const barrel = new THREE.Mesh(unitBox, gunMaterial);
-  if (gunMount) barrel.position.copy(gunMount);
-  else barrel.position.set(1.2, 2.4, -1.65);
-  barrel.scale.set(0.3, 0.3, 0.6);
-  body.add(barrel);
-  outline(barrel, "soot");
+  // A mech without its own modelled gun gets a plain barrel on the gun arm, in the colour of the weapon in hand.
+  const gunParts: THREE.Object3D[] = [];
+  if (!hasModelledGun) {
+    const barrel = new THREE.Mesh(unitBox, gunMaterial);
+    if (gunMount) barrel.position.copy(gunMount);
+    else barrel.position.set(1.2, 2.4, -1.65);
+    barrel.scale.set(0.3, 0.3, 0.6);
+    body.add(barrel);
+    outline(barrel, "soot");
+    gunParts.push(barrel);
+  }
 
   // Armor plates bolted on over each zone. Art hook: real plate models with bolts and scratches at V2.
   const plateMaterial = toon ? toon.material("#a9b8c4") : new THREE.MeshStandardMaterial({ color: "#a9b8c4", roughness: 0.5, metalness: 0.3 });
@@ -170,7 +177,7 @@ export function createMechModel(
   return {
     group, body, legMeshes, zoneMaterials, toon, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
     hp: [...zoneMaxHp], dead: false, repairing: false, upgradeParts: [], fxTimers: [0, 0, 0, 0, 0, 0, 0],
-    kitParts, fxAnchors, gunParts: [barrel], paints,
+    kitParts, fxAnchors, gunParts, paints,
   };
 }
 

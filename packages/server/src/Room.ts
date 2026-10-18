@@ -52,6 +52,8 @@ export interface RoomConfig {
   // Dev only (DEV_TUNING=1): the raw data files, so players in a room can change numbers live. Each room tunes its
   // own copy, so a playtest in one room never changes another.
   tuningRaws?: TuningRaws;
+  // Each player's hit boxes, by the roster mech they are dealt. Without it everyone has the standard boxes.
+  zonesFor?: (id: number) => ZoneSet;
 }
 
 // One room: a lobby that runs match after match. Transport free: it only sees parsed messages and a send
@@ -644,7 +646,8 @@ export class Room {
       const z = old ? target.history[index * 4 + 2]! : target.state.z;
       const yaw = old ? target.history[index * 4 + 3]! : target.state.bodyYaw;
 
-      if (raycastMech(ox, oy, oz, dx, dy, dz, bestDistance, x, y, z, yaw, this.config.zones, this.zoneHit)) {
+      const zones = this.config.zonesFor?.(target.id) ?? this.config.zones;
+      if (raycastMech(ox, oy, oz, dx, dy, dz, bestDistance, x, y, z, yaw, zones, this.zoneHit)) {
         best = target;
         bestDistance = this.zoneHit.distance;
         bestZone = this.zoneHit.zone;

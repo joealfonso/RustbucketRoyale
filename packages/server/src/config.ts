@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import {
   World, buildNavGrid, buildRange, generateMap, parseBotConfig, parseChunkSet, parseCombatStats, parseGrenadeStats, parseMatchConfig, parseMechStats,
-  parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseTiers, parseWeapons, parseLootConfig, parseUpgrades, parseZones, TUNABLE_FILES, type RangeData, type TuningRaws,
+  parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseTiers, parseWeapons, parseLootConfig, parseUpgrades, parseZones, makeZonesFor, TUNABLE_FILES, type RangeData, type TuningRaws,
 } from "@rustbucket/shared";
 import type { MapForRoom, RoomConfig } from "./Room";
 
@@ -12,6 +12,9 @@ function readJson(name: string): unknown {
 }
 
 export interface ConfigOptions {
+  // Give each player the hit boxes of the roster mech they are dealt (data/mechKits.json), as the real server does.
+  // Tests leave it off and use the standard boxes, which their aiming is built around.
+  roster?: boolean;
   // "generated" builds each match's map from its seed. "range" always uses the flat test strip, which
   // keeps combat tests simple because spawns and walls never move.
   maps?: "generated" | "range";
@@ -34,7 +37,10 @@ export function loadRoomConfig(options: ConfigOptions = {}): RoomConfig {
     match: parseMatchConfig(readJson("match.json")),
     ring: parseRingConfig(readJson("ring.json")),
     zones: parseZones(readJson("zones.json")),
+    zonesFor: undefined as ((id: number) => import("@rustbucket/shared").ZoneSet) | undefined,
   };
+
+  if (options.roster) base.zonesFor = makeZonesFor(base.zones, readJson("mechKits.json"));
 
   if (options.maps === "generated") {
     const chunks = parseChunkSet(readJson("chunks.json"));

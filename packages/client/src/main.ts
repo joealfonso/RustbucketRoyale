@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, createZoneHit, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, createZoneHit, makeZonesFor, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
   type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
@@ -146,11 +146,11 @@ scene.add(propView.group);
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
 const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters) : null;
 
-// ?kit=standin draws every mech from one model kit (data/mechKits.json) instead of grey boxes; ?kit=roster deals each
-// player one of the roster's mechs by player number. Off by default until the art is settled.
-const kitId = params.get("kit");
+// Each player is dealt one of the roster's mechs by player number (data/mechKits.json), the same rule the server uses
+// for their hit boxes. ?kit=grey draws everyone as the grey-box mech, ?kit=<name> everyone as one kit.
+const kitId = params.get("kit") ?? "roster";
 const kitsData = parseKits(mechKitsJson);
-const oneKit = kitId && kitId !== "roster" ? await loadKit(kitId, kitsData) : null;
+const oneKit = kitId !== "roster" && kitId !== "grey" ? await loadKit(kitId, kitsData) : null;
 const kitFor = kitId === "roster" ? await loadRoster(kitsData) : () => oneKit;
 const ownModel = createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body, kitFor(net?.id ?? 0), palette.mech.trim);
 const mechGroup = ownModel.group;
@@ -181,7 +181,9 @@ remotes.weaponColors = weaponColors;
 remotes.upgrades = upgradeSet.upgrades;
 remotes.look = remoteLook;
 const aimHit = createZoneHit();
-const aimAtMechs = (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number) => remotes.raycast(ox, oy, oz, dx, dy, dz, max, zoneSet, aimHit);
+// The crosshair checks each mech against its own hit boxes, the ones the server uses (only with the roster drawn).
+const zonesFor = kitId === "roster" ? makeZonesFor(zoneSet, mechKitsJson) : () => zoneSet;
+const aimAtMechs = (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number) => remotes.raycast(ox, oy, oz, dx, dy, dz, max, zonesFor, aimHit);
 const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgradeSet.upgrades.map((u) => u.color), toon);
 if (net) net.viewDelayMs = () => remotes.viewDelayMs;
 

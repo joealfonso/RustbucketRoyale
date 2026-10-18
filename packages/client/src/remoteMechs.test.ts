@@ -92,10 +92,10 @@ describe("RemoteMechs", () => {
     const p = new THREE.Vector3();
     remotes.positionOf(1, p);
     // From 20 m in front (yaw 0 faces -Z), straight at the left arm, 1.2 m to the mech's left.
-    const distance = remotes.raycast(p.x - 1.2, 2.4, p.z - 20, 0, 0, 1, 300, zones, hit);
+    const distance = remotes.raycast(p.x - 1.2, 2.4, p.z - 20, 0, 0, 1, 300, () => zones, hit);
     expect(distance).toBeGreaterThan(18);
     expect(hit.zone).toBe(ZONE_ARMS);
-    expect(remotes.raycast(p.x + 5, 2.4, p.z - 20, 0, 0, 1, 300, zones, hit)).toBe(-1);
+    expect(remotes.raycast(p.x + 5, 2.4, p.z - 20, 0, 0, 1, 300, () => zones, hit)).toBe(-1);
   });
 });
 

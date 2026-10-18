@@ -78,13 +78,13 @@ export class RemoteMechs {
   }
 
   // The distance along a ray to the nearest standing mech, checked against its hit zones where it is drawn, or -1.
-  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number, zones: ZoneSet, hit: ZoneHit): number {
+  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number, zonesFor: (id: number) => ZoneSet, hit: ZoneHit): number {
     let best = -1;
     let reach = max;
-    for (const r of this.remotes.values()) {
+    for (const [id, r] of this.remotes) {
       if (r.dead) continue;
       const p = r.model.group.position;
-      if (raycastMech(ox, oy, oz, dx, dy, dz, reach, p.x, p.y, p.z, r.model.group.rotation.y, zones, hit)) {
+      if (raycastMech(ox, oy, oz, dx, dy, dz, reach, p.x, p.y, p.z, r.model.group.rotation.y, zonesFor(id), hit)) {
         best = hit.distance;
         reach = hit.distance;
       }

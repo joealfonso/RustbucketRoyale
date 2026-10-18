@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ZONE_ARMS, ZONE_TORSO, World, boxFromData, type MechInput, type ServerMessage } from "@rustbucket/shared";
+import { ZONE_ARMS, ZONE_LEGS, ZONE_TORSO, World, boxFromData, type MechInput, type ServerMessage } from "@rustbucket/shared";
 import type { Room, RoomConfig } from "./Room";
+import { loadRoomConfig } from "./config";
 import { Client, idle, makeRoom, startMatch } from "./testClient";
 
 // The shooter spawns at x -21 and the target at x -15. The target turns its back (faces +X) so its
@@ -56,6 +57,20 @@ describe("shots", () => {
     tick(room, [shooter, target], (c) => (c === shooter ? idle({ fire: true, targetX: -15, targetY: 2.4, targetZ: 1.2 }) : idle({ aimYaw: Math.PI / 2 })), 6);
     expect(hits(shooter)[0]).toMatchObject({ targetId: target.id, zone: ZONE_ARMS });
     expect(target.last().health.hp[ZONE_ARMS]).toBeLessThan(60);
+  });
+
+  it("land on the shape of the mech the target was dealt, not only the standard boxes", () => {
+    // The target is player 2, which the roster deals the Cataclysm: four legs splayed wide. With the server's default
+    // spawn yaw its front legs reach out to about 1.1 m on +Z, where the standard leg box (0.35 m) has nothing.
+    const legShot = (roster: boolean) => {
+      const { room, shooter, target } = setup((c) => (roster ? { ...c, zonesFor: loadRoomConfig({ roster: true }).zonesFor } : c));
+      expect(target.id).toBe(2);
+      tick(room, [shooter, target], () => idle(), 30);
+      tick(room, [shooter, target], (c) => (c === shooter ? idle({ fire: true, targetX: -10, targetY: 1.0, targetZ: 1.1 }) : idle()), 6);
+      return hits(shooter)[0];
+    };
+    expect(legShot(true)).toMatchObject({ targetId: 2, zone: ZONE_LEGS });
+    expect(legShot(false)).toBeUndefined();
   });
 
   it("are stopped by a wall in between", () => {

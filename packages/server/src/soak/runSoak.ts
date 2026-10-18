@@ -41,7 +41,7 @@ const readData = (name: string) => JSON.parse(readFileSync(new URL(`../../../../
 // Everything random comes from the seed, so a failing seed can be played again exactly.
 export function runSoak(tier: string, seed: number, options: SoakOptions = {}): SoakReport {
   const { fakePlayers = 3, tickBudgetMs = 8, bandwidthKbps = 64, maxCorrection = 0.05 } = options;
-  const base = loadRoomConfig({ maps: "generated" });
+  const base = loadRoomConfig({ maps: "generated", roster: true });
   const bots = options.fill === undefined ? base.bots : { ...base.bots, fill: { ...base.bots.fill, [tier]: options.fill } };
   const config = { ...base, bots, random: lcg(seed) };
   const chunks = parseChunkSet(readData("chunks.json"));

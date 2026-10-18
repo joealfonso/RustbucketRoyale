@@ -15,12 +15,18 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 export const STATES = ["Intact", "Damaged", "Broken"] as const;
 const ZONE_INDEX: Record<string, number> = { legs: 0, arms: 1, torso: 2 };
 
-type Paint = "body" | "accent" | "trim";
+// body: white paint that rusts; accent: the pilot's colour, rusts too; trim: navy frame, never rusts; weapon: takes the
+// colour of the weapon in hand, so a modelled gun shows what you are holding (and the game adds no barrel of its own).
+type Paint = "body" | "accent" | "trim" | "weapon";
 
 export interface KitsData {
   lodDistances: number[]; // metres at which the second and then the third level of detail take over
   roster?: string[]; // the mechs players are dealt, by player number, with ?kit=roster
-  kits: Record<string, { file?: string; folder?: string; name?: string; parts: Record<string, { zone: string; paint: Paint }> }>;
+  // `noHit` parts (floating drones) get no hit box; `hitboxes` is written by scripts/make-hitboxes.ts.
+  kits: Record<string, {
+    file?: string; folder?: string; name?: string; parts: Record<string, { zone: string; paint: Paint; noHit?: boolean }>;
+    hitboxes?: Record<string, { center: number[]; size: number[] }[]>;
+  }>;
 }
 
 export interface KitState {
@@ -48,7 +54,7 @@ export function parseKits(raw: unknown): KitsData {
     if (!kit.file && !(kit.folder && kit.name)) throw new Error(`mechKits.json: ${id} needs a file, or a folder and a name`);
     for (const [part, p] of Object.entries(kit.parts)) {
       if (!(p.zone in ZONE_INDEX)) throw new Error(`mechKits.json: ${id} ${part} has unknown zone "${p.zone}"`);
-      if (!["body", "accent", "trim"].includes(p.paint)) throw new Error(`mechKits.json: ${id} ${part} has unknown paint "${p.paint}"`);
+      if (!["body", "accent", "trim", "weapon"].includes(p.paint)) throw new Error(`mechKits.json: ${id} ${part} has unknown paint "${p.paint}"`);
     }
   }
   return d;

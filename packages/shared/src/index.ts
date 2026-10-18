@@ -19,3 +19,4 @@ export * from "./rangeMap";
 export * from "./loot";
 export * from "./upgrades";
 export * from "./tuning";
+export * from "./hitboxes";
