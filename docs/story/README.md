@@ -117,6 +117,13 @@ Hold F, standing still, and in six seconds your worst part is back in running or
 
 Crates and wrecks now and then give up an upgrade: a big tumbling coloured cube you fit with E. Four of them, each one big change: Big Tanks for longer jets, Quick Hands to repair and loot twice as fast, Big Ears to hear further and stretch the radar, Overclock to fire faster. Two sockets, so a third means giving one up. Each bolts a part onto the mech, so you can see what someone is carrying. (The shot is the end of a match, where it's hard to spot the parts at this size.)
 
+## 15. Gate 8b: tuning live, for the whole room
+*Passed 20:31. Commit `91a8e84`.*
+
+![The F1 panel: "Tuning: on", the Speed sliders, and every data file with a Copy button](15-8b-live-tuning-panel.jpg)
+
+The tuning panel used to change numbers only in your own browser, which online did nothing to the server and made your mech fight it. Now a change goes to the server, gets checked like loading the file, and lands for everyone in the room at once. Every gameplay file is there, and Copy puts a file's numbers on the clipboard, so a good value goes straight into `data/`. It only works on a server started for testing.
+
 ---
 
-*Next: gate 8b, tuning live.*
+*Next: gate 8c, performance, bot counts and a load test.*
