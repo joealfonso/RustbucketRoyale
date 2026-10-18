@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ZONE_TORSO, World, boxFromData, type MechInput, type ServerMessage } from "@rustbucket/shared";
+import { ZONE_ARMS, ZONE_TORSO, World, boxFromData, type MechInput, type ServerMessage } from "@rustbucket/shared";
 import type { Room, RoomConfig } from "./Room";
 import { Client, idle, makeRoom, startMatch } from "./testClient";
 
@@ -47,6 +47,15 @@ describe("shots", () => {
     expect(hits(shooter)[0]).toMatchObject({ t: "hit", targetId: target.id, zone: ZONE_TORSO, damage: config.weapons.weapons[config.weapons.start]!.damage, killed: false });
     expect(target.last().health.hp[ZONE_TORSO]).toBe(100 - config.weapons.weapons[config.weapons.start]!.damage);
     expect(shooter.messages.find((m) => m.t === "shot")).toMatchObject({ hitMech: true });
+  });
+
+  it("hit an arm when aimed at the arm itself", () => {
+    // The target faces the shooter (forward is -X at yaw PI/2), so its left arm is 1.2 m to the +Z side.
+    const { room, shooter, target } = setup();
+    tick(room, [shooter, target], (c) => (c === target ? idle({ aimYaw: Math.PI / 2 }) : idle()), 40);
+    tick(room, [shooter, target], (c) => (c === shooter ? idle({ fire: true, targetX: -15, targetY: 2.4, targetZ: 1.2 }) : idle({ aimYaw: Math.PI / 2 })), 6);
+    expect(hits(shooter)[0]).toMatchObject({ targetId: target.id, zone: ZONE_ARMS });
+    expect(target.last().health.hp[ZONE_ARMS]).toBeLessThan(60);
   });
 
   it("are stopped by a wall in between", () => {

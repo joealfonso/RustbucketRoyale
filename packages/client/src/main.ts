@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, createZoneHit, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
   type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
@@ -171,6 +171,8 @@ const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.
 remotes.weaponColors = weaponColors;
 remotes.upgrades = upgradeSet.upgrades;
 remotes.look = remoteLook;
+const aimHit = createZoneHit();
+const aimAtMechs = (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number) => remotes.raycast(ox, oy, oz, dx, dy, dz, max, zoneSet, aimHit);
 const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgradeSet.upgrades.map((u) => u.color), toon);
 if (net) net.viewDelayMs = () => remotes.viewDelayMs;
 
@@ -305,6 +307,7 @@ if (net) {
   };
   net.onHit = (h) => {
     flashHitMarker(h.killed);
+    showHit(h.zone, h.damage, h.killed);
     sound.play("hitMarker");
     impacts.spawn(h.x, h.y, h.z, 0.15);
   };
@@ -361,6 +364,22 @@ function flashHitMarker(killed: boolean): void {
   crosshair.classList.add(killed ? "kill" : "hit");
   clearTimeout(hitTimer);
   hitTimer = window.setTimeout(() => crosshair.classList.remove("hit", "kill"), killed ? 400 : 120);
+}
+
+// Every hit that lands pops the tick marks again (restarting the animation), and says what it struck.
+const hitMarker = document.getElementById("hitmarker")!;
+const hitLabel = document.getElementById("hitlabel")!;
+function showHit(zone: number, damage: number, killed: boolean): void {
+  for (const el of [hitMarker, hitLabel]) {
+    el.classList.remove("pop", "kill");
+    void el.offsetWidth; // lets the same animation start again straight away
+    el.classList.add("pop");
+    if (killed) el.classList.add("kill");
+  }
+  const part = zone < 0 ? "SPLASH" : (zoneSet.zones[zone]?.name ?? "").toUpperCase();
+  // A part already at zero takes nothing more, so say so rather than "-0".
+  const amount = damage > 0 ? `-${Math.round(damage)}` : "BROKEN";
+  hitLabel.textContent = killed ? `${part} ${amount} · DOWN` : `${part} ${amount}`;
 }
 
 function flashHurt(): void {
@@ -433,7 +452,7 @@ function frame(now: number): void {
     const wantedSlot = loadout.slots[mechInput.slot]! >= 0 ? mechInput.slot : loadout.active;
     if (wantedSlot !== firingSlot) { firingSlot = wantedSlot; gate.holdUntil(simTime + lootConfig.switchSeconds); }
     const weapon = weaponSet.weapons[loadout.slots[firingSlot]!] ?? weaponStats;
-    setAimTarget(rig.camera, map.world, weapon.maxAimDistance, mechInput);
+    setAimTarget(rig.camera, map.world, weapon.maxAimDistance, mechInput, aimAtMechs);
     mechInput.targetX = Math.fround(mechInput.targetX); mechInput.targetY = Math.fround(mechInput.targetY); mechInput.targetZ = Math.fround(mechInput.targetZ);
     // A destroyed mech can only look around, and nobody moves during the countdown: the same rules the server applies,
     // so prediction does not run ahead and get pulled back.

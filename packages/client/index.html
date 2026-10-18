@@ -21,6 +21,22 @@
       .bar.locked > div { background: #e03030; }
       #crosshair.hit i { background: #ff4040; }
       #crosshair.kill i { background: #ff4040; transform: scale(1.8); }
+      /* A tick mark at each corner of the crosshair for every hit that lands, popping out and fading. */
+      #hitmarker { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; opacity: 0; }
+      #hitmarker i { position: absolute; width: 10px; height: 3px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.75); }
+      #hitmarker i:nth-child(1) { left: -17px; top: -13px; transform: rotate(45deg); }
+      #hitmarker i:nth-child(2) { left: 7px; top: -13px; transform: rotate(-45deg); }
+      #hitmarker i:nth-child(3) { left: -17px; top: 10px; transform: rotate(-45deg); }
+      #hitmarker i:nth-child(4) { left: 7px; top: 10px; transform: rotate(45deg); }
+      #hitmarker.pop { animation: hitpop 0.22s ease-out; }
+      #hitmarker.kill i { background: #ff4d3d; }
+      #hitmarker.kill.pop { animation: hitpop 0.5s ease-out; }
+      @keyframes hitpop { 0% { opacity: 1; transform: scale(1.5); } 40% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.1); } }
+      /* What the last hit struck and for how much, under the crosshair. */
+      #hitlabel { position: fixed; left: 50%; top: calc(50% + 26px); transform: translateX(-50%); color: #fff; font: 700 12px ui-monospace, monospace; text-shadow: 0 0 3px #000, 0 0 1px #000; pointer-events: none; opacity: 0; white-space: nowrap; }
+      #hitlabel.pop { animation: labelpop 0.9s ease-out; }
+      #hitlabel.kill { color: #ff4d3d; }
+      @keyframes labelpop { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
       #zones { position: fixed; left: 20px; bottom: 80px; display: grid; grid-template-columns: 14px 120px; gap: 4px 8px; color: #fff; font-size: 11px; pointer-events: none; text-shadow: 0 0 2px #000; }
       #zones .track { height: 8px; margin-top: 3px; background: rgba(0,0,0,.6); }
       #zones .track { position: relative; }
@@ -54,6 +70,8 @@
   </head>
   <body>
     <canvas id="game"></canvas>
+    <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+    <div id="hitlabel"></div>
     <div id="crosshair"><i class="h l"></i><i class="h r"></i><i class="v t"></i><i class="v b"></i><i class="dot"></i></div>
     <div id="roomBar"><span id="roomText"></span><button id="copyLink">Copy invite link</button><button id="startButton" class="hidden">Start match (Enter)</button></div>
     <div id="bigText"></div>

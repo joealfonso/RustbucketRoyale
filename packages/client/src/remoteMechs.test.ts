@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { STEP, type OtherState } from "@rustbucket/shared";
+import zonesJson from "../../../data/zones.json";
+import { STEP, ZONE_ARMS, createZoneHit, parseZones, type OtherState } from "@rustbucket/shared";
 import { RemoteMechs } from "./remoteMechs";
 
 const INTERVAL = 3 * STEP * 1000; // snapshots every 3 ticks
@@ -81,4 +82,20 @@ describe("RemoteMechs", () => {
     remotes.push([], 33, 1000);
     expect(scene.children.length).toBe(0);
   });
+
+  it("finds the mech under a ray, by its hit zones where it is drawn, so the crosshair can aim at an arm", () => {
+    const { remotes } = make();
+    const zones = parseZones(zonesJson);
+    feed(remotes, 30, 0, () => 0);
+    remotes.update(1e9);
+    const hit = createZoneHit();
+    const p = new THREE.Vector3();
+    remotes.positionOf(1, p);
+    // From 20 m in front (yaw 0 faces -Z), straight at the left arm, 1.2 m to the mech's left.
+    const distance = remotes.raycast(p.x - 1.2, 2.4, p.z - 20, 0, 0, 1, 300, zones, hit);
+    expect(distance).toBeGreaterThan(18);
+    expect(hit.zone).toBe(ZONE_ARMS);
+    expect(remotes.raycast(p.x + 5, 2.4, p.z - 20, 0, 0, 1, 300, zones, hit)).toBe(-1);
+  });
 });
+

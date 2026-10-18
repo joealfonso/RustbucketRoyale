@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { STEP, type OtherState } from "@rustbucket/shared";
+import { STEP, raycastMech, type OtherState, type ZoneHit, type ZoneSet } from "@rustbucket/shared";
 import { createMechModel, setMechDamage, setMechGear, setMechUpgrades, type MechModel } from "./mechModel";
 import type { UpgradeDef } from "@rustbucket/shared";
 import type { Toon } from "./toonMaterial";
@@ -74,6 +74,21 @@ export class RemoteMechs {
   // Who can be watched: everyone still standing.
   aliveIds(): number[] {
     return [...this.remotes.entries()].filter(([, r]) => !r.dead).map(([id]) => id);
+  }
+
+  // The distance along a ray to the nearest standing mech, checked against its hit zones where it is drawn, or -1.
+  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number, zones: ZoneSet, hit: ZoneHit): number {
+    let best = -1;
+    let reach = max;
+    for (const r of this.remotes.values()) {
+      if (r.dead) continue;
+      const p = r.model.group.position;
+      if (raycastMech(ox, oy, oz, dx, dy, dz, reach, p.x, p.y, p.z, r.model.group.rotation.y, zones, hit)) {
+        best = hit.distance;
+        reach = hit.distance;
+      }
+    }
+    return best;
   }
 
   // Whether a wreck that still has something in it is within range of a spot, for the "hold E" prompt.
