@@ -20,6 +20,7 @@ Player accent colors must contrast with both moss green and rust orange. Enemy a
 Chunky, simplified, big readable masses. Exaggerate joints, feet, and weapons. Every mech has a unique silhouette feature (antenna, shoulder plate, tank) that survives at distance. Avoid thin details that vanish at 50 m.
 
 ## Avoiding AI tells
+These rules are about how the game looks and reads: menus, HUD, UI systems and visual design patterns. They do not ban AI-made models; those follow the asset intake checklist like any other model.
 Every detail has a job you can state in one sentence. A vent has an intake behind it, a cable runs from a source to a destination, a bolt holds two parts together.
 Detail density is uneven on purpose: big calm shapes, a few focused details.
 Parts have visible seams, hinges, and panel breaks. No melted blends.
@@ -71,7 +72,7 @@ Hand painted flipbooks and simple meshes. Pooled, capped by data file values, wi
 Keep silhouettes strong. Reuse the atlas. Show damage on the model. Check every new asset next to the reference mech.
 
 ## Do not
-Ship imported materials. Ship AI geometry or textures unmodified. Use AI generated models for hero mechs. Add thin detail that disappears at distance. Use magenta anywhere except the zone ring. Add realistic particles.
+Ship imported materials. Add thin detail that disappears at distance. Use magenta anywhere except the zone ring. Add realistic particles.
 
 ## Budgets
 Starting guesses until M1 and V1 profiling replace them: 60 fps mid-range GPU, host holds 60 fps with 40 bots on the large tier.
