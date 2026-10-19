@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M10, gate 10a built
+Current code milestone: M10, gates 10a and 10b built (10b waits on Joseph's Fly.io account)
 Current visual milestone: V4, V5a and V6 passed. Nothing in progress
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -120,3 +120,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-19: Joseph's playtest passed gates V6a, V6b, V4a, V4b and V5a, the title screen with bot difficulty, the dash slide and the performance pass. No milestone in progress.
 - 2026-10-19: The top three performance recommendations, on Joseph's call: the mech models are quantised (921 to 556 kB raw, no visible change); each match's map is built on worker threads (MAP_WORKERS, default 2), so a match start no longer stalls other rooms (10 large rooms: worst frame 390-450 ms to 14-18 ms); bot route searches replan only when needed and use a weighted search, so large rooms per process go from about 10 to about 30 on this laptop. Left: a brand-new room still builds its lobby map on the main thread (about 200 ms on large).
 - 2026-10-19: M10 started on Joseph's go. Gate 10a built, waiting for its check. `npm run build` then `npm start` serves the game and its page on one address (PORT, default 8080): open http://localhost:8080, create a room, play. Files go out brotli or gzip compressed (Ironclad's model 132 kB to 17 kB); game connections are let in only from the server's own pages (or ALLOWED_ORIGINS); GET /health answers with the room count; DEV_TUNING is refused in production; a built page ignores `?server=`. A Dockerfile builds the same thing as an image (not built here: Docker is not on this Mac). The gauntlet now starts the production server and checks it. 10b needs Joseph's choice of host, domain and monthly budget.
+- 2026-10-19: Gate 10b set up for Fly.io on Joseph's pick: fly.toml (one machine, sleeps when idle, /health checked, 1 GB shared CPU, region iad as a guess), a deploy job in CI that ships main after the gauntlet once the FLY_API_TOKEN secret exists, and docs/DEPLOY.md with the account steps. Not deployed: that needs Joseph's account. Check: follow docs/DEPLOY.md, open the link on your phone on cellular and play a match against bots; then read `fly logs`.

@@ -13,6 +13,7 @@ Open these on demand. Do not import them.
 - `DESIGN.md`: palette, shading, damage states, HUD, asset intake. Read before any art, shader, VFX, or UI work.
 - `docs/MECH_ROSTER.md`: the four launch mechs and the hangar. Read before any mech model work.
 - `docs/DECISIONS.md`, `docs/PERF.md`, `docs/ASSETS.md`, `docs/MECHS.md`.
+- `docs/DEPLOY.md`: hosting on Fly.io, before any deploy or server config work.
 
 ## How to work
 - Do only the milestone named in `docs/MILESTONES.md` or by me. Do not build ahead.

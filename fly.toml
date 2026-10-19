@@ -1,0 +1,42 @@
+# Fly.io: the game server and its page on one machine (M10 gate 10b). Steps in docs/DEPLOY.md.
+#
+# Exactly one machine: rooms live in that machine's memory, so a second one would split them and an invite link
+# would find its room only half the time. Deploy with --ha=false (CI does) and never scale past one until rooms are
+# routed to the machine that holds them. Scaling later means more machines with routing, never a bigger room.
+
+app = "rustbucket-royale" # must be unique on Fly; change it if the name is taken
+primary_region = "iad" # a guess (US east): pick the region nearest the players with `fly platform regions`
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  MAP_WORKERS = "1" # one shared CPU: one map worker beside the rooms
+  MAX_ROOMS = "20"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Asleep with nobody on it, so an idle game costs almost nothing; the first visitor waits a few seconds for it to
+  # wake. A WebSocket keeps it awake while anyone plays.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 150
+    hard_limit = 200
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb" # a guess with headroom: measure a full large room and lower it in docs/PERF.md

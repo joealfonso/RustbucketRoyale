@@ -16,3 +16,29 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run gauntlet
+  # A push to main that passes the gauntlet goes live on Fly.io (docs/DEPLOY.md). Skipped until the FLY_API_TOKEN
+  # secret exists, so the repo works the same without a host. One deploy at a time, and a newer push waits rather
+  # than cutting an older deploy off halfway.
+  deploy:
+    needs: gauntlet
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - name: Check for the Fly token
+        id: token
+        run: |
+          if [ -n "$FLY_API_TOKEN" ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "No FLY_API_TOKEN secret, so no deploy."; fi
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.present == 'true'
+        with:
+          lfs: true
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: steps.token.outputs.present == 'true'
+      # --ha=false keeps it to one machine: rooms live in its memory (fly.toml).
+      - run: flyctl deploy --remote-only --ha=false
+        if: steps.token.outputs.present == 'true'
