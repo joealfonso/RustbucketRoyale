@@ -2,21 +2,54 @@
   "master": 0.7,
   "maxVoices": 24,
   "hearingMeters": 300,
+  "echo": {
+    "seconds": 1.6,
+    "level": 0.35
+  },
+  "air": {
+    "nearHz": 16000,
+    "halfMeters": 70,
+    "farHz": 900,
+    "farEcho": 2.5
+  },
+  "variation": {
+    "pitch": 0.06,
+    "level": 0.12
+  },
+  "weaponShots": {
+    "autocannon": "shot",
+    "scattergun": "shotScattergun",
+    "spikeDriver": "shotSpikeDriver"
+  },
   "sounds": {
     "shot": {
-      "volume": 0.45,
+      "volume": 0.5,
+      "echo": 0.45,
+      "file": null
+    },
+    "shotScattergun": {
+      "volume": 0.55,
+      "echo": 0.5,
+      "file": null
+    },
+    "shotSpikeDriver": {
+      "volume": 0.5,
+      "echo": 0.45,
       "file": null
     },
     "impact": {
       "volume": 0.25,
+      "echo": 0.25,
       "file": null
     },
     "explosion": {
       "volume": 1.0,
+      "echo": 0.6,
       "file": null
     },
     "smash": {
       "volume": 0.7,
+      "echo": 0.4,
       "file": null
     },
     "hitMarker": {
@@ -25,10 +58,12 @@
     },
     "hurt": {
       "volume": 0.6,
+      "echo": 0.1,
       "file": null
     },
     "dash": {
       "volume": 0.5,
+      "echo": 0.2,
       "file": null
     },
     "jets": {
@@ -36,11 +71,13 @@
       "file": null
     },
     "step": {
-      "volume": 0.6,
+      "volume": 0.32,
+      "echo": 0.15,
       "file": null
     },
     "grenadeThrow": {
       "volume": 0.4,
+      "echo": 0.15,
       "file": null
     },
     "countdown": {
@@ -69,30 +106,37 @@
     },
     "ram": {
       "volume": 0.7,
+      "echo": 0.35,
       "file": null
     },
     "pounce": {
       "volume": 0.55,
+      "echo": 0.3,
       "file": null
     },
     "slam": {
       "volume": 0.9,
+      "echo": 0.5,
       "file": null
     },
     "mortar": {
       "volume": 0.85,
+      "echo": 0.55,
       "file": null
     },
     "shellIncoming": {
       "volume": 0.6,
+      "echo": 0.3,
       "file": null
     },
     "decoy": {
       "volume": 0.4,
+      "echo": 0.3,
       "file": null
     },
     "fizz": {
       "volume": 0.55,
+      "echo": 0.25,
       "file": null
     }
   }

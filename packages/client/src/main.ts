@@ -475,10 +475,17 @@ if (net) {
     remotes.push(snap.others, snap.tick, performance.now());
     for (const n of snap.noises) radar?.hear(n.x, n.z, n.kind, performance.now());
   };
+  // A scattergun's pellets each arrive as their own shot, a few milliseconds apart: one sound per pull, not one per
+  // pellet, or a blast stacks into a harsh chorus.
+  const lastShotSound = new Map<number, number>();
   net.onShot = (s) => {
     if (s.id === net.id) return; // our own shot already played the moment we fired
-    shotFx.show(s, remotes.weaponOf(s.id), s.hitMech);
-    sound.play("shot", { x: s.ox, y: s.oy, z: s.oz });
+    const weapon = remotes.weaponOf(s.id);
+    shotFx.show(s, weapon, s.hitMech);
+    const now = performance.now();
+    if (now - (lastShotSound.get(s.id) ?? -Infinity) < 40) return;
+    lastShotSound.set(s.id, now);
+    sound.play(sound.shotFor(weaponSet.weapons[weapon]?.id), { x: s.ox, y: s.oy, z: s.oz });
   };
   net.onHit = (h) => {
     flashHitMarker(h.killed);
@@ -764,7 +771,7 @@ function frame(now: number): void {
         computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weapon, Math.random, shot, armsBroken() ? zoneSet.brokenArmsSpreadMultiplier : 1, muzzle);
         shotFx.show(shot, weaponSet.weapons.indexOf(weapon));
       }
-      sound.play("shot", { x: shot.ox, y: shot.oy, z: shot.oz });
+      sound.play(sound.shotFor(weapon.id), { x: shot.ox, y: shot.oy, z: shot.oz });
       rig.addShake(weapon.shakeForce);
     }
     // Online a grenade needs one in the bag. Count it down here so a held key does not throw twice before the server says.
