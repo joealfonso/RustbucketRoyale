@@ -83,21 +83,25 @@
     },
     "Arm_Camo": {
       "zone": "arms",
-      "paint": "blue"
+      "paint": "blue",
+      "noHit": true
     },
     "Arm_Frame": {
       "zone": "arms",
       "paint": "frame",
-      "rusts": false
+      "rusts": false,
+      "noHit": true
     },
     "Arm_Conduits": {
       "zone": "arms",
       "paint": "conduitGlow",
-      "glow": true
+      "glow": true,
+      "noHit": true
     },
     "Emitter": {
       "zone": "arms",
-      "paint": "weapon"
+      "paint": "frame",
+      "rusts": false
     },
     "Blade": {
       "zone": "arms",
@@ -106,8 +110,7 @@
     },
     "Carbine": {
       "zone": "arms",
-      "paint": "frame",
-      "rusts": false
+      "paint": "weapon"
     }
   }
 }

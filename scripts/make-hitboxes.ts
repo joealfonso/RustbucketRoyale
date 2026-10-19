@@ -1,6 +1,7 @@
 // Measures each one-file mech kit and writes its hit boxes into data/mechKits.json: one box round each part, in that
 // part's hit zone (parts marked noHit, such as floating drones, are left out). The server and the client then check
-// shots against the shape you actually see. Run after changing a mech model: npx tsx scripts/make-hitboxes.ts
+// shots against the shape you actually see. It also copies the gun muzzles (Mount_Gun, Mount_Gun_2, ...), which
+// shots leave from in turn. Run after changing a mech model: npx tsx scripts/make-hitboxes.ts
 // The extents come from the bounds every glTF model stores for its positions, plus the node's position. Rotated or
 // scaled part nodes are not handled (the roster scripts never use them); the script stops if it meets one.
 import { readFileSync, writeFileSync } from "node:fs";
@@ -18,7 +19,7 @@ const kitsPath = join(root, "data/mechKits.json");
 const kits = JSON.parse(readFileSync(kitsPath, "utf8"));
 const round = (n: number) => Math.round(n * 100) / 100;
 
-for (const [id, kit] of Object.entries(kits.kits) as [string, { file?: string; parts: Record<string, { zone: string; noHit?: boolean }>; hitboxes?: unknown }][]) {
+for (const [id, kit] of Object.entries(kits.kits) as [string, { file?: string; parts: Record<string, { zone: string; noHit?: boolean }>; hitboxes?: unknown; muzzles?: number[][] }][]) {
   if (!kit.file) continue;
   const gltf = readGltfJson(readFileSync(join(root, "assets", kit.file))) as Gltf;
   const boxes: Record<string, { center: number[]; size: number[] }[]> = { legs: [], arms: [], torso: [] };
@@ -37,6 +38,8 @@ for (const [id, kit] of Object.entries(kits.kits) as [string, { file?: string; p
   }
   for (const zone of ["legs", "arms", "torso"]) if (boxes[zone]!.length === 0) throw new Error(`${id}: nothing to hit in the ${zone} zone`);
   kit.hitboxes = boxes;
-  console.log(`${id}: ${boxes.legs!.length} leg, ${boxes.arms!.length} arm, ${boxes.torso!.length} torso boxes`);
+  const muzzles = (gltf.nodes ?? []).filter((n) => /^Mount_Gun(_\d+)?$/.test(n.name ?? "")).sort((a, b) => (a.name! < b.name! ? -1 : 1)).map((n) => (n.translation ?? [0, 0, 0]).map(round));
+  if (muzzles.length > 0) kit.muzzles = muzzles;
+  console.log(`${id}: ${boxes.legs!.length} leg, ${boxes.arms!.length} arm, ${boxes.torso!.length} torso boxes, ${muzzles.length} muzzles`);
 }
 writeFileSync(kitsPath, `${JSON.stringify(kits, null, 2)}\n`);

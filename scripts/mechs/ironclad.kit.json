@@ -1,25 +1,99 @@
 {
-  "scheme": { "hull": "#4A5056", "hazard": "#FFC93C", "hazardBlack": "#1E2224", "frame": "#2A2F33", "sensorGlow": "#FF3B30" },
+  "scheme": {
+    "hull": "#4A5056",
+    "hazard": "#FFC93C",
+    "hazardBlack": "#1E2224",
+    "frame": "#2A2F33",
+    "sensorGlow": "#FF3B30"
+  },
   "parts": {
-    "Torso": { "zone": "torso", "paint": "hull" },
-    "Head": { "zone": "torso", "paint": "frame" },
-    "Sensor": { "zone": "torso", "paint": "sensorGlow", "glow": true },
-    "Missile_Pods": { "zone": "torso", "paint": "hull" },
-    "Accent_Band": { "zone": "torso", "paint": "accent" },
-    "Frame": { "zone": "torso", "paint": "frame", "rusts": false },
-    "Arm_R": { "zone": "arms", "paint": "hull" },
-    "Autocannon": { "zone": "arms", "paint": "weapon" },
-    "Arm_L": { "zone": "arms", "paint": "hull" },
-    "Shield": { "zone": "arms", "paint": "hull" },
-    "Pile_Driver": { "zone": "arms", "paint": "frame", "rusts": false },
-    "Arm_Frame": { "zone": "arms", "paint": "frame", "rusts": false },
-    "Shoulder_Stripes": { "zone": "arms", "paint": "hazard" },
-    "Shoulder_Stripes_Black": { "zone": "arms", "paint": "hazardBlack" },
-    "Leg_R": { "zone": "legs", "paint": "hull" },
-    "Leg_L": { "zone": "legs", "paint": "hull" },
-    "Feet": { "zone": "legs", "paint": "frame" },
-    "Pistons": { "zone": "legs", "paint": "frame", "rusts": false },
-    "Shin_Stripes": { "zone": "legs", "paint": "hazard" },
-    "Shin_Stripes_Black": { "zone": "legs", "paint": "hazardBlack" }
+    "Torso": {
+      "zone": "torso",
+      "paint": "hull"
+    },
+    "Head": {
+      "zone": "torso",
+      "paint": "frame"
+    },
+    "Sensor": {
+      "zone": "torso",
+      "paint": "sensorGlow",
+      "glow": true
+    },
+    "Missile_Pods": {
+      "zone": "torso",
+      "paint": "hull"
+    },
+    "Accent_Band": {
+      "zone": "torso",
+      "paint": "accent"
+    },
+    "Frame": {
+      "zone": "torso",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Arm_R": {
+      "zone": "arms",
+      "paint": "hull"
+    },
+    "Autocannon": {
+      "zone": "arms",
+      "paint": "weapon"
+    },
+    "Arm_L": {
+      "zone": "arms",
+      "paint": "hull"
+    },
+    "Shield": {
+      "zone": "arms",
+      "paint": "hull"
+    },
+    "Pile_Driver": {
+      "zone": "arms",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Arm_Frame": {
+      "zone": "arms",
+      "paint": "frame",
+      "rusts": false,
+      "noHit": true
+    },
+    "Shoulder_Stripes": {
+      "zone": "arms",
+      "paint": "hazard",
+      "noHit": true
+    },
+    "Shoulder_Stripes_Black": {
+      "zone": "arms",
+      "paint": "hazardBlack",
+      "noHit": true
+    },
+    "Leg_R": {
+      "zone": "legs",
+      "paint": "hull"
+    },
+    "Leg_L": {
+      "zone": "legs",
+      "paint": "hull"
+    },
+    "Feet": {
+      "zone": "legs",
+      "paint": "frame"
+    },
+    "Pistons": {
+      "zone": "legs",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Shin_Stripes": {
+      "zone": "legs",
+      "paint": "hazard"
+    },
+    "Shin_Stripes_Black": {
+      "zone": "legs",
+      "paint": "hazardBlack"
+    }
   }
 }

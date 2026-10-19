@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, createZoneHit, makeZonesFor, mechStatsFor, parseRoster, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
   type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
@@ -213,8 +213,9 @@ const gaitConfig = parseGait(gaitJson);
 const dust = new TimedEffects(scene, 32, gaitConfig.dustMeters, new THREE.MeshBasicMaterial({ color: "#a39a86", transparent: true, opacity: 0.45 }));
 const gaitInput: GaitInput = { vx: 0, vz: 0, yaw: 0, grounded: true, dashing: false, limping: false, walkSpeed: 0, runSpeed: 0 };
 const footAt = new THREE.Vector3();
-// Dust under each foot that came down, and one thud for them. `audible` is false for someone else walking:
-// walking makes no sound (NOISE_KINDS), so sneaking past someone still works; their run you hear.
+// Dust under each foot that came down, and one thud for them, pitched for the mech's weight. `audible` is false for
+// someone else walking beyond gait.json hearWalkMeters: up close you hear a mech walk, further off only its run, and
+// the radar still never shows walking (NOISE_KINDS), so sneaking past at a distance still works.
 function footfalls(model: MechModel, feet: number, audible: boolean): void {
   let thud = audible;
   for (let leg = 0; leg < model.legs.length; leg++) {
@@ -223,7 +224,7 @@ function footfalls(model: MechModel, feet: number, audible: boolean): void {
     dust.spawn(footAt.x, footAt.y, footAt.z, gaitConfig.dustSeconds);
     if (thud) {
       const loud = gaitConfig.stepLoudness + (gaitConfig.runStepLoudness - gaitConfig.stepLoudness) * model.gait!.loud;
-      sound.play("step", footAt, loud);
+      sound.play("step", footAt, loud, gaitConfig.mechs[model.gaitId]?.stepPitch ?? 1);
       thud = false;
     }
   }
@@ -238,7 +239,10 @@ const walkRemote = (model: MechModel, m: number, vx: number, vy: number, vz: num
   gaitInput.limping = legsLimping(model);
   gaitInput.walkSpeed = stats.walkSpeed; gaitInput.runSpeed = stats.runSpeed;
   const feet = walkMech(model, gaitConfig, gaitInput, fxDt);
-  if (feet) footfalls(model, feet, running);
+  if (feet) {
+    const p = model.group.position, me = mechGroup.position;
+    footfalls(model, feet, running || Math.abs(p.x - me.x) + Math.abs(p.z - me.z) < gaitConfig.hearWalkMeters);
+  }
 };
 
 // Art hook: a puff where a prop broke. Replace with real debris at V5.
@@ -260,6 +264,9 @@ remotes.look = remoteLook;
 const aimHit = createZoneHit();
 // The crosshair checks each mech against its own hit boxes, the ones the server uses (only with the roster drawn).
 const zonesFor = kitId === "roster" ? makeZonesFor(zoneSet, roster, mechKitsJson) : () => zoneSet;
+// Your shots leave your mech's own gun, the same muzzles the server fires from, taking turns where it has two.
+const muzzlesFor = makeMuzzlesFor(roster, mechKitsJson);
+let shotsFired = 0;
 const aimAtMechs = (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number) => remotes.raycast(ox, oy, oz, dx, dy, dz, max, zonesFor, aimHit);
 const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgradeSet.upgrades.map((u) => u.color), toon);
 if (net) net.viewDelayMs = () => remotes.viewDelayMs;
@@ -615,8 +622,10 @@ function frame(now: number): void {
     simTime += STEP;
     if (mechInput.fire && gate.tryFire(simTime, weapon.shotsPerSecond * upgradeScale(loadout, upgradeSet, "fireRate"))) {
       // Each pellet is drawn at once, with this client's own spread. The server decides what they hit.
+      const muzzles = muzzlesFor(mech.mech);
+      const muzzle = muzzles[shotsFired++ % muzzles.length]!;
       for (let i = 0; i < weapon.pellets; i++) {
-        computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weapon, Math.random, shot, armsBroken() ? zoneSet.brokenArmsSpreadMultiplier : 1);
+        computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weapon, Math.random, shot, armsBroken() ? zoneSet.brokenArmsSpreadMultiplier : 1, muzzle);
         shotFx.show(shot);
       }
       sound.play("shot", { x: shot.ox, y: shot.oy, z: shot.oz });

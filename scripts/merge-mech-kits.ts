@@ -12,7 +12,7 @@ for (const id of kits.roster as string[]) {
   if (!existsSync(side)) { console.log(`${id}: no ${id}.kit.json, left as it is`); continue; }
   const { scheme, parts } = JSON.parse(readFileSync(side, "utf8"));
   const kit = kits.kits[id];
-  kits.kits[id] = { file: kit.file, scheme, parts, ...(kit.hitboxes ? { hitboxes: kit.hitboxes } : {}) };
+  kits.kits[id] = { file: kit.file, scheme, parts, ...(kit.hitboxes ? { hitboxes: kit.hitboxes } : {}), ...(kit.muzzles ? { muzzles: kit.muzzles } : {}) };
   console.log(`${id}: ${Object.keys(parts).length} parts, ${Object.keys(scheme).length} colours`);
 }
 writeFileSync(kitsPath, `${JSON.stringify(kits, null, 2)}\n`);

@@ -1,10 +1,11 @@
 {
   "farMeters": 120,
   "smoothing": 10,
-  "stepLoudness": 0.5,
+  "stepLoudness": 0.7,
   "runStepLoudness": 1,
   "dustSeconds": 0.5,
   "dustMeters": 0.7,
+  "hearWalkMeters": 30,
   "mechs": {
     "ironclad": {
       "walkStride": 2.5,
@@ -20,7 +21,8 @@
       "dashLean": 12,
       "tuck": 0.5,
       "limp": 0.6,
-      "turnStep": 0.8
+      "turnStep": 0.8,
+      "stepPitch": 0.8
     },
     "stiletto": {
       "walkStride": 4.6,
@@ -36,7 +38,8 @@
       "dashLean": 18,
       "tuck": 0.8,
       "limp": 0.6,
-      "turnStep": 0.8
+      "turnStep": 0.8,
+      "stepPitch": 1.5
     },
     "cataclysm": {
       "walkStride": 4.0,
@@ -52,7 +55,8 @@
       "dashLean": 6,
       "tuck": 0.4,
       "limp": 0.5,
-      "turnStep": 1.0
+      "turnStep": 1.0,
+      "stepPitch": 0.65
     },
     "arbiter": {
       "walkStride": 3.1,
@@ -68,7 +72,8 @@
       "dashLean": 14,
       "tuck": 0.6,
       "limp": 0.6,
-      "turnStep": 0.8
+      "turnStep": 0.8,
+      "stepPitch": 1.2
     }
   }
 }

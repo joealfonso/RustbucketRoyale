@@ -32,6 +32,7 @@ export interface Player {
   interested: Set<number>;
   watchId: number;
   heard: NoiseEvent[];
+  shotsFired: number; // trigger pulls so far, for taking turns between two guns
   sentPickupIds: number[]; // the pickups in the last snapshot, so an unchanged list is not sent again // sounds to pass on in the next snapshot
   quietUntil: Int32Array; // per noise kind, the tick before which this mech makes no new pulse // when knocked out, the mech this client says it is watching (0 for none) // ids of the mechs this client is currently being sent
   dead: boolean;

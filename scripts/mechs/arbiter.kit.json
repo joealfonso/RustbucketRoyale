@@ -1,30 +1,134 @@
 {
-  "scheme": { "white": "#F0F0EE", "teal": "#1FB8B0", "frame": "#2C3640", "dome": "#3F8FE0", "tealGlow": "#3FF0E0", "domeGlow": "#9FD8FF" },
+  "scheme": {
+    "white": "#F0F0EE",
+    "teal": "#1FB8B0",
+    "frame": "#2C3640",
+    "dome": "#3F8FE0",
+    "tealGlow": "#3FF0E0",
+    "domeGlow": "#9FD8FF"
+  },
   "parts": {
-    "Torso": { "zone": "torso", "paint": "white" },
-    "Torso_Frame": { "zone": "torso", "paint": "frame", "rusts": false },
-    "Torso_Trim": { "zone": "torso", "paint": "teal" },
-    "Torso_Glow": { "zone": "torso", "paint": "tealGlow", "glow": true },
-    "Sensor": { "zone": "torso", "paint": "dome", "rusts": false },
-    "Sensor_Ring": { "zone": "torso", "paint": "domeGlow", "glow": true, "rusts": false },
-    "Sensor_Frame": { "zone": "torso", "paint": "frame", "rusts": false },
-    "Mast": { "zone": "torso", "paint": "frame", "rusts": false },
-    "Drones": { "zone": "torso", "paint": "white", "noHit": true },
-    "Drone_Eyes": { "zone": "torso", "paint": "tealGlow", "glow": true, "noHit": true },
-    "Drone_Pylons": { "zone": "torso", "paint": "frame", "rusts": false, "noHit": true },
-    "Leg_L": { "zone": "legs", "paint": "white" },
-    "Leg_R": { "zone": "legs", "paint": "white" },
-    "Leg_Frame": { "zone": "legs", "paint": "frame", "rusts": false },
-    "Leg_Glow": { "zone": "legs", "paint": "tealGlow", "glow": true },
-    "Arm_L": { "zone": "arms", "paint": "white" },
-    "Arm_R": { "zone": "arms", "paint": "white" },
-    "Arm_Frame_L": { "zone": "arms", "paint": "frame", "rusts": false },
-    "Arm_Frame_R": { "zone": "arms", "paint": "frame", "rusts": false },
-    "Arm_Glow_L": { "zone": "arms", "paint": "tealGlow", "glow": true },
-    "Arm_Glow_R": { "zone": "arms", "paint": "tealGlow", "glow": true },
-    "Arm_Accent": { "zone": "arms", "paint": "accent" },
-    "Pauldron_L": { "zone": "arms", "paint": "teal" },
-    "Pauldron_R": { "zone": "arms", "paint": "teal" },
-    "Gun_R": { "zone": "arms", "paint": "weapon" }
+    "Torso": {
+      "zone": "torso",
+      "paint": "white"
+    },
+    "Torso_Frame": {
+      "zone": "torso",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Torso_Trim": {
+      "zone": "torso",
+      "paint": "teal"
+    },
+    "Torso_Glow": {
+      "zone": "torso",
+      "paint": "tealGlow",
+      "glow": true
+    },
+    "Sensor": {
+      "zone": "torso",
+      "paint": "dome",
+      "rusts": false
+    },
+    "Sensor_Ring": {
+      "zone": "torso",
+      "paint": "domeGlow",
+      "glow": true,
+      "rusts": false
+    },
+    "Sensor_Frame": {
+      "zone": "torso",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Mast": {
+      "zone": "torso",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Drones": {
+      "zone": "torso",
+      "paint": "white",
+      "noHit": true
+    },
+    "Drone_Eyes": {
+      "zone": "torso",
+      "paint": "tealGlow",
+      "glow": true,
+      "noHit": true
+    },
+    "Drone_Pylons": {
+      "zone": "torso",
+      "paint": "frame",
+      "rusts": false,
+      "noHit": true
+    },
+    "Leg_L": {
+      "zone": "legs",
+      "paint": "white"
+    },
+    "Leg_R": {
+      "zone": "legs",
+      "paint": "white"
+    },
+    "Leg_Frame": {
+      "zone": "legs",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Leg_Glow": {
+      "zone": "legs",
+      "paint": "tealGlow",
+      "glow": true
+    },
+    "Arm_L": {
+      "zone": "arms",
+      "paint": "white"
+    },
+    "Arm_R": {
+      "zone": "arms",
+      "paint": "white"
+    },
+    "Arm_Frame_L": {
+      "zone": "arms",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Arm_Frame_R": {
+      "zone": "arms",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Arm_Glow_L": {
+      "zone": "arms",
+      "paint": "tealGlow",
+      "glow": true
+    },
+    "Arm_Glow_R": {
+      "zone": "arms",
+      "paint": "tealGlow",
+      "glow": true
+    },
+    "Arm_Accent": {
+      "zone": "arms",
+      "paint": "accent"
+    },
+    "Pauldron_L": {
+      "zone": "arms",
+      "paint": "teal"
+    },
+    "Pauldron_R": {
+      "zone": "arms",
+      "paint": "teal"
+    },
+    "Gun_R": {
+      "zone": "arms",
+      "paint": "weapon"
+    },
+    "Gun_L": {
+      "zone": "arms",
+      "paint": "weapon"
+    }
   }
 }

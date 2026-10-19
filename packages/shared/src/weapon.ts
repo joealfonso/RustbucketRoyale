@@ -1,10 +1,6 @@
 import type { MechState } from "./mechStep";
+import { STANDARD_MUZZLE } from "./muzzles";
 import type { WeaponStats } from "./stats";
-
-// Where the gun barrel sits relative to the mech, in the mech's own frame.
-const MUZZLE_RIGHT = 1.2;
-const MUZZLE_UP = 2.4;
-const MUZZLE_FORWARD = 1.4;
 
 export interface Shot {
   ox: number; oy: number; oz: number;
@@ -32,16 +28,17 @@ export class FireGate {
   }
 }
 
-// Works out a shot from the barrel toward the aim point, plus a little random spread.
+// Works out a shot from the barrel toward the aim point, plus a little random spread. `muzzle` is where the barrel
+// ends in the mech's own frame (muzzles.ts).
 // GUESS: this is the M2 stand-in for the camera ray versus barrel rule that is open in docs/DECISIONS.md (decide at M3).
 export function computeShot(
   mech: MechState, targetX: number, targetY: number, targetZ: number,
-  stats: WeaponStats, random: () => number, out: Shot, spreadMultiplier = 1,
+  stats: WeaponStats, random: () => number, out: Shot, spreadMultiplier = 1, muzzle: readonly number[] = STANDARD_MUZZLE,
 ): void {
   const sin = Math.sin(mech.bodyYaw), cos = Math.cos(mech.bodyYaw);
-  out.ox = mech.x + cos * MUZZLE_RIGHT - sin * MUZZLE_FORWARD;
-  out.oy = mech.y + MUZZLE_UP;
-  out.oz = mech.z - sin * MUZZLE_RIGHT - cos * MUZZLE_FORWARD;
+  out.ox = mech.x + cos * muzzle[0]! + sin * muzzle[2]!;
+  out.oy = mech.y + muzzle[1]!;
+  out.oz = mech.z - sin * muzzle[0]! + cos * muzzle[2]!;
 
   let dx = targetX - out.ox, dy = targetY - out.oy, dz = targetZ - out.oz;
   const length = Math.hypot(dx, dy, dz);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STEP } from "@rustbucket/shared";
+import { STEP, type ServerMessage } from "@rustbucket/shared";
 import { loadRoomConfig } from "./config";
 import { Client, forward, idle, makeRoom, startMatch } from "./testClient";
 import type { Room, RoomConfig } from "./Room";
@@ -66,6 +66,20 @@ describe("roster mechs", () => {
     pick(plain.room, p, 1);
     drive(plain.room, [p], 3);
     expect(p.last().you.mech).toBe(0);
+  });
+
+  it("fires each mech's shots from its own gun, Arbiter's two wrist guns in turn", () => {
+    const { room, config } = rosterRoom();
+    const shooter = new Client(room, config);
+    const watcher = new Client(room, config);
+    pick(room, shooter, mechIndex(config, "arbiter"));
+    drive(room, [shooter, watcher], 5);
+    const x = shooter.last().you.x;
+    drive(room, [shooter, watcher], 40, () => idle({ fire: true, targetX: x, targetY: 2, targetZ: 200 }));
+    const sides = watcher.messages.filter((m): m is Extract<ServerMessage, { t: "shot" }> => m.t === "shot" && m.id === shooter.id).map((m) => Math.sign(m.ox - x));
+    expect(sides.length).toBeGreaterThanOrEqual(3);
+    // Facing +z, the right wrist is world -x and the left +x: the shots swap sides every pull.
+    for (let i = 1; i < sides.length; i++) expect(sides[i]).toBe(-sides[i - 1]!);
   });
 
   it("moves each mech at its own speed, and the client predicts it without correction", () => {

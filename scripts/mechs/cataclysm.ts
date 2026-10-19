@@ -135,8 +135,11 @@ const oneBarrel = (x: number) => merge(
   box(at(x, 0, 0.15), [0.36, 0.36, 0.7], 0.05), // breech
   box(at(x, 0, -0.55), [0.3, 0.3, 0.7], 0.04), // jacket
   ...[-1.05, -1.6, -2.15].map((dz) => cylinder(at(x, 0, dz), 0.17, 0.16, "z", 8)), // recoil-dampening collars
-  box(at(x, 0, -barrelLength + 0.08), [0.32, 0.32, 0.16], 0.03), // muzzle brake
 );
+// The muzzle brakes are their own part, painted the colour of the weapon in hand: the mortar is the gun, and shots
+// leave the two muzzles in turn (Mount_Gun and Mount_Gun_2).
+const muzzleBrakes = raise(merge(...[-barrelX, barrelX].map((x) => box(at(x, 0, -barrelLength + 0.08), [0.32, 0.32, 0.16], 0.03))));
+const muzzleAt = (x: number): V3 => [x, pivot[1] + barrelLength * Math.sin(elevation), pivot[2] - barrelLength * Math.cos(elevation)];
 const barrels = raise(merge(oneBarrel(-barrelX), oneBarrel(barrelX), box(at(0, 0, -1.6), [0.4, 0.14, 0.14], 0.03)));
 const oneSleeve = (x: number) => merge(
   cylinder(at(x, 0, -(0.9 + barrelLength - 0.1) / 2), 0.11, barrelLength - 1.0, "z", 8), // inner tube
@@ -148,7 +151,7 @@ const barrelSleeves = merge(
 );
 
 // ---- Point-defence turrets on the front corners (arms zone), each with a small glowing emitter. The right one also
-// carries the sponson for the side gun, the gun the server actually fires from (Mount_Gun).
+// carries a sponson with a small side gun, for looks: the mortar is what fires.
 const pdZ = -0.6, pdX = 0.9, pdY = 2.65;
 const pdTurret = (x: number) => merge(
   cylinder([x, 2.47, pdZ], 0.17, 0.14, "y", 8), // pedestal
@@ -156,13 +159,12 @@ const pdTurret = (x: number) => merge(
   prism([[pdY - 0.1, -0.78], [pdY + 0.12, -0.78], [pdY + 0.1, -0.88], [pdY - 0.06, -0.92]], "x", x - 0.15, x + 0.15), // sloped front
   cylinder([x, pdY, -1.0], 0.05, 0.2, "z", 6), // emitter barrel
 );
-const mountGun: V3 = [1.2, 2.4, -1.65];
 const armR = merge(pdTurret(pdX), box([1.2, 2.4, -0.95], [0.26, 0.3, 0.5], 0.05));
 const armL = pdTurret(-pdX);
 const pdEmitters = merge(...[-1, 1].map((s) => cylinder([s * pdX, pdY, -1.14], 0.065, 0.08, "z", 6)));
 const sideGun = merge(
   box([1.2, 2.4, -1.28], [0.18, 0.18, 0.18], 0.03),
-  cylinder([1.2, 2.4, -1.5], 0.07, 0.3, "z", 6), // muzzle ends at Mount_Gun
+  cylinder([1.2, 2.4, -1.5], 0.07, 0.3, "z", 6), // muzzle
 );
 
 // ---- Legs (legs zone). Built for the right front leg, mirrored for the others. The thigh angles out and up from the
@@ -210,6 +212,7 @@ const nodes: NodeData[] = [
   { name: "Turret_Camo", mesh: turretCamo },
   { name: "Turret_Scorch", mesh: turretScorch },
   { name: "Barrels", mesh: barrels },
+  { name: "Muzzle_Brakes", mesh: muzzleBrakes },
   { name: "Barrel_Sleeves", mesh: barrelSleeves },
   { name: "Arm_L", mesh: armL },
   { name: "Arm_R", mesh: armR },
@@ -219,7 +222,8 @@ const nodes: NodeData[] = [
   ...legNodes("Leg_FR", legFR),
   ...legNodes("Leg_BL", legBL),
   ...legNodes("Leg_BR", legBR),
-  { name: "Mount_Gun", translation: mountGun },
+  { name: "Mount_Gun", translation: muzzleAt(barrelX) },
+  { name: "Mount_Gun_2", translation: muzzleAt(-barrelX) },
   { name: "Torso_Fx", translation: [0, 2.5, 1.15] },
   { name: "Arm_R_Fx", translation: [0.4, 3.0, 0.3] },
   { name: "Leg_FL_Fx", translation: [-knee[0], knee[1], knee[2]] },

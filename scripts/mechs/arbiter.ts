@@ -142,7 +142,10 @@ const leftArm = merge(
 );
 const armFrameL = merge(
   cylinder([-1.02, 2.3, 0], 0.1, 0.22, "x", 8), // elbow
-  box([-1.14, 2.37, -0.88], [0.14, 0.16, 0.36], 0.03), // backup SMG
+);
+// The left wrist SMG fires in turn with the right one (Mount_Gun_2).
+const gunL = merge(
+  box([-1.14, 2.37, -0.88], [0.14, 0.16, 0.36], 0.03),
   cylinder([-1.14, 2.37, -1.18], 0.035, 0.24, "z", 6),
 );
 const armGlowL = box([-1.06, 2.46, -0.26], [0.06, 0.06, 0.3]);
@@ -205,7 +208,9 @@ const nodes: NodeData[] = [
   { name: "Pauldron_L", mesh: pauldronL },
   { name: "Pauldron_R", mesh: pauldronR },
   { name: "Gun_R", mesh: gunR },
+  { name: "Gun_L", mesh: gunL },
   { name: "Mount_Gun", translation: [1.2, 2.4, -1.65] },
+  { name: "Mount_Gun_2", translation: [-1.14, 2.37, -1.3] },
   { name: "Torso_Fx", translation: [0, 2.6, -0.34] },
   { name: "Arm_R_Fx", translation: [1.08, 2.34, -0.3] },
   { name: "Leg_L_Fx", translation: [-legX, 1.02, -0.3] },

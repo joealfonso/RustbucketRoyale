@@ -198,7 +198,8 @@ const carbine = merge(
 );
 
 type Zone = "legs" | "arms" | "torso";
-interface Part { name: string; zone: Zone; paint: string; glow?: true; rusts?: false; mesh: MeshData }
+// `noHit`: spans both arms, so one hit box round it would stretch across the chest.
+interface Part { name: string; zone: Zone; paint: string; glow?: true; rusts?: false; noHit?: true; mesh: MeshData }
 const parts: Part[] = [
   { name: "Torso", zone: "torso", paint: "white", mesh: merge(chest, collarR) },
   { name: "Torso_Camo", zone: "torso", paint: "blue", mesh: torsoCamo },
@@ -217,17 +218,18 @@ const parts: Part[] = [
   { name: "Thigh_Band", zone: "legs", paint: "accent", mesh: mirrorX(thighBandR) },
   { name: "Arm_L", zone: "arms", paint: "white", mesh: armL },
   { name: "Arm_R", zone: "arms", paint: "white", mesh: armR },
-  { name: "Arm_Camo", zone: "arms", paint: "blue", mesh: armCamo },
-  { name: "Arm_Frame", zone: "arms", paint: "frame", rusts: false, mesh: armFrame },
-  { name: "Arm_Conduits", zone: "arms", paint: "conduitGlow", glow: true, mesh: armConduits },
-  { name: "Emitter", zone: "arms", paint: "weapon", mesh: emitter },
+  { name: "Arm_Camo", zone: "arms", paint: "blue", noHit: true, mesh: armCamo },
+  { name: "Arm_Frame", zone: "arms", paint: "frame", rusts: false, noHit: true, mesh: armFrame },
+  { name: "Arm_Conduits", zone: "arms", paint: "conduitGlow", glow: true, noHit: true, mesh: armConduits },
+  { name: "Emitter", zone: "arms", paint: "frame", rusts: false, mesh: emitter },
   { name: "Blade", zone: "arms", paint: "bladeGlow", glow: true, mesh: blade },
-  { name: "Carbine", zone: "arms", paint: "frame", rusts: false, mesh: carbine },
+  { name: "Carbine", zone: "arms", paint: "weapon", mesh: carbine },
 ];
 const scheme = { white: "#E8EAEE", blue: "#2F6FD0", frame: "#22303F", visorGlow: "#5CFF7A", conduitGlow: "#FF8A1F", bladeGlow: "#4FC3FF" };
 
 const markers: NodeData[] = [
-  { name: "Mount_Gun", translation: [1.2, 2.4, -1.65] },
+  // The carbine under the left forearm is the gun: shots leave its muzzle shroud.
+  { name: "Mount_Gun", translation: [-1.2, 2.2, -1.2] },
   { name: "Torso_Fx", translation: [0.3, 2.9, -0.42] },
   { name: "Arm_R_Fx", translation: ELBOW_R },
   { name: "Leg_L_Fx", translation: mirrorPoint(KNEE) },

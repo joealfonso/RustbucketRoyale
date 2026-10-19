@@ -5,7 +5,7 @@ import {
   NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
   takenWithE, itemUpgrade, upgradeItem, upgradeScale, applyTune, assignDeep, parseTunable, setNumberAt, TUNABLE_FILES, type TuningRaws, type UpgradeSet,
-  makeZonesFor, mechStatsFor, rosterIndex, abilityFor, type Roster, type AbilitySet, type AbilityStats, type PounceStats, type RamStats,
+  makeZonesFor, makeMuzzlesFor, mechStatsFor, rosterIndex, abilityFor, type Roster, type AbilitySet, type AbilityStats, type PounceStats, type RamStats,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
@@ -104,6 +104,7 @@ export class Room {
 
   private statsFor: (mech: number) => MechStats;
   private zonesFor: (mech: number) => ZoneSet;
+  private muzzlesFor: (mech: number) => readonly (readonly number[])[];
   private abilityFor: (mech: number) => AbilityStats | null;
 
   private tuningRaws: TuningRaws | null = null;
@@ -122,6 +123,7 @@ export class Room {
     // Made from this room's own copies, so tuning in the room reaches each mech's numbers.
     this.statsFor = mechStatsFor(config.mech, config.roster ?? null);
     this.zonesFor = makeZonesFor(config.zones, config.roster ?? null, config.kitHitboxes);
+    this.muzzlesFor = makeMuzzlesFor(config.roster ?? null, config.kitHitboxes);
     this.abilityFor = abilityFor(config.abilities, config.roster ?? null);
     this.random = config.random ?? Math.random;
     this.pickups = new Pickups(config.loot.maxPickups);
@@ -168,7 +170,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: this.newBot(), send: () => {}, mech, state: this.freshState(slot, mech),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -223,7 +225,7 @@ export class Room {
     const mech = this.dealtMech(id);
     const player: Player = {
       id, slot, bot: null, send, mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(),
-      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length),
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -638,16 +640,19 @@ export class Room {
     const weaponIndex = activeWeapon(player.loadout);
     const weapon = this.config.weapons.weapons[weaponIndex];
     if (!weapon || !player.gate.tryFire(player.steps * STEP, weapon.shotsPerSecond * upgradeScale(player.loadout, this.config.upgrades, "fireRate"))) return;
+    // A mech with two guns fires them in turn; every pellet of one pull leaves the same muzzle.
+    const muzzles = this.muzzlesFor(player.state.mech);
+    const muzzle = muzzles[player.shotsFired++ % muzzles.length]!;
     // A scattergun fires several pellets with one pull. Each is its own shot, with its own spread and its own hit.
-    for (let i = 0; i < weapon.pellets; i++) this.firePellet(player, input, weapon);
+    for (let i = 0; i < weapon.pellets; i++) this.firePellet(player, input, weapon, muzzle);
     this.makeNoise(player, "shot", player.state.x, player.state.z);
   }
 
-  private firePellet(player: Player, input: MechInput, weapon: WeaponStats): void {
+  private firePellet(player: Player, input: MechInput, weapon: WeaponStats, muzzle: readonly number[]): void {
     // The aim point is only a direction hint, so it cannot send a shot faster or from anywhere but the barrel.
     // A broken arm still fires, just nowhere near where it is pointed.
     const spread = player.hp[ZONE_ARMS]! <= 0 ? this.config.zones.brokenArmsSpreadMultiplier : 1;
-    computeShot(player.state, input.targetX, input.targetY, input.targetZ, weapon, this.random, this.shot, spread);
+    computeShot(player.state, input.targetX, input.targetY, input.targetZ, weapon, this.random, this.shot, spread, muzzle);
     const s = this.shot;
 
     // How far the shot goes: the nearest wall, unless a mech is in the way.

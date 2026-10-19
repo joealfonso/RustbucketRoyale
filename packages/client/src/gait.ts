@@ -19,24 +19,26 @@ export interface MechGait {
   tuck: number; // metres the feet pull up while in the air
   limp: number; // 0 to 1: how hard a damaged mech favours one leg
   turnStep: number; // metres of stepping for each radian turned on the spot, so turning shuffles the feet
+  stepPitch: number; // footfall sound: below 1 a heavier stomp, above 1 a lighter step
 }
 
 export interface GaitConfig {
   farMeters: number; // beyond this other mechs stand still: nobody can see their feet
   smoothing: number; // how quickly speed, direction and leaning follow the mech, per second
   stepLoudness: number; // footfall volume while walking
+  hearWalkMeters: number; // someone else walking is heard this close; running is heard as far as any sound
   runStepLoudness: number;
   dustSeconds: number; // how long a footfall's dust lasts
   dustMeters: number; // and how big it gets
   mechs: Record<string, MechGait>;
 }
 
-const GAIT_KEYS: (keyof MechGait)[] = ["walkStride", "runStride", "stance", "runStance", "stepHeight", "runStepHeight", "bob", "runBob", "sway", "lean", "dashLean", "tuck", "limp", "turnStep"];
+const GAIT_KEYS: (keyof MechGait)[] = ["walkStride", "runStride", "stance", "runStance", "stepHeight", "runStepHeight", "bob", "runBob", "sway", "lean", "dashLean", "tuck", "limp", "turnStep", "stepPitch"];
 
 // Fails loudly on a bad data file, like the rest of data/.
 export function parseGait(raw: unknown): GaitConfig {
   const d = raw as Record<string, unknown>;
-  for (const key of ["farMeters", "smoothing", "stepLoudness", "runStepLoudness", "dustSeconds", "dustMeters"]) {
+  for (const key of ["farMeters", "smoothing", "stepLoudness", "runStepLoudness", "hearWalkMeters", "dustSeconds", "dustMeters"]) {
     if (typeof d?.[key] !== "number" || !Number.isFinite(d[key])) throw new Error(`gait.json: "${key}" must be a number`);
   }
   const mechs = d.mechs as Record<string, Record<string, unknown>> | undefined;
