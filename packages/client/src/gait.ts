@@ -134,8 +134,11 @@ export function stepGait(s: GaitState, input: GaitInput, g: MechGait, sides: rea
 
   const run = clamp01((s.speed - input.walkSpeed) / Math.max(0.1, input.runSpeed - input.walkSpeed));
   s.loud = run;
-  // Sideways the stride shrinks and the cycle runs quicker, so steps get shorter without the planted feet skidding.
-  const stride = (g.walkStride + (g.runStride - g.walkStride) * run) * (1 - (1 - g.sideStride) * Math.abs(s.dirX));
+  // The cycle keeps the forward stride's pace in every direction, so stepping sideways is never quicker than walking.
+  // Sideways the feet only travel sideStride of it (legs cannot reach across the body), so planted feet slide a
+  // little; a quicker cycle would have kept them still, and read as frantic.
+  const stride = g.walkStride + (g.runStride - g.walkStride) * run;
+  const stepStride = stride * (1 - (1 - g.sideStride) * Math.abs(s.dirX));
   const lift = g.stepHeight + (g.runStepHeight - g.stepHeight) * run;
   const stance = g.stance + (g.runStance - g.stance) * run;
 
@@ -151,7 +154,7 @@ export function stepGait(s: GaitState, input: GaitInput, g: MechGait, sides: rea
   s.stepping += (stepWanted - s.stepping) * follow;
 
   // Each foot: planted and sliding back under the body, or swinging forward through the air.
-  const reach = (stride * stance) / 2;
+  const reach = (stepStride * stance) / 2;
   let planted = 0;
   for (let leg = 0; leg < sides.length; leg++) {
     const p = (s.phase + legOffset(sides[leg]!)) % 1;

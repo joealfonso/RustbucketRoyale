@@ -62,20 +62,20 @@ describe("gait", () => {
     expect(checked).toBeGreaterThan(5);
   });
 
-  it("steps sideways in short steps without the planted foot skidding", () => {
-    const g = createGait(2);
-    const sideways = (speed: number): GaitInput => ({ ...walking(0), vx: speed, vz: 0 });
-    for (let i = 0; i < 120; i++) stepGait(g, sideways(6.8), ironclad, sides, config.smoothing, DT);
-    let checked = 0, widest = 0;
-    for (let i = 0; i < 60; i++) {
-      const before = g.feet[0]!, downBefore = (g.planted & 1) !== 0;
-      stepGait(g, sideways(6.8), ironclad, sides, config.smoothing, DT);
-      widest = Math.max(widest, Math.abs(g.feet[0]!));
-      if (downBefore && (g.planted & 1) !== 0 && g.footfalls === 0) { expect(before - g.feet[0]!).toBeCloseTo(6.8 * DT, 3); checked++; }
-    }
-    expect(checked).toBeGreaterThan(3);
-    // Half the stride or less each way: a side-step is shorter than a step forward.
-    expect(widest).toBeLessThan((ironclad.walkStride * ironclad.stance) / 2 * ironclad.sideStride + 0.01);
+  it("steps sideways no quicker than forward, in shorter steps", () => {
+    const steps = (vx: number, vz: number) => {
+      const g = createGait(2);
+      let falls = 0, widest = 0;
+      for (let i = 0; i < 600; i++) {
+        stepGait(g, { ...walking(0), vx, vz }, ironclad, sides, config.smoothing, DT);
+        if (i > 120 && g.footfalls) falls++;
+        if (i > 120) widest = Math.max(widest, Math.abs(g.feet[0]!));
+      }
+      return { falls, widest };
+    };
+    const forward = steps(0, -6.8), sideways = steps(6.8, 0);
+    expect(sideways.falls).toBeLessThanOrEqual(forward.falls + 1);
+    expect(sideways.widest).toBeLessThan((ironclad.walkStride * ironclad.stance) / 2 * ironclad.sideStride + 0.01);
   });
 
   it("lands each foot in turn while walking, and stands still when stopped", () => {
