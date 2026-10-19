@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { freeze } from "../freeze";
 import type { PlayMap } from "../loadMap";
 import type { MapMeshes } from "../mapRenderer";
 import type { Toon } from "../toonMaterial";
@@ -47,6 +48,8 @@ export class EdgeBarrier {
       planBay(config, seedOf(map.seed, 200000 + r * 10000 + b), b * run.bayLength, run.bayLength, run.height, run.thickness)));
     this.buildFar();
     this.group.add(this.nearMeshes);
+    // The far quads are instances and the near models are built in place: nothing here moves.
+    freeze(this.group);
     scene.add(this.group);
   }
 
@@ -146,6 +149,7 @@ export class EdgeBarrier {
       const geometry = toGeometry(meshes);
       this.nearMeshes.add(new THREE.Mesh(geometry, this.toon.world(hex)), new THREE.Mesh(geometry, this.toon.shellOutline(hex)));
     }
+    freeze(this.nearMeshes);
   }
 
   dispose(): void {

@@ -5,7 +5,7 @@ import paletteJson from "../../../data/palette.json";
 import lookJson from "../../../data/look.json";
 import { parseMechStats } from "@rustbucket/shared";
 import { buildPlayMap, propConfig } from "./loadMap";
-import { PropView } from "./propView";
+import { PropView, drawnFar } from "./propView";
 import { PROP_MODELS } from "./props";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 
@@ -16,8 +16,28 @@ function setup() {
   return { map, view, camera };
 }
 
-// Instances drawn this frame, summed over every prop mesh.
-const drawn = (view: PropView) => view.group.children.reduce((n, m) => n + (m as THREE.InstancedMesh).count, 0);
+// Props drawn this frame (or only those drawn one way: "standing prop", "far prop"). The meshes of one way of drawing
+// a model share one instance buffer, so each buffer is counted once.
+function drawn(view: PropView, name?: string): number {
+  const counted = new Map<THREE.BufferAttribute, number>();
+  for (const m of view.group.children as THREE.InstancedMesh[]) if (!name || m.name === name) counted.set(m.instanceMatrix, m.count);
+  return [...counted.values()].reduce((a, b) => a + b, 0);
+}
+
+describe("far boxes", () => {
+  const near = 140 ** 2, far = 150 ** 2;
+
+  it("switches to the box past the far distance and back inside the near one", () => {
+    expect(drawnFar(false, 100 ** 2, near, far)).toBe(false);
+    expect(drawnFar(false, 151 ** 2, near, far)).toBe(true);
+    expect(drawnFar(true, 139 ** 2, near, far)).toBe(false);
+  });
+
+  it("keeps whatever it was between the two, so the boundary does not flicker", () => {
+    expect(drawnFar(false, 145 ** 2, near, far)).toBe(false);
+    expect(drawnFar(true, 145 ** 2, near, far)).toBe(true);
+  });
+});
 
 describe("prop view", () => {
   it("draws only the props in front of the camera", () => {
@@ -33,6 +53,26 @@ describe("prop view", () => {
     expect(map.props.length).toBeGreaterThan(100);
     expect(sideways).toBeGreaterThan(0);
     expect(sideways).toBeLessThan(fromAbove);
+  });
+
+  it("draws near props as models and far ones as boxes", () => {
+    const { view, camera } = setup();
+    // Low over the middle with the view cut off at 100 m: everything drawn is near.
+    camera.far = 100;
+    camera.updateProjectionMatrix();
+    camera.position.set(0, 3, 0);
+    camera.lookAt(10, 3, 0);
+    view.cull(camera);
+    expect(drawn(view, "standing prop")).toBeGreaterThan(0);
+    expect(drawn(view, "far prop")).toBe(0);
+    // High above the map: everything is far.
+    camera.far = 3000;
+    camera.updateProjectionMatrix();
+    camera.position.set(0, 600, 0);
+    camera.lookAt(0, 0, 0);
+    view.cull(camera);
+    expect(drawn(view, "standing prop")).toBe(0);
+    expect(drawn(view, "far prop")).toBeGreaterThan(0);
   });
 
   it("shows a broken prop's debris in its place", () => {

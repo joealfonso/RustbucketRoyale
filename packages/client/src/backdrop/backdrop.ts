@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { toGeometry } from "../dressing/dressing";
 import { box, type MeshData } from "../dressing/shapes";
+import { freeze } from "../freeze";
 import type { Toon } from "../toonMaterial";
 import { backdropLayout, type BackdropConfig } from "./layout";
 import { backdropPieces } from "./shapes";
@@ -29,6 +30,7 @@ export class Backdrop {
     const out = config.apron.outMeters, far = edge + out, mid = edge + out / 2;
     const slabs = [box([0, -0.5, -mid], [far * 2, 1, out]), box([0, -0.5, mid], [far * 2, 1, out]), box([-mid, -0.5, 0], [out, 1, edge * 2]), box([mid, -0.5, 0], [out, 1, edge * 2])];
     this.group.add(new THREE.Mesh(toGeometry(slabs), toon.ground(config.apron.paint)));
+    freeze(this.group);
     scene.add(this.group);
   }
 

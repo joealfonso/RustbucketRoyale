@@ -11,6 +11,7 @@ import groundJson from "../../../../data/ground.json";
 import { ContactShadows, parseShadowLook } from "../contactShadows";
 import { toGeometry } from "../dressing/dressing";
 import { box } from "../dressing/shapes";
+import { freeze } from "../freeze";
 import { parseGait, type GaitInput } from "../gait";
 import { loadRoster, parseKits } from "../mechKit";
 import { createMechModel, type MechModel } from "../mechModel";
@@ -118,10 +119,10 @@ export class Hangar {
       const paint = key === "light" ? c.hexGrid.color : key === "engineer" ? c.engineers.paint : c.paints[key]!;
       const geometry = toGeometry([mesh]);
       if (key === "lamp" || key === "light") {
-        this.scene.add(new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: this.toon.color(paint), fog: false })));
+        this.scene.add(freeze(new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: this.toon.color(paint), fog: false }))));
         continue;
       }
-      this.scene.add(new THREE.Mesh(geometry, this.toon.material(paint)), new THREE.Mesh(geometry, this.toon.shellOutline(paint)));
+      this.scene.add(freeze(new THREE.Mesh(geometry, this.toon.material(paint))), freeze(new THREE.Mesh(geometry, this.toon.shellOutline(paint))));
     }
   }
 
@@ -143,12 +144,12 @@ export class Hangar {
       new THREE.MeshBasicMaterial({ color: this.toon.color(b.panel), transparent: true, opacity: b.panelOpacity, depthWrite: false, fog: false }),
     );
     pane.position.set((markX - decals.markSize * 0.6 + b.center[0] + width / 2 + 0.4) / 2, b.center[1], b.center[2] - 0.02);
-    this.scene.add(pane, mark, brand);
+    this.scene.add(freeze(pane), freeze(mark), freeze(brand));
     // Painted on the deck, read from where you stand.
     const onFloor = (mesh: THREE.Mesh, x: number, z: number) => {
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.set(x, 0.015, z);
-      this.scene.add(mesh);
+      this.scene.add(freeze(mesh));
     };
     bayCentres(this.config).forEach((bay, i) => {
       const number = textDecal(this.toon, String(i + 1).padStart(2, "0"), decals.font, decals.bayNumber.height, decals.bayNumber.color);
@@ -163,7 +164,7 @@ export class Hangar {
     floorMark.rotation.x = -Math.PI / 2;
     floorMark.scale.z = 0.2; // the raised wall plate, flattened to paint
     floorMark.position.set(label.position.x - labelWidth / 2 - decals.floorMark.size * 0.7, 0.012, labelZ + decals.floorMark.size / 2);
-    this.scene.add(floorMark);
+    this.scene.add(freeze(floorMark));
   }
 
   private async loadMechs(): Promise<void> {

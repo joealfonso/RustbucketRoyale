@@ -1,9 +1,36 @@
 import * as THREE from "three";
+import { freeze } from "./freeze";
 import type { PropConfig } from "@rustbucket/shared";
+import propsJson from "../../../data/props.json";
 import { toGeometry } from "./dressing/dressing";
 import { seedOf, type DressPiece } from "./dressing/kinds";
 import type { PlayMap } from "./loadMap";
+import { standIn } from "./props/standIn";
 import type { Toon, ToonInstances } from "./toonMaterial";
+
+// Past `beyondMeters` from the camera a standing prop is drawn as its plain stand-in box (props/standIn.ts), and it
+// turns back into its model only once nearer than `beyondMeters - hysteresisMeters`, so a prop at the boundary does
+// not flicker between the two as the camera bobs. From data/props.json; a very large distance turns the boxes off.
+export interface FarBoxes {
+  beyondMeters: number;
+  hysteresisMeters: number;
+}
+
+export function parseFarBoxes(raw: unknown): FarBoxes {
+  const f = raw as FarBoxes | undefined;
+  if (typeof f?.beyondMeters !== "number" || typeof f.hysteresisMeters !== "number" || f.hysteresisMeters < 0 || f.hysteresisMeters > f.beyondMeters) {
+    throw new Error("props.json: farBoxes needs beyondMeters and hysteresisMeters between 0 and beyondMeters");
+  }
+  return f;
+}
+
+const farBoxes = parseFarBoxes((propsJson as { farBoxes?: unknown }).farBoxes);
+
+// Whether a standing prop is drawn as its far box, given whether it was last frame and its squared distance from the
+// camera. Squared distances keep a square root per prop out of the frame loop.
+export function drawnFar(wasFar: boolean, distanceSq: number, nearSq: number, farSq: number): boolean {
+  return wasFar ? distanceSq > nearSq : distanceSq > farSq;
+}
 
 // A prop type's model, built once: what stands there, and the debris left when it breaks (see props/).
 export type PropModelBuilder = (size: [number, number, number], seed: number) => { intact: DressPiece[]; destroyed: DressPiece[] };
@@ -16,8 +43,9 @@ const one = new THREE.Vector3(1, 1, 1);
 const seen = new THREE.Frustum();
 const viewProjection = new THREE.Matrix4();
 const ball = new THREE.Sphere();
+const eye = new THREE.Vector3();
 
-// The instanced meshes of one state (standing or broken) of one prop type, sharing one instance buffer.
+// The instanced meshes of one way of drawing (standing, broken or far) one prop type, sharing one instance buffer.
 interface Packed {
   meshes: THREE.InstancedMesh[];
   buffer: THREE.InstancedBufferAttribute;
@@ -26,21 +54,25 @@ interface Packed {
 }
 
 // One prop type's model drawn many times: one instanced mesh (and outline) per paint, for the standing props and
-// again for their debris. Each frame only the props inside the camera's view are packed into the instance buffers:
-// on a large map that is about a quarter of the five thousand or so, and drawing all of them every frame was half the
-// GPU's work (docs/PERF.md). The pieces of one model share one buffer, so a frame uploads it once.
+// again for their debris, plus one box (and outline) standing in for the far ones. Each frame only the props inside
+// the camera's view are packed into the instance buffers: on a large map that is about a quarter of the five thousand
+// or so, and drawing all of them every frame was half the GPU's work (docs/PERF.md). The pieces of one model share
+// one buffer, so a frame uploads it once.
 class PropInstances {
   readonly meshes: THREE.InstancedMesh[] = [];
   private standing: Packed;
   private broken: Packed;
+  private far: Packed;
   private matrices: Float32Array; // every prop's placement, 16 numbers each
   private isBroken: Uint8Array;
+  private isFar: Uint8Array;
   private reach = 0; // how far any piece, standing or broken, goes from its prop's origin
 
   constructor(toon: Toon, intact: DressPiece[], destroyed: DressPiece[], private count: number) {
     this.matrices = new Float32Array(count * 16);
     this.isBroken = new Uint8Array(count);
-    const make = (pieces: DressPiece[]): Packed => {
+    this.isFar = new Uint8Array(count);
+    const make = (pieces: DressPiece[], name: string): Packed => {
       const buffer = new THREE.InstancedBufferAttribute(new Float32Array(count * 16), 16);
       const meshes: THREE.InstancedMesh[] = [];
       for (const p of pieces) {
@@ -52,14 +84,16 @@ class PropInstances {
           mesh.instanceMatrix = buffer;
           mesh.frustumCulled = false; // culled per prop below; three's one sphere round all of them never culls
           mesh.count = 0;
+          mesh.name = name;
           meshes.push(mesh);
           this.meshes.push(mesh);
         }
       }
       return { meshes, buffer, shown: new Int32Array(count).fill(-1), changed: false };
     };
-    this.standing = make(intact);
-    this.broken = make(destroyed);
+    this.standing = make(intact, "standing prop");
+    this.broken = make(destroyed, "broken prop");
+    this.far = make([standIn(intact)], "far prop");
     // Room for the outlines, pushed out along their normals by the outline width (a few centimetres).
     this.reach += 0.5;
   }
@@ -73,19 +107,26 @@ class PropInstances {
     this.isBroken[i] = 1;
   }
 
-  // Packs the props inside `view` into the buffers, standing or broken.
-  show(view: THREE.Frustum): void {
-    let standing = 0, broken = 0;
+  // Packs the props inside `view` into the buffers: broken, standing near `from`, or standing far from it. The far
+  // test runs for props out of view too, so one turning into view already has the right look.
+  show(view: THREE.Frustum, from: THREE.Vector3, nearSq: number, farSq: number): void {
+    let standing = 0, broken = 0, far = 0;
     for (let i = 0; i < this.count; i++) {
       const m = i * 16;
-      ball.center.set(this.matrices[m + 12]!, this.matrices[m + 13]!, this.matrices[m + 14]!);
+      const x = this.matrices[m + 12]!, y = this.matrices[m + 13]!, z = this.matrices[m + 14]!;
+      const dx = x - from.x, dy = y - from.y, dz = z - from.z;
+      const isFar = drawnFar(this.isFar[i] === 1, dx * dx + dy * dy + dz * dz, nearSq, farSq);
+      this.isFar[i] = isFar ? 1 : 0;
+      ball.center.set(x, y, z);
       ball.radius = this.reach;
       if (!view.intersectsSphere(ball)) continue;
       if (this.isBroken[i]) broken = this.put(this.broken, broken, i);
+      else if (isFar) far = this.put(this.far, far, i);
       else standing = this.put(this.standing, standing, i);
     }
     this.upload(this.standing, standing);
     this.upload(this.broken, broken);
+    this.upload(this.far, far);
   }
 
   // Puts prop `i` in `slot`, copying its matrix only if another prop sat there last time.
@@ -118,7 +159,8 @@ class PropInstances {
 
 // The breakable props. A type with a model in props/ is drawn as that model, turned a quarter or half turn by its id
 // so a field of crates is not all alike (never more, so it always stays inside its collision box), and breaks into
-// debris that stays where it stood. A type without a model is a plain toon box that disappears.
+// debris that stays where it stood. Far away a standing one is a plain box in its main colour (see FarBoxes); debris
+// stays debris at any distance. A type without a model is a plain toon box that disappears.
 // Art hook: a real model per type replaces its builder in props/.
 export class PropView {
   readonly group = new THREE.Group();
@@ -126,7 +168,12 @@ export class PropView {
   private models: PropInstances[] = [];
   private boxes: ToonInstances[] = [];
 
-  constructor(map: PlayMap, config: PropConfig, toon: Toon, builders: Record<string, PropModelBuilder> = {}) {
+  private nearSq: number;
+  private farSq: number;
+
+  constructor(map: PlayMap, config: PropConfig, toon: Toon, builders: Record<string, PropModelBuilder> = {}, far: FarBoxes = farBoxes) {
+    this.farSq = far.beyondMeters ** 2;
+    this.nearSq = (far.beyondMeters - far.hysteresisMeters) ** 2;
     const byType = config.types.map(() => [] as number[]);
     for (const p of map.props) byType[p.type]!.push(p.id);
     byType.forEach((ids, type) => {
@@ -158,13 +205,16 @@ export class PropView {
       boxes.addTo(this.group);
       this.boxes.push(boxes);
     });
+    // Instances move, the meshes never do: no matrix work per frame for the whole group (freeze.ts).
+    freeze(this.group);
   }
 
   // Call each frame before drawing, once the camera has moved.
   cull(camera: THREE.Camera): void {
     camera.updateMatrixWorld();
     seen.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
-    for (const m of this.models) m.show(seen);
+    eye.setFromMatrixPosition(camera.matrixWorld);
+    for (const m of this.models) m.show(seen, eye, this.nearSq, this.farSq);
   }
 
   destroy(id: number): void {

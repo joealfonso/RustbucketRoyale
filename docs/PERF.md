@@ -240,9 +240,9 @@ Medium seed 77 failed the soak at 67 kbps before and passes at 61 after. A full 
 1. Serve `.glb` compressed, or quantise the mech models. The four roster models are 900 kB of the 1.2 MB first load when the host does not compress them (many do not for `model/gltf-binary`): brotli makes them 86 kB, gzip 156 kB. A host setting, no code. Failing that, `KHR_mesh_quantization` in the mech build scripts halves them raw with no loader change; meshopt or Draco would need a decoder. [deploy, then `scripts/mechs/`]
 2. Generate maps off the main thread on the server. A large map takes about 160 ms and stalls every room in the process at each match start: a worker thread, or generating the next map during the results screen in a worker. [server, `Room.beginCountdown`]
 3. Cheaper route searches for large rooms (one route field to the ring centre per ring stage, or a coarse grid for long routes): searches are 80% of a large room's tick, the limit on large rooms per process. [server, `Pathfinder.ts`, `Bot.ts`] Done, see "Cheaper route searches" below.
-4. Props past about 150 m drawn as plain boxes or not at all: even culled, a view across the map still sends 2.3 to 2.9M triangles, nearly all distant props a few pixels tall. Changes the look slightly far away, so it needs Joseph's eye. [`propView.ts`]
-5. `matrixAutoUpdate = false` on everything that never moves (map, dressing, props, backdrop, wall): `updateMatrixWorld` is the top JavaScript cost in a fight. Small, safe. [`main.ts` and the builders]
-6. Merge each remote mech's leg pieces per paint: a fight is 150 to 400 draw calls, mostly mech parts and their outlines. [`mechModel.ts`, `legRig.ts`]
+4. Props past about 150 m drawn as plain boxes or not at all: even culled, a view across the map still sends 2.3 to 2.9M triangles, nearly all distant props a few pixels tall. Changes the look slightly far away, so it needs Joseph's eye. [`propView.ts`] Done, see "Far props drawn as boxes" below.
+5. `matrixAutoUpdate = false` on everything that never moves (map, dressing, props, backdrop, wall): `updateMatrixWorld` is the top JavaScript cost in a fight. Small, safe. [`main.ts` and the builders] Done, but the premise was wrong: see "Static objects frozen" below.
+6. Merge each remote mech's leg pieces per paint: a fight is 150 to 400 draw calls, mostly mech parts and their outlines. [`mechModel.ts`, `legRig.ts`] Done, see "Mech parts merged" below.
 7. Load lil-gui and the debug panel on the first F1: 19 kB (6 kB gz) off the start. Small gain. [`main.ts`, `debugPanel.ts`]
 8. On the developer's disk only: `Library/` and `Logs/` in the repo folder are the Unity prototype's editor caches, 1.3 GB, ignored by git. Safe to delete when not working on the `unity-prototype` branch. [Joseph]
 
@@ -312,3 +312,55 @@ A new room's lobby map is now built on the map workers too. `RoomManager` takes 
 | medium | 10 | workers | 4.1 | 2.2 | 3.0 | 167 |
 
 `npx tsx scripts/load-test.ts large 10`, worst late tick over the step while rooms were made and started: 357 and 189 ms before, 8 and 25 ms after; tick mean and 99th percentile unchanged (1.27 / 3.07 to 3.31 before, 1.14 to 1.23 / 2.17 to 2.54 after). A new large room now takes a few tenths of a second longer to welcome its first player, since its map waits behind any other builds in the pool; nobody else pays for it.
+
+### Far props drawn as boxes (2026-10-19, recommendation 4 of the performance pass)
+A standing crate, junk pile or barrel more than 150 m from the camera is drawn as one plain toon box round its model, with an outline, in the paint seen most from its sides and top (`props/standIn.ts`: crate rust orange, junk deep rust, barrel spark yellow). It turns back into its model inside 140 m, so a prop at the boundary does not flicker (`farBoxes` in `data/props.json`). Debris stays debris at any distance. The far test is a squared distance per prop in the loop that already culls them, so nothing is allocated per frame; each prop type adds two draw calls when any of its props are far.
+
+Same method as the pass above (production build, `vite preview`, headless Chrome 1600 x 900, vsync and frame cap off), offline large tier, before and after builds alternated, two runs each. Spawn is the game's own view at spawn; overview (`&overview`) looks down on the whole map from above, the worst case. The laptop was busy with other agents, so frame times vary a lot between runs (seed 7 at spawn, unchanged by this, measured 1.8 to 4.0 ms across both builds); triangles and draw calls are exact.
+
+| View | Triangles before / after | Draw calls before / after | Uncapped ms per frame before | After |
+| :- | :- | :- | :- | :- |
+| seed 7, spawn | 0.62M / 0.62M | 137 / 137 | 1.8 to 3.9 | 3.6 to 4.0 |
+| seed 11, spawn | 2.91M / 0.69M | 129 / 135 | 3.9 to 5.8 | 3.4 to 3.9 |
+| seed 23, spawn | 2.71M / 0.65M | 129 / 135 | 4.0 to 5.3 | 3.6 to 4.0 |
+| seed 7, overview | 4.85M / 0.67M | 129 / 113 | 4.3 to 7.4 | 3.7 to 4.1 |
+| seed 11, overview | 4.89M / 0.73M | 129 / 113 | 5.6 to 7.2 | 4.2 to 4.3 |
+| seed 23, overview | 4.80M / 0.69M | 129 / 113 | 2.2 to 7.4 | 4.0 |
+
+Seed 7's spawn view sees no prop past 150 m, so it is unchanged. A view across the map now sends about a quarter of the triangles, and the overview a seventh; the frame time is close to what the rest of the scene costs. Screenshots of the same views before and after: seed 7 identical, seeds 11 and 23 differ in 500 to 800 pixels, all along the horizon (far crates lose their white marking and barrels their black bands, and read as orange and yellow blocks under the haze).
+
+### Static objects frozen (2026-10-19, recommendation 5 of the performance pass)
+Everything placed once and never moved now has `matrixAutoUpdate = false` (`freeze.ts`): the map's box meshes, the dressing (frozen again after each chunk rebuild), the edge wall (far quads and the near models after each rebuild), the backdrop, the contact shadow meshes, the sky, the effect pools whose instances move but whose mesh never does (sprites, cards, debris), and the title screen's hall, gantry frames and painted decals. Not frozen: mechs, projectiles, grenades, pickups, the ring wall, explosion light, the scene lights (the key light is re-aimed per light preset), the camera, and the props (`propView.ts`, owned elsewhere at the time; one `freeze(this.group)` at the end of its constructor would do it). `matrixWorldAutoUpdate = false` on a root was not used: in three r186 it only skips that node's own world matrix and still walks every child, so it saves nothing over the above.
+
+What the scene holds (headless Chrome, production build): a busy online arena (`?create&tier=arena&bots=7`) is about 1,500 objects, of which the eight mechs are about 1,300 (143 to 189 parts each); offline large (seed 7, no bots) is 293. Only 88 of them are static, because the world was already merged into a few meshes per paint. So the top `updateMatrixWorld` cost in a fight is the mech parts, not the world.
+
+`scene.updateMatrixWorld()` timed in the page, best of 15 rounds of 500 calls, with the static objects frozen and unfrozen alternately in the same page so the busy laptop affects both alike, microseconds per call:
+
+| Scene | Nothing frozen | Frozen as shipped | Props frozen too |
+| :- | :- | :- | :- |
+| offline large, seed 7 (two runs) | 59.0, 57.0 | 52.2, 51.8 | 48.0, 48.8 |
+| online arena fight (three runs) | 186, 345, 79 | 180, 337, 78 | 192, 334, 77 |
+
+About 10% of a small cost on large (6 microseconds a frame, 10 with the props), 2 to 3% in a fight. The arena's absolute numbers swing with what the mechs are doing and the laptop's load. In CPU profiles (8 s, 100 microsecond sampling, alternating builds, two runs each) `updateMatrixWorld` was 0.14 to 0.33 ms a frame in the arena and 0.04 to 0.10 on large, before and after alike, and F1 work median 0.6 to 3.4 ms either way: the change is smaller than the noise. Screenshots of offline large seed 7 at spawn and medium seed 11 overview are byte for byte identical before and after; the title screen, the style test and an arena match into spectating look the same. A scratch check walked and jumped across a large map (dressing and edge rebuilds) and found every static object frozen with its world matrix right after each rebuild.
+
+The real gain is in the mechs: about 160 parts each, every one recomputed every frame. That is recommendation 6 (merging leg pieces), plus fewer separate parts in the kits.
+
+### Mech parts merged (2026-10-19, recommendation 6 of the performance pass)
+Method. Per mech: the meshes drawn at the nearest level of detail, counted in Node from the real roster models (every fill and every outline). In a fight: the online arena with 7 bots (`?create&tier=arena&bots=7`, dev client, game server on 8080), headless Chrome over CDP at 1600 x 900, WebGL draw calls counted every frame for 20 s starting 8 s into the match, and mech draw calls counted as the meshes under a mech's level-of-detail objects that three actually drew after culling (`onBeforeRender`). Four runs each way. Other agents were changing props and static objects in the same folder at the time, so whole-frame totals move for reasons of their own; the mech numbers do not.
+
+| Mech | Draw calls before, whole / arms and legs broken | After | Triangles (unchanged) |
+| :- | :- | :- | :- |
+| Ironclad | 60 / 12 | 26 / 6 | 8,240 |
+| Stiletto | 76 / 18 | 33 / 4 | 7,144 |
+| Cataclysm | 80 / 12 | 45 / 4 | 11,712 |
+| Arbiter | 72 / 22 | 31 / 4 | 6,348 |
+
+| Arena, per run | Before | After |
+| :- | :- | :- |
+| Draw calls per mech on screen, mean | 46, 59, 62, 64 | 30, 24, 26, 31 |
+| Mech draw calls per frame, mean (mechs on screen, mean) | 272 (6), 258 (4), 182 (3), 236 (4) | 139 (4), 84 (4), 195 (7), 189 (6) |
+| All draw calls per frame, median | 368, 358, 271, 228 | 247, 171, 265, 288 |
+
+Parts that move together (the body, or one leg piece on its joint), share a zone and show in the same damage states are merged when a kit is first used, by kind of material, with each part's colour on its corners (`mechMerge.ts`). It costs about 1 ms once per kit and 0.2 to 0.3 ms per mech after that (Node); the merged geometry is shared by every mech of a kit, plus 12 bytes of colour per corner. It also halves the objects three updates every frame for each mech (`updateMatrixWorld`, the frozen-objects section above): 143 to 189 before (Ironclad, Stiletto, Arbiter, Cataclysm), 65 to 102 after. Look: on `style.html` the four roster close-ups (key 6) are identical to the pixel before and after (one pixel of 1.44 million differs on Stiletto); the roster (key 4) and the stand-in's four damage states (key D, at 10 and 50 m) differ only where smoke, sparks and the drones move, by as much as two runs of the old code differ from each other. The title screen hangar and walking (key W) look as before.
+
+What is left: Cataclysm's 45 is mostly its twelve leg pieces at three calls each (rusting paint, bare frame, outline). Letting one material carry rusting and non-rusting paint (a rust flag per corner) would make that two, about 12 fewer for Cataclysm and 6 for the others; it changes the toon shader, so not done here.

@@ -51,6 +51,10 @@
     "damage": 70,
     "delaySeconds": 0.06
   },
+  "farBoxes": {
+    "beyondMeters": 150,
+    "hysteresisMeters": 10
+  },
   "density": {
     "minPerSquareKm": 400,
     "maxPerSquareKm": 2600

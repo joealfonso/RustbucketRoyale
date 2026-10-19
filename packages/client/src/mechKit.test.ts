@@ -46,12 +46,13 @@ describe("mech kit", () => {
     const toon = new Toon(parseLook(lookJson), parsePalette(paletteJson));
     const max = [60, 60, 100];
     const model = createMechModel("#ffffff", max, toon, "scrapSteel", kit);
-    const shown = (zone: number) => model.kitParts.filter((p) => p.zone === zone).map((p) => p.states.findIndex((s) => s?.[0]?.visible));
-    expect(shown(0)).toEqual([0, 0]);
+    // The zone's pieces in view are exactly those of one state (bit 1 intact, 2 damaged, 4 broken).
+    const shows = (zone: number, state: number) => model.kitPieces.filter((p) => p.zone === zone).every((p) => p.object.visible === ((p.shownIn & (1 << state)) !== 0));
+    expect(shows(0, 0)).toBe(true);
     setMechDamage(model, [10, 0, 100], false);
-    expect(shown(0)).toEqual([1, 1]); // legs damaged
-    expect(shown(1)).toEqual([2, 2]); // arms broken
-    expect(shown(2)).toEqual([0, 0, 0]); // torso, jets and sensor whole
+    expect(shows(0, 1)).toBe(true); // legs damaged
+    expect(shows(1, 2)).toBe(true); // arms broken
+    expect(shows(2, 0)).toBe(true); // torso, jets and sensor whole
     expect(model.gunParts.every((g) => !g.visible)).toBe(true); // no arm, no gun
     expect(model.fxAnchors.every((a) => a instanceof THREE.Object3D)).toBe(true);
   });
@@ -84,11 +85,11 @@ describe("mech kit", () => {
     }));
     const toon = new Toon(parseLook(lookJson), parsePalette(paletteJson));
     const model = createMechModel("#ffffff", [60, 60, 100], toon, "scrapSteel", { id: "test", parts, lodDistances: kits.lodDistances, legs: [] });
-    const legsShown = () => model.kitParts.filter((p) => p.zone === 0).map((p) => p.states[0]![0]!.visible);
+    const legsShown = () => model.kitPieces.filter((p) => p.zone === 0).map((p) => p.object.visible);
     setMechDamage(model, [10, 60, 100], false);
-    expect(legsShown()).toEqual([true, true]); // damaged: still there
+    expect(legsShown()).toEqual([true]); // damaged: still there (both legs are one piece, intact and damaged)
     setMechDamage(model, [0, 60, 100], false);
-    expect(legsShown()).toEqual([false, false]); // broken: gone, the mech crawls
+    expect(legsShown()).toEqual([false]); // broken: gone, the mech crawls
   });
 });
 

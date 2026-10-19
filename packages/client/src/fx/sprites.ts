@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { freeze } from "../freeze";
 import { flickerFrame, flipbookFrame, SlotRing, stepped } from "./flipbook";
 import { CELL, COLUMNS, paintSpriteSheet, ROWS } from "./spriteArt";
 
@@ -153,6 +154,7 @@ export class SpritePool {
     if (spriteLook.layer === "ground") { material.polygonOffset = true; material.polygonOffsetFactor = -2; material.polygonOffsetUnits = -4; }
     this.mesh = new THREE.Mesh(this.geometry, material);
     this.mesh.frustumCulled = false; // the sprites are placed in the shader, so the quad's own bounds mean nothing
+    freeze(this.mesh); // for the same reason the mesh itself never moves
     scene.add(this.mesh);
   }
 

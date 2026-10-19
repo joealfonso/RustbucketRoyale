@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { freeze } from "../freeze";
 
 // Flat painted cards for effects that need a crisp drawn shape rather than a sprite from the sheet: muzzle stars,
 // tracer streaks, hit flashes. Each shape is one small mesh with its toon colour bands baked into the vertices (hard
@@ -81,6 +82,7 @@ export class CardBatch {
     this.mesh.count = 0;
     this.mesh.visible = false;
     this.m = this.mesh.instanceMatrix.array as Float32Array;
+    freeze(this.mesh); // the cards are instances; the mesh holding them never moves
     scene.add(this.mesh);
   }
 

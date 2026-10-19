@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { freeze } from "./freeze";
 import type { PlayMap } from "./loadMap";
 import type { Toon, ToonInstances } from "./toonMaterial";
 
@@ -28,6 +29,8 @@ export class MapMeshes {
       boxes.addTo(this.group);
       this.all.push(boxes);
     }
+    // Hiding a box changes its instance, never the mesh, so the meshes themselves never move.
+    freeze(this.group);
     scene.add(this.group);
   }
 

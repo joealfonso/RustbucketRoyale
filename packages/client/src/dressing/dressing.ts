@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { freeze } from "../freeze";
 import { addOutlineNormals } from "../outlineNormals";
 import type { PlayMap } from "../loadMap";
 import type { MapMeshes } from "../mapRenderer";
@@ -58,6 +59,7 @@ export class Dressing {
         }
       }
     });
+    freeze(this.group);
     scene.add(this.group);
   }
 
@@ -180,6 +182,8 @@ export class Dressing {
       const geometry = toGeometry(meshes);
       this.group.add(new THREE.Mesh(geometry, this.toon.world(hex)), new THREE.Mesh(geometry, this.toon.shellOutline(hex)));
     }
+    // A rebuild makes new meshes, which three would otherwise update every frame like anything else.
+    freeze(this.group);
   }
 
   dispose(): void {

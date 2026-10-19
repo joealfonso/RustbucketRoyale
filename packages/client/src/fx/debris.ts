@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { freeze } from "../freeze";
 import { addOutlineNormals } from "../outlineNormals";
 import type { Toon } from "../toonMaterial";
 import { SlotRing, stepped } from "./flipbook";
@@ -69,6 +70,7 @@ export class Debris {
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.count = 0;
       m.frustumCulled = false;
+      freeze(m); // the chunks are instances; the mesh holding them never moves
       scene.add(m);
     }
     for (let i = 0; i < capacity; i++) {

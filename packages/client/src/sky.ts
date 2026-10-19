@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { freeze } from "./freeze";
 import type { LightPreset } from "./lightPresets";
 
 // The sky (data/look.json, `sky`): one draw call behind everything. A gradient from the haze colour at the horizon to
@@ -130,6 +131,7 @@ export class Sky {
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -1000; // first, so everything else draws over it
+    freeze(this.mesh);
   }
 
   use(preset: LightPreset): void {

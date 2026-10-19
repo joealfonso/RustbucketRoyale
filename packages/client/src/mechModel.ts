@@ -4,6 +4,7 @@ import type { Toon } from "./toonMaterial";
 import type { LoadedKit } from "./mechKit";
 import { createGait, type GaitState } from "./gait";
 import { SEGMENTS_PER_LEG, segmentOf } from "./legRig";
+import { mergedPieces, type FillLook } from "./mechMerge";
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const materials = new Map<string, THREE.MeshStandardMaterial>();
@@ -42,13 +43,14 @@ export interface MechModel {
   repairing: boolean; // shown with welding sparks
   upgradeParts: THREE.Mesh[]; // one per upgrade, made the first time it is fitted, shown while fitted
   fxTimers: number[]; // per zone: seconds until the next spark, then the next puff of smoke. Last: welding sparks
-  // A mech built from a kit: each part's intact, damaged and broken versions (each with its levels of detail), and
-  // the point in each hit zone that sparks and smoke come from. Empty for the grey-box mech.
-  kitParts: { zone: number; states: (THREE.Object3D[] | null)[] }[]; // intact, damaged, broken; a missing one falls back
+  // A mech built from a kit: its parts merged into few pieces (mechMerge.ts), each with its levels of detail and the
+  // zone states it shows in (bit 1 intact, 2 damaged, 4 broken), and the point in each hit zone that sparks and smoke
+  // come from. Empty for the grey-box mech.
+  kitPieces: { zone: number; shownIn: number; object: THREE.LOD }[];
   fxAnchors: (THREE.Object3D | null)[];
   gunParts: THREE.Object3D[]; // hidden with the arms when they are broken
-  // A kit's painted materials beyond the one per zone: white body paint and the pilot's accent, each zone its own,
-  // so any part can carry either and still rust with its zone.
+  // A kit's painted materials beyond the one per zone: each zone's paint (its colours on the corners, so the base is
+  // white) and the pilot's accent, so every painted part rusts with its zone.
   paints: { zone: number; material: THREE.MeshToonMaterial; base: THREE.Color }[];
   glows: { material: THREE.MeshBasicMaterial; base: THREE.Color }[]; // sensors and energy accents, dark once the torso breaks
   // Walking (gait.ts, mechWalk.ts): one hip, knee and ankle joint per leg under the body, with the leg pieces hung
@@ -114,16 +116,23 @@ export function createMechModel(
   let hasModelledGun = false;
   const paints: MechModel["paints"] = [];
   const glows: MechModel["glows"] = [];
-  // One rusting material per zone and paint colour, made on first use.
-  const paintFor = (zone: number, color: string): THREE.MeshToonMaterial => {
-    const base = new THREE.Color(color);
-    const found = paints.find((p) => p.zone === zone && p.base.equals(base));
+  // One rusting material per zone for the merged paint, whose colours are on its corners, and one for the accent.
+  const paintFor = (zone: number, color: string, cornerColors: boolean): THREE.MeshToonMaterial => {
+    const found = paints.find((p) => p.zone === zone && p.material.vertexColors === cornerColors);
     if (found) return found.material;
     const material = toon!.ownMaterial(color, true);
-    paints.push({ zone, material, base });
+    material.vertexColors = cornerColors;
+    paints.push({ zone, material, base: new THREE.Color(color) });
     return material;
   };
-  const kitParts: MechModel["kitParts"] = [];
+  const glowFor = (color: string, cornerColors: boolean): THREE.MeshBasicMaterial => {
+    const found = glows.find((g) => g.material.vertexColors === cornerColors);
+    if (found) return found.material;
+    const material = new THREE.MeshBasicMaterial({ color, vertexColors: cornerColors });
+    glows.push({ material, base: new THREE.Color(color) });
+    return material;
+  };
+  const kitPieces: MechModel["kitPieces"] = [];
   const fxAnchors: MechModel["fxAnchors"] = [null, null, null];
   let gunMount: THREE.Vector3 | null = null;
   const legs: MechModel["legs"] = [];
@@ -153,45 +162,8 @@ export function createMechModel(
       const reach = Math.sqrt(Math.max(0, length * length - drop * drop)) * 0.97;
       legs.push({ side: j.side, hip, knee, ankle, restHip: j.hip.clone(), restKnee: j.knee.clone(), restAnkle: j.ankle.clone(), reach });
     }
-    // Each part's states are levels-of-detail objects; damage shows one state at a time.
     for (const p of kit.parts) {
       if (p.paint === "weapon") hasModelledGun = true;
-      const paintColor = p.color ? toon.color(p.color) : p.paint === "accent" ? toon.color(accent) : p.paint === "trim" ? toon.color(trimColor) : grey;
-      let mat: THREE.Material;
-      if (p.paint === "weapon") mat = gunMaterial;
-      else if (p.glow) {
-        const glow = new THREE.MeshBasicMaterial({ color: paintColor });
-        glows.push({ material: glow, base: new THREE.Color(paintColor) });
-        mat = glow;
-      } else if (p.rusts) mat = paintFor(p.zone, paintColor);
-      else mat = toon.material(paintColor);
-      const outlineColor = p.paint === "weapon" ? trimColor : paintColor;
-      const makeLod = (lods: THREE.BufferGeometry[], visible: boolean): THREE.LOD => {
-        const lod = new THREE.LOD();
-        lods.forEach((geometry, level) => {
-          const holder = new THREE.Group();
-          holder.add(new THREE.Mesh(geometry, mat), new THREE.Mesh(geometry, toon.shellOutline(outlineColor)));
-          lod.addLevel(holder, level === 0 ? 0 : kit.lodDistances[level - 1]!);
-        });
-        lod.visible = visible;
-        return lod;
-      };
-      const states = p.states.map((state, i) => {
-        if (!state) return null;
-        // A leg part is hung piece by piece on its joints, placed so it sits where it was modelled while at rest.
-        if (state.pieces && legs.length > 0) {
-          return state.pieces.map(({ piece, lods }) => {
-            const lod = makeLod(lods, i === 0);
-            lod.position.copy(segmentRest(piece)).negate();
-            segmentGroup(piece).add(lod);
-            return lod;
-          });
-        }
-        const lod = makeLod(state.lods, i === 0);
-        body.add(lod);
-        return [lod];
-      });
-      kitParts.push({ zone: p.zone, states });
       const intact = p.states[0]!; // the loader guarantees every part has its intact version
       if (intact.fx && !fxAnchors[p.zone]) {
         const anchor = new THREE.Object3D();
@@ -200,6 +172,31 @@ export function createMechModel(
         fxAnchors[p.zone] = anchor;
       }
       if (intact.mount) gunMount = intact.mount;
+    }
+    // The parts merged into pieces, each a levels-of-detail object; damage shows the pieces of one state at a time.
+    const accentColor = toon.color(accent);
+    const shared = cornerColored(toon);
+    const fillMaterial = (zone: number, look: FillLook, isAccent: boolean): THREE.Material => {
+      if (look === "weapon") return gunMaterial;
+      if (look === "glow") return glowFor(isAccent ? accentColor : "#ffffff", !isAccent);
+      if (look === "rust") return paintFor(zone, isAccent ? accentColor : "#ffffff", !isAccent);
+      return isAccent ? toon.material(accentColor) : shared.plain;
+    };
+    for (const piece of mergedPieces(kit, toon, bodyColor, trimColor)) {
+      const lod = new THREE.LOD();
+      piece.fills[0]!.lods.forEach((_, level) => {
+        const holder = new THREE.Group();
+        for (const f of piece.fills) if (f.lods[level]) holder.add(new THREE.Mesh(f.lods[level]!, fillMaterial(piece.zone, f.look, f.accent)));
+        for (const o of piece.outlines) if (o.lods[level]) holder.add(new THREE.Mesh(o.lods[level]!, o.accent ? toon.shellOutline(accentColor) : shared.shell));
+        lod.addLevel(holder, level === 0 ? 0 : kit.lodDistances[level - 1]!);
+      });
+      lod.visible = (piece.shownIn & 1) !== 0;
+      // A leg piece hangs on its joint, placed so it sits where it was modelled while at rest.
+      if (piece.segment >= 0 && legs.length > 0) {
+        lod.position.copy(segmentRest(piece.segment)).negate();
+        segmentGroup(piece.segment).add(lod);
+      } else body.add(lod);
+      kitPieces.push({ zone: piece.zone, shownIn: piece.shownIn, object: lod });
     }
   } else {
     part(2, [0, 2.4, 0], [1.8, 1.6, 1.2]);
@@ -249,9 +246,29 @@ export function createMechModel(
   return {
     group, body, legMeshes, zoneMaterials, toon, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
     hp: [...zoneMaxHp], dead: false, repairing: false, upgradeParts: [], fxTimers: [0, 0, 0, 0, 0, 0, 0],
-    kitParts, fxAnchors, gunParts, paints, glows,
+    kitPieces, fxAnchors, gunParts, paints, glows,
     legs, legSides: legs.map((l) => l.side), gait: legs.length > 0 ? createGait(legs.length) : null, gaitId: kit?.id ?? "", crawlDrop: 0, crawlTilt: 0,
   };
+}
+
+// The materials that take their colour from a merged piece's corners and are the same on every kit mech: plain paint
+// that never rusts, and the outline. Copies of the toon ones, so things drawn in white or outlined in it are untouched.
+const cornerColoredByToon = new WeakMap<Toon, { plain: THREE.MeshToonMaterial; shell: THREE.MeshBasicMaterial }>();
+function cornerColored(toon: Toon): { plain: THREE.MeshToonMaterial; shell: THREE.MeshBasicMaterial } {
+  let found = cornerColoredByToon.get(toon);
+  if (!found) {
+    const plain = toon.ownMaterial("#ffffff");
+    plain.vertexColors = true;
+    const source = toon.shellOutline("#ffffff");
+    const shell = source.clone();
+    shell.onBeforeCompile = source.onBeforeCompile; // clone() leaves behind the shader change that pushes the shell out
+    shell.customProgramCacheKey = source.customProgramCacheKey;
+    shell.color.setRGB(1, 1, 1);
+    shell.vertexColors = true;
+    found = { plain, shell };
+    cornerColoredByToon.set(toon, found);
+  }
+  return found;
 }
 
 // Damage you can read on the mech: parts darken as they take hits, a broken arm falls off, broken legs leave the
@@ -283,14 +300,13 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
   const armsBroken = hp[1]! <= 0;
   for (const arm of model.armMeshes) arm.visible = !armsBroken;
   for (const gun of model.gunParts) gun.visible = !armsBroken;
-  // A kit mech shows each part in its zone's state: intact, damaged, or broken.
-  for (const part of model.kitParts) {
-    const fraction = hp[part.zone]! / model.zoneMaxHp[part.zone]!;
-    let state = hp[part.zone]! <= 0 ? 2 : fraction < damagedBelow ? 1 : 0;
-    // No damaged version: the intact one stays, darkening, sparking and smoking. No broken version: the part is
-    // gone (an arm shot off; legs gone and the mech crawls on its belly).
-    if (state === 1 && !part.states[1]) state = 0;
-    part.states.forEach((objects, i) => { if (objects) for (const o of objects) o.visible = i === state; });
+  // A kit mech shows each part in its zone's state: intact, damaged, or broken. A part with no damaged version keeps
+  // its intact one, darkening, sparking and smoking; with no broken version it is gone (an arm shot off; legs gone
+  // and the mech crawls on its belly). Which pieces carry which states is worked out in mechMerge.ts.
+  for (const piece of model.kitPieces) {
+    const fraction = hp[piece.zone]! / model.zoneMaxHp[piece.zone]!;
+    const state = hp[piece.zone]! <= 0 ? 2 : fraction < damagedBelow ? 1 : 0;
+    piece.object.visible = (piece.shownIn & (1 << state)) !== 0;
   }
   // Crawling: the body drops onto stubs and tips forward, so a legless mech reads at a distance.
   const crawling = hp[0]! <= 0 && !dead;

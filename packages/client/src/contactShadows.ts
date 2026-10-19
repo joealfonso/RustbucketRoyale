@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Box, World } from "@rustbucket/shared";
+import { freeze } from "./freeze";
 
 // Soft dark patches on the ground under things, so crates, walls and mechs sit on the floor instead of floating
 // over it. Not real shadows: no light direction, just the darkening where an object meets the ground.
@@ -132,6 +133,8 @@ function shadowMesh(material: THREE.Material, count: number): { mesh: THREE.Inst
   const mesh = new THREE.InstancedMesh(geometry, material, count);
   // Drawn first among the see-through things, under dust, ghosts and the zone wall.
   mesh.renderOrder = -1;
+  // The patches are instances; the mesh holding them stays where it is, even for the ones that follow mechs.
+  freeze(mesh);
   return { mesh, shape };
 }
 
