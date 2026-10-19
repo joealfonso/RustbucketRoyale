@@ -8,10 +8,10 @@
   "hearWalkMeters": 30,
   "mechs": {
     "ironclad": {
-      "walkStride": 3.6,
-      "runStride": 5.2,
-      "stance": 0.3,
-      "runStance": 0.18,
+      "walkStride": 4.6,
+      "runStride": 6.4,
+      "stance": 0.4,
+      "runStance": 0.25,
       "stepHeight": 0.3,
       "runStepHeight": 0.55,
       "bob": 0.16,

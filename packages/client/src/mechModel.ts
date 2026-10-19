@@ -53,7 +53,7 @@ export interface MechModel {
   glows: { material: THREE.MeshBasicMaterial; base: THREE.Color }[]; // sensors and energy accents, dark once the torso breaks
   // Walking (gait.ts, mechWalk.ts): one hip, knee and ankle joint per leg under the body, with the leg pieces hung
   // on them, and where each joint sits at rest. Empty for a mech whose kit marks no leg joints.
-  legs: { side: string; hip: THREE.Group; knee: THREE.Group; ankle: THREE.Group; restHip: THREE.Vector3; restKnee: THREE.Vector3; restAnkle: THREE.Vector3 }[];
+  legs: { side: string; hip: THREE.Group; knee: THREE.Group; ankle: THREE.Group; restHip: THREE.Vector3; restKnee: THREE.Vector3; restAnkle: THREE.Vector3; reach: number }[];
   legSides: string[]; // each leg's side name, in the same order (L, R, or FL, FR, BL, BR)
   gait: GaitState | null;
   gaitId: string; // which mech's numbers in data/gait.json it walks with
@@ -146,7 +146,12 @@ export function createMechModel(
       hip.add(knee);
       knee.add(ankle);
       body.add(hip);
-      legs.push({ side: j.side, hip, knee, ankle, restHip: j.hip.clone(), restKnee: j.knee.clone(), restAnkle: j.ankle.clone() });
+      // How far forward or back of the hip this foot can reach on the ground, in the leg's side view: past it the
+      // foot slides on the ground instead of the straightened leg lifting it into the air.
+      const length = Math.hypot(j.knee.y - j.hip.y, j.knee.z - j.hip.z) + Math.hypot(j.ankle.y - j.knee.y, j.ankle.z - j.knee.z);
+      const drop = j.hip.y - j.ankle.y;
+      const reach = Math.sqrt(Math.max(0, length * length - drop * drop)) * 0.97;
+      legs.push({ side: j.side, hip, knee, ankle, restHip: j.hip.clone(), restKnee: j.knee.clone(), restAnkle: j.ankle.clone(), reach });
     }
     // Each part's states are levels-of-detail objects; damage shows one state at a time.
     for (const p of kit.parts) {

@@ -26,7 +26,10 @@ export function walkMech(model: MechModel, config: GaitConfig, input: GaitInput,
   for (let i = 0; i < model.legs.length; i++) {
     const leg = model.legs[i]!;
     const a = leg.restAnkle, h = leg.restHip, k = leg.restKnee;
-    const x = a.x + g.feet[i * 3]!, y = a.y + g.feet[i * 3 + 1]! - body.position.y, z = a.z + g.feet[i * 3 + 2]!;
+    // A stride longer than the leg (a heavy mech at speed) keeps the foot planted and sliding at the end of its
+    // reach rather than lifting it off the ground.
+    const z = clamp(a.z + g.feet[i * 3 + 2]!, h.z - leg.reach, h.z + leg.reach);
+    const x = a.x + g.feet[i * 3]!, y = a.y + g.feet[i * 3 + 1]! - body.position.y;
     const y1 = y * cp - z * sp, z1 = y * sp + z * cp;
     const x2 = x * cr - y1 * sr, y2 = x * sr + y1 * cr;
     // Sideways steps swing the whole leg out at the hip; the bend itself stays in the leg's own side view.
