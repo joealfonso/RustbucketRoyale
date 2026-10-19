@@ -6,7 +6,7 @@
 export type SoundName =
   | "shot" | "impact" | "explosion" | "smash" | "hitMarker" | "hurt"
   | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap" | "loot" | "repair"
-  | "ram" | "pounce" | "slam";
+  | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz";
 
 export interface AudioConfig {
   master: number;
@@ -145,6 +145,14 @@ export class Sound {
       case "pounce": this.burst(into, 0.12, "highpass", 3200, 0.8); this.clank(into, 420, 0.12, 0.4); return this.sweep(into, 600, 2800, 0.35);
       // Landing hard: a crack, steel ringing, grit flying and a deep thud.
       case "slam": this.click(into, 1); this.clank(into, 160, 0.4, 0.6); this.thump(into, 190, 38, 0.5, 1.2); return this.crunch(into, 0.36, "lowpass", 1500, 1.3);
+      // A mortar tube going off: the crack of the charge, the tube ringing, a hollow thoonk and a cough of grit.
+      case "mortar": this.click(into, 1); this.clank(into, 240, 0.35, 0.55); this.thump(into, 280, 55, 0.45, 1.2); return this.crunch(into, 0.4, "lowpass", 1400, 1.2, 0.004);
+      // A shell coming down: a whistle falling in pitch and swelling as it nears, over the rush of air.
+      case "shellIncoming": this.sweep(into, 3200, 1100, 0.6); return this.glide(into, 1900, 750, 0.6, "sine", 0.5, true);
+      // Decoys projected out: a soft, slightly out-of-tune shimmer rising, with a breath of air.
+      case "decoy": this.glide(into, 700, 1400, 0.45, "triangle", 0.25, true); this.glide(into, 712, 1428, 0.45, "triangle", 0.2, true); return this.sweep(into, 1800, 5000, 0.4);
+      // A decoy bursting: an electric crackle and a blip dropping away.
+      case "fizz": this.crunch(into, 0.22, "highpass", 3500, 0.9); this.burst(into, 0.08, "bandpass", 5200, 1.5); return this.glide(into, 1800, 300, 0.2, "square", 0.15);
       case "jets": return 0;
     }
   }
@@ -226,6 +234,28 @@ export class Sound {
     const env = ctx.createGain();
     env.gain.setValueAtTime(level, t);
     env.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    osc.connect(env).connect(into);
+    osc.start(t);
+    osc.stop(t + seconds + 0.02);
+    return seconds;
+  }
+
+  // A tone sliding from one pitch to another: a whistle or a blip. With `swell` it grows to full then cuts off at the
+  // end, like something arriving; otherwise it starts full and dies away.
+  private glide(into: AudioNode, from: number, to: number, seconds: number, type: OscillatorType, level: number, swell = false): number {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const osc = new OscillatorNode(ctx, { type, frequency: from });
+    osc.frequency.exponentialRampToValueAtTime(to, t + seconds);
+    const env = ctx.createGain();
+    if (swell) {
+      env.gain.setValueAtTime(0.0001, t);
+      env.gain.exponentialRampToValueAtTime(level, t + seconds * 0.9);
+      env.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    } else {
+      env.gain.setValueAtTime(level, t);
+      env.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    }
     osc.connect(env).connect(into);
     osc.start(t);
     osc.stop(t + seconds + 0.02);

@@ -44,7 +44,7 @@ describe("leg solver", () => {
 
 describe("gait", () => {
   const sides = ["L", "R"];
-  const walking = (speed: number): GaitInput => ({ vx: 0, vz: -speed, yaw: 0, grounded: true, dashing: false, limping: false, walkSpeed: 6.8, runSpeed: 13.6 });
+  const walking = (speed: number): GaitInput => ({ vx: 0, vz: -speed, yaw: 0, grounded: true, dashing: false, limping: false, braced: false, walkSpeed: 6.8, runSpeed: 13.6 });
 
   it("keeps a planted foot still on the ground while the body walks over it", () => {
     const g = createGait(2);
@@ -97,6 +97,24 @@ describe("gait", () => {
     expect(running).toBeLessThan(0);
     for (let i = 0; i < 30; i++) stepGait(g, { ...walking(13.6), dashing: true }, ironclad, sides, config.smoothing, DT);
     expect(g.pitch).toBeLessThan(running);
+  });
+
+  it("sinks the body and stops stepping while braced, then stands back up", () => {
+    const cataclysm = config.mechs.cataclysm!;
+    expect(cataclysm.braceDrop).toBeGreaterThan(0);
+    const g = createGait(2);
+    for (let i = 0; i < 120; i++) stepGait(g, walking(6.8), cataclysm, sides, config.smoothing, DT);
+    // The mech step stops a braced mech dead; turning to aim must not shuffle its feet either.
+    let landed = 0;
+    for (let i = 0; i < 90; i++) {
+      stepGait(g, { ...walking(0), yaw: i * 0.02, braced: true }, cataclysm, sides, config.smoothing, DT);
+      if (i > 30 && g.footfalls) landed++;
+    }
+    expect(landed).toBe(0);
+    expect(g.bob).toBeCloseTo(-cataclysm.braceDrop, 2);
+    expect(Math.max(...g.feet.map(Math.abs))).toBeLessThan(0.05);
+    for (let i = 0; i < 120; i++) stepGait(g, walking(0), cataclysm, sides, config.smoothing, DT);
+    expect(Math.abs(g.bob)).toBeLessThan(0.01);
   });
 
   it("has numbers for every roster mech", () => {

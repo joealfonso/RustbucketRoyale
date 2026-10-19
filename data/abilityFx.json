@@ -22,5 +22,28 @@
     "color": "sparkYellow",
     "shakeForce": 0.5,
     "shakeRadius": 15
+  },
+  "warning": {
+    "ringColor": "warningRed",
+    "opacity": 0.8,
+    "minOpacity": 0.25,
+    "pulsesPerSecond": 3,
+    "ringWidth": 0.12,
+    "whistleLeadSeconds": 0.6
+  },
+  "fizz": {
+    "sparks": 10,
+    "sparkMeters": 0.18,
+    "spreadMeters": 1.3,
+    "sparkSeconds": 0.3,
+    "flashMeters": 1.1,
+    "flashSeconds": 0.12,
+    "heightMeters": 2,
+    "color": "#3FF0E0"
+  },
+  "ghost": {
+    "opacity": 0.4,
+    "tint": "#3FF0E0",
+    "tintStrength": 0.35
   }
 }

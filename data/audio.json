@@ -78,6 +78,22 @@
     "slam": {
       "volume": 0.9,
       "file": null
+    },
+    "mortar": {
+      "volume": 0.85,
+      "file": null
+    },
+    "shellIncoming": {
+      "volume": 0.6,
+      "file": null
+    },
+    "decoy": {
+      "volume": 0.4,
+      "file": null
+    },
+    "fizz": {
+      "volume": 0.55,
+      "file": null
     }
   }
 }

@@ -217,4 +217,10 @@ describe("server binary dispatch", () => {
     expect(encodeServerBinary(m)).toBeNull();
     expect(JSON.parse(JSON.stringify(m))).toEqual(m);
   });
+
+  it("sends a decoy start with its decoys' ids as text too", () => {
+    const m: ServerMessage = { t: "ability", id: 7, kind: "decoy", event: "start", x: 3, y: 0.5, z: -8, ids: [101, 102] };
+    expect(encodeServerBinary(m)).toBeNull();
+    expect(JSON.parse(JSON.stringify(m))).toEqual(m);
+  });
 });

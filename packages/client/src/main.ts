@@ -2,7 +2,7 @@ import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
   parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
-  type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
+  type AbilityMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import audioJson from "../../../data/audio.json";
@@ -50,6 +50,7 @@ import { BreakFx } from "./props/breakFx";
 import propFxJson from "../../../data/propFx.json";
 import abilityFxJson from "../../../data/abilityFx.json";
 import { AbilityFx, abilityMoment, parseAbilityFx } from "./abilityFx";
+import { MortarWarnings } from "./mortarWarning";
 import dressingJson from "../../../data/dressing.json";
 import chunksJsonForDressing from "../../../data/chunks.json";
 import { createMechModel, legsLimping, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
@@ -208,10 +209,15 @@ for (const el of [canvas, hint]) el.addEventListener("click", () => sound.start(
 const blasts = new Fireballs(scene, 8);
 const abilityFxConfig = parseAbilityFx(abilityFxJson);
 const abilityFx = new AbilityFx(scene, abilityFxConfig, (c) => toon.color(c));
+const whistleAt = { x: 0, y: 0, z: 0 };
+const mortarWarnings = new MortarWarnings(scene, abilityFxConfig.warning, (c) => toon.color(c), (x, y, z) => {
+  whistleAt.x = x; whistleAt.y = y; whistleAt.z = z;
+  sound.play("shellIncoming", whistleAt);
+});
 // Walking (gait.ts): each mech's legs follow how fast it is really going. Footfalls kick up dust (art hook for V5).
 const gaitConfig = parseGait(gaitJson);
 const dust = new TimedEffects(scene, 32, gaitConfig.dustMeters, new THREE.MeshBasicMaterial({ color: "#a39a86", transparent: true, opacity: 0.45 }));
-const gaitInput: GaitInput = { vx: 0, vz: 0, yaw: 0, grounded: true, dashing: false, limping: false, walkSpeed: 0, runSpeed: 0 };
+const gaitInput: GaitInput = { vx: 0, vz: 0, yaw: 0, grounded: true, dashing: false, limping: false, braced: false, walkSpeed: 0, runSpeed: 0 };
 const footAt = new THREE.Vector3();
 // Dust under each foot that came down, and one thud for them, pitched for the mech's weight. `audible` is false for
 // someone else walking beyond gait.json hearWalkMeters: up close you hear a mech walk, further off only its run, and
@@ -234,8 +240,10 @@ const walkRemote = (model: MechModel, m: number, vx: number, vy: number, vz: num
   gaitInput.vx = vx; gaitInput.vz = vz; gaitInput.yaw = model.group.rotation.y;
   // Others carry no grounded flag: jets on, or rising or falling fast, means in the air.
   gaitInput.grounded = !jetting && Math.abs(vy) < 2;
-  // A ram leans like a dash. A pounce is in the air, so the feet tuck instead.
-  gaitInput.dashing = (ability && gaitInput.grounded) || Math.hypot(vx, vz) > stats.runSpeed * 1.15;
+  // A ram leans like a dash. A pounce is in the air, so the feet tuck instead. A mortar strike plants the feet.
+  const kind = abilityOf(m)?.kind;
+  gaitInput.dashing = (ability && kind === "ram" && gaitInput.grounded) || Math.hypot(vx, vz) > stats.runSpeed * 1.15;
+  gaitInput.braced = ability && kind === "barrage";
   gaitInput.limping = legsLimping(model);
   gaitInput.walkSpeed = stats.walkSpeed; gaitInput.runSpeed = stats.runSpeed;
   const feet = walkMech(model, gaitConfig, gaitInput, fxDt);
@@ -261,6 +269,7 @@ const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.
 remotes.weaponColors = weaponColors;
 remotes.upgrades = upgradeSet.upgrades;
 remotes.look = remoteLook;
+remotes.ghostLook = abilityFxConfig.ghost;
 const aimHit = createZoneHit();
 // The crosshair checks each mech against its own hit boxes, the ones the server uses (only with the roster drawn).
 const zonesFor = kitId === "roster" ? makeZonesFor(zoneSet, roster, mechKitsJson) : () => zoneSet;
@@ -416,12 +425,17 @@ if (net) {
     sound.play("grenadeThrow", { x: g.x, y: g.y, z: g.z });
   };
   net.onExplode = (e) => showBlast(e.x, e.y, e.z);
-  // Your own start and landing already showed from prediction; anyone's ram or slam connecting shows here.
+  // Your own start and landing already showed from prediction; anyone's ram or slam connecting shows here. The
+  // warning ring for a strike is always the server's, yours too, so everyone sees the same spot.
   net.onAbility = (a) => {
-    if (a.id === net.id && a.event !== "hit") return;
-    if (a.event === "start") showAbilityStart(a.kind, a.x, a.y, a.z);
-    else if (a.event === "land") showSlam(a.x, a.y, a.z, slamRadiusOf(remotes.mechOf(a.id)));
-    else showAbilityHit(a.x, a.y, a.z);
+    const own = a.id === net.id;
+    if (a.event === "hit") showAbilityHit(a.x, a.y, a.z);
+    else if (a.event === "pop") showPop(a.id, a.x, a.y, a.z);
+    else if (a.event === "land") { if (!own) showSlam(a.x, a.y, a.z, slamRadiusOf(remotes.mechOf(a.id))); }
+    else if (a.kind === "barrage") showStrike(a.id, own, a.x, a.y, a.z);
+    // Others get nothing for decoys going out: they are meant to be fooled.
+    else if (a.kind === "decoy") { if (own) showOwnDecoys(a.ids ?? []); }
+    else if (!own) showAbilityStart(a.kind, a.x, a.y, a.z);
   };
   // A destroyed prop leaves the world here too, so walking where it stood matches the server.
   net.onPropDestroyed = (id) => {
@@ -515,9 +529,41 @@ function slamRadiusOf(m: number): number {
   return a?.kind === "pounce" ? a.slamRadius : 0;
 }
 
-function showAbilityStart(kind: "ram" | "pounce", x: number, y: number, z: number): void {
+// A ram, leap or mortar strike starting, at the mech. Decoys going out show nothing here (showOwnDecoys).
+function showAbilityStart(kind: AbilityMessage["kind"], x: number, y: number, z: number): void {
+  if (kind === "decoy") return;
   abilityFx.start(x, y, z);
-  sound.play(kind, { x, y: y + 1, z });
+  sound.play(kind === "barrage" ? "mortar" : kind, { x, y: y + 1, z });
+}
+
+// The strike's numbers for the Cataclysm that called it. Someone near the target may not have that mech in sight,
+// so it falls back to whichever roster mech has a mortar strike.
+function barrageOf(m: number): BarrageStats | null {
+  const a = m >= 0 ? abilityOf(m) : null;
+  if (a?.kind === "barrage") return a;
+  for (const b of Object.values(abilitySet.mechs)) if (b.kind === "barrage") return b;
+  return null;
+}
+
+const strikeFrom = { x: 0, y: 0, z: 0 };
+// A strike called in: the ring at the target for everyone, and the launch at the Cataclysm for anyone but its
+// pilot, who heard it from prediction.
+function showStrike(id: number, own: boolean, x: number, y: number, z: number): void {
+  const stats = barrageOf(own ? mech.mech : remotes.mechOf(id));
+  if (stats) mortarWarnings.show(x, y, z, stats);
+  if (!own && remotes.positionOf(id, strikeFrom)) showAbilityStart("barrage", strikeFrom.x, strikeFrom.y, strikeFrom.z);
+}
+
+// Your decoys going out: you see them see-through and hear them leave you. Nobody else does.
+function showOwnDecoys(ids: readonly number[]): void {
+  remotes.addOwnDecoys(ids);
+  sound.play("decoy", { x: mech.x, y: mech.y + 1, z: mech.z });
+}
+
+function showPop(id: number, x: number, y: number, z: number): void {
+  remotes.forgetOwnDecoy(id);
+  abilityFx.fizz(x, y, z);
+  sound.play("fizz", { x, y: y + abilityFxConfig.fizz.heightMeters, z });
 }
 
 function showSlam(x: number, y: number, z: number, radius: number): void {
@@ -666,12 +712,14 @@ function frame(now: number): void {
   gaitInput.vx = mech.vx; gaitInput.vz = mech.vz; gaitInput.yaw = mechGroup.rotation.y;
   gaitInput.grounded = mech.grounded; gaitInput.limping = legsLimping(ownModel);
   gaitInput.dashing = mech.dashTime > 0 || (mech.abilityTime > 0 && ownAbilityStats?.kind === "ram");
+  gaitInput.braced = mech.abilityTime > 0 && ownAbilityStats?.kind === "barrage";
   gaitInput.walkSpeed = ownStats.walkSpeed; gaitInput.runSpeed = ownStats.runSpeed;
   const ownFeet = walkMech(ownModel, gaitConfig, gaitInput, frameTime);
   if (ownFeet && !health.dead) footfalls(ownModel, ownFeet, true);
   remotes.forEachNear(mechGroup.position.x, mechGroup.position.z, gaitConfig.farMeters, walkRemote);
   dust.update(frameTime);
   abilityFx.update(frameTime);
+  mortarWarnings.update(frameTime);
 
   // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.
   rig.setFovKick(mech.dashTime > 0 ? mech.dashTime / mechStats.dashSeconds : 0, frameTime);

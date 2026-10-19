@@ -107,19 +107,19 @@ roster.forEach((r, i) => {
 const gait = parseGait(gaitJson);
 const rosterStats = parseRoster(rosterJson);
 const statsFor = mechStatsFor(parseMechStats(mechJson), rosterStats);
-const WALKS = ["standing", "walking", "running", "dashing", "in the air", "limping"] as const;
+const WALKS = ["standing", "walking", "running", "dashing", "in the air", "limping", "braced"] as const;
 let walk = 0;
 const clock = new THREE.Clock();
 function walkRoster(dt: number): void {
   const mode = WALKS[walk]!;
   rosterModels.forEach((model, i) => {
     const stats = statsFor(rosterStats.mechs.findIndex((m) => m.id === roster[i]!.id));
-    const speed = mode === "standing" || mode === "in the air" ? 0 : mode === "walking" || mode === "limping" ? stats.walkSpeed : mode === "dashing" ? stats.dashSpeed : stats.runSpeed;
+    const speed = mode === "standing" || mode === "in the air" || mode === "braced" ? 0 : mode === "walking" || mode === "limping" ? stats.walkSpeed : mode === "dashing" ? stats.dashSpeed : stats.runSpeed;
     const yaw = model.group.rotation.y;
     setMechDamage(model, mode === "limping" ? [zoneMaxHp[0]! * 0.3, zoneMaxHp[1]!, zoneMaxHp[2]!] : zoneMaxHp, false);
     walkMech(model, gait, {
       vx: -Math.sin(yaw) * speed, vz: -Math.cos(yaw) * speed, yaw, grounded: mode !== "in the air", dashing: mode === "dashing",
-      limping: mode === "limping", walkSpeed: stats.walkSpeed, runSpeed: stats.runSpeed,
+      limping: mode === "limping", braced: mode === "braced", walkSpeed: stats.walkSpeed, runSpeed: stats.runSpeed,
     }, dt);
   });
 }

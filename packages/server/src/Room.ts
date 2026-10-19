@@ -5,12 +5,14 @@ import {
   NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
   takenWithE, itemUpgrade, upgradeItem, upgradeScale, applyTune, assignDeep, parseTunable, setNumberAt, TUNABLE_FILES, type TuningRaws, type UpgradeSet,
-  makeZonesFor, makeMuzzlesFor, mechStatsFor, rosterIndex, abilityFor, type Roster, type AbilitySet, type AbilityStats, type PounceStats, type RamStats,
+  makeZonesFor, makeMuzzlesFor, mechStatsFor, rosterIndex, abilityFor, barrageTarget, type Roster, type AbilitySet, type AbilityStats, type BarrageStats,
+  type DecoyStats, type PounceStats, type RamStats,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
 import { parseBotAbilities, type BotAbilityStats } from "./botAbilities";
 import { AbstractFights, RATINGS, botsNeeded, pickDifficulty, type FarBot } from "./botLod";
+import { decoyAlong, spawnDecoys, stepDecoy, type Decoy } from "./decoys";
 import { Pathfinder } from "./Pathfinder";
 import { activeWeapon, collectSmall, freshLoadout, selectSlot, spillItems, takeUpgrade, takeWeapon, wantsItem } from "./loadout";
 import { Pickups } from "./Pickups";
@@ -19,6 +21,7 @@ import type { Player } from "./Player";
 const KILL_HEIGHT = -50;
 const CHEST_HEIGHT = 1.7; // where splash damage measures to
 const BLAST_LIFT = 0.2; // keeps a grenade resting on the floor from blasting from inside it
+const SKY_HEIGHT = 500; // above anything a map builds, so a ray down from here finds the ground
 
 interface LiveGrenade {
   ownerId: number;
@@ -92,7 +95,10 @@ export class Room {
   private destroyedProps: number[] = [];
   private pickups: Pickups;
   private pickupScratch: PickupState[] = [];
-  private pendingBlasts: { x: number; y: number; z: number; tick: number; owner: Player | null }[] = [];
+  private pendingBlasts: { x: number; y: number; z: number; tick: number; owner: Player | null; damage: number; radius: number }[] = [];
+  private decoys: Decoy[] = [];
+  private decoyHit = createZoneHit();
+  private strikeAt = { x: 0, z: 0 };
 
   private botInput = createMechInput();
   private botTargets: BotTarget[] = [];
@@ -198,6 +204,11 @@ export class Room {
     }));
   }
 
+  // How many decoys are out, for checks: nobody but their owner is told they exist.
+  get decoyCount(): number {
+    return this.decoys.length;
+  }
+
   get mapMeters(): number {
     return this.map.meters;
   }
@@ -245,6 +256,7 @@ export class Room {
     const player = this.players.get(id);
     if (!player) return;
     this.players.delete(id);
+    for (const d of [...this.decoys]) if (d.ownerId === id) this.popDecoy(d, null);
     if (this.hostId === id) this.hostId = this.humans()[0]?.id ?? 0;
     if (this.state === "lobby") this.fillBots();
     // Walking out of a running match counts as being knocked out.
@@ -348,9 +360,10 @@ export class Room {
       this.recordHistory(player);
     }
 
+    this.stepDecoys();
     this.settleFarFights();
     this.stepGrenades();
-    this.setOffBarrels();
+    this.setOffPendingBlasts();
     if (this.state === "active") this.applyRing();
     if (this.tickCount % net.snapshotEvery === 0) this.broadcastSnapshots();
   }
@@ -363,6 +376,9 @@ export class Room {
     const { lod } = this.config.bots;
     const bot = player.bot!;
     bot.abilityKind = this.abilityFor(player.state.mech)?.kind ?? null;
+    let health = 0;
+    for (let zone = 0; zone < ZONE_COUNT; zone++) health += player.hp[zone]! + player.loadout.armor[zone]!;
+    bot.noteHealth(health);
 
     if (this.state === "countdown" || player.dead) {
       Object.assign(input, createMechInput(), { aimYaw: player.state.bodyYaw });
@@ -393,6 +409,8 @@ export class Room {
       if (other === player || !other.participant || other.dead) continue;
       this.botTargets.push({ id: other.id, x: other.state.x, y: other.state.y, z: other.state.z });
     }
+    // Decoys look like any mech to a bot, so it chases and shoots them. Its own are not worth fooling itself with.
+    for (const d of this.decoys) if (d.ownerId !== player.id) this.botTargets.push({ id: d.id, x: d.state.x, y: d.state.y, z: d.state.z });
     bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, STEP, input);
     this.processInput(player, input);
   }
@@ -470,6 +488,7 @@ export class Room {
     this.map = this.config.mapFor(this.tier, this.seed);
     this.resetProps();
     this.pendingBlasts = [];
+    this.decoys = [];
     this.finder = new Pathfinder(this.map.nav, this.config.bots.path);
     for (const p of this.players.values()) p.bot?.setFinder(this.finder);
     this.fillBots();
@@ -603,7 +622,7 @@ export class Room {
     player.state.crawling = player.hp[ZONE_LEGS]! <= 0;
     player.state.fuelScale = upgradeScale(player.loadout, this.config.upgrades, "fuel");
     stepMech(player.state, input, this.statsFor(player.state.mech), dt, this.map.world, ability);
-    if (ability) this.afterAbilityStep(player, ability, abilityBefore, cooldownBefore);
+    if (ability) this.afterAbilityStep(player, input, ability, abilityBefore, cooldownBefore);
     player.steps += Math.round(dt / STEP);
     if (player.state.running) this.makeNoise(player, "run", player.state.x, player.state.z);
     if (player.state.jetting) this.makeNoise(player, "jets", player.state.x, player.state.z);
@@ -661,9 +680,15 @@ export class Room {
     if (this.map.world.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.worldHit)) { reach = this.worldHit.distance; hitBox = this.worldHit.index; }
 
     // Shots do damage in the lobby too, so there is something to practise on. Only the countdown is safe.
-    const target = this.state !== "countdown" ? this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach) : null;
-    if (target) {
-      reach = this.zoneHit.distance;
+    let target = this.state !== "countdown" ? this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach) : null;
+    if (target) reach = this.zoneHit.distance;
+    // A decoy in front of everything else takes the shot and bursts. No damage and no hit marker: the pop is the tell.
+    const decoy = decoyAlong(this.decoys, player.id, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.zonesFor, this.decoyHit);
+    if (decoy) {
+      reach = this.decoyHit.distance;
+      target = null;
+      this.popDecoy(decoy, player);
+    } else if (target) {
       const damage = weapon.damage * this.shieldFactor(target, s.dx, s.dz);
       const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, damage, target.loadout.armor);
       const killed = !target.dead && isDestroyed(target.hp);
@@ -678,7 +703,7 @@ export class Room {
     }
 
     const message: ServerMessage = {
-      t: "shot", id: player.id, ox: s.ox, oy: s.oy, oz: s.oz, dx: s.dx, dy: s.dy, dz: s.dz, length: reach, hitMech: target !== null,
+      t: "shot", id: player.id, ox: s.ox, oy: s.oy, oz: s.oz, dx: s.dx, dy: s.dy, dz: s.dz, length: reach, hitMech: target !== null || decoy !== null,
     };
     this.sendNear(s.ox, s.oz, message, player);
   }
@@ -786,18 +811,28 @@ export class Room {
       const distance = Math.hypot(prop.x - bx, prop.y - by, prop.z - bz);
       if (distance < radius) this.damageProp(prop.id, damage * (1 - distance / radius), owner);
     }
+
+    for (const d of [...this.decoys]) {
+      const dx = d.state.x - bx, dy = d.state.y + CHEST_HEIGHT - by, dz = d.state.z - bz;
+      const distance = Math.hypot(dx, dy, dz);
+      if (distance >= radius) continue;
+      if (distance > 0.5 && this.map.world.raycast(bx, by, bz, dx / distance, dy / distance, dz / distance, distance - 0.5, this.worldHit)) continue;
+      this.popDecoy(d, owner);
+    }
   }
 
   // ---- abilities
 
   // What a ram or a leap does to everyone else. The movement itself is in the shared mech step, so the client
   // predicts it; hits, damage and shoves are the server's alone.
-  private afterAbilityStep(player: Player, ability: AbilityStats, timeBefore: number, cooldownBefore: number): void {
+  private afterAbilityStep(player: Player, input: MechInput, ability: AbilityStats, timeBefore: number, cooldownBefore: number): void {
     const s = player.state;
     // The cooldown only jumps up on the step the ability starts. Watching it rather than the active time also catches
     // a ram that a wall stops on its very first step.
     const started = s.abilityCooldown > cooldownBefore;
-    if (started) {
+    if (started && ability.kind === "barrage") this.callStrike(player, input, ability);
+    else if (started && ability.kind === "decoy") this.dropDecoys(player, ability);
+    else if (started) {
       player.rammed.length = 0;
       this.sendNear(s.x, s.z, { t: "ability", id: player.id, kind: ability.kind, event: "start", x: s.x, y: s.y, z: s.z }, player);
       this.makeNoise(player, "dash", s.x, s.z);
@@ -805,7 +840,7 @@ export class Room {
     if (ability.kind === "ram") {
       // Includes the step the charge ends on, which is often the one that reached the wall or the target.
       if (started || timeBefore > 0) this.ramContact(player, ability);
-    } else if (timeBefore > 0 && s.abilityTime <= 0 && s.grounded) {
+    } else if (ability.kind === "pounce" && timeBefore > 0 && s.abilityTime <= 0 && s.grounded) {
       this.slam(player, ability);
     }
   }
@@ -830,6 +865,7 @@ export class Room {
       this.sendNear(t.x, t.z, { t: "ability", id: player.id, kind: "ram", event: "hit", x: t.x, y: t.y, z: t.z }, player);
       this.abilityDamage(player, target, ram.damage);
     }
+    this.popDecoysAround(s.x, s.y, s.z, ram.hitRadius, height, player);
 
     for (const prop of this.map.props) {
       if (this.propHp[prop.id]! <= 0) continue;
@@ -852,6 +888,81 @@ export class Room {
       const t = target.state;
       if (Math.hypot(t.x - s.x, t.z - s.z) > pounce.slamRadius || Math.abs(t.y - s.y) > height) continue;
       this.abilityDamage(player, target, pounce.damage);
+    }
+    this.popDecoysAround(s.x, s.y, s.z, pounce.slamRadius, height, player);
+  }
+
+  // Mortar Strike. The warning goes up at the target at once, for whoever is near it and whoever is near the
+  // Cataclysm (who sees it called in); the launch is loud, so the Cataclysm shows on radar. The shells come down
+  // later whatever happens to the Cataclysm meanwhile, and are still its kills.
+  private callStrike(player: Player, input: MechInput, strike: BarrageStats): void {
+    const s = player.state;
+    const at = this.strikeAt;
+    barrageTarget(s.x, s.z, input.targetX, input.targetZ, s.abilityX, s.abilityZ, strike, at);
+    const y = this.groundAt(at.x, at.z, input.targetY);
+    const message: ServerMessage = { t: "ability", id: player.id, kind: "barrage", event: "start", x: at.x, y, z: at.z };
+    this.sendNearEither(at.x, at.z, s.x, s.z, message, player);
+    this.makeNoise(player, "shot", s.x, s.z);
+    for (let i = 0; i < strike.shells; i++) {
+      const r = strike.spreadMeters * Math.sqrt(this.random()), angle = this.random() * Math.PI * 2;
+      const x = at.x + Math.cos(angle) * r, z = at.z + Math.sin(angle) * r;
+      const tick = this.tickCount + Math.round((strike.delaySeconds + i * strike.shellSeconds) / STEP);
+      this.pendingBlasts.push({ x, y: this.groundAt(x, z, y), z, tick, owner: player, damage: strike.damage, radius: strike.blastRadius });
+    }
+  }
+
+  // The height of whatever is under a spot, from a ray straight down, or `fallback` where there is nothing.
+  private groundAt(x: number, z: number, fallback: number): number {
+    if (this.map.world.raycast(x, SKY_HEIGHT, z, 0, -1, 0, SKY_HEIGHT * 2, this.worldHit)) return SKY_HEIGHT - this.worldHit.distance;
+    return fallback;
+  }
+
+  // Decoy Drones. Only the owner is told, with the decoys' ids so it can draw its own see-through: a start message to
+  // anyone else would let a client read which Arbiters are fake. Everyone else just sees more Arbiters.
+  private dropDecoys(player: Player, decoy: DecoyStats): void {
+    const s = player.state;
+    const fresh = spawnDecoys(s, player.id, this.statsFor(s.mech), decoy, () => this.nextId++);
+    this.decoys.push(...fresh);
+    const ids = fresh.map((d) => d.id);
+    player.send({ t: "ability", id: player.id, kind: "decoy", event: "start", x: s.x, y: s.y, z: s.z, ids });
+    this.makeNoise(player, "dash", s.x, s.z);
+  }
+
+  private stepDecoys(): void {
+    for (const d of [...this.decoys]) {
+      const owner = this.players.get(d.ownerId);
+      if (!owner || !stepDecoy(d, this.statsFor(d.state.mech), this.map.world, STEP, owner.state.x, owner.state.z)) {
+        this.popDecoy(d, null);
+        continue;
+      }
+      // Footsteps on the radar like the real thing. The owner is the source, so it does not hear its own decoys.
+      if (d.state.running) this.makeNoise(owner, "run", d.state.x, d.state.z, d.quietUntil);
+    }
+  }
+
+  // Shot, blasted, rammed, slammed, out of time or left without its owner: the decoy bursts where it stands, with a
+  // crash anyone near can hear.
+  private popDecoy(decoy: Decoy, by: Player | null): void {
+    if (!this.removeDecoy(decoy)) return;
+    const { x, y, z } = decoy.state;
+    this.sendNear(x, z, { t: "ability", id: decoy.id, kind: "decoy", event: "pop", x, y, z }, by ?? undefined);
+    this.makeNoise(null, "smash", x, z);
+  }
+
+  private removeDecoy(decoy: Decoy): boolean {
+    const index = this.decoys.indexOf(decoy);
+    if (index < 0) return false;
+    this.decoys.splice(index, 1);
+    // Ids are never reused, so a gone decoy's would only pile up in everyone's view list.
+    for (const p of this.players.values()) p.interested.delete(decoy.id);
+    return true;
+  }
+
+  // Every decoy within reach of a ram or a slam, at about the same height, the same test the mechs get.
+  private popDecoysAround(x: number, y: number, z: number, radius: number, height: number, by: Player): void {
+    for (const d of [...this.decoys]) {
+      if (d.ownerId === by.id) continue;
+      if (Math.hypot(d.state.x - x, d.state.z - z) <= radius && Math.abs(d.state.y - y) <= height) this.popDecoy(d, by);
     }
   }
 
@@ -988,18 +1099,19 @@ export class Room {
     if (item !== null) this.pickups.add(item, prop.x + (this.random() - 0.5), 0.5, prop.z + (this.random() - 0.5));
     if (this.config.props.types[prop.type]!.explodes) {
       const delay = Math.round(this.config.props.barrelBlast.delaySeconds / STEP);
-      this.pendingBlasts.push({ x: prop.x, y: 0, z: prop.z, tick: this.tickCount + delay, owner: by });
+      const { damage, radius } = this.config.props.barrelBlast;
+      this.pendingBlasts.push({ x: prop.x, y: 0, z: prop.z, tick: this.tickCount + delay, owner: by, damage, radius });
     }
   }
 
-  // Barrels go off a beat after they break, so a chain of them ripples rather than all going at once.
-  private setOffBarrels(): void {
-    const { barrelBlast } = this.config.props;
+  // Barrels go off a beat after they break, so a chain of them ripples rather than all going at once. Mortar shells
+  // wait here too.
+  private setOffPendingBlasts(): void {
     for (let i = this.pendingBlasts.length - 1; i >= 0; i--) {
       const b = this.pendingBlasts[i]!;
       if (this.tickCount < b.tick) continue;
       this.pendingBlasts.splice(i, 1);
-      this.blast(b.x, b.y, b.z, barrelBlast.damage, barrelBlast.radius, b.owner);
+      this.blast(b.x, b.y, b.z, b.damage, b.radius, b.owner);
     }
   }
 
@@ -1047,12 +1159,14 @@ export class Room {
 
   // Something made a sound. Everyone within earshot hears it, at a spot a little off the real one, and bots go to look.
   // A mech makes at most one pulse of each kind every so often, so holding the jets is one pulse a beat, not sixty.
-  private makeNoise(source: Player | null, kind: NoiseKind, x: number, z: number): void {
+  // `quiet` is whose pulse timer to use, normally the source's own; a decoy has its own, so its footsteps and its
+  // owner's are heard separately.
+  private makeNoise(source: Player | null, kind: NoiseKind, x: number, z: number, quiet = source?.quietUntil): void {
     const { noise } = this.config;
     const k = NOISE_KINDS.indexOf(kind);
-    if (source) {
-      if (this.tickCount < source.quietUntil[k]!) return;
-      source.quietUntil[k] = this.tickCount + Math.round(noise.pulseSeconds / STEP);
+    if (quiet) {
+      if (this.tickCount < quiet[k]!) return;
+      quiet[k] = this.tickCount + Math.round(noise.pulseSeconds / STEP);
     }
     const radius = noise.loudness[kind];
     for (const p of this.players.values()) {
@@ -1097,6 +1211,16 @@ export class Room {
     }
   }
 
+  // The same, for something seen at two spots at once: sent once to anyone near either.
+  private sendNearEither(x1: number, z1: number, x2: number, z2: number, message: ServerMessage, source?: Player): void {
+    const range = this.config.net.interestRange * this.config.net.interestLeaveFactor;
+    for (const p of this.players.values()) {
+      if (p.bot) continue;
+      const view = this.viewFrom(p);
+      if (p === source || Math.hypot(view.x - x1, view.z - z1) <= range || Math.hypot(view.x - x2, view.z - z2) <= range) p.send(message);
+    }
+  }
+
   private broadcastSnapshots(): void {
     const { interestRange, interestLeaveFactor } = this.config.net;
     const everyone: OtherState[] = [];
@@ -1106,6 +1230,18 @@ export class Room {
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
         running: p.state.running, jetting: p.state.jetting, dead: p.dead, looted: p.looted, repairing: p.repairZone >= 0, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
         weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil), upgrades: p.loadout.upgrades, mech: p.state.mech, ability: p.state.abilityTime > 0,
+      });
+    }
+    // A decoy is drawn exactly as its owner is right now, damage and all, so nothing on it gives it away but how it
+    // moves: a smoking Arbiter beside two clean copies would be easy to pick out.
+    for (const d of this.decoys) {
+      const owner = this.players.get(d.ownerId);
+      if (!owner) continue;
+      const s = d.state;
+      everyone.push({
+        id: d.id, x: s.x, y: s.y, z: s.z, yaw: s.bodyYaw, running: s.running, jetting: s.jetting, dead: false, looted: false, repairing: false,
+        bot: owner.bot !== null, hp: owner.hp.map(Math.ceil), weapon: Math.max(0, activeWeapon(owner.loadout)), armor: owner.loadout.armor.map(Math.ceil),
+        upgrades: owner.loadout.upgrades, mech: s.mech, ability: false,
       });
     }
     const match = this.progress();

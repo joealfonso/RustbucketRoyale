@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { AbilityStats } from "@rustbucket/shared";
 import { TimedEffects } from "./effects";
 
 export interface AbilityFxConfig {
@@ -8,6 +9,12 @@ export interface AbilityFxConfig {
   slam: { ringSeconds: number; ringColor: string; ringOpacity: number; puffs: number; puffSpread: number; shakeForce: number; shakeRadius: number };
   // A ram or slam connecting with somebody.
   hit: { flashMeters: number; flashSeconds: number; color: string; shakeForce: number; shakeRadius: number };
+  // The ring on the ground where a mortar strike will land (mortarWarning.ts). Opacity pulses between the two.
+  warning: { ringColor: string; opacity: number; minOpacity: number; pulsesPerSecond: number; ringWidth: number; whistleLeadSeconds: number };
+  // A decoy bursting: sparks round where it stood and a flash in the middle, `heightMeters` up its body.
+  fizz: { sparks: number; sparkMeters: number; spreadMeters: number; sparkSeconds: number; flashMeters: number; flashSeconds: number; heightMeters: number; color: string };
+  // How the Arbiter's own decoys look to the Arbiter (ghostLook.ts): see-through and tinted, so it never loses itself.
+  ghost: { opacity: number; tint: string; tintStrength: number };
 }
 
 export function parseAbilityFx(raw: unknown): AbilityFxConfig {
@@ -20,12 +27,16 @@ export function parseAbilityFx(raw: unknown): AbilityFxConfig {
   check("dust", ["puffs", "spreadMeters", "meters", "seconds", "opacity"], ["color"]);
   check("slam", ["ringSeconds", "ringOpacity", "puffs", "puffSpread", "shakeForce", "shakeRadius"], ["ringColor"]);
   check("hit", ["flashMeters", "flashSeconds", "shakeForce", "shakeRadius"], ["color"]);
+  check("warning", ["opacity", "minOpacity", "pulsesPerSecond", "ringWidth", "whistleLeadSeconds"], ["ringColor"]);
+  check("fizz", ["sparks", "sparkMeters", "spreadMeters", "sparkSeconds", "flashMeters", "flashSeconds", "heightMeters"], ["color"]);
+  check("ghost", ["opacity", "tintStrength"], ["tint"]);
+  if (!((d.warning!.ringWidth as number) > 0 && (d.warning!.ringWidth as number) < 1)) throw new Error("abilityFx.json: warning.ringWidth must be between 0 and 1");
   return raw as AbilityFxConfig;
 }
 
 // What happened to a mech's ability over one sim step, from its ability time before and after: it started, or a
 // pounce came down. A ram just runs out, which needs nothing shown.
-export function abilityMoment(before: number, after: number, kind: "ram" | "pounce" | undefined): "start" | "land" | null {
+export function abilityMoment(before: number, after: number, kind: AbilityStats["kind"] | undefined): "start" | "land" | null {
   if (before <= 0 && after > 0) return "start";
   if (before > 0 && after <= 0 && kind === "pounce") return "land";
   return null;
@@ -34,6 +45,9 @@ export function abilityMoment(before: number, after: number, kind: "ram" | "poun
 const PUFF_POOL = 48;
 const FLASH_POOL = 8;
 const RING_POOL = 6;
+const SPARK_POOL = 32;
+const FIZZ_FLASH_POOL = 4;
+const GOLDEN_ANGLE = 2.39996; // spreads the sparks evenly round the burst without a random number
 const RING_LIFT = 0.08; // just above the ground so the ring does not flicker into it
 const RING_START = 0.2; // share of its full width the ring starts at
 
@@ -44,17 +58,22 @@ interface Ring {
   radius: number;
 }
 
-// Dust, slam rings and hit flashes for the Q abilities. Fixed pools made at startup; when one is all busy the oldest
+// Dust, slam rings, hit flashes and decoy fizzes for the Q abilities. Fixed pools made at startup; when one is all busy the oldest
 // is reused. Art hook: the sizes, colours and lifetimes are in data/abilityFx.json; real effects replace these at V5.
 export class AbilityFx {
   private puffs: TimedEffects;
   private flashes: TimedEffects;
+  private sparks: TimedEffects;
+  private fizzFlashes: TimedEffects;
   private rings: Ring[] = [];
   private nextRing = 0;
 
   constructor(scene: THREE.Scene, private config: AbilityFxConfig, color: (name: string) => string) {
     this.puffs = new TimedEffects(scene, PUFF_POOL, config.dust.meters, new THREE.MeshBasicMaterial({ color: color(config.dust.color), transparent: true, opacity: config.dust.opacity, depthWrite: false }));
     this.flashes = new TimedEffects(scene, FLASH_POOL, config.hit.flashMeters, new THREE.MeshBasicMaterial({ color: color(config.hit.color) }));
+    const fizzMaterial = new THREE.MeshBasicMaterial({ color: color(config.fizz.color) });
+    this.sparks = new TimedEffects(scene, SPARK_POOL, config.fizz.sparkMeters, fizzMaterial);
+    this.fizzFlashes = new TimedEffects(scene, FIZZ_FLASH_POOL, config.fizz.flashMeters, fizzMaterial);
     const geometry = new THREE.RingGeometry(0.85, 1, 40);
     geometry.rotateX(-Math.PI / 2);
     for (let i = 0; i < RING_POOL; i++) {
@@ -90,9 +109,25 @@ export class AbilityFx {
     this.flashes.spawn(x, y, z, this.config.hit.flashSeconds);
   }
 
+  // A decoy bursting where it stood (x, y, z at its feet).
+  fizz(x: number, y: number, z: number): void {
+    const f = this.config.fizz;
+    const middle = y + f.heightMeters;
+    this.fizzFlashes.spawn(x, middle, z, f.flashSeconds);
+    for (let i = 0; i < f.sparks; i++) {
+      // Points spread over a ball: heights evenly from bottom to top, turned by the golden angle each time.
+      const up = f.sparks > 1 ? (i / (f.sparks - 1)) * 2 - 1 : 0;
+      const across = Math.sqrt(1 - up * up) * f.spreadMeters;
+      const angle = i * GOLDEN_ANGLE;
+      this.sparks.spawn(x + Math.cos(angle) * across, middle + up * f.spreadMeters, z + Math.sin(angle) * across, f.sparkSeconds);
+    }
+  }
+
   update(dt: number): void {
     this.puffs.update(dt);
     this.flashes.update(dt);
+    this.sparks.update(dt);
+    this.fizzFlashes.update(dt);
     const life = this.config.slam.ringSeconds;
     for (const ring of this.rings) {
       if (ring.age >= life) continue;

@@ -1,4 +1,4 @@
-import { createRayHit, type BotPathStats, type BotStats, type MechInput, type MechState, type RingNow, type World } from "@rustbucket/shared";
+import { createRayHit, type AbilityStats, type BotPathStats, type BotStats, type MechInput, type MechState, type RingNow, type World } from "@rustbucket/shared";
 import type { BotAbilityStats } from "./botAbilities";
 import type { Pathfinder } from "./Pathfinder";
 
@@ -51,7 +51,9 @@ export class Bot {
   private heardZ = 0;
   private heardFor = 0;
   needsRepair = false; // set by the room: a part is bad enough that the bot stops to fix it when nobody is in sight
-  abilityKind: "ram" | "pounce" | null = null; // set by the room: the Q ability of the mech this bot drives
+  abilityKind: AbilityStats["kind"] | null = null; // set by the room: the Q ability of the mech this bot drives
+  private healthMark = Infinity;
+  private hurtFor = 0; // seconds left of feeling under fire since the last hit
   private hasLoot = false;
   private lootX = 0;
   private lootZ = 0;
@@ -72,6 +74,12 @@ export class Bot {
     this.heardX = x;
     this.heardZ = z;
     this.heardFor = seconds;
+  }
+
+  // Its hit points plus armor, every tick, from the room. Any drop means it was just hit, seen or not.
+  noteHealth(health: number): void {
+    if (health < this.healthMark && this.abilities) this.hurtFor = this.abilities.decoyHurtSeconds;
+    this.healthMark = health;
   }
 
   // Something worth having, set by the room. The bot goes for it whenever nobody is in sight.
@@ -100,8 +108,10 @@ export class Bot {
     this.wanderIn -= dt;
     this.replanIn -= dt;
     this.heardFor -= dt;
+    this.hurtFor -= dt;
 
     const target = this.pickTarget(self, targets, world);
+    let targetDistance = Infinity;
     let wantX = 0, wantZ = 0; // the direction to travel, in the world
     let run = false;
 
@@ -115,6 +125,7 @@ export class Bot {
 
       const dx = target.x - self.x, dz = target.z - self.z;
       const distance = Math.hypot(dx, dz) || 1;
+      targetDistance = distance;
       const toward = this.preferredMovement(distance, dx / distance, dz / distance);
       wantX = toward.x; wantZ = toward.z;
       // A fight that is a long way off is walked to along a route, so the bot does not run into a wall on the way.
@@ -159,6 +170,8 @@ export class Bot {
       this.turnToward(self, self.x + heading.x * 10, self.y + EYE_HEIGHT, self.z + heading.z * 10, dt);
     }
 
+    if (this.abilityKind === "decoy" && this.abilities) this.dropDecoys(targetDistance, dt, out);
+
     // Stuck: it means to move but is not getting anywhere, so hop and slide sideways for a moment.
     this.watchIn -= dt;
     if (this.watchIn <= 0) {
@@ -191,8 +204,9 @@ export class Bot {
     out.aimPitch = this.aimPitch;
   }
 
-  // Q in a fight: a ram once the target is close and lined up dead ahead, since it charges the way the bot looks, or
-  // a pounce onto the target from a middling range. The mech step ignores the key while the ability is cooling down.
+  // Q in a fight: a ram once the target is close and lined up dead ahead, since it charges the way the bot looks, a
+  // pounce onto the target from a middling range, or a mortar strike on it from further off. The mech step ignores
+  // the key while the ability is cooling down. Decoys are not about a target, so they are decided apart.
   private useAbility(self: MechState, target: BotTarget, distance: number, dt: number, out: MechInput): void {
     const a = this.abilities!;
     if (this.abilityKind === "ram") {
@@ -203,11 +217,25 @@ export class Bot {
       out.ability = true;
       return;
     }
-    if (distance < a.pounceMinRange || distance > a.pounceMaxRange || this.random() >= a.pounceChancePerSecond * dt) return;
+    if (this.abilityKind === "pounce") {
+      if (distance < a.pounceMinRange || distance > a.pounceMaxRange || this.random() >= a.pounceChancePerSecond * dt) return;
+    } else if (this.abilityKind === "barrage") {
+      if (distance < a.barrageMinRange || distance > a.barrageMaxRange || this.random() >= a.barrageChancePerSecond * dt) return;
+    } else {
+      return;
+    }
     out.ability = true;
-    // The aim point is the landing spot now. Holding fire this step keeps a shot from going there with perfect aim.
+    // The aim point is the landing spot or the strike now. Holding fire this step keeps a shot from going there with
+    // perfect aim.
     out.fire = false;
     out.targetX = target.x; out.targetY = target.y; out.targetZ = target.z;
+  }
+
+  // An Arbiter under fire, or with someone right on top of it, sends its decoys out to muddle them.
+  private dropDecoys(targetDistance: number, dt: number, out: MechInput): void {
+    const a = this.abilities!;
+    if (this.hurtFor <= 0 && targetDistance > a.decoyNearRange) return;
+    if (this.random() < a.decoyChancePerSecond * dt) out.ability = true;
   }
 
   // The direction to walk to reach a spot. Far spots are walked to along a planned route round obstacles,

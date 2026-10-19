@@ -147,13 +147,15 @@ export interface ExplodeMessage {
   x: number; y: number; z: number;
 }
 
-// A moment of somebody's ability worth showing: a ram or leap starting, a ram connecting, a pounce landing.
+// A moment of somebody's ability worth showing: a ram, leap, strike or decoys starting, a ram connecting, a pounce
+// landing, a decoy shot and bursting. A barrage start is at the target point, where the warning goes, not the mech.
 export interface AbilityMessage {
   t: "ability";
   id: number;
-  kind: "ram" | "pounce";
-  event: "start" | "hit" | "land";
+  kind: "ram" | "pounce" | "barrage" | "decoy";
+  event: "start" | "hit" | "land" | "pop";
   x: number; y: number; z: number;
+  ids?: number[]; // on a decoy start, the decoys' ids, so their owner can draw its own decoys see-through
 }
 
 // Where the match is. `seconds` means: time left in the countdown or results, or time elapsed once active.

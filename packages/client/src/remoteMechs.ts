@@ -4,6 +4,8 @@ import { createMechModel, setMechDamage, setMechGear, setMechUpgrades, type Mech
 import type { UpgradeDef } from "@rustbucket/shared";
 import type { Toon } from "./toonMaterial";
 import type { LoadedKit } from "./mechKit";
+import type { AbilityFxConfig } from "./abilityFx";
+import { makeGhost } from "./ghostLook";
 
 interface Sample {
   time: number;
@@ -20,6 +22,7 @@ interface Remote {
   dead: boolean;
   looted: boolean;
   bot: boolean;
+  ghost: THREE.Material[] | null; // drawn see-through as one of your own decoys, with the material copies that took
   samples: Sample[];
   seen: boolean;
 }
@@ -37,12 +40,15 @@ export class RemoteMechs {
   private offset = 0;
   private jitter = 0;
   private hasClock = false;
+  private ownDecoys = new Set<number>(); // ids of your own decoys, drawn see-through for you alone
 
   // The colour of each weapon by index, for drawing the gun in hand.
   weaponColors: string[] = [];
   upgrades: UpgradeDef[] = [];
   // The toon look and colours for other mechs. Without it they are drawn as plain grey boxes.
   look: { toon: Toon; accentFor: (id: number) => string; body: string; kitFor: (mech: number) => LoadedKit | null; trim: string } | null = null;
+  // How your own decoys look to you. Without it they are drawn like anyone else.
+  ghostLook: AbilityFxConfig["ghost"] | null = null;
 
   constructor(
     private scene: THREE.Scene,
@@ -131,6 +137,35 @@ export class RemoteMechs {
     return true;
   }
 
+  // Your decoys just went out. They may already be in a snapshot, or arrive in the next one: either way they go see-through.
+  addOwnDecoys(ids: readonly number[]): void {
+    for (const id of ids) {
+      this.ownDecoys.add(id);
+      const remote = this.remotes.get(id);
+      if (remote) this.ghostIfOwn(id, remote);
+    }
+  }
+
+  // One of your decoys burst. It leaves the snapshots next, so there is nothing left to draw differently.
+  forgetOwnDecoy(id: number): void {
+    this.ownDecoys.delete(id);
+  }
+
+  isOwnDecoy(id: number): boolean {
+    return this.ownDecoys.has(id);
+  }
+
+  private ghostIfOwn(id: number, remote: Remote): void {
+    if (remote.ghost || !this.ghostLook || !this.ownDecoys.has(id)) return;
+    remote.ghost = makeGhost(remote.model, this.ghostLook);
+  }
+
+  private dropModel(remote: Remote): void {
+    this.scene.remove(remote.model.group);
+    if (remote.ghost) for (const m of remote.ghost) m.dispose();
+    remote.ghost = null;
+  }
+
   private makeModel(o: OtherState): MechModel {
     const model = this.look ? createMechModel(this.look.accentFor(o.id), this.zoneMaxHp, this.look.toon, this.look.body, this.look.kitFor(o.mech), this.look.trim) : createMechModel("#2f7fd0", this.zoneMaxHp);
     this.scene.add(model.group);
@@ -153,12 +188,12 @@ export class RemoteMechs {
       let remote = this.remotes.get(o.id);
       if (remote && remote.mech !== o.mech) {
         // Picked another mech between matches: same player, new body. Keeps its samples so it does not jump.
-        this.scene.remove(remote.model.group);
+        this.dropModel(remote);
         remote.model = this.makeModel(o);
         remote.mech = o.mech;
       }
       if (!remote) {
-        remote = { model: this.makeModel(o), mech: o.mech, vx: 0, vy: 0, vz: 0, jetting: false, running: false, ability: false, dead: false, looted: false, bot: o.bot, samples: [], seen: true };
+        remote = { model: this.makeModel(o), mech: o.mech, vx: 0, vy: 0, vz: 0, jetting: false, running: false, ability: false, dead: false, looted: false, bot: o.bot, ghost: null, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;
@@ -171,14 +206,16 @@ export class RemoteMechs {
       setMechDamage(remote.model, o.hp, o.dead);
       setMechGear(remote.model, this.weaponColors[o.weapon] ?? "#d9731a", o.armor);
       setMechUpgrades(remote.model, o.upgrades, this.upgrades);
+      this.ghostIfOwn(o.id, remote); // after the upgrades, so their parts go see-through too
       remote.samples.push({ time: serverMs, x: o.x, y: o.y, z: o.z, yaw: o.yaw });
       if (remote.samples.length > MAX_SAMPLES) remote.samples.shift();
     }
 
     for (const [id, remote] of this.remotes) {
       if (!remote.seen) {
-        this.scene.remove(remote.model.group);
+        this.dropModel(remote);
         this.remotes.delete(id);
+        this.ownDecoys.delete(id); // a decoy runs out within sight of you, so once gone it is gone for good
       }
     }
   }

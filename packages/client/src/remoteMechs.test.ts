@@ -1,6 +1,11 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import zonesJson from "../../../data/zones.json";
+import abilityFxJson from "../../../data/abilityFx.json";
+import lookJson from "../../../data/look.json";
+import paletteJson from "../../../data/palette.json";
+import { parseAbilityFx } from "./abilityFx";
+import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import { STEP, ZONE_ARMS, createZoneHit, parseZones, type OtherState } from "@rustbucket/shared";
 import { RemoteMechs } from "./remoteMechs";
 
@@ -119,5 +124,64 @@ describe("RemoteMechs", () => {
     expect(hit.zone).toBe(ZONE_ARMS);
     expect(remotes.raycast(p.x + 5, 2.4, p.z - 20, 0, 0, 1, 300, () => zones, hit)).toBe(-1);
   });
-});
 
+  describe("your own decoys", () => {
+    const toon = new Toon(parseLook(lookJson), parsePalette(paletteJson));
+    const ghost = parseAbilityFx(abilityFxJson).ghost;
+    const looked = () => {
+      const made = make();
+      made.remotes.look = { toon, accentFor: () => "#D9453B", body: "paintWhite", kitFor: () => null, trim: "frameNavy" };
+      made.remotes.ghostLook = ghost;
+      return made;
+    };
+    // Every material a mech is drawn with, outlines left out (a ghost hides those).
+    const drawn = (group: THREE.Object3D) => {
+      const out: THREE.Material[] = [];
+      group.traverse((o) => { if (o instanceof THREE.Mesh && o.visible && (o.material as THREE.Material).side !== THREE.BackSide) out.push(o.material as THREE.Material); });
+      return out;
+    };
+
+    it("draws the decoys see-through whether their ids come before or after the snapshot, and nobody else", () => {
+      const { remotes, scene } = looked();
+      remotes.addOwnDecoys([2]); // before: not in a snapshot yet
+      remotes.push([other(1, 0), other(2, 5), other(3, 10)], 0, 0);
+      remotes.addOwnDecoys([3]); // after: already drawn
+      const [real, early, late] = scene.children;
+      expect(drawn(real!).every((m) => !m.transparent)).toBe(true);
+      for (const decoy of [early!, late!]) {
+        expect(drawn(decoy).length).toBeGreaterThan(0);
+        expect(drawn(decoy).every((m) => m.transparent && m.opacity === ghost.opacity)).toBe(true);
+      }
+      expect(remotes.isOwnDecoy(1)).toBe(false);
+      expect(remotes.isOwnDecoy(2) && remotes.isOwnDecoy(3)).toBe(true);
+    });
+
+    it("leaves materials shared with other mechs alone", () => {
+      const { remotes, scene } = looked();
+      remotes.push([other(1, 0), other(2, 5)], 0, 0);
+      // Plates (hidden until armour is fitted) come from the shared toon material of their colour.
+      const every = (group: THREE.Object3D) => {
+        const out = new Set<THREE.Material>();
+        group.traverse((o) => { if (o instanceof THREE.Mesh) out.add(o.material as THREE.Material); });
+        return [...out];
+      };
+      const solid = every(scene.children[0]!);
+      expect(solid.filter((m) => every(scene.children[1]!).includes(m)).length).toBeGreaterThan(0);
+      remotes.addOwnDecoys([2]);
+      expect(every(scene.children[0]!)).toEqual(solid);
+      expect(solid.every((m) => !m.transparent)).toBe(true);
+      const stillShared = every(scene.children[1]!).filter((m) => solid.includes(m));
+      expect(stillShared.every((m) => m.side === THREE.BackSide)).toBe(true); // only outlines, which a ghost hides
+    });
+
+    it("forgets a decoy once it pops or leaves the snapshots", () => {
+      const { remotes } = looked();
+      remotes.push([other(1, 0), other(2, 5)], 0, 0);
+      remotes.addOwnDecoys([1, 2]);
+      remotes.forgetOwnDecoy(1);
+      expect(remotes.isOwnDecoy(1)).toBe(false);
+      remotes.push([], 3, 50);
+      expect(remotes.isOwnDecoy(2)).toBe(false);
+    });
+  });
+});

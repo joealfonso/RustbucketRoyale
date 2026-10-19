@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import mechJson from "../../../data/mech.json";
 import abilitiesJson from "../../../data/abilities.json";
-import { parseAbilities, type AbilityStats, type PounceStats, type RamStats } from "./abilities";
+import { barrageTarget, parseAbilities, type AbilityStats, type BarrageStats, type DecoyStats, type PounceStats, type RamStats } from "./abilities";
 import { createMechInput, type MechInput } from "./MechInput";
 import { createMechState, stepMech, type MechState } from "./mechStep";
 import { writeSelf } from "./mechWire";
@@ -13,6 +13,8 @@ const stats = parseMechStats(mechJson);
 const abilities = parseAbilities(abilitiesJson);
 const ram = abilities.mechs.ironclad as RamStats;
 const pounce = abilities.mechs.stiletto as PounceStats;
+const barrage = abilities.mechs.cataclysm as BarrageStats;
+const decoy = abilities.mechs.arbiter as DecoyStats;
 const DT = 1 / 60;
 const ground = boxFromData({ name: "g", center: [0, -0.5, 0], size: [1000, 1, 1000], color: "#fff" });
 const flat = new World([ground]);
@@ -159,6 +161,129 @@ describe("pounce", () => {
   });
 });
 
+describe("mortar strike", () => {
+  const busy = (extra: Partial<MechInput> = {}): MechInput => ({ ...createMechInput(), moveY: 1, moveX: 1, run: true, jet: true, ...extra });
+
+  it("plants the mech for its brace time, even with move and jets held, then lets it go", () => {
+    const s = standing();
+    steps(s, press(), 1, barrage);
+    expect(s.abilityCooldown).toBe(barrage.cooldownSeconds);
+    expect(s.abilityTime).toBeGreaterThan(0);
+    expect(s.abilityX).toBeCloseTo(0);
+    expect(s.abilityZ).toBeCloseTo(-1);
+
+    // The step it starts on counts as the first step of the brace, as with the ram.
+    const brace = Math.round(barrage.braceSeconds / DT);
+    for (let i = 1; i < brace - 1; i++) {
+      steps(s, busy(), 1, barrage);
+      expect(s.abilityTime, `step ${i}`).toBeGreaterThan(0);
+      expect([s.vx, s.vz, s.jetting]).toEqual([0, 0, false]);
+    }
+    expect(Math.hypot(s.x, s.z)).toBe(0);
+    expect(s.y).toBeCloseTo(0);
+    steps(s, busy(), 1, barrage);
+    expect([s.abilityTime, s.vx, s.vz]).toEqual([0, 0, 0]);
+    steps(s, busy(), 10, barrage);
+    expect(s.jetting).toBe(true);
+    expect(Math.hypot(s.vx, s.vz)).toBeGreaterThan(0);
+  });
+
+  it("ends on the same step whether or not its time left went through a snapshot's rounding", () => {
+    const idle = createMechInput();
+    const brace = Math.round(barrage.braceSeconds / DT);
+    for (let snapshotAt = 0; snapshotAt < brace + 2; snapshotAt++) {
+      const exact = standing(), rounded = standing();
+      steps(exact, press(), 1, barrage); steps(rounded, press(), 1, barrage);
+      for (let i = 0; i < brace + 10; i++) {
+        if (i === snapshotAt) rounded.abilityTime = Math.fround(rounded.abilityTime);
+        steps(exact, idle, 1, barrage); steps(rounded, idle, 1, barrage);
+        expect(rounded.abilityTime > 0, `snapshot at ${snapshotAt}, step ${i}`).toBe(exact.abilityTime > 0);
+      }
+    }
+  });
+
+  it("blocks a dash while braced and cuts one already going", () => {
+    const s = standing();
+    steps(s, { ...createMechInput(), dash: true, moveX: 1 }, 1, barrage);
+    expect(s.dashTime).toBeGreaterThan(0);
+    steps(s, press(), 1, barrage);
+    expect([s.dashTime, s.vx, s.vz]).toEqual([0, 0, 0]);
+    steps(s, busy({ dash: true }), 1, barrage);
+    expect(s.dashTime).toBe(0);
+  });
+
+  it("follows the same start rules: on the ground, on working legs, off cooldown", () => {
+    const flying = createMechState(stats, 0, 5, 0, 0);
+    steps(flying, press(), 1, barrage);
+    expect([flying.abilityTime, flying.abilityCooldown]).toEqual([0, 0]);
+    const crawler = standing();
+    crawler.crawling = true;
+    steps(crawler, press(), 1, barrage);
+    expect([crawler.abilityTime, crawler.abilityCooldown]).toEqual([0, 0]);
+    const s = standing();
+    steps(s, press(), Math.round(barrage.braceSeconds / DT) + 30, barrage);
+    expect(s.abilityTime).toBe(0);
+    expect(s.abilityCooldown).toBeGreaterThan(0);
+  });
+});
+
+describe("mortar strike target", () => {
+  const out = { x: 0, z: 0 };
+  // At (10, 20) aiming down -Z.
+  const at = (tx: number, tz: number) => { barrageTarget(10, 20, tx, tz, 0, -1, barrage, out); return [out.x, out.z]; };
+
+  it("leaves an aim point in range where it is", () => {
+    expect(at(40, -20)).toEqual([40, -20]);
+  });
+
+  it("pulls a far aim point in to its range, along the line to it", () => {
+    const [x, z] = at(10 + 300, 20);
+    expect(x).toBeCloseTo(10 + barrage.maxRange);
+    expect(z).toBeCloseTo(20);
+  });
+
+  it("pushes a near aim point out to its least range straight ahead", () => {
+    const [x, z] = at(12, 20);
+    expect(x).toBeCloseTo(10);
+    expect(z).toBeCloseTo(20 - barrage.minRange);
+  });
+
+  it("puts an aim point on top of the mech, or not a number, straight ahead too", () => {
+    for (const [tx, tz] of [[10, 20], [NaN, 0], [Infinity, 20]] as const) {
+      const [x, z] = at(tx, tz);
+      expect(x).toBeCloseTo(10);
+      expect(z).toBeCloseTo(20 - barrage.minRange);
+    }
+  });
+});
+
+describe("decoy drones", () => {
+  it("sets the cooldown and the aim direction and leaves the mech's movement alone", () => {
+    const yaw = Math.PI / 2;
+    const used = standing(), plain = standing();
+    const moving = (ability: boolean): MechInput => ({ ...createMechInput(), aimYaw: yaw, moveY: 1, jet: true, ability });
+    steps(used, moving(true), 1, decoy);
+    steps(plain, moving(false), 1, decoy);
+    expect(used.abilityCooldown).toBe(decoy.cooldownSeconds);
+    expect(used.abilityTime).toBe(0);
+    expect(used.abilityX).toBeCloseTo(-1);
+    expect(used.abilityZ).toBeCloseTo(0);
+    steps(used, moving(true), 30, decoy);
+    steps(plain, moving(false), 30, decoy);
+    for (const key of ["x", "y", "z", "vx", "vy", "vz", "jetting", "grounded"] as const) expect(used[key], key).toBe(plain[key]);
+  });
+
+  it("lets a dash carry on through it", () => {
+    const s = standing();
+    steps(s, { ...createMechInput(), dash: true, moveX: 1 }, 1, decoy);
+    const dashLeft = s.dashTime;
+    steps(s, press(), 1, decoy);
+    expect(s.abilityCooldown).toBe(decoy.cooldownSeconds);
+    expect(s.dashTime).toBeCloseTo(dashLeft - DT);
+    expect(s.vx).toBeCloseTo(stats.dashSpeed);
+  });
+});
+
 describe("ability determinism and prediction", () => {
   // A fixed, varied input sequence: walking, turning, both abilities fired more than once.
   function inputAt(i: number): MechInput {
@@ -166,7 +291,7 @@ describe("ability determinism and prediction", () => {
   }
 
   it("gives identical states for the same inputs, every time", () => {
-    for (const ability of [ram, pounce]) {
+    for (const ability of [ram, pounce, barrage, decoy]) {
       const a = createMechState(stats, 0, 0, 0, 0), b = createMechState(stats, 0, 0, 0, 0);
       for (let i = 0; i < 1200; i++) {
         stepMech(a, inputAt(i), stats, DT, flat, ability);
@@ -178,7 +303,7 @@ describe("ability determinism and prediction", () => {
   });
 
   it("lets the client replay a ram or a leap in flight with no correction", () => {
-    for (const ability of [ram, pounce]) {
+    for (const ability of [ram, pounce, barrage]) {
       const server = createMechState(stats, 0, 0, 0, 0);
       const client = new Predictor(() => stats, flat, 0, 0, 0, 0, () => ability);
       for (let i = 0; i < 40; i++) {

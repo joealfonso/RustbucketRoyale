@@ -22,7 +22,8 @@
       "tuck": 0.5,
       "limp": 0.6,
       "turnStep": 0.8,
-      "stepPitch": 0.8
+      "stepPitch": 0.8,
+      "braceDrop": 0
     },
     "stiletto": {
       "walkStride": 4.6,
@@ -39,7 +40,8 @@
       "tuck": 0.8,
       "limp": 0.6,
       "turnStep": 0.8,
-      "stepPitch": 1.5
+      "stepPitch": 1.5,
+      "braceDrop": 0
     },
     "cataclysm": {
       "walkStride": 4.0,
@@ -56,7 +58,8 @@
       "tuck": 0.4,
       "limp": 0.5,
       "turnStep": 1.0,
-      "stepPitch": 0.65
+      "stepPitch": 0.65,
+      "braceDrop": 0.3
     },
     "arbiter": {
       "walkStride": 3.1,
@@ -73,7 +76,8 @@
       "tuck": 0.6,
       "limp": 0.6,
       "turnStep": 0.8,
-      "stepPitch": 1.2
+      "stepPitch": 1.2,
+      "braceDrop": 0
     }
   }
 }

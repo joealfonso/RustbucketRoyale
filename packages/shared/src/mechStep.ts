@@ -29,9 +29,9 @@ export interface MechState {
   dashTime: number; // seconds of dash left, above 0 while dashing
   dashCooldown: number;
   dashX: number; dashZ: number; // dash direction, unit length
-  abilityTime: number; // seconds of ram charge left, or above 0 while a pounce is in the air
+  abilityTime: number; // seconds of ram charge or mortar brace left, or above 0 while a pounce is in the air
   abilityCooldown: number; // seconds until the ability can be used again
-  abilityX: number; abilityZ: number; // direction of the ram or leap, unit length
+  abilityX: number; abilityZ: number; // direction of the ram, leap, strike or decoys, unit length
   fuel: Meter;
   stamina: Meter;
 }
@@ -83,19 +83,24 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   // Only a mech on solid footing can start one: no rams in mid air, no leaps off broken legs.
   if (!ability) s.abilityTime = 0;
   s.abilityCooldown = Math.max(0, s.abilityCooldown - dt);
+  // The server spots a start by the cooldown going up, so every kind sets it here.
   if (ability && input.ability && s.abilityCooldown <= 0 && s.abilityTime <= 0 && s.grounded && !s.crawling) {
     s.abilityCooldown = ability.cooldownSeconds;
-    s.dashTime = 0;
-    if (ability.kind === "ram") {
+    if (ability.kind === "pounce") {
+      s.dashTime = 0;
+      launchPounce(s, input, ability, stats, forwardX, forwardZ);
+    } else {
       s.abilityX = forwardX;
       s.abilityZ = forwardZ;
-      s.abilityTime = ability.activeSeconds;
-    } else {
-      launchPounce(s, input, ability, stats, forwardX, forwardZ);
+      // Decoys leave the Arbiter's own movement alone, so a dash carries on through them: dash and decoy is the escape.
+      if (ability.kind !== "decoy") s.dashTime = 0;
+      if (ability.kind === "ram") s.abilityTime = ability.activeSeconds;
+      else if (ability.kind === "barrage") s.abilityTime = ability.braceSeconds;
     }
   }
   const ramming = s.abilityTime > 0 && ability?.kind === "ram";
   const pouncing = s.abilityTime > 0 && ability?.kind === "pounce";
+  const bracing = s.abilityTime > 0 && ability?.kind === "barrage";
 
   // A dash goes the way you are steering, in any of the eight directions, or straight ahead if you are standing still.
   s.dashCooldown = Math.max(0, s.dashCooldown - dt);
@@ -126,6 +131,13 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
     }
   } else if (pouncing) {
     // The leap keeps the speed it was launched with: no steering off it in the air.
+  } else if (bracing) {
+    // Feet planted while the strike is called in: a stopped target for a moment is the price of the shells.
+    s.vx = 0;
+    s.vz = 0;
+    s.abilityTime -= dt;
+    // The same half-step end as the ram, for the same snapshot rounding reason.
+    if (s.abilityTime < dt * 0.5) s.abilityTime = 0;
   } else if (s.dashTime > 0) {
     s.vx = s.dashX * stats.dashSpeed;
     s.vz = s.dashZ * stats.dashSpeed;
@@ -148,7 +160,7 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
     }
   }
 
-  s.jetting = input.jet && s.fuel.canUse && !pouncing;
+  s.jetting = input.jet && s.fuel.canUse && !pouncing && !bracing;
   if (s.jetting) {
     s.fuel.drain(stats.fuelDrainPerSecond * dt, stats.fuelRegenDelay);
     s.vy = Math.min(s.vy + stats.jetLift * dt, stats.jetMaxRiseSpeed);

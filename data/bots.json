@@ -94,6 +94,12 @@
     "ramMaxRange": 28,
     "pounceChancePerSecond": 0.5,
     "pounceMinRange": 10,
-    "pounceMaxRange": 28
+    "pounceMaxRange": 28,
+    "barrageChancePerSecond": 0.3,
+    "barrageMinRange": 30,
+    "barrageMaxRange": 110,
+    "decoyChancePerSecond": 1.5,
+    "decoyHurtSeconds": 2,
+    "decoyNearRange": 15
   }
 }
