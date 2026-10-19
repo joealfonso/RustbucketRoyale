@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M9 mech classes (gate 9c built, waiting for its playtest)
+Current code milestone: none (M1 to M9 done)
 Current visual milestone: V3 done, with V2d walk cycles passed after it. V4 (HUD and radar) not started
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -107,3 +107,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: During the 9b check (Joseph: "the sounds need to be improved and applied on walk. all guns shoot from the same spot"): every mech now fires from its own gun (Stiletto's left carbine, Cataclysm's mortar muzzles, Arbiter's two wrists in turn), the weapon colour marks that gun, sounds rebuilt to carry on laptop speakers, footsteps pitched per mech and heard from others within 30 m. Check by ear: steps, shots, ram, pounce, slam.
 - 2026-10-18: Gate 9b passed by Joseph's call, with the own-gun muzzles and rebuilt sounds. 9c (Cataclysm and Arbiter abilities) not started.
 - 2026-10-18: Gate 9c built, waiting for its playtest. Check: as Cataclysm press Q aiming 15 to 120 m out: it plants and booms, a red ring appears at the target for everyone, a whistle, then three shells; stand in someone else's ring and run. As Arbiter press Q: two copies of you run off at angles (see-through to you, real-looking to everyone else, damage and all); bots shoot them; one hit pops them in a teal fizz. Bots use both. HUD shows "Q Mortar Strike" and "Q Decoy Drones". On style.html W also cycles a "braced" pose. Numbers in data/abilities.json, data/abilityFx.json, data/gait.json braceDrop and data/bots.json abilities. Soak passes on all tiers at 43 to 58 kbps.
+- 2026-10-18: Gate 9c passed by Joseph's call. M9 is done: four mechs with their own movement, toughness and Q ability, used by bots. No code milestone is next; V4 (HUD and radar) not started.

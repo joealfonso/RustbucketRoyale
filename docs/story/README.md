@@ -201,6 +201,13 @@ The four mechs stopped being skins. You now pick one on the start menu, or on th
 
 Two mechs got a button that changes how a fight goes. Ironclad-IV's Q is a Shield Ram: a straight charge with the shield up, shoving and hurting whatever it hits and smashing crates on the way. Stiletto-B's Q is a Pounce: a leap toward the crosshair that slams down on whoever is underneath. Both are worked out by the same code on your machine and on the server, so they feel instant and can't be cheated. Bots use them too. The work was split into three pieces, each built by its own helper: the shared rules, the server, the client. Putting them together, a soak run caught the ram ending a step apart on the client and the server; the cause was the rounding of one number in each update. In the playtest you asked for two fixes. Every gun had been firing from the same spot on the right arm, so each mech now shoots from its own gun: Stiletto's carbine on its left arm, Cataclysm's twin mortar barrels, Arbiter's two wrist guns in turn. And the sounds were rebuilt so laptop speakers carry them, with footsteps you can hear.
 
+## 27. Gate 9c: four ways to play
+*Passed 22:13. Commit `20b6822`.*
+
+![The four roster mechs mid-run, each now carrying its own gun in the weapon colour: Ironclad's autocannon, Stiletto's left carbine, Cataclysm's mortar muzzles, Arbiter's two wrist guns](27-9c-four-ways-to-play.jpg)
+
+The last two mechs got their button, and every mech now plays its own way. Cataclysm's Mortar Strike plants its claws and lobs three shells at the crosshair. Everyone sees a red ring on the ground first, so the target can run, and the planted Cataclysm becomes a target itself. Arbiter's Decoy Drones send two copies of it running off. To everyone else they look real, damage and all; only their owner sees them as ghosts. Bots fall for them, and one hit pops them in a teal fizz. Three helpers built it again, side by side: rules, server, client. That finishes M9: pick a mech, and each moves, takes hits and fights differently.
+
 ---
 
-*Next: 9c, Cataclysm's mortar and Arbiter's decoy drones, and bots that use them.*
+*Next: the visual track's V4 (HUD and radar), or whatever the playtests ask for.*
