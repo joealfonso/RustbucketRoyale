@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import {
   World, buildNavGrid, buildRange, generateMap, parseBotConfig, parseChunkSet, parseCombatStats, parseGrenadeStats, parseMatchConfig, parseMechStats,
-  parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseTiers, parseWeapons, parseLootConfig, parseUpgrades, parseZones, makeZonesFor, TUNABLE_FILES, type RangeData, type TuningRaws,
+  parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseTiers, parseWeapons, parseLootConfig, parseUpgrades, parseZones, parseRoster, TUNABLE_FILES, type Roster, type RangeData, type TuningRaws,
 } from "@rustbucket/shared";
 import type { MapForRoom, RoomConfig } from "./Room";
 
@@ -12,8 +12,9 @@ function readJson(name: string): unknown {
 }
 
 export interface ConfigOptions {
-  // Give each player the hit boxes of the roster mech they are dealt (data/mechKits.json), as the real server does.
-  // Tests leave it off and use the standard boxes, which their aiming is built around.
+  // Load the roster (data/roster.json) and its measured hit boxes (data/mechKits.json), as the real server does, so
+  // each mech moves, takes damage and is hit its own way. Tests leave it off: one standard mech is what their
+  // aiming and numbers are built around.
   roster?: boolean;
   // "generated" builds each match's map from its seed. "range" always uses the flat test strip, which
   // keeps combat tests simple because spawns and walls never move.
@@ -37,10 +38,14 @@ export function loadRoomConfig(options: ConfigOptions = {}): RoomConfig {
     match: parseMatchConfig(readJson("match.json")),
     ring: parseRingConfig(readJson("ring.json")),
     zones: parseZones(readJson("zones.json")),
-    zonesFor: undefined as ((id: number) => import("@rustbucket/shared").ZoneSet) | undefined,
+    roster: undefined as Roster | undefined,
+    kitHitboxes: undefined as unknown,
   };
 
-  if (options.roster) base.zonesFor = makeZonesFor(base.zones, readJson("mechKits.json"));
+  if (options.roster) {
+    base.roster = parseRoster(readJson("roster.json"));
+    base.kitHitboxes = readJson("mechKits.json");
+  }
 
   if (options.maps === "generated") {
     const chunks = parseChunkSet(readJson("chunks.json"));

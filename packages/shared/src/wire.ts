@@ -64,7 +64,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
   for (const n of [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale]) {
     v.setFloat32(o, n, true); o += 4;
   }
-  v.setUint8(o, (s.grounded ? 1 : 0) | (s.running ? 2 : 0) | (s.jetting ? 4 : 0) | (s.fuelLocked ? 8 : 0) | (s.staminaLocked ? 16 : 0) | (s.crawling ? 32 : 0)); o += 1;
+  v.setUint8(o, (s.grounded ? 1 : 0) | (s.running ? 2 : 0) | (s.jetting ? 4 : 0) | (s.fuelLocked ? 8 : 0) | (s.staminaLocked ? 16 : 0) | (s.crawling ? 32 : 0) | ((s.mech & 3) << 6)); o += 1;
 
   v.setUint8(o, others.length); o += 1;
   for (const other of others) {
@@ -74,7 +74,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
     v.setInt16(o, Math.round(other.z / POSITION_STEP), true); o += 2;
     const turns = ((other.yaw % TWO_PI) + TWO_PI) % TWO_PI;
     v.setUint16(o, Math.round((turns / TWO_PI) * 65535), true); o += 2;
-    v.setUint8(o, (other.running ? 1 : 0) | (other.jetting ? 2 : 0) | (other.dead ? 4 : 0) | (other.bot ? 8 : 0) | (other.looted ? 16 : 0) | (other.repairing ? 32 : 0)); o += 1;
+    v.setUint8(o, (other.running ? 1 : 0) | (other.jetting ? 2 : 0) | (other.dead ? 4 : 0) | (other.bot ? 8 : 0) | (other.looted ? 16 : 0) | (other.repairing ? 32 : 0) | ((other.mech & 3) << 6)); o += 1;
     for (let i = 0; i < 3; i++) { v.setUint8(o, u8(other.hp[i] ?? 0)); o += 1; }
     v.setUint8(o, u8(other.weapon)); o += 1;
     for (let i = 0; i < 3; i++) { v.setUint8(o, u8(other.armor[i] ?? 0)); o += 1; }
@@ -126,12 +126,13 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
   const f = () => { const n = v.getFloat32(o, true); o += 4; return n; };
   const you: SelfState = {
     x: f(), y: f(), z: f(), vx: f(), vz: f(), vy: f(), bodyYaw: f(), dashTime: f(), dashCooldown: f(), dashX: f(), dashZ: f(),
-    fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(),
+    fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(), mech: 0,
     grounded: false, running: false, jetting: false, crawling: false, fuelLocked: false, staminaLocked: false,
   };
   const flags = v.getUint8(o); o += 1;
   you.grounded = (flags & 1) !== 0; you.running = (flags & 2) !== 0; you.jetting = (flags & 4) !== 0;
   you.fuelLocked = (flags & 8) !== 0; you.staminaLocked = (flags & 16) !== 0; you.crawling = (flags & 32) !== 0;
+  you.mech = flags >> 6;
 
   const slot = (n: number) => (n === EMPTY_SLOT ? -1 : n);
   const count = v.getUint8(o); o += 1;
@@ -148,7 +149,7 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
     const weapon = v.getUint8(o); o += 1;
     const armor = [v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2)]; o += 3;
     const upgrades = [slot(v.getUint8(o)), slot(v.getUint8(o + 1))]; o += 2;
-    others.push({ id, x, y, z, yaw, running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, repairing: (bits & 32) !== 0, bot: (bits & 8) !== 0, hp: ohp, weapon, armor, upgrades });
+    others.push({ id, x, y, z, yaw, running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, repairing: (bits & 32) !== 0, bot: (bits & 8) !== 0, hp: ohp, weapon, armor, upgrades, mech: bits >> 6 });
   }
   const noiseCount = v.getUint8(o); o += 1;
   if (bytes.length < o + noiseCount * NOISE_BYTES + LOADOUT_BYTES + LOOTING_BYTES + 1) return null;

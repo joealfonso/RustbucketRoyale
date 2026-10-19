@@ -12,6 +12,7 @@ interface Sample {
 
 interface Remote {
   model: MechModel;
+  mech: number; // the roster mech it is drawn as. A new one swaps the model.
   dead: boolean;
   looted: boolean;
   bot: boolean;
@@ -37,7 +38,7 @@ export class RemoteMechs {
   weaponColors: string[] = [];
   upgrades: UpgradeDef[] = [];
   // The toon look and colours for other mechs. Without it they are drawn as plain grey boxes.
-  look: { toon: Toon; accentFor: (id: number) => string; body: string; kitFor: (id: number) => LoadedKit | null; trim: string } | null = null;
+  look: { toon: Toon; accentFor: (id: number) => string; body: string; kitFor: (mech: number) => LoadedKit | null; trim: string } | null = null;
 
   constructor(
     private scene: THREE.Scene,
@@ -78,13 +79,13 @@ export class RemoteMechs {
   }
 
   // The distance along a ray to the nearest standing mech, checked against its hit zones where it is drawn, or -1.
-  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number, zonesFor: (id: number) => ZoneSet, hit: ZoneHit): number {
+  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number, zonesFor: (mech: number) => ZoneSet, hit: ZoneHit): number {
     let best = -1;
     let reach = max;
-    for (const [id, r] of this.remotes) {
+    for (const r of this.remotes.values()) {
       if (r.dead) continue;
       const p = r.model.group.position;
-      if (raycastMech(ox, oy, oz, dx, dy, dz, reach, p.x, p.y, p.z, r.model.group.rotation.y, zonesFor(id), hit)) {
+      if (raycastMech(ox, oy, oz, dx, dy, dz, reach, p.x, p.y, p.z, r.model.group.rotation.y, zonesFor(r.mech), hit)) {
         best = hit.distance;
         reach = hit.distance;
       }
@@ -111,6 +112,12 @@ export class RemoteMechs {
     return true;
   }
 
+  private makeModel(o: OtherState): MechModel {
+    const model = this.look ? createMechModel(this.look.accentFor(o.id), this.zoneMaxHp, this.look.toon, this.look.body, this.look.kitFor(o.mech), this.look.trim) : createMechModel("#2f7fd0", this.zoneMaxHp);
+    this.scene.add(model.group);
+    return model;
+  }
+
   push(others: readonly OtherState[], serverTick: number, nowMs: number): void {
     const serverMs = serverTick * STEP * 1000;
     const gap = nowMs - serverMs;
@@ -125,10 +132,14 @@ export class RemoteMechs {
 
     for (const o of others) {
       let remote = this.remotes.get(o.id);
+      if (remote && remote.mech !== o.mech) {
+        // Picked another mech between matches: same player, new body. Keeps its samples so it does not jump.
+        this.scene.remove(remote.model.group);
+        remote.model = this.makeModel(o);
+        remote.mech = o.mech;
+      }
       if (!remote) {
-        const model = this.look ? createMechModel(this.look.accentFor(o.id), this.zoneMaxHp, this.look.toon, this.look.body, this.look.kitFor(o.id), this.look.trim) : createMechModel("#2f7fd0", this.zoneMaxHp);
-        this.scene.add(model.group);
-        remote = { model, dead: false, looted: false, bot: o.bot, samples: [], seen: true };
+        remote = { model: this.makeModel(o), mech: o.mech, dead: false, looted: false, bot: o.bot, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;

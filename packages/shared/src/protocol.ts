@@ -43,7 +43,14 @@ export interface TuneMessage {
   value: number;
 }
 
-export type ClientMessage = InputMessage | StartMessage | TuneMessage;
+// The mech this player wants to drive (an index into data/roster.json). In the lobby it swaps at once; during a
+// match it waits for the next one. The server checks the number against its roster.
+export interface MechMessage {
+  t: "mech";
+  mech: number;
+}
+
+export type ClientMessage = InputMessage | StartMessage | TuneMessage | MechMessage;
 
 // The full state a client needs to rewind and replay its own mech.
 export interface SelfState {
@@ -55,6 +62,7 @@ export interface SelfState {
   fuel: number; fuelLocked: boolean; fuelTimer: number;
   stamina: number; staminaLocked: boolean; staminaTimer: number;
   fuelScale: number;
+  mech: number; // which roster mech you are driving. Can change between matches.
 }
 
 // All a client needs to draw somebody else.
@@ -72,6 +80,7 @@ export interface OtherState {
   weapon: number; // index of the weapon in hand, for drawing the right gun
   armor: number[]; // plate points left on legs, arms, torso, for drawing plates
   upgrades: number[]; // the two upgrades fitted, -1 for none, for drawing the parts bolted on
+  mech: number; // which roster mech to draw, and whose hit boxes the crosshair checks
 }
 
 // What you are carrying. Slots hold a weapon index, or -1 when empty.
@@ -175,6 +184,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (typeof data !== "object" || data === null) return null;
   const m = data as Record<string, unknown>;
   if (m.t === "start") return { t: "start" };
+  if (m.t === "mech") return Number.isInteger(m.mech) && (m.mech as number) >= 0 ? { t: "mech", mech: m.mech as number } : null;
   if (m.t === "tune") {
     if (typeof m.file !== "string" || typeof m.path !== "string" || m.path.length > 80 || !finite(m.value)) return null;
     return { t: "tune", file: m.file, path: m.path, value: m.value };

@@ -5,6 +5,7 @@ import {
   NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
   takenWithE, itemUpgrade, upgradeItem, upgradeScale, applyTune, assignDeep, parseTunable, TUNABLE_FILES, type TuningRaws, type UpgradeSet,
+  makeZonesFor, mechStatsFor, rosterIndex, type Roster,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
@@ -52,8 +53,10 @@ export interface RoomConfig {
   // Dev only (DEV_TUNING=1): the raw data files, so players in a room can change numbers live. Each room tunes its
   // own copy, so a playtest in one room never changes another.
   tuningRaws?: TuningRaws;
-  // Each player's hit boxes, by the roster mech they are dealt. Without it everyone has the standard boxes.
-  zonesFor?: (id: number) => ZoneSet;
+  // The roster mechs (data/roster.json) and the hit boxes measured for them (data/mechKits.json). Without a roster
+  // every mech moves, takes damage and is hit like the standard one, which is what most tests want.
+  roster?: Roster;
+  kitHitboxes?: unknown;
 }
 
 // One room: a lobby that runs match after match. Transport free: it only sees parsed messages and a send
@@ -96,6 +99,9 @@ export class Room {
   private farBots: FarBot[] = [];
   private anchors: Player[] = []; // the people bots keep full AI near
 
+  private statsFor: (mech: number) => MechStats;
+  private zonesFor: (mech: number) => ZoneSet;
+
   private tuningRaws: TuningRaws | null = null;
   private tunes: Extract<ServerMessage, { t: "tuned" }>[] = []; // every change so far, replayed to people who join later
 
@@ -105,9 +111,12 @@ export class Room {
     if (config.tuningRaws) {
       this.tuningRaws = JSON.parse(JSON.stringify(config.tuningRaws)) as TuningRaws;
       const own: Record<string, unknown> = { ...config };
-      for (const file of TUNABLE_FILES) own[file] = parseTunable(file, this.tuningRaws);
+      for (const file of TUNABLE_FILES) if (file !== "roster" || config.roster) own[file] = parseTunable(file, this.tuningRaws);
       this.config = config = own as unknown as RoomConfig;
     }
+    // Made from this room's own copies, so tuning in the room reaches each mech's numbers.
+    this.statsFor = mechStatsFor(config.mech, config.roster ?? null);
+    this.zonesFor = makeZonesFor(config.zones, config.roster ?? null, config.kitHitboxes);
     this.random = config.random ?? Math.random;
     this.pickups = new Pickups(config.loot.maxPickups);
     this.historyLength = Math.ceil(config.combat.historyMs / (STEP * 1000));
@@ -146,15 +155,26 @@ export class Room {
   }
 
   private addBot(): void {
-    const { mech, net } = this.config;
+    const { net } = this.config;
     const slot = this.freeSlot();
     const id = this.nextId++;
+    const mech = this.dealtMech(id);
     this.players.set(id, {
-      id, slot, bot: this.newBot(), send: () => {}, state: createMechState(mech, ...this.spawnFor(slot), Math.PI),
+      id, slot, bot: this.newBot(), send: () => {}, mech, state: this.freshState(slot, mech),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
       hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
+  }
+
+  // Bots, and people who have not picked, are dealt a mech by player number, so a room has all four in it.
+  private dealtMech(id: number): number {
+    return id % (this.config.roster?.mechs.length ?? 1);
+  }
+
+  // A mech standing on its spawn, as the roster mech it is.
+  private freshState(slot: number, mech: number) {
+    return createMechState(this.statsFor(mech), ...this.spawnFor(slot), Math.PI, mech);
   }
 
   private newBot(): Bot {
@@ -184,7 +204,7 @@ export class Room {
 
   // Returns the new player's id, or null if the room is full.
   join(send: (message: ServerMessage) => void): number | null {
-    const { net, mech } = this.config;
+    const { net } = this.config;
     if (this.humans().length >= net.maxPlayers) {
       send({ t: "refused", reason: "The room is full." });
       return null;
@@ -194,8 +214,9 @@ export class Room {
     // Someone arriving while a match is running can only watch it.
     const watching = this.state === "active" || this.state === "results";
     const id = this.nextId++;
+    const mech = this.dealtMech(id);
     const player: Player = {
-      id, slot, bot: null, send, state: createMechState(mech, ...this.spawnFor(slot), Math.PI), gate: new FireGate(), grenadeGate: new FireGate(),
+      id, slot, bot: null, send, mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(),
       queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
@@ -244,6 +265,10 @@ export class Room {
       this.tune(message.file, message.path, message.value);
       return true;
     }
+    if (message.t === "mech") {
+      this.pickMech(player, message.mech);
+      return true;
+    }
 
     if (message.lagMs !== undefined) player.lagMs = message.lagMs;
     player.watchId = message.watchId ?? 0;
@@ -254,6 +279,14 @@ export class Room {
     toMechInput(message, input);
     player.queue.push({ seq: message.seq, input });
     return true;
+  }
+
+  // A person picked a mech. Before a match it swaps at once, where they stand. Once a match is running they keep
+  // the one they have and get the new one at the next spawn, so nobody can swap mid fight.
+  private pickMech(player: Player, mech: number): void {
+    if (!this.config.roster || mech !== rosterIndex(this.config.roster, mech)) return;
+    player.mech = mech;
+    if (this.state === "lobby" || this.state === "countdown") player.state.mech = mech;
   }
 
   // A playtester changed a number. It goes through the same checks as loading the file, then into the live values
@@ -435,7 +468,7 @@ export class Room {
       player.askedSlot = 0;
       player.looted = false;
       this.stopLooting(player);
-      player.state = createMechState(this.config.mech, ...this.spawnFor(player.slot), Math.PI);
+      player.state = this.freshState(player.slot, player.mech);
       player.queue.length = 0;
     }
     this.state = "countdown";
@@ -485,7 +518,7 @@ export class Room {
   }
 
   private respawnForPractice(player: Player): void {
-    player.state = createMechState(this.config.mech, ...this.spawnFor(player.slot), Math.PI);
+    player.state = this.freshState(player.slot, player.mech);
     player.hp = createHealth(this.config.zones);
     player.loadout = freshLoadout(this.config.weapons, this.config.loot);
     player.looted = false;
@@ -550,7 +583,7 @@ export class Room {
     const dashBefore = player.state.dashTime;
     player.state.crawling = player.hp[ZONE_LEGS]! <= 0;
     player.state.fuelScale = upgradeScale(player.loadout, this.config.upgrades, "fuel");
-    stepMech(player.state, input, this.config.mech, dt, this.map.world);
+    stepMech(player.state, input, this.statsFor(player.state.mech), dt, this.map.world);
     player.steps += Math.round(dt / STEP);
     if (player.state.running) this.makeNoise(player, "run", player.state.x, player.state.z);
     if (player.state.jetting) this.makeNoise(player, "jets", player.state.x, player.state.z);
@@ -580,7 +613,7 @@ export class Room {
   // Outside a running match nothing can be lost, so a fall just puts you back on your spawn.
   private fellOffMap(player: Player): void {
     if (this.state === "active") this.eliminate(player, null);
-    else player.state = createMechState(this.config.mech, ...this.spawnFor(player.slot), Math.PI);
+    else player.state = this.freshState(player.slot, player.mech);
   }
 
   private tryShoot(player: Player, input: MechInput): void {
@@ -608,7 +641,7 @@ export class Room {
     const target = this.state !== "countdown" ? this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach) : null;
     if (target) {
       reach = this.zoneHit.distance;
-      const taken = applyDamage(target.hp, this.config.zones, this.zoneHit.zone, weapon.damage, target.loadout.armor);
+      const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, weapon.damage, target.loadout.armor);
       const killed = !target.dead && isDestroyed(target.hp);
       player.send({
         t: "hit", targetId: target.id, zone: this.zoneHit.zone, damage: taken, killed,
@@ -646,7 +679,7 @@ export class Room {
       const z = old ? target.history[index * 4 + 2]! : target.state.z;
       const yaw = old ? target.history[index * 4 + 3]! : target.state.bodyYaw;
 
-      const zones = this.config.zonesFor?.(target.id) ?? this.config.zones;
+      const zones = this.zonesFor(target.state.mech);
       if (raycastMech(ox, oy, oz, dx, dy, dz, bestDistance, x, y, z, yaw, zones, this.zoneHit)) {
         best = target;
         bestDistance = this.zoneHit.distance;
@@ -706,7 +739,7 @@ export class Room {
 
       const amount = damage * (1 - distance / radius);
       let total = 0;
-      for (let zone = 0; zone < ZONE_COUNT; zone++) total += applyDamage(target.hp, zones, zone, amount, target.loadout.armor);
+      for (let zone = 0; zone < ZONE_COUNT; zone++) total += applyDamage(target.hp, this.zonesFor(target.state.mech), zone, amount, target.loadout.armor);
       const killed = isDestroyed(target.hp);
       owner?.send({ t: "hit", targetId: target.id, zone: -1, damage: total, killed, x: target.state.x, y: target.state.y + CHEST_HEIGHT, z: target.state.z });
       if (killed) this.eliminate(target, owner);
@@ -957,7 +990,7 @@ export class Room {
       everyone.push({
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
         running: p.state.running, jetting: p.state.jetting, dead: p.dead, looted: p.looted, repairing: p.repairZone >= 0, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
-        weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil), upgrades: p.loadout.upgrades,
+        weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil), upgrades: p.loadout.upgrades, mech: p.state.mech,
       });
     }
     const match = this.progress();

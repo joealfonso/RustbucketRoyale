@@ -1,0 +1,40 @@
+{
+  "mechs": [
+    {
+      "id": "ironclad",
+      "name": "Ironclad-IV",
+      "role": "Heavy brawler",
+      "speed": 0.85,
+      "jets": 0.7,
+      "lift": 0.9,
+      "damageTaken": { "legs": 0.7, "arms": 0.75, "torso": 0.7 }
+    },
+    {
+      "id": "stiletto",
+      "name": "Stiletto-B",
+      "role": "Fast skirmisher",
+      "speed": 1.2,
+      "jets": 1.5,
+      "lift": 1.25,
+      "damageTaken": { "legs": 1.25, "arms": 1.25, "torso": 1.25 }
+    },
+    {
+      "id": "cataclysm",
+      "name": "Cataclysm",
+      "role": "Siege walker",
+      "speed": 0.75,
+      "jets": 0.55,
+      "lift": 0.8,
+      "damageTaken": { "legs": 0.6, "arms": 0.9, "torso": 0.75 }
+    },
+    {
+      "id": "arbiter",
+      "name": "Arbiter",
+      "role": "Support",
+      "speed": 1.05,
+      "jets": 1.15,
+      "lift": 1,
+      "damageTaken": { "legs": 1, "arms": 1, "torso": 1 }
+    }
+  ]
+}

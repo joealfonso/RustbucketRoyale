@@ -7,6 +7,7 @@ export interface Player {
   slot: number;
   bot: Bot | null; // set for computer players, which have no connection
   send: (message: ServerMessage) => void;
+  mech: number; // the roster mech this player drives from their next spawn (state.mech is the one they drive now)
   state: MechState;
   gate: FireGate;
   grenadeGate: FireGate;

@@ -47,7 +47,7 @@ export function runSoak(tier: string, seed: number, options: SoakOptions = {}): 
   const chunks = parseChunkSet(readData("chunks.json"));
   const tiers = parseTiers(readData("tiers.json"));
   const room = new Room("SOAK", tier, config, null);
-  const players = Array.from({ length: fakePlayers }, (_, i) => new HeadlessPlayer(room, config.mech, config.bots, chunks, tiers, parsePropConfig(readData("props.json")), lcg(seed + i + 1)));
+  const players = Array.from({ length: fakePlayers }, (_, i) => new HeadlessPlayer(room, config.mech, config.bots, chunks, tiers, parsePropConfig(readData("props.json")), lcg(seed + i + 1), config.roster ?? null, i));
   const problems: string[] = [];
   const problem = (text: string) => { if (problems.length < 20) problems.push(text); };
 

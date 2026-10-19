@@ -1,4 +1,4 @@
-import type { Loadout, MatchProgress, RingNow, UpgradeDef, WeaponStats } from "@rustbucket/shared";
+import type { Loadout, MatchProgress, RingNow, RosterMech, UpgradeDef, WeaponStats } from "@rustbucket/shared";
 
 export interface RoomView {
   code: string;
@@ -24,6 +24,7 @@ export class Hud {
   private zoneWarning = byId("zoneWarning");
   private lastText = new Map<HTMLElement, string>();
   private loadoutBox = byId("loadout");
+  private mechBox = byId("mechName");
   private promptBox = byId("prompt");
   private plateFills = Array.from(document.querySelectorAll<HTMLElement>("#zones .plate"));
 
@@ -83,6 +84,14 @@ export class Hud {
       this.loadoutBox.innerHTML = html;
     }
     this.plateFills.forEach((fill, zone) => { fill.style.width = `${Math.min(1, (l.armor[zone] ?? 0) / (plates[zone] || 1)) * 100}%`; });
+  }
+
+  // The mech you are driving, and the one you picked for next match if it is a different one.
+  setMech(mech: RosterMech, next: string | null): void {
+    const html = `${mech.name} <small>· ${mech.role}</small>${next ? `<br /><small>Next match: ${next}</small>` : ""}`;
+    if (this.lastText.get(this.mechBox) === html) return;
+    this.lastText.set(this.mechBox, html);
+    this.mechBox.innerHTML = html;
   }
 
   // A hint shown near something to interact with, or hidden with an empty string.

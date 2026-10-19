@@ -20,3 +20,4 @@ export * from "./loot";
 export * from "./upgrades";
 export * from "./tuning";
 export * from "./hitboxes";
+export * from "./roster";

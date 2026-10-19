@@ -1,4 +1,4 @@
-import { Predictor, STEP, createMechInput, type MechInput, type PickupState, type ServerMessage } from "@rustbucket/shared";
+import { Predictor, STEP, mechStatsFor, createMechInput, type MechInput, type PickupState, type ServerMessage } from "@rustbucket/shared";
 import { loadRoomConfig } from "./config";
 import { Room, type RoomConfig } from "./Room";
 
@@ -54,7 +54,7 @@ export class Client {
     // Start where the server put this player (slot = join order here) so the first snapshot is not a jump.
     const map = config.mapFor(room.tier, 0);
     const [x, y, z] = map.spawns[(this.id - 1) % map.spawns.length]!;
-    this.predictor = new Predictor(config.mech, map.world, x, y, z, Math.PI);
+    this.predictor = new Predictor(mechStatsFor(config.mech, config.roster ?? null), map.world, x, y, z, Math.PI);
   }
   send(input: MechInput): void {
     const seq = this.predictor.step(input, STEP);

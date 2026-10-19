@@ -1,6 +1,6 @@
 import {
   Predictor, STEP, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
-  ringAt, type BotConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type RingSchedule, type ServerMessage, type TierSet, type World,
+  mechStatsFor, ringAt, type Roster, type BotConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type RingSchedule, type ServerMessage, type TierSet, type World,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "../Bot";
 import { Pathfinder } from "../Pathfinder";
@@ -41,8 +41,11 @@ export class HeadlessPlayer {
     private tiers: TierSet,
     private propConfig: PropConfig,
     private random: () => number,
+    private roster: Roster | null = null,
+    pick = 0, // the roster mech this player picks, so the soak drives every kind
   ) {
     this.id = room.join((m) => this.receive(m)) ?? 0;
+    room.receive(this.id, JSON.stringify({ t: "mech", mech: pick }));
   }
 
   // Everything goes through the packed format and back, exactly as it would over the wire.
@@ -70,7 +73,7 @@ export class HeadlessPlayer {
     this.props = map.props;
     const finder = new Pathfinder(map.nav, this.bots.path);
     if (!this.predictor) {
-      this.predictor = new Predictor(this.mech, map.world, ...map.spawns[0]!, Math.PI);
+      this.predictor = new Predictor(mechStatsFor(this.mech, this.roster), map.world, ...map.spawns[0]!, Math.PI);
       this.brain = new Bot(this.bots.difficulties.normal!, this.random, this.bots.path, finder);
     } else {
       this.predictor.setWorld(map.world);

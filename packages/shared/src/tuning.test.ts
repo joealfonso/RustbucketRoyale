@@ -9,13 +9,14 @@ import botsJson from "../../../data/bots.json";
 import noiseJson from "../../../data/noise.json";
 import combatJson from "../../../data/combat.json";
 import propsJson from "../../../data/props.json";
+import rosterJson from "../../../data/roster.json";
 import { applyTune, assignDeep, parseTunable, setNumberAt, TUNABLE_FILES, type TuningRaws } from "./tuning";
 import type { WeaponSet } from "./stats";
 import type { ZoneSet } from "./zones";
 
 const raws = (): TuningRaws => JSON.parse(JSON.stringify({
   mech: mechJson, weapons: weaponsJson, grenade: grenadeJson, zones: zonesJson, loot: lootJson, upgrades: upgradesJson,
-  bots: botsJson, noise: noiseJson, combat: combatJson, props: propsJson,
+  bots: botsJson, noise: noiseJson, combat: combatJson, roster: rosterJson, props: propsJson,
 }));
 
 describe("live tuning", () => {

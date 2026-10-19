@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: none (M1 to M8 done)
+Current code milestone: M9 mech classes (gate 9a built, waiting for its playtest)
 Current visual milestone: V3 done (junkyard dressing, props). V4 (HUD and radar) not started
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -14,6 +14,7 @@ Update the two lines above when a gate passes. Claude Code reads this file first
 - M6: destructible props, loot drops, noise, looting wrecks.
 - M7: part damage, broken states, crawl, repair.
 - M8: upgrades, tuning pass with the debug panel, perf pass, bot count tuning from soak data, first load test for rooms per server.
+- M9: mech classes. Each roster mech plays its own way: its own movement and toughness (9a), then one ability each on Q (9b, 9c), and bots that use them.
 
 ## Visual
 - V1 style test: one grey-box mech and one chunk in the browser with the toon shader, outline, palette, and lighting. Gate: screenshots at 10 m, 50 m, and 150 m read well on a mid-range laptop before any more assets get made. Draw three thumbnail silhouettes of the first mech on paper before opening Blender, and keep the scan of the chosen one in the repo next to the screenshots. Also build the asset import checker (`scripts/check-assets.ts`, run by the gauntlet; it was a Unity editor script before the move to the web) that fails a glTF model over the triangle budget, with the wrong naming, or without the master toon material.
@@ -96,3 +97,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Gate V3b built, waiting for its playtest. Check: shoot a crate, a junk pile and a barrel; each bursts into chunks in its colours and leaves low debris you can walk over, and the cover is really gone; crates read as loot (straps, cross), barrels as explosive. On style.html press 5 to see each standing and broken.
 - 2026-10-18: Gate V3b passed by Joseph's call. V3 is done. Open: updating the roster to docs/MECH_ROSTER.md (per-mech paint, glowing sensors), now allowed by DESIGN.md. V4 not started.
 - 2026-10-18: The four roster mechs rebuilt to docs/MECH_ROSTER.md on Joseph's call: own factory paint per mech, glowing sensors and accents, pilot accent markings, Ironclad's recessed eye and ramming shield, Stiletto's raptor head and jump-pack fins, Cataclysm's lens array, claws and point-defence turrets, Arbiter's four drones on pylons. Serial numbers left for the decal font. Check: style.html key 4, and any match.
+- 2026-10-18: M9 started on Joseph's go, in gates 9a (pick a mech, each with its own speed, jets and toughness), 9b and 9c (one ability each on Q, bots using them).
+- 2026-10-18: Gate 9a built, waiting for its playtest. Check: pick a mech on the start menu (it is remembered) or on the pause screen (Esc); in the lobby it swaps where you stand, mid match the HUD says "Next match: ..." and it swaps at the next one. Stiletto-B is fast with long, quick jets and is fragile; Ironclad-IV and Cataclysm are slow, short on jets and tough; Arbiter is the all-rounder until its ability in 9c. Bots are dealt all four. The numbers are first guesses in data/roster.json, tunable in F1 (Data files, roster.json). Soak passes on all tiers at 42 to 51 kbps.

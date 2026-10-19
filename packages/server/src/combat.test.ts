@@ -63,7 +63,7 @@ describe("shots", () => {
     // The target is player 2, which the roster deals the Cataclysm: four legs splayed wide. With the server's default
     // spawn yaw its front legs reach out to about 1.1 m on +Z, where the standard leg box (0.35 m) has nothing.
     const legShot = (roster: boolean) => {
-      const { room, shooter, target } = setup((c) => (roster ? { ...c, zonesFor: loadRoomConfig({ roster: true }).zonesFor } : c));
+      const { room, shooter, target } = setup((c) => (roster ? { ...c, roster: loadRoomConfig({ roster: true }).roster, kitHitboxes: loadRoomConfig({ roster: true }).kitHitboxes } : c));
       expect(target.id).toBe(2);
       tick(room, [shooter, target], () => idle(), 30);
       tick(room, [shooter, target], (c) => (c === shooter ? idle({ fire: true, targetX: -10, targetY: 1.0, targetZ: 1.1 }) : idle()), 6);

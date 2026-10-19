@@ -8,7 +8,7 @@ export function writeSelf(s: MechState): SelfState {
     dashTime: s.dashTime, dashCooldown: s.dashCooldown, dashX: s.dashX, dashZ: s.dashZ,
     fuel: s.fuel.value, fuelLocked: s.fuel.locked, fuelTimer: s.fuel.regenTimer,
     stamina: s.stamina.value, staminaLocked: s.stamina.locked, staminaTimer: s.stamina.regenTimer,
-    fuelScale: s.fuelScale,
+    fuelScale: s.fuelScale, mech: s.mech,
   };
 }
 
@@ -20,5 +20,6 @@ export function readSelf(s: MechState, from: SelfState): void {
   s.dashTime = from.dashTime; s.dashCooldown = from.dashCooldown; s.dashX = from.dashX; s.dashZ = from.dashZ;
   s.fuel.value = from.fuel; s.fuel.locked = from.fuelLocked; s.fuel.regenTimer = from.fuelTimer;
   s.fuelScale = from.fuelScale;
+  s.mech = from.mech;
   s.stamina.value = from.stamina; s.stamina.locked = from.staminaLocked; s.stamina.regenTimer = from.staminaTimer;
 }

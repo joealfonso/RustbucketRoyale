@@ -22,8 +22,10 @@ export class Predictor {
 
   private ring: MechInput[] = [];
 
-  constructor(private stats: MechStats, private world: World, x: number, y: number, z: number, yaw: number) {
-    this.state = createMechState(stats, x, y, z, yaw);
+  // `statsFor` gives the stats of a roster mech: the mech number comes with every snapshot, so a replay always
+  // steps with the stats of the mech the server was stepping.
+  constructor(private statsFor: (mech: number) => MechStats, private world: World, x: number, y: number, z: number, yaw: number) {
+    this.state = createMechState(statsFor(0), x, y, z, yaw);
     for (let i = 0; i < HISTORY; i++) this.ring.push(createMechInput());
   }
 
@@ -36,7 +38,7 @@ export class Predictor {
   step(input: MechInput, dt: number): number {
     this.seq++;
     Object.assign(this.ring[this.seq % HISTORY]!, input);
-    stepMech(this.state, input, this.stats, dt, this.world);
+    stepMech(this.state, input, this.statsFor(this.state.mech), dt, this.world);
     return this.seq;
   }
 
@@ -48,7 +50,7 @@ export class Predictor {
     // If the history was overwritten the replay would be wrong, so trust the server and move on.
     if (this.seq - ack < HISTORY) {
       for (let s = ack + 1; s <= this.seq; s++) {
-        stepMech(this.state, this.ring[s % HISTORY]!, this.stats, dt, this.world);
+        stepMech(this.state, this.ring[s % HISTORY]!, this.statsFor(this.state.mech), dt, this.world);
       }
     }
 

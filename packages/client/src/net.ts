@@ -78,6 +78,10 @@ export class NetClient {
     if (this.open) this.socket.send(JSON.stringify({ t: "tune", file, path, value }));
   }
 
+  sendMech(mech: number): void {
+    if (this.open) this.socket.send(JSON.stringify({ t: "mech", mech }));
+  }
+
   sendStart(): void {
     if (this.open) this.socket.send(JSON.stringify({ t: "start" }));
   }

@@ -15,6 +15,7 @@ export interface MechState {
   grounded: boolean;
   running: boolean;
   jetting: boolean;
+  mech: number; // which roster mech this is (data/roster.json). The caller steps it with that mech's stats.
   fuelScale: number; // tank size from upgrades, 1 for the standard tank. Set by the server from the loadout.
   crawling: boolean; // legs broken: slow, no sprint or dash, jets still work. Set by the server from hit points.
   dashTime: number; // seconds of dash left, above 0 while dashing
@@ -24,9 +25,9 @@ export interface MechState {
   stamina: Meter;
 }
 
-export function createMechState(stats: MechStats, x: number, y: number, z: number, yaw: number): MechState {
+export function createMechState(stats: MechStats, x: number, y: number, z: number, yaw: number, mech = 0): MechState {
   return {
-    x, y, z, vx: 0, vz: 0, vy: 0, bodyYaw: yaw,
+    x, y, z, vx: 0, vz: 0, vy: 0, bodyYaw: yaw, mech,
     grounded: false, running: false, jetting: false, fuelScale: 1, crawling: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
     fuel: new Meter(stats.fuelMax), stamina: new Meter(stats.staminaMax),
   };

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, createZoneHit, makeZonesFor, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, createZoneHit, makeZonesFor, mechStatsFor, parseRoster, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
   type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
@@ -21,6 +21,8 @@ import upgradesJson from "../../../data/upgrades.json";
 import paletteJson from "../../../data/palette.json";
 import lookJson from "../../../data/look.json";
 import mechKitsJson from "../../../data/mechKits.json";
+import rosterJson from "../../../data/roster.json";
+import { mechCards, savedMech } from "./mechPicker";
 import { loadKit, loadRoster, parseKits } from "./mechKit";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import botsJson from "../../../data/bots.json";
@@ -68,6 +70,9 @@ const grenadeStats = parseGrenadeStats(grenadeJson);
 const hudStats = parseHudStats(hudJson);
 const zoneSet = parseZones(zonesJson);
 const zoneMaxHp = zoneSet.zones.map((z) => z.hp);
+// The four mechs and how each one moves and takes damage, the same numbers the server uses.
+const roster = parseRoster(rosterJson);
+const statsFor = mechStatsFor(mechStats, roster);
 const damageFxConfig = parseDamageFx(damageFxJson);
 setCrawlLook(damageFxConfig.crawl, zoneSet.damagedBelowFraction);
 
@@ -83,6 +88,8 @@ const online = params.has("room") || params.has("create") || params.has("online"
 
 const hint = document.getElementById("hint")!;
 const hintHtml = hint.innerHTML;
+// The mech you asked for. null until you pick one: online the server deals you one by player number instead.
+let picked = savedMech(roster, params);
 
 if (!offline && !online) {
   hint.classList.add("hidden");
@@ -94,6 +101,8 @@ if (!offline && !online) {
   document.getElementById("createRoom")!.addEventListener("click", () => { location.search = `?create&tier=${tierSelect.value}${botSelect.value === "" ? "" : `&bots=${botSelect.value}`}`; });
   document.getElementById("joinRoom")!.addEventListener("click", () => { if (codeInput.value.trim()) location.search = `?room=${codeInput.value.trim().toUpperCase()}`; });
   document.getElementById("playOffline")!.addEventListener("click", () => { location.search = `?offline&tier=${tierSelect.value}`; });
+  // Picking is remembered in this browser, so the game it opens next starts you in that mech.
+  mechCards(document.getElementById("menuMechs")!, roster, picked ?? 0, () => {});
   await new Promise(() => {}); // nothing more to do until a button reloads the page
 }
 
@@ -117,6 +126,7 @@ try {
     const welcome = await net.welcome;
     ({ tier, seed } = welcome);
     roomCode = welcome.code;
+    if (picked !== null) net.sendMech(picked);
     // Reloading the page now rejoins this room.
     // Keep the room settings in the address too. If the server restarts, reloading brings the room back the same way.
     const again = new URLSearchParams({ room: roomCode, tier });
@@ -134,6 +144,13 @@ try {
 let map = buildPlayMap(tier, seed, mechStats);
 const overview = params.has("overview");
 hint.innerHTML = hintHtml;
+// Esc frees the mouse and shows the pause screen, where you can pick another mech. Online it swaps in the lobby
+// and waits for the next match once one is running; offline it swaps at once.
+const highlightMech = mechCards(document.getElementById("hintMechs")!, roster, picked ?? 0, (m) => {
+  picked = m;
+  if (net) net.sendMech(m);
+  else mech.mech = m;
+});
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
@@ -157,14 +174,17 @@ scene.add(propView.group);
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
 const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters) : null;
 
-// Each player is dealt one of the roster's mechs by player number (data/mechKits.json), the same rule the server uses
-// for their hit boxes. ?kit=grey draws everyone as the grey-box mech, ?kit=<name> everyone as one kit.
+// Each mech is drawn as its roster mech's kit, by the mech number the server sends. ?kit=grey draws everyone as the
+// grey-box mech, ?kit=<name> everyone as one kit.
 const kitId = params.get("kit") ?? "roster";
 const kitsData = parseKits(mechKitsJson);
 const oneKit = kitId !== "roster" && kitId !== "grey" ? await loadKit(kitId, kitsData) : null;
 const kitFor = kitId === "roster" ? await loadRoster(kitsData) : () => oneKit;
-const ownModel = createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body, kitFor(net?.id ?? 0), palette.mech.trim);
-const mechGroup = ownModel.group;
+const makeOwnModel = (m: number) => createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body, kitFor(m), palette.mech.trim);
+let shownMech = picked ?? 0;
+let shownNext = -2; // the "next match" mech on the HUD line, -1 for none, -2 before the line is first written
+let ownModel = makeOwnModel(shownMech);
+let mechGroup = ownModel.group;
 scene.add(mechGroup);
 
 const glow = new THREE.MeshBasicMaterial({ color: "#ffb833" });
@@ -195,7 +215,7 @@ remotes.upgrades = upgradeSet.upgrades;
 remotes.look = remoteLook;
 const aimHit = createZoneHit();
 // The crosshair checks each mech against its own hit boxes, the ones the server uses (only with the roster drawn).
-const zonesFor = kitId === "roster" ? makeZonesFor(zoneSet, mechKitsJson) : () => zoneSet;
+const zonesFor = kitId === "roster" ? makeZonesFor(zoneSet, roster, mechKitsJson) : () => zoneSet;
 const aimAtMechs = (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number) => remotes.raycast(ox, oy, oz, dx, dy, dz, max, zonesFor, aimHit);
 const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgradeSet.upgrades.map((u) => u.color), toon);
 if (net) net.viewDelayMs = () => remotes.viewDelayMs;
@@ -206,9 +226,9 @@ const input = new Input(canvas, hint, () => mechStats.sprintDoubleTapSeconds);
 // copied into the live values in place, so everything already holding them sees it.
 const tuningRaws = JSON.parse(JSON.stringify({
   mech: mechJson, weapons: weaponsJson, grenade: grenadeJson, zones: zonesJson, loot: lootJson, upgrades: upgradesJson,
-  bots: botsJson, noise: noiseJson, combat: combatJson, props: propsJsonForLoot,
+  bots: botsJson, noise: noiseJson, combat: combatJson, roster: rosterJson, props: propsJsonForLoot,
 })) as TuningRaws;
-const liveData: Partial<Record<TunableFile, unknown>> = { mech: mechStats, weapons: weaponSet, grenade: grenadeStats, zones: zoneSet, loot: lootConfig, upgrades: upgradeSet };
+const liveData: Partial<Record<TunableFile, unknown>> = { mech: mechStats, weapons: weaponSet, grenade: grenadeStats, zones: zoneSet, loot: lootConfig, upgrades: upgradeSet, roster };
 const applyLocally = (file: string, path: string, value: number) => {
   const parsed = applyTune(tuningRaws, file, path, value);
   if (parsed !== null) assignDeep(liveData[file as TunableFile], parsed);
@@ -225,8 +245,9 @@ if (net) {
 
 const [spawnX, spawnY, spawnZ] = map.spawn;
 // Yaw PI faces +Z.
-const predictor = new Predictor(mechStats, map.world, spawnX, spawnY, spawnZ, Math.PI);
+const predictor = new Predictor(statsFor, map.world, spawnX, spawnY, spawnZ, Math.PI);
 const mech = predictor.state;
+mech.mech = shownMech; // offline this is the mech you drive; online the first snapshot says
 const aim = { yaw: Math.PI, pitch: 0 };
 const mechInput = createMechInput();
 const look = { dx: 0, dy: 0 };
@@ -429,8 +450,20 @@ const staminaBar = document.getElementById("stamina")!;
 const fuelFill = fuelBar.firstElementChild as HTMLElement;
 const staminaFill = staminaBar.firstElementChild as HTMLElement;
 
+// A new mech under you: picked another one, or the server dealt one. The old model goes, damage is shown again on the new one.
+function swapOwnMech(m: number): void {
+  scene.remove(mechGroup);
+  ownModel = makeOwnModel(m);
+  mechGroup = ownModel.group;
+  scene.add(mechGroup);
+  setMechDamage(ownModel, health.hp, health.dead);
+  shownMech = m;
+  shownNext = -2; // says the HUD line is out of date
+  if (picked === null) highlightMech(m);
+}
+
 function respawnOffline(): void {
-  Object.assign(mech, createMechState(mechStats, spawnX, spawnY, spawnZ, aim.yaw));
+  Object.assign(mech, createMechState(statsFor(mech.mech), spawnX, spawnY, spawnZ, aim.yaw, mech.mech));
 }
 
 window.addEventListener("resize", () => {
@@ -589,6 +622,9 @@ function frame(now: number): void {
     fill.parentElement!.classList.toggle("broken", state === ZONE_BROKEN); // the bar is empty, so the track shows it
   });
   fxDt = frameTime;
+  if (mech.mech !== shownMech) swapOwnMech(mech.mech);
+  const next = picked !== null && picked !== mech.mech ? picked : -1;
+  if (next !== shownNext) { shownNext = next; hud.setMech(roster.mechs[mech.mech]!, next >= 0 ? roster.mechs[next]!.name : null); }
   damageFx.emitFrom(ownModel, frameTime);
   remotes.forEachModel(emitDamage);
   damageFx.update(frameTime);
