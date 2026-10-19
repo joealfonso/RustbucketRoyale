@@ -1,0 +1,42 @@
+/* The CRT look, on the HUD only (DESIGN.md, HUD): fine scanlines over panels and their text, a 1 px phosphor edge on
+   the text and a slow, slight flicker. --crt (0 to 1) scales all of it; crt.ts sets it and the --crt-* numbers from
+   data/crt.json. The 3D view is never touched, so the world stays readable and the look costs the GPU nothing there.
+   Every rule hangs off .crtOn, which crt.ts removes at 0, so off means nothing drawn and nothing animating. */
+
+/* The phosphor edge: one crisp pixel of the text's own colour to the right, never a blurred halo. */
+.crtOn :is(.panel, #feed > div, #status, #hitlabel) {
+  text-shadow: 1px 0 0 color-mix(in srgb, currentColor calc(var(--crt) * var(--crt-phosphor) * 100%), transparent);
+}
+
+/* Lines ride on a layer above each panel's content, so they cross the text as well as the background. */
+.crtOn :is(#feed > div, .warningTag) { position: relative; }
+.crtOn :is(.panel, #feed > div, #status, #hitlabel, .warningTag)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom,
+    transparent 0 calc(var(--crt-period) - 1px),
+    rgb(0 0 0 / calc(var(--crt) * var(--crt-scan))) calc(var(--crt-period) - 1px) var(--crt-period));
+  /* Flickering the lines' opacity brightens and dims the panel a little. Opacity alone keeps it on the compositor. */
+  animation: crt-flicker var(--crt-flicker) linear infinite;
+}
+
+/* Irregular, so it reads as an old tube and not as a pulse. */
+@keyframes crt-flicker {
+  0%, 18%, 23%, 61%, 66%, 100% { opacity: 1; }
+  20% { opacity: calc(1 - var(--crt-flicker-depth)); }
+  63% { opacity: calc(1 - var(--crt-flicker-depth) * 0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crtOn :is(.panel, #feed > div, #status, #hitlabel, .warningTag)::before { animation: none; }
+}
+
+/* The pause screen's switch. It says ON or OFF and fills when on, so it never rests on colour alone. */
+#hint #crtSwitch { display: flex; align-items: center; gap: 0.6rem; cursor: pointer; border: var(--hud-border) solid var(--hud-amber-dim); border-radius: 0; padding: 0.35rem 0.7rem; background: rgba(0, 0, 0, 0.25); color: var(--hud-amber); font: 700 0.85rem var(--hud-word); letter-spacing: 0.1em; text-transform: uppercase; }
+#hint #crtSwitch:hover { border-color: var(--hud-amber); }
+#hint #crtSwitch:focus-visible { outline: 2px solid var(--hud-text); outline-offset: 2px; }
+#crtSwitch .state { min-width: 2.6em; padding: 0 0.3em; border: 1px solid currentColor; font: 400 0.9rem var(--hud-num); }
+#crtSwitch[aria-checked="true"] .state { background: var(--hud-amber); color: var(--hud-soot); border-color: var(--hud-amber); }

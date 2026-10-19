@@ -36,7 +36,7 @@
       </div>
       <div id="loadout"></div>
     </div>
-    <div id="radarFrame" class="panel"><span class="label">Radar</span></div>
+    <div id="radarFrame" class="panel"><span class="label">Radar</span><canvas id="radar"></canvas></div>
     <div id="prompt" class="panel"></div>
     <div id="results"><h2 id="resultTitle"></h2><p id="resultSub"></p></div>
     <div id="hurt"></div>
@@ -63,6 +63,7 @@
           <dt>Esc</dt><dd>Free the mouse</dd><dt>R</dt><dd>Respawn</dd>
         </dl>
         <div id="hintMechs" class="mechCards"></div>
+        <button type="button" id="crtSwitch" role="switch" aria-checked="true">CRT effect <span class="state">On</span></button>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

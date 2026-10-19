@@ -1,0 +1,8 @@
+{
+  "defaultIntensity": 0.6,
+  "scanlinePeriodPx": 3,
+  "scanlineAlpha": 0.32,
+  "phosphorAlpha": 0.4,
+  "flickerSeconds": 6,
+  "flickerDepth": 0.35
+}

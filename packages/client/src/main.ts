@@ -35,6 +35,8 @@ import combatJson from "../../../data/combat.json";
 import { DamageFx, parseDamageFx } from "./damageFx";
 import { setAimTarget } from "./aimTarget";
 import { DebugPanel, FrameTimes } from "./debugPanel";
+import { Crt, parseCrt } from "./crt";
+import crtJson from "../../../data/crt.json";
 import { TimedEffects } from "./effects";
 import { Input } from "./input";
 import { ClientGrenades } from "./grenades";
@@ -69,6 +71,8 @@ import { createMechModel, legsLimping, setCrawlLook, setMechDamage, setMechUpgra
 import { NetClient } from "./net";
 import { Projectiles } from "./projectiles";
 import { Radar } from "./radar";
+import { parseRadar } from "./radarData";
+import radarJson from "../../../data/radar.json";
 import { RemoteMechs } from "./remoteMechs";
 import { RingView } from "./ringView";
 import { ShotFx } from "./shotFx";
@@ -108,6 +112,8 @@ const params = new URLSearchParams(location.search);
 const offline = params.has("offline");
 const online = params.has("room") || params.has("create") || params.has("online") || params.has("server");
 
+// The CRT look on the HUD, as this browser last set it or else data/crt.json. Set before the start menu, which wears it too.
+const crt = new Crt(document.documentElement, parseCrt(crtJson), () => localStorage);
 const hint = document.getElementById("hint")!;
 const hintHtml = hint.innerHTML;
 // The mech you asked for. null until you pick one: online the server deals you one by player number instead.
@@ -166,6 +172,7 @@ try {
 let map = buildPlayMap(tier, seed, mechStats);
 const overview = params.has("overview");
 hint.innerHTML = hintHtml;
+crt.attachSwitch(document.getElementById("crtSwitch") as HTMLButtonElement);
 // Esc frees the mouse and shows the pause screen, where you can pick another mech. Online it swaps in the lobby
 // and waits for the next match once one is running; offline it swaps at once.
 const highlightMech = mechCards(document.getElementById("hintMechs")!, roster, picked ?? 0, (m) => {
@@ -207,7 +214,7 @@ const ringView = new RingView(scene, toon.color("zoneMagenta"));
 const shadowLook = parseShadowLook(groundJson.shadows);
 const contactShadows = new ContactShadows(scene, shadowLook, toon.color(shadowLook.color));
 contactShadows.setMap(map.boxes, map.world);
-const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters) : null;
+const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters, parseRadar(radarJson)) : null;
 
 // Each mech is drawn as its roster mech's kit, by the mech number the server sends. ?kit=grey draws everyone as the
 // grey-box mech, ?kit=<name> everyone as one kit.
@@ -324,6 +331,7 @@ const frameMs = new FrameTimes(240);
 const workMs = new FrameTimes(240); // time spent on the frame before the GPU takes over: the headroom a locked 60 fps hides
 const panel = new DebugPanel(mechStats, tuningRaws, cameraStats, (file, path, value) => (net ? net.sendTune(file, path, value) : applyLocally(file, path, value)));
 panel.addGait(gaitConfig);
+panel.addHud(crt.setting, (v) => crt.setIntensity(v));
 if (net) {
   net.onTuned = (file, path, value) => { applyLocally(file, path, value); panel.refresh(); };
   void net.welcome.then((w) => panel.setServerTuning(w.tuning), () => {});

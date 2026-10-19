@@ -184,6 +184,12 @@ export class DebugPanel {
     f.close();
   }
 
+  // The CRT look on the HUD (crt.ts): yours alone like the camera, and remembered in this browser.
+  addHud(crt: { intensity: number }, onIntensity: (v: number) => void): void {
+    const f = this.gui.addFolder("HUD");
+    f.add(crt, "intensity", 0, 1, 0.05).name("CRT intensity").onChange(onIntensity);
+  }
+
   toggle(): boolean {
     this.gui.show(this.gui._hidden);
     return !this.gui._hidden;

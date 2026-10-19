@@ -116,8 +116,10 @@ canvas { display: block; width: 100%; height: 100%; }
 #loadout .swatch { display: inline-block; width: 0.55em; height: 0.55em; margin: 0 0.3em 0 0.5em; vertical-align: 0.05em; }
 #loadout .upgrades { color: var(--hud-amber); }
 
-/* Bottom right: a frame round the radar canvas, which radar.ts draws 150 px wide, 16 px in from the corner. */
-#radarFrame { display: none; right: 8px; bottom: 8px; width: 166px; height: 186px; padding: 0.2rem 0.5rem; }
+/* Bottom right: the radar. The canvas sits inside its frame and is sized in rem, so the two can never drift apart and
+   both grow with the HUD; radar.ts matches the canvas pixels to this size. */
+#radarFrame { display: none; right: var(--hud-margin); bottom: var(--hud-margin); padding: 0.3rem 0.5rem 0.5rem; }
+#radarFrame canvas { display: block; width: 12.5rem; height: 12.5rem; margin-top: 0.3rem; }
 
 /* Centre: the aim. A solid soot edge keeps the amber readable on sky and sand alike. */
 #crosshair { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }

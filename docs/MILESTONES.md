@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none (M1 to M9 done)
-Current visual milestone: V6a, V6b and V4a built, waiting for their playtest. V4b (radar scope, CRT layer) next
+Current visual milestone: V6a, V6b, V4a and V4b built, waiting for their playtest. V5 (VFX pass) not started
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -112,3 +112,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-19: Gates V6a and V6b built, waiting for their playtest. Check: a sky with sun and toon clouds, warm haze that melts the distance, three light looks picked by the map seed (force one with ?look=golden+afternoon, hazy+dusk or overcast; style.html key L cycles them), a worn floor of moss, dirt, gravel, oil and tyre tracks, soft shadows under walls, props and mechs, the map edge as a junkyard wall of corrugated steel, containers and a fence, and scrap mountains, cranes and stacks beyond it. Before and after: docs/style/v6-before.jpg, v6-golden-afternoon.jpg, v6-hazy-dusk.jpg. Read F1 Performance on large on your laptop: about 26 more draw calls.
 - 2026-10-19: During the build: a dash now slides in a lunge instead of a sprint of footsteps (Joseph: "shift currently applies step noises").
 - 2026-10-19: Gate V4a built, waiting for its playtest. Check: the HUD in Chakra Petch (words), Share Tech Mono (numbers) and Barlow (menus), amber on soot panels with one clipped corner: match status top left, room bar top centre, kill feed right, your mech panel bottom left (name, Q line, damage diagram, armour plates, fuel and stamina, loadout), radar frame bottom right; the Q cooldown also under the crosshair. The damage diagram is your own mech from the front of its measured hit boxes: solid when whole, hatched when damaged, red outline with crosses when broken, with percents. Warning tags in the upper centre use a shape and words as well as colour, at most three, and the blink obeys reduced motion. Menus, pause screen and results restyled. Screenshots: docs/style/v4a-hud-1366.png, v4a-hud-1920.png. Fonts add 78 KB to the download.
+- 2026-10-19: Gate V4b built, waiting for its playtest. Check: the radar in its frame at any window size, an amber scope with rings and a sweep; each sound kind has its own shape (ring, diamond, square, cross, burst); the zone is a dashed amber circle; the zone arrow blinks red when you are outside. The HUD has a CRT look (scanlines, slight flicker) on the panels only: switch it on the pause screen, set its strength in F1 under HUD. Screenshot: docs/style/v4b-hud-1920.png.
