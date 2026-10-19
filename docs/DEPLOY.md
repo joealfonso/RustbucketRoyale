@@ -1,7 +1,17 @@
-# Deploying to Fly.io
+# Deploying
 
 The game runs on Fly.io as one machine that serves the page and the game from one address (M10). `fly.toml` holds the
 settings; `Dockerfile` builds the image on Fly's builders, so Docker is not needed on your computer.
+
+## Free and quick: your Mac and a Cloudflare tunnel
+For a game night or the 10b check, no account and no card. Your Mac is the server, so it must stay awake.
+1. Once: `brew install cloudflared`.
+2. `npm run build && npm start` (the production server on port 8080; `PORT=8090 npm start` to keep 8080 free for
+   development).
+3. In a second terminal: `cloudflared tunnel --url http://localhost:8080` (or 8090). It prints an
+   `https://....trycloudflare.com` address: send that. The game connects back through it over wss; the origin check
+   passes as it is (checked 2026-10-19).
+4. Ctrl+C both when done. The address is new each time.
 
 ## One time, by Joseph (needs your account)
 1. Install the Fly command line: `brew install flyctl`.
