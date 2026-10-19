@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { WebSocketServer } from "ws";
-import { STEP, encodeServerBinary, parseBotDifficulty } from "@rustbucket/shared";
+import { STEP, SnapshotMemory, encodeServerBinary, parseBotDifficulty } from "@rustbucket/shared";
 import type { RoomManager, Ticket } from "./RoomManager";
 
 const MAX_MESSAGE_BYTES = 4096;
@@ -34,10 +34,11 @@ export function startServer(
     const asked = query.get("bots");
     const bots = asked === null ? defaultBots : Math.min(MAX_BOTS_REQUESTED, Math.max(0, Math.floor(Number(asked) || 0)));
     const difficulty = parseBotDifficulty(query.get("difficulty"));
+    const memory = new SnapshotMemory(); // what this socket was last sent, so snapshots carry only changes
     const ticket: Ticket | null = manager.join(query.get("room"), query.get("tier"), (message) => {
       if (socket.readyState !== socket.OPEN) return;
       // Snapshots and shots are packed binary, the rare messages are readable text.
-      const packed = encodeServerBinary(message);
+      const packed = encodeServerBinary(message, memory);
       if (packed) socket.send(packed);
       else socket.send(JSON.stringify(message));
     }, bots, difficulty, () => socket.close());

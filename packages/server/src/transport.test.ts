@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
-import { createMechInput, decodeServerBinary, encodeInput, type InputMessage, type ServerMessage } from "@rustbucket/shared";
+import { SnapshotMemory, createMechInput, decodeServerBinary, encodeInput, type InputMessage, type ServerMessage } from "@rustbucket/shared";
 import { loadRoomConfig } from "./config";
 import { Room, type MapForRoom } from "./Room";
 import { RoomManager } from "./RoomManager";
@@ -20,9 +20,10 @@ function connect(port: number, query = ""): Promise<{ socket: WebSocket; message
   return new Promise((resolve) => {
     const socket = new WebSocket(`ws://localhost:${port}/${query}`);
     const messages: ServerMessage[] = [];
+    const memory = new SnapshotMemory();
     // Snapshots and shots come packed, everything else as text.
     socket.on("message", (data, isBinary) => {
-      const message = isBinary ? decodeServerBinary(new Uint8Array(data as Buffer)) : JSON.parse(data.toString());
+      const message = isBinary ? decodeServerBinary(new Uint8Array(data as Buffer), memory) : JSON.parse(data.toString());
       if (message) messages.push(message);
     });
     socket.on("open", () => resolve({ socket, messages }));

@@ -1,4 +1,4 @@
-import { decodeServerBinary, encodeInput, type AbilityMessage, type ExplodeMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
+import { SnapshotMemory, decodeServerBinary, encodeInput, type AbilityMessage, type ExplodeMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
 
 type SnapshotMessage = Extract<ServerMessage, { t: "snapshot" }>;
 type ShotMessage = Extract<ServerMessage, { t: "shot" }>;
@@ -39,6 +39,7 @@ export class NetClient {
   watchId: () => number = () => 0;
   private sentAt = new Float64Array(256);
   private socket: WebSocket;
+  private memory = new SnapshotMemory(); // what this connection was last sent, which snapshots are changes from
   // Reused every send so the frame loop does not build a new object each time.
   private message: InputMessage = {
     t: "input", seq: 0, moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0,
@@ -56,7 +57,7 @@ export class NetClient {
     this.socket.onerror = () => { failed(new Error(`Could not reach the server at ${url}.`)); this.onClose?.(`Could not reach the server at ${url}.`); };
     this.socket.onmessage = (event) => {
       // Snapshots and shots arrive packed, everything else as text.
-      const message = event.data instanceof ArrayBuffer ? decodeServerBinary(new Uint8Array(event.data)) : (JSON.parse(event.data as string) as ServerMessage);
+      const message = event.data instanceof ArrayBuffer ? decodeServerBinary(new Uint8Array(event.data), this.memory) : (JSON.parse(event.data as string) as ServerMessage);
       if (!message) return;
       if (message.t === "welcome") { this.id = message.id; welcomed({ seed: message.seed, tier: message.tier, code: message.code, tuning: message.tuning }); }
       else if (message.t === "tuned") this.onTuned?.(message.file, message.path, message.value);

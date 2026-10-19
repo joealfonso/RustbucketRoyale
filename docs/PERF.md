@@ -367,3 +367,13 @@ What is left: Cataclysm's 45 is mostly its twelve leg pieces at three calls each
 
 ### Tuning panel loaded on F1 (2026-10-19, recommendation 7 of the performance pass)
 The F1 panel and lil-gui are a chunk of their own, fetched the first time F1 is pressed (a few milliseconds on a local host; the panel opens when it arrives). `FrameTimes` moved to `frameTimes.ts` so the frame loop still records frame times without it. Production build, JavaScript fetched at the start of a match: 951 kB before, 916 kB after (about 10 kB less gzipped). The panel chunk is 35.5 kB (9.7 kB gzipped). The server's tuning switch (DEV_TUNING) is remembered from the welcome and applied when the panel is built.
+
+### Snapshots carry only what changed (2026-10-19)
+Snapshots were 99% of what a player is sent, and other mechs about 73% of a snapshot at 21 bytes each. The server and each client now keep a memory per connection (`SnapshotMemory` in `wire.ts`): a mech already in view goes as the change in its position (1 byte an axis) with its health, armour, weapon and upgrades only when one changes, 9 bytes instead of 21; your own numbers go only when they differ from the last snapshot. Measured with the soak's headless players, worst of three per match, seeds 1 to 3 (small) and 1 to 3 (medium):
+
+| Tier | Average kbps before | Average after | Busiest second before | Busiest second after | Mean snapshot bytes after |
+| :- | :- | :- | :- | :- | :- |
+| small | 51 | 24 | 78 | 46 to 52 | 143 to 147 |
+| medium | 43 | 21 to 22 | 56 | 26 to 35 | 101 to 135 |
+
+The busiest second on small is the opening brawl just after the countdown: snapshots about 3.9 kB, shots about 1.2 kB and hit, ability and grenade messages about 1 kB that second. Next if it is ever needed: shot origins as 16-bit numbers (24 to 18 bytes a shot) and the readable hit and ability messages packed.

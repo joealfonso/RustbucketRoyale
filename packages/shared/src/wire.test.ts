@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createMechInput } from "./MechInput";
-import { decodeInput, decodeServerBinary, decodeShot, decodeSnapshot, encodeInput, encodeServerBinary, encodeShot, encodeSnapshot, snapshotSize } from "./wire";
+import { SnapshotMemory, decodeInput, decodeServerBinary, decodeShot, decodeSnapshot, encodeInput, encodeServerBinary, encodeShot, encodeSnapshot, snapshotSize } from "./wire";
 import type { InputMessage, OtherState, ServerMessage, ShotMessage } from "./protocol";
 
 type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
@@ -135,6 +135,75 @@ describe("snapshot wire format", () => {
     expect(decodeSnapshot(bytes.slice(0, bytes.length - 1))).toBeNull();
     const padded = new Uint8Array(bytes.length + 3); padded.set(bytes);
     expect(decodeSnapshot(padded)).toBeNull();
+  });
+});
+
+describe("snapshots against a connection's memory", () => {
+  // A server and a client side of one connection.
+  const link = () => {
+    const sent = new SnapshotMemory(), read = new SnapshotMemory();
+    return (s: Snapshot) => { const bytes = encodeSnapshot(s, sent); return { bytes, back: decodeSnapshot(bytes, read) }; };
+  };
+  const walk = (o: OtherState, metres: number): OtherState => ({ ...o, x: o.x + metres, z: o.z - metres / 2, y: o.y + 0.3 });
+
+  it("sends a mech in full the first time, then 9 bytes a snapshot while only its position and yaw change", () => {
+    const send = link();
+    const first = send(snapshot([other(1, 10), other(2, 20)]));
+    const full = encodeSnapshot(snapshot([other(1, 10), other(2, 20)])).length;
+    expect(first.bytes.length).toBe(full);
+    const second = send(snapshot([walk(other(1, 10), 1.3), { ...walk(other(2, 20), -2), yaw: 1 }]));
+    expect(second.bytes.length).toBe(snapshotSize(0, 0, 0, 0) + 2 * 9); // your own numbers did not change either
+  });
+
+  it("reads back exactly what a full snapshot would, over many snapshots of moving, hurt and changing mechs", () => {
+    const send = link();
+    let a = other(5, -300), b = other(9, 640);
+    for (let i = 0; i < 200; i++) {
+      a = walk(a, 0.9 + (i % 7) * 0.31);
+      b = { ...walk(b, -1.7), hp: i % 25 === 0 ? [b.hp[0]! - 1, b.hp[1]!, b.hp[2]!] : b.hp, weapon: i > 120 ? 1 : 2, upgrades: i > 150 ? [3, 0] : b.upgrades };
+      const s = snapshot(i % 40 < 30 ? [a, b] : [b]); // a leaves view for a while and comes back
+      expect(send(s).back).toEqual(decodeSnapshot(encodeSnapshot(s)));
+    }
+  });
+
+  it("sends the details again only when one changes", () => {
+    const send = link();
+    const o = other(3, 0);
+    send(snapshot([o]));
+    const same = send(snapshot([walk(o, 1)])).bytes.length;
+    const hurt = send(snapshot([{ ...walk(o, 2), hp: [59, 33, 100] }]));
+    expect(hurt.bytes.length - same).toBe(9);
+    expect(hurt.back!.others[0]!.hp).toEqual([59, 33, 100]);
+  });
+
+  it("sends a long jump, such as a respawn, as a full position", () => {
+    const send = link();
+    send(snapshot([other(4, 0)]));
+    const jumped = send(snapshot([other(4, 500)]));
+    expect(jumped.back!.others[0]!.x).toBeCloseTo(500, 5);
+    expect(jumped.bytes.length).toBe(snapshotSize(0, 0, 0, 0) + 12);
+  });
+
+  it("leaves out your own numbers that did not change, and gives them back exactly", () => {
+    const send = link();
+    const s = snapshot([]);
+    send(s);
+    const moved = { ...s, you: { ...s.you, x: s.you.x + 0.1234567, vx: 0, fuel: 70.25 } };
+    const { bytes, back } = send(moved);
+    expect(bytes.length).toBe(snapshotSize(0, 0, 0, 3));
+    expect(back!.you).toEqual(decodeSnapshot(encodeSnapshot(moved))!.you);
+    expect(send(moved).bytes.length).toBe(snapshotSize(0, 0, 0, 0));
+  });
+
+  it("refuses a change for a mech this side was never sent, and keeps its memory as it was", () => {
+    const sent = new SnapshotMemory(), read = new SnapshotMemory();
+    decodeSnapshot(encodeSnapshot(snapshot([other(1, 0)]), sent), read);
+    const change = encodeSnapshot(snapshot([walk(other(1, 0), 1)]), sent);
+    expect(decodeSnapshot(change, new SnapshotMemory())).toBeNull();
+    const before = new Map(read.others);
+    expect(decodeSnapshot(change.slice(0, change.length - 1), read)).toBeNull();
+    expect(read.others).toEqual(before);
+    expect(decodeSnapshot(change, read)!.others[0]!.x).toBeCloseTo(1, 5);
   });
 });
 

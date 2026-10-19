@@ -1,6 +1,6 @@
 // Measures what one person is sent each second, and how long the server takes per tick, in a room full of bots.
 // Run: npx tsx scripts/measure-bandwidth.ts
-import { STEP, encodeServerBinary, type ServerMessage } from "../packages/shared/src";
+import { STEP, SnapshotMemory, encodeServerBinary, type ServerMessage } from "../packages/shared/src";
 import { loadRoomConfig } from "../packages/server/src/config";
 import { Room } from "../packages/server/src/Room";
 
@@ -10,8 +10,9 @@ console.log("| Tier | Bots | Down kbps (one person) | Snapshot bytes | Mean tick
 for (const tier of ["small", "medium", "large"]) {
   const room = new Room("MEAS", tier, config, null);
   let snapshotBytes = 0, snapshots = 0, otherBytes = 0;
+  const memory = new SnapshotMemory();
   const id = room.join((m: ServerMessage) => {
-    const packed = encodeServerBinary(m);
+    const packed = encodeServerBinary(m, memory);
     const size = packed ? packed.length : JSON.stringify(m).length;
     if (m.t === "snapshot") { snapshotBytes += size; snapshots++; } else otherBytes += size;
   })!;

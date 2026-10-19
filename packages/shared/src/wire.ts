@@ -20,12 +20,24 @@ export const isBinaryType = (first: number) => first === TYPE_SNAPSHOT || first 
 
 // ---- sizes
 
-// Your own state: 20 float32s, but most are 0 most of the time (dash and ability timers, regen timers, vertical speed
-// on the ground). A 3-byte mask says which are sent, so a 0 costs one bit instead of 4 bytes. Only +0 is skipped,
-// so prediction replays from exactly the numbers the server has. Then one byte of flags.
+// Your own state: 20 float32s, but most do not change from one snapshot to the next (timers at 0, full fuel and
+// stamina, the fuel scale, the facing while standing). A 3-byte mask says which are sent; one left out is the same
+// float as last time (0 for a fresh memory), so prediction replays from exactly the numbers the server has. Then one
+// byte of flags.
 const SELF_FLOATS = 20;
 const SELF_MASK_BYTES = 3;
-const OTHER_BYTES = 21;
+// Another mech: id, a byte saying what follows, its flags, its position, its yaw, then its details (hit points,
+// weapon, armour, upgrades). Once a client has been sent a mech, the position goes as the change since last time,
+// 1 byte an axis, and the details only when one changes, so a mech in view usually costs 9 bytes instead of 21.
+const OTHER_HEAD_BYTES = 2 + 1 + 1;
+const POSITION_BYTES = 6;
+const POSITION_DELTA_BYTES = 3;
+const YAW_BYTES = 2;
+const DETAIL_BYTES = 9;
+const OTHER_BYTES = OTHER_HEAD_BYTES + POSITION_BYTES + YAW_BYTES + DETAIL_BYTES;
+const ABILITY_BIT = 1;
+const DELTA_BIT = 2;
+const DETAILS_BIT = 4;
 const LOADOUT_BYTES = 9;
 const LOOTING_BYTES = 2; // how far through looting a wreck, then through a repair, 0 to 255 each
 const PICKUP_BYTES = 9;
@@ -39,6 +51,23 @@ const PICKUPS_UNCHANGED = 255; // in place of the pickup count: keep the list fr
 
 const u8 = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
 
+interface OtherMemory {
+  x: number; // position in whole steps, as sent
+  y: number;
+  z: number;
+  details: number[]; // the detail bytes, as sent
+}
+
+// What one connection was last sent about each mech in view. WebSocket messages arrive whole and in order, so the
+// server keeps one per connection to write snapshots against and the client keeps one to read them. A mech that
+// leaves view is forgotten on both sides, so it comes back in full. A fresh memory per call gives full snapshots.
+export class SnapshotMemory {
+  self = new Float32Array(SELF_FLOATS);
+  others = new Map<number, OtherMemory>();
+}
+
+const fitsByte = (n: number) => n >= -128 && n <= 127;
+
 // ---- snapshot
 
 // `selfFloats` is how many of your own numbers are not 0.
@@ -46,15 +75,37 @@ export function snapshotSize(others: number, noises = 0, pickups = 0, selfFloats
   return SNAPSHOT_HEADER_BYTES + SELF_MASK_BYTES + selfFloats * 4 + 1 + 1 + others * OTHER_BYTES + 1 + noises * NOISE_BYTES + LOADOUT_BYTES + LOOTING_BYTES + 1 + pickups * PICKUP_BYTES;
 }
 
-export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Uint8Array {
+export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, memory = new SnapshotMemory()): Uint8Array {
   const others = m.others.slice(0, 255);
   const noises = m.noises.slice(0, 255);
   const pickups = m.pickups?.slice(0, PICKUPS_UNCHANGED - 1) ?? [];
   const s = m.you;
   const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale];
   let mask = 0, present = 0;
-  selfNumbers.forEach((n, i) => { if (!Object.is(Math.fround(n), 0)) { mask |= 1 << i; present++; } });
-  const buffer = new ArrayBuffer(snapshotSize(others.length, noises.length, pickups.length, present));
+  selfNumbers.forEach((n, i) => { if (!Object.is(Math.fround(n), memory.self[i])) { mask |= 1 << i; present++; } });
+
+  // Each other mech against what this connection was last sent about it.
+  const seen = new Map<number, OtherMemory>();
+  const kinds: number[] = [];
+  let otherBytes = 0;
+  for (const other of others) {
+    const now: OtherMemory = {
+      x: Math.round(other.x / POSITION_STEP), y: Math.round(other.y / HEIGHT_STEP), z: Math.round(other.z / POSITION_STEP),
+      details: [
+        u8(other.hp[0] ?? 0), u8(other.hp[1] ?? 0), u8(other.hp[2] ?? 0), u8(other.weapon),
+        u8(other.armor[0] ?? 0), u8(other.armor[1] ?? 0), u8(other.armor[2] ?? 0),
+        (other.upgrades[0] ?? -1) < 0 ? EMPTY_SLOT : other.upgrades[0]!, (other.upgrades[1] ?? -1) < 0 ? EMPTY_SLOT : other.upgrades[1]!,
+      ],
+    };
+    const was = memory.others.get(other.id);
+    const delta = was !== undefined && fitsByte(now.x - was.x) && fitsByte(now.y - was.y) && fitsByte(now.z - was.z);
+    const details = was === undefined || now.details.some((b, i) => b !== was.details[i]);
+    kinds.push((other.ability ? ABILITY_BIT : 0) | (delta ? DELTA_BIT : 0) | (details ? DETAILS_BIT : 0));
+    otherBytes += OTHER_HEAD_BYTES + (delta ? POSITION_DELTA_BYTES : POSITION_BYTES) + YAW_BYTES + (details ? DETAIL_BYTES : 0);
+    seen.set(other.id, now);
+  }
+
+  const buffer = new ArrayBuffer(snapshotSize(0, noises.length, pickups.length, present) + otherBytes);
   const v = new DataView(buffer);
   let o = 0;
   v.setUint8(o, TYPE_SNAPSHOT); o += 1;
@@ -71,24 +122,25 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
 
   for (let i = 0; i < SELF_MASK_BYTES; i++) { v.setUint8(o, (mask >> (i * 8)) & 255); o += 1; }
   selfNumbers.forEach((n, i) => { if (mask & (1 << i)) { v.setFloat32(o, n, true); o += 4; } });
+  memory.self.set(selfNumbers);
   v.setUint8(o, (s.grounded ? 1 : 0) | (s.running ? 2 : 0) | (s.jetting ? 4 : 0) | (s.fuelLocked ? 8 : 0) | (s.staminaLocked ? 16 : 0) | (s.crawling ? 32 : 0) | ((s.mech & 3) << 6)); o += 1;
 
   v.setUint8(o, others.length); o += 1;
-  for (const other of others) {
+  others.forEach((other, i) => {
+    const kind = kinds[i]!, now = seen.get(other.id)!, was = memory.others.get(other.id);
     v.setUint16(o, other.id, true); o += 2;
-    v.setInt16(o, Math.round(other.x / POSITION_STEP), true); o += 2;
-    v.setInt16(o, Math.round(other.y / HEIGHT_STEP), true); o += 2;
-    v.setInt16(o, Math.round(other.z / POSITION_STEP), true); o += 2;
+    v.setUint8(o, kind); o += 1;
+    v.setUint8(o, (other.running ? 1 : 0) | (other.jetting ? 2 : 0) | (other.dead ? 4 : 0) | (other.bot ? 8 : 0) | (other.looted ? 16 : 0) | (other.repairing ? 32 : 0) | ((other.mech & 3) << 6)); o += 1;
+    if (kind & DELTA_BIT) {
+      v.setInt8(o, now.x - was!.x); v.setInt8(o + 1, now.y - was!.y); v.setInt8(o + 2, now.z - was!.z); o += POSITION_DELTA_BYTES;
+    } else {
+      v.setInt16(o, now.x, true); v.setInt16(o + 2, now.y, true); v.setInt16(o + 4, now.z, true); o += POSITION_BYTES;
+    }
     const turns = ((other.yaw % TWO_PI) + TWO_PI) % TWO_PI;
     v.setUint16(o, Math.round((turns / TWO_PI) * 65535), true); o += 2;
-    v.setUint8(o, (other.running ? 1 : 0) | (other.jetting ? 2 : 0) | (other.dead ? 4 : 0) | (other.bot ? 8 : 0) | (other.looted ? 16 : 0) | (other.repairing ? 32 : 0) | ((other.mech & 3) << 6)); o += 1;
-    for (let i = 0; i < 3; i++) { v.setUint8(o, u8(other.hp[i] ?? 0)); o += 1; }
-    v.setUint8(o, u8(other.weapon)); o += 1;
-    for (let i = 0; i < 3; i++) { v.setUint8(o, u8(other.armor[i] ?? 0)); o += 1; }
-    for (let i = 0; i < 2; i++) { const u = other.upgrades[i] ?? -1; v.setUint8(o, u < 0 ? EMPTY_SLOT : u); o += 1; }
-    // A byte of its own because the first flags byte is full. The other seven bits are free for later.
-    v.setUint8(o, other.ability ? 1 : 0); o += 1;
-  }
+    if (kind & DETAILS_BIT) for (const b of now.details) { v.setUint8(o, b); o += 1; }
+  });
+  memory.others = seen;
   v.setUint8(o, noises.length); o += 1;
   for (const n of noises) {
     v.setInt16(o, Math.round(n.x / NOISE_STEP), true); o += 2;
@@ -116,7 +168,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
   return new Uint8Array(buffer);
 }
 
-export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "snapshot" }> | null {
+export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory()): Extract<ServerMessage, { t: "snapshot" }> | null {
   if (bytes.length < snapshotSize(0, 0, 0, 0)) return null;
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let o = 1;
@@ -137,13 +189,14 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
   for (let i = 0; i < SELF_FLOATS; i++) if (mask & (1 << i)) present++;
   if (bytes.length < snapshotSize(0, 0, 0, present)) return null;
   let field = 0;
-  const f = () => { if (!(mask & (1 << field++))) return 0; const n = v.getFloat32(o, true); o += 4; return n; };
+  const f = () => { const i = field++; if (!(mask & (1 << i))) return memory.self[i]!; const n = v.getFloat32(o, true); o += 4; return n; };
   const you: SelfState = {
     x: f(), y: f(), z: f(), vx: f(), vz: f(), vy: f(), bodyYaw: f(), dashTime: f(), dashCooldown: f(), dashX: f(), dashZ: f(),
     abilityTime: f(), abilityCooldown: f(), abilityX: f(), abilityZ: f(),
     fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(), mech: 0,
     grounded: false, running: false, jetting: false, crawling: false, fuelLocked: false, staminaLocked: false,
   };
+  const selfOrder = [you.x, you.y, you.z, you.vx, you.vz, you.vy, you.bodyYaw, you.dashTime, you.dashCooldown, you.dashX, you.dashZ, you.abilityTime, you.abilityCooldown, you.abilityX, you.abilityZ, you.fuel, you.fuelTimer, you.stamina, you.staminaTimer, you.fuelScale];
   const flags = v.getUint8(o); o += 1;
   you.grounded = (flags & 1) !== 0; you.running = (flags & 2) !== 0; you.jetting = (flags & 4) !== 0;
   you.fuelLocked = (flags & 8) !== 0; you.staminaLocked = (flags & 16) !== 0; you.crawling = (flags & 32) !== 0;
@@ -151,22 +204,33 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
 
   const slot = (n: number) => (n === EMPTY_SLOT ? -1 : n);
   const count = v.getUint8(o); o += 1;
-  if (bytes.length < o + count * OTHER_BYTES + 1) return null;
+  // Read into a new memory, and keep it only once the whole snapshot has read cleanly.
+  const seen = new Map<number, OtherMemory>();
   const others: OtherState[] = [];
   for (let i = 0; i < count; i++) {
-    const id = v.getUint16(o, true); o += 2;
-    const x = v.getInt16(o, true) * POSITION_STEP; o += 2;
-    const y = v.getInt16(o, true) * HEIGHT_STEP; o += 2;
-    const z = v.getInt16(o, true) * POSITION_STEP; o += 2;
-    const yaw = (v.getUint16(o, true) / 65535) * TWO_PI; o += 2;
-    const bits = v.getUint8(o); o += 1;
-    const ohp = [v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2)]; o += 3;
-    const weapon = v.getUint8(o); o += 1;
-    const armor = [v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2)]; o += 3;
-    const upgrades = [slot(v.getUint8(o)), slot(v.getUint8(o + 1))]; o += 2;
-    const bits2 = v.getUint8(o); o += 1;
-    others.push({ id, x, y, z, yaw, running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, repairing: (bits & 32) !== 0, bot: (bits & 8) !== 0, hp: ohp, weapon, armor, upgrades, mech: bits >> 6, ability: (bits2 & 1) !== 0 });
+    if (bytes.length < o + OTHER_HEAD_BYTES) return null;
+    const id = v.getUint16(o, true);
+    const kind = v.getUint8(o + 2);
+    const bits = v.getUint8(o + 3);
+    o += OTHER_HEAD_BYTES;
+    const delta = (kind & DELTA_BIT) !== 0, hasDetails = (kind & DETAILS_BIT) !== 0;
+    const was = memory.others.get(id);
+    if (!was && (delta || !hasDetails)) return null; // a change from something this connection was never sent
+    if (bytes.length < o + (delta ? POSITION_DELTA_BYTES : POSITION_BYTES) + YAW_BYTES + (hasDetails ? DETAIL_BYTES : 0)) return null;
+    let qx: number, qy: number, qz: number;
+    if (delta) { qx = was!.x + v.getInt8(o); qy = was!.y + v.getInt8(o + 1); qz = was!.z + v.getInt8(o + 2); o += POSITION_DELTA_BYTES; }
+    else { qx = v.getInt16(o, true); qy = v.getInt16(o + 2, true); qz = v.getInt16(o + 4, true); o += POSITION_BYTES; }
+    const yaw = (v.getUint16(o, true) / 65535) * TWO_PI; o += YAW_BYTES;
+    let d = was?.details;
+    if (hasDetails) { d = Array.from(bytes.subarray(o, o + DETAIL_BYTES)); o += DETAIL_BYTES; }
+    seen.set(id, { x: qx, y: qy, z: qz, details: d! });
+    others.push({
+      id, x: qx * POSITION_STEP, y: qy * HEIGHT_STEP, z: qz * POSITION_STEP, yaw,
+      running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, repairing: (bits & 32) !== 0, bot: (bits & 8) !== 0,
+      hp: [d![0]!, d![1]!, d![2]!], weapon: d![3]!, armor: [d![4]!, d![5]!, d![6]!], upgrades: [slot(d![7]!), slot(d![8]!)], mech: bits >> 6, ability: (kind & ABILITY_BIT) !== 0,
+    });
   }
+  if (bytes.length < o + 1) return null;
   const noiseCount = v.getUint8(o); o += 1;
   if (bytes.length < o + noiseCount * NOISE_BYTES + LOADOUT_BYTES + LOOTING_BYTES + 1) return null;
   const noises: NoiseEvent[] = [];
@@ -195,6 +259,8 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
     });
     o += PICKUP_BYTES;
   }
+  memory.others = seen;
+  for (let i = 0; i < SELF_FLOATS; i++) memory.self[i] = selfOrder[i]!;
   return { t: "snapshot", tick, ack, ackAgeMs, you, health: { hp, dead, respawnIn }, match: { state, seconds, alive, total }, others, noises, loadout, looting, repairing, pickups: unchanged ? null : pickups };
 }
 
@@ -280,14 +346,15 @@ export function decodeInput(bytes: Uint8Array): InputMessage | null {
 // ---- both directions
 
 // Packed form of a server message, or null when it is one of the readable ones.
-export function encodeServerBinary(m: ServerMessage): Uint8Array | null {
-  if (m.t === "snapshot") return encodeSnapshot(m);
+// `memory` is the connection's (SnapshotMemory); without one every snapshot goes in full.
+export function encodeServerBinary(m: ServerMessage, memory?: SnapshotMemory): Uint8Array | null {
+  if (m.t === "snapshot") return encodeSnapshot(m, memory);
   if (m.t === "shot") return encodeShot(m);
   return null;
 }
 
-export function decodeServerBinary(bytes: Uint8Array): ServerMessage | null {
-  if (bytes[0] === TYPE_SNAPSHOT) return decodeSnapshot(bytes);
+export function decodeServerBinary(bytes: Uint8Array, memory?: SnapshotMemory): ServerMessage | null {
+  if (bytes[0] === TYPE_SNAPSHOT) return decodeSnapshot(bytes, memory);
   if (bytes[0] === TYPE_SHOT) return decodeShot(bytes);
   return null;
 }

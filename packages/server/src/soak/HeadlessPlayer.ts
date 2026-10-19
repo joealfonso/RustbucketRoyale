@@ -1,5 +1,5 @@
 import {
-  Predictor, STEP, abilityFor, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
+  Predictor, STEP, SnapshotMemory, abilityFor, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
   mechStatsFor, ringAt, type Roster, type BotConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type AbilitySet, type AbilityStats, type RingSchedule, type ServerMessage, type TierSet, type World,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "../Bot";
@@ -16,6 +16,8 @@ const RAMMED_NEAR = 3; // metres: a ram hit this close to where it thinks it is 
 export class HeadlessPlayer {
   id = 0;
   bytesReceived = 0;
+  private sentMemory = new SnapshotMemory(); // the server side of this connection
+  private readMemory = new SnapshotMemory(); // the browser side
   worstCorrection = 0;
   corrections = 0;
   places: number[] = []; // every place handed out by an elimination message
@@ -56,9 +58,9 @@ export class HeadlessPlayer {
 
   // Everything goes through the packed format and back, exactly as it would over the wire.
   private receive(m: ServerMessage): void {
-    const packed = encodeServerBinary(m);
+    const packed = encodeServerBinary(m, this.sentMemory);
     this.bytesReceived += packed ? packed.length : JSON.stringify(m).length;
-    const message = packed ? decodeServerBinary(packed)! : m;
+    const message = packed ? decodeServerBinary(packed, this.readMemory)! : m;
 
     if (message.t === "welcome" || message.t === "room") this.useMap(message.seed, message.tier);
     if (message.t === "room") { this.ring = message.ring; this.settleSnapshots = 3; }
