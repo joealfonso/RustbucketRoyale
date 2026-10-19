@@ -81,7 +81,8 @@
     "waypointReach": 4,
     "minPathDistance": 20,
     "goalMoveReplan": 15,
-    "searchesPerTick": 1
+    "searchesPerTick": 1,
+    "heuristicWeight": 1.3
   },
   "loot": {
     "searchMeters": 40,

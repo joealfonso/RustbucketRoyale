@@ -11,6 +11,7 @@ const tier = process.argv[2] ?? "medium";
 const steps = (process.argv[3] ?? "5,10,20,40").split(",").map(Number);
 const PORT = 8091;
 const SETTLE_SECONDS = 20;
+const ROOM_GAP_MS = 1500;
 const BUDGET_MS = 8; // half the 16.7 ms tick, the same budget as the soak test
 
 const server = spawn("npx", ["tsx", "packages/server/src/main.ts"], {
@@ -65,6 +66,9 @@ for (const target of steps) {
   for (; rooms < target; rooms++) {
     const code = await player(null, rooms);
     await player(code, rooms + 0.5);
+    // Making a large map holds the server for most of a second. Back to back, the players already in were sending
+    // inputs the whole time with no ticks to refill their message budget, and got kicked for flooding.
+    await new Promise((r) => setTimeout(r, ROOM_GAP_MS));
   }
   await new Promise((r) => setTimeout(r, SETTLE_SECONDS * 1000 - 5000));
   bytesIn = 0;
