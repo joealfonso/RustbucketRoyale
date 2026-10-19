@@ -66,7 +66,7 @@ Where the mechs are shown off, such as a menu or loadout screen backdrop. Not bu
 - The mechs are clean Aegis Dynamics factory machines that leave a match as rustbuckets, not machines built from junk.
 
 ## Still open
-1. **The hangar.** Its hexagonal grid, glowing light strips and holographic displays still clash with the bans on hex grid decoration and soft glow panels. There is no hangar scene yet, so this waits until one is planned.
+1. **The hangar.** Settled 2026-10-19 (Joseph): its hexagonal grid, glowing light strips and holographic displays are allowed in the hangar only, as an exception in DESIGN.md. The match world keeps the bans.
 2. **Weapons and abilities.** The game has an autocannon, a scattergun, a spike driver and grenades, usable by any mech. The designs carry a Gatling, shield and pile driver, missiles, a plasma blade, a laser carbine, a rail mortar, point-defense lasers, drones with decoys and repair beams, and a jump pack. In the game these are looks only (gate V2c). Making any of them work is new gameplay, and the drones' repair overlaps with repair at M7.
 3. **Four legs.** Cataclysm walks on four legs. Hit zones are legs, arms and torso, so it works, but its legs need a broken look that reads when the leg zone breaks.
 4. **Text.** The AEGIS DYNAMICS logo and the serial numbers are real text and must use the decal font (Big Shoulders Stencil).
