@@ -5,7 +5,7 @@ import propsJson from "../../../data/props.json";
 import { toGeometry } from "./dressing/dressing";
 import { seedOf, type DressPiece } from "./dressing/kinds";
 import type { PlayMap } from "./loadMap";
-import { standIn } from "./props/standIn";
+import { standIn, type FarBands } from "./props/standIn";
 import type { Toon, ToonInstances } from "./toonMaterial";
 
 // Past `beyondMeters` from the camera a standing prop is drawn as its plain stand-in box (props/standIn.ts), and it
@@ -14,12 +14,17 @@ import type { Toon, ToonInstances } from "./toonMaterial";
 export interface FarBoxes {
   beyondMeters: number;
   hysteresisMeters: number;
+  bands?: Record<string, FarBands>; // by prop type id: rings kept on the far box (a barrel's hazard bands)
 }
 
 export function parseFarBoxes(raw: unknown): FarBoxes {
   const f = raw as FarBoxes | undefined;
   if (typeof f?.beyondMeters !== "number" || typeof f.hysteresisMeters !== "number" || f.hysteresisMeters < 0 || f.hysteresisMeters > f.beyondMeters) {
     throw new Error("props.json: farBoxes needs beyondMeters and hysteresisMeters between 0 and beyondMeters");
+  }
+  for (const [id, b] of Object.entries(f.bands ?? {})) {
+    const ok = typeof b?.paint === "string" && Array.isArray(b.at) && b.at.every((v) => typeof v === "number" && v > 0 && v < 1) && typeof b.thickness === "number" && b.thickness > 0 && b.thickness < 0.5;
+    if (!ok) throw new Error(`props.json: farBoxes.bands.${id} needs a paint, at (shares of the height between 0 and 1) and a thickness`);
   }
   return f;
 }
@@ -68,7 +73,7 @@ class PropInstances {
   private isFar: Uint8Array;
   private reach = 0; // how far any piece, standing or broken, goes from its prop's origin
 
-  constructor(toon: Toon, intact: DressPiece[], destroyed: DressPiece[], private count: number) {
+  constructor(toon: Toon, intact: DressPiece[], destroyed: DressPiece[], private count: number, bands: FarBands | null = null) {
     this.matrices = new Float32Array(count * 16);
     this.isBroken = new Uint8Array(count);
     this.isFar = new Uint8Array(count);
@@ -93,7 +98,7 @@ class PropInstances {
     };
     this.standing = make(intact, "standing prop");
     this.broken = make(destroyed, "broken prop");
-    this.far = make([standIn(intact)], "far prop");
+    this.far = make(standIn(intact, bands), "far prop");
     // Room for the outlines, pushed out along their normals by the outline width (a few centimetres).
     this.reach += 0.5;
   }
@@ -182,7 +187,7 @@ export class PropView {
       const builder = builders[t.id];
       if (builder) {
         const model = builder(t.size, type);
-        const view = new PropInstances(toon, model.intact, model.destroyed, ids.length);
+        const view = new PropInstances(toon, model.intact, model.destroyed, ids.length, far.bands?.[t.id] ?? null);
         const square = t.size[0] === t.size[2];
         ids.forEach((id, instance) => {
           const p = map.props[id]!;

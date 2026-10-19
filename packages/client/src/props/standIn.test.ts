@@ -16,7 +16,9 @@ describe("far stand-in", () => {
       { paint: "deepRust", mesh: box([0, 0.5, 0], [2, 1, 2]) },
       { paint: "sparkYellow", mesh: box([0, 1.1, 0], [0.2, 0.2, 0.2]) },
     ];
-    const s = standIn(pieces);
+    const [first, ...extra] = standIn(pieces);
+    const s = first!;
+    expect(extra).toHaveLength(0);
     expect(s.paint).toBe("deepRust");
     expect(s.mesh.indices.length / 3).toBe(12);
     const { min, max } = bounds(s.mesh.positions);
@@ -29,14 +31,27 @@ describe("far stand-in", () => {
     const plates = [box([0, 1.5, 0], [2, 0.05, 2]), box([1, 0.75, 0], [0.05, 1.5, 2]), box([-1, 0.75, 0], [0.05, 1.5, 2]),
       box([0, 0.75, 1], [2, 1.5, 0.05]), box([0, 0.75, -1], [2, 1.5, 0.05])];
     const core = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => box([0, 0.15 + k * 0.17, 0], [1.8, 0.12, 1.8]));
-    expect(standIn([{ paint: "deepRust", mesh: merge(...core) }, { paint: "rustOrange", mesh: merge(...plates) }]).paint).toBe("rustOrange");
+    expect(standIn([{ paint: "deepRust", mesh: merge(...core) }, { paint: "rustOrange", mesh: merge(...plates) }])[0]!.paint).toBe("rustOrange");
+  });
+
+  it("keeps a barrel's hazard bands on its far box, just proud of it, where the data puts them", () => {
+    const bands = { paint: "soot", at: [0.2, 0.75], thickness: 0.1 };
+    const [body, ...rest] = standIn([{ paint: "sparkYellow", mesh: box([0, 1, 0], [1, 2, 1]) }], bands);
+    expect(body!.paint).toBe("sparkYellow");
+    expect(rest.map((r) => r.paint)).toEqual(["soot"]); // both rings in one piece, one draw
+    const rings = rest[0]!.mesh;
+    expect(rings.indices.length / 3).toBe(24);
+    const { min, max } = bounds(rings.positions);
+    expect(+min[1]!.toFixed(6)).toBe(0.3); // the low ring, 0.4 up and 0.2 thick
+    expect(+max[1]!.toFixed(6)).toBe(1.6); // the high ring, 1.5 up
+    expect(max[0]).toBeGreaterThan(0.5); // stands out past the body, so it never shares its pixels
   });
 
   for (const type of propsJson.types) {
     it(`fits inside the ${type.id}'s box in one of its paints`, () => {
       const size = type.size as [number, number, number];
       const { intact } = PROP_MODELS[type.id]!(size, 1);
-      const s = standIn(intact);
+      const s = standIn(intact)[0]!;
       expect(intact.map((p) => p.paint)).toContain(s.paint);
       const { min, max } = bounds(s.mesh.positions);
       const slack = 0.06;

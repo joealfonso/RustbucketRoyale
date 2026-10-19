@@ -1,11 +1,19 @@
 import * as THREE from "three";
 import type { DressPiece } from "../dressing/kinds";
-import { box, type V3 } from "../dressing/shapes";
+import { box, merge, type V3 } from "../dressing/shapes";
 
 // The far stand-in for a prop model: one plain box round the whole standing model, in the paint that is seen most
 // from outside it. Past the far-box distance a prop is a few pixels tall, so its outline and main colour are all that
 // still read; the model's hundred and more triangles there were most of a view across a large map (docs/PERF.md).
-export function standIn(intact: DressPiece[]): DressPiece {
+// `bands` adds thin rings standing just proud of the box, so a far barrel keeps its black hazard bands: yellow and
+// black is how it reads as explosive from across the map.
+export interface FarBands {
+  paint: string;
+  at: number[]; // where each band's middle sits, as a share of the box's height from its foot
+  thickness: number; // as a share of the box's height
+}
+
+export function standIn(intact: DressPiece[], bands: FarBands | null = null): DressPiece[] {
   const min: V3 = [Infinity, Infinity, Infinity], max: V3 = [-Infinity, -Infinity, -Infinity];
   for (const { mesh } of intact) {
     const p = mesh.positions;
@@ -15,7 +23,16 @@ export function standIn(intact: DressPiece[]): DressPiece {
     }
   }
   const centre: V3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
-  return { paint: seenMost(intact, min, max), mesh: box(centre, [max[0] - min[0], max[1] - min[1], max[2] - min[2]]) };
+  const size: V3 = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+  const pieces: DressPiece[] = [{ paint: seenMost(intact, min, max), mesh: box(centre, size) }];
+  // A few centimetres proud on every side, so the band never fights the box's faces for the same pixels.
+  const proud = 0.03;
+  // All the rings are one piece, so they cost one draw and one outline however many there are.
+  if (bands && bands.at.length > 0) {
+    const rings = bands.at.map((at) => box([centre[0], min[1] + size[1] * at, centre[2]], [size[0] + proud * 2, size[1] * bands.thickness, size[2] + proud * 2]));
+    pieces.push({ paint: bands.paint, mesh: merge(...rings) });
+  }
+  return pieces;
 }
 
 const RAYS = 8; // per side of each face of the box, so 64 a face

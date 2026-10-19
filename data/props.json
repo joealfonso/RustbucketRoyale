@@ -53,7 +53,17 @@
   },
   "farBoxes": {
     "beyondMeters": 150,
-    "hysteresisMeters": 10
+    "hysteresisMeters": 10,
+    "bands": {
+      "barrel": {
+        "paint": "soot",
+        "at": [
+          0.2,
+          0.745
+        ],
+        "thickness": 0.09
+      }
+    }
   },
   "density": {
     "minPerSquareKm": 400,
