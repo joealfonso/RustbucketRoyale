@@ -27,7 +27,7 @@ Detail density is uneven on purpose: big calm shapes, a few focused details.
 Parts have visible seams, hinges, and panel breaks. No melted blends.
 Surfaces are flat toon bands with visible brush marks. No gloss, airbrush gradients, or baked lighting.
 No gibberish text. Use none, or real text hand set in the chosen fonts. Pick one licensed monospace font for the HUD and one stencil or hand lettered font for decals, and record both here.
-Chosen fonts (2026-10-17): HUD, IBM Plex Mono (SIL Open Font License). Decals, Big Shoulders Stencil (SIL Open Font License). Both get a row in docs/ASSETS.md when their files enter the repo.
+Chosen fonts (2026-10-19, replacing IBM Plex Mono): HUD, three faces, all SIL Open Font License and self-hosted from npm (@fontsource): Chakra Petch (500, 700) for words, labels and headings; Share Tech Mono for every number and small key caps; Barlow (400, 600) for running text in menus and results. Decals, Big Shoulders Stencil (SIL Open Font License). Each has a row in docs/ASSETS.md once its files enter the repo. In the client they are CSS tokens (--hud-word, --hud-num, --hud-body) in packages/client/src/hud.css, with the colours (--hud-amber, --hud-amber-dim, --hud-soot, --hud-panel, --hud-warn, --hud-text).
 Banned looks: teal and orange grading, neon rim glow, purple to blue gradients, god rays, lens flare, bokeh, hex grid decoration, glass cards, soft glow panels, stock icon packs, emoji icons.
 Allowed on mechs (from the roster designs): glowing sensors and visors, and small emissive energy accents on weapons, conduits and drones, in each mech's own colours. They are flat emissive toon colour, never a bloom halo or a rim glow round the whole mech. A mech's sensor goes dark when its torso breaks, which makes a destroyed mech read at a glance.
 Wear follows logic: rust where water pools, scuffs where parts rub, chips along edges.
@@ -58,7 +58,7 @@ Chunks: buildings, ruins, cover clusters, open ground, all on the shared atlas w
 One warm key light, cool soot shadows, soft fog for depth. Shadows near range only if the budget needs it. The zone ring is the only magenta in the world.
 
 ## HUD
-Chunky retro CRT terminal. Amber on soot, bold monospace, rectangular panels. CRT post effect has an intensity slider and an off switch. Never rely on color alone for warnings. Mech damage diagram is always on screen.
+Chunky retro CRT terminal. Amber on soot, bold squared type with monospace numbers, rectangular panels with one clipped corner. CRT post effect has an intensity slider and an off switch. Never rely on color alone for warnings. Mech damage diagram is always on screen.
 
 ## VFX
 Hand painted flipbooks and simple meshes. Pooled, capped by data file values, with a low setting. Sparks and smoke are the main language of damage.
