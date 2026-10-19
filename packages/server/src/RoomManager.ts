@@ -97,7 +97,7 @@ export class RoomManager {
     const { joined } = ticket;
     if (joined) {
       joined.room.leave(joined.id);
-      if (joined.room.playerCount === 0) this.rooms.delete(joined.room.code);
+      if (joined.room.playerCount === 0 && !joined.room.holdingForRejoin) this.rooms.delete(joined.room.code);
       return;
     }
     // Gave up waiting. A room nobody is waiting for is dropped, and its map is thrown away when it arrives.
@@ -108,7 +108,18 @@ export class RoomManager {
   }
 
   tick(): void {
-    for (const room of this.rooms.values()) room.tick();
+    for (const room of this.rooms.values()) {
+      room.tick();
+      // The last person dropped and did not come back in time.
+      if (room.playerCount === 0 && !room.holdingForRejoin) this.rooms.delete(room.code);
+    }
+  }
+
+  // A dropped player coming back to their mech (Room.rejoin). Null when there is nothing to come back to.
+  rejoin(code: string | null, id: number, token: string, send: (message: ServerMessage) => void): Ticket | null {
+    const room = code ? this.rooms.get(code.toUpperCase()) : undefined;
+    const joined = room?.rejoin(id, token, send) ?? null;
+    return room && joined !== null ? { code: room.code, joined: { room, id: joined } } : null;
   }
 
   private queue(code: string, entry: Preparing, send: (message: ServerMessage) => void, refusedLater: () => void): Ticket {

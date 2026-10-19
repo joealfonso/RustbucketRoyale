@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ServerMessage } from "@rustbucket/shared";
+import { STEP, type ServerMessage } from "@rustbucket/shared";
 import type { MapForRoom, RoomConfig } from "./Room";
 import { Client, makeRoom, tickRoom } from "./testClient";
 
@@ -55,7 +55,7 @@ describe("a room waiting for its next map", () => {
 
   it("asks for the next map when results begin, and keeps showing results until it is there", async () => {
     const maps = laterMaps();
-    const { room } = makeRoom(maps.patch);
+    const { room, config } = makeRoom(maps.patch);
     maps.asked[0]!.resolve();
     await settle();
     const host = new Client(room);
@@ -64,7 +64,8 @@ describe("a room waiting for its next map", () => {
     tickRoom(room, 20);
     expect(room.matchState).toBe("active");
 
-    room.leave(guest.id); // the host is the last one standing
+    room.leave(guest.id); // the host is the last one standing once the guest is not back in time
+    tickRoom(room, Math.ceil(config.net.rejoinGraceSeconds / STEP) + 1);
     expect(room.matchState).toBe("results");
     expect(maps.asked).toHaveLength(2);
     tickRoom(room, 120); // well past the short test results

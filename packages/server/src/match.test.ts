@@ -151,30 +151,71 @@ describe("the ring", () => {
     expect(a.messages.find((m) => m.t === "result")).toMatchObject({ t: "result" });
   });
 
-  it("counts a player who walks out of the match as knocked out", () => {
+  it("counts a player who walks out of the match as knocked out, once they are not back in time", () => {
     const { room, config } = makeRoom();
     const a = new Client(room, config);
     const b = new Client(room, config);
     startMatch(room, a);
     room.leave(b.id);
+    expect(room.matchState).toBe("active");
+    tickRoom(room, seconds(config.net.rejoinGraceSeconds) + 1);
     expect(room.matchState).toBe("results");
     expect(a.messages.find((m) => m.t === "result")).toMatchObject({ winnerId: a.id });
   });
 
-  it("leaves a dropped player's mech as a wreck until the next countdown, and says they dropped out", () => {
+  it("holds a dropped player's mech for the grace time, then leaves it as a wreck until the next countdown", () => {
     const { room, config } = makeRoom();
     const a = new Client(room, config);
     const b = new Client(room, config);
     const c = new Client(room, config);
     startMatch(room, a);
     room.leave(b.id);
+    expect(lastRoom(a).players).toBe(2); // people still connected
+    expect(room.holdingForRejoin).toBe(true);
+    drive(room, [a, c], seconds(config.net.rejoinGraceSeconds) - 5);
+    expect(room.inspect().find((m) => m.id === b.id)).toMatchObject({ dead: false, eliminated: false }); // still waiting
+    drive(room, [a, c], 10);
     expect(a.messages.find((m) => m.t === "eliminated")).toMatchObject({ id: b.id, killerId: null, left: true });
     expect(room.inspect().find((m) => m.id === b.id)).toMatchObject({ dead: true, eliminated: true });
-    expect(lastRoom(a).players).toBe(2); // people still connected
+    expect(room.holdingForRejoin).toBe(false);
     expect(room.matchState).toBe("active"); // two still in it
     room.leave(c.id);
+    drive(room, [a], seconds(config.net.rejoinGraceSeconds) + 5);
     expect(room.matchState).toBe("results");
     driveUntil(room, [a], () => room.matchState === "countdown", seconds(60));
     expect(room.inspect().some((m) => m.id === b.id || m.id === c.id)).toBe(false);
+  });
+
+  it("gives a player who comes back in time their own mech, in the same match", () => {
+    const { room, config } = makeRoom();
+    const a = new Client(room, config);
+    const b = new Client(room, config);
+    startMatch(room, a);
+    const welcome = b.messages.find((m) => m.t === "welcome") as Extract<ServerMessage, { t: "welcome" }>;
+    expect(welcome.rejoin).toMatch(/^[0-9a-f]{32}$/);
+    room.leave(b.id);
+    drive(room, [a], seconds(5));
+    expect(room.rejoin(b.id, "0".repeat(32), () => {})).toBeNull(); // somebody else's guess
+    const back: ServerMessage[] = [];
+    expect(room.rejoin(b.id, welcome.rejoin, (m) => back.push(m))).toBe(b.id);
+    expect(back[0]).toMatchObject({ t: "welcome", id: b.id, rejoin: welcome.rejoin });
+    expect(lastRoom(a).players).toBe(2);
+    drive(room, [a, b], seconds(config.net.rejoinGraceSeconds) + 5);
+    expect(room.inspect().find((m) => m.id === b.id)).toMatchObject({ eliminated: false });
+    expect(back.some((m) => m.t === "snapshot")).toBe(true);
+  });
+
+  it("refuses to bring back a player who was gone too long, or who left outside a match", () => {
+    const { room, config } = makeRoom();
+    const a = new Client(room, config);
+    const b = new Client(room, config);
+    const c = new Client(room, config);
+    const token = (x: Client) => (x.messages.find((m) => m.t === "welcome") as Extract<ServerMessage, { t: "welcome" }>).rejoin;
+    room.leave(c.id); // in the lobby: just gone
+    expect(room.rejoin(c.id, token(c), () => {})).toBeNull();
+    startMatch(room, a);
+    room.leave(b.id);
+    drive(room, [a], seconds(config.net.rejoinGraceSeconds) + 5);
+    expect(room.rejoin(b.id, token(b), () => {})).toBeNull();
   });
 });

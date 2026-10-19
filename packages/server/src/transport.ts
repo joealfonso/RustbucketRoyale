@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { STEP, SnapshotMemory, encodeServerBinary, parseBotDifficulty } from "@rustbucket/shared";
+import { STEP, SnapshotMemory, encodeServerBinary, parseBotDifficulty, parseRejoin, type ServerMessage } from "@rustbucket/shared";
 import type { RoomManager, Ticket } from "./RoomManager";
 import type { StaticSite } from "./staticSite";
 
@@ -84,7 +84,7 @@ export function startServer(
     let lastOut = 0, lastIn = 0;
     // When a delayed message is due: never before the one sent ahead of it.
     const due = (after: number) => Math.max(after, performance.now() + lag!.ms / 2 + (Math.random() * 2 - 1) * (lag!.jitterMs / 2));
-    const ticket: Ticket | null = manager.join(query.get("room"), query.get("tier"), (message) => {
+    const deliver = (message: ServerMessage) => {
       if (socket.readyState !== socket.OPEN) return;
       // Snapshots and shots are packed binary, the rare messages are readable text. Packed now, in order, even when
       // sending is delayed, because a snapshot is written against the one before it.
@@ -93,13 +93,28 @@ export function startServer(
       if (!lag) { socket.send(out); return; }
       lastOut = due(lastOut);
       setTimeout(() => { if (socket.readyState === socket.OPEN) socket.send(out); }, lastOut - performance.now());
-    }, bots, difficulty, () => socket.close());
-    if (!ticket) {
+    };
+    // Closes once everything already sent has gone, including anything the lag simulator is holding back.
+    const closeAfterSent = () => setTimeout(() => socket.close(), lag ? Math.max(0, lastOut - performance.now()) + 1 : 0);
+    // `?rejoin` in the address: a dropped player coming back. Their room waits for the first message, which says who
+    // they were and carries their secret (never the address: proxies log addresses).
+    const rejoining = query.has("rejoin");
+    let ticket: Ticket | null = rejoining ? null : manager.join(query.get("room"), query.get("tier"), deliver, bots, difficulty, () => socket.close());
+    if (!rejoining && !ticket) {
       socket.close();
       return;
     }
     let early = 0;
     const handle = (data: WebSocket.RawData, isBinary: boolean) => {
+      if (!ticket) {
+        const ask = isBinary ? null : parseRejoin(data.toString());
+        ticket = ask ? manager.rejoin(query.get("room"), ask.id, ask.token, deliver) : null;
+        if (!ticket) {
+          deliver({ t: "refused", reason: "Too late to get back into that match.", rejoinFailed: true });
+          closeAfterSent();
+        }
+        return;
+      }
       const joined = ticket.joined;
       if (!joined) {
         if (++early > MAX_MESSAGES_WHILE_WAITING) socket.close();
@@ -120,7 +135,7 @@ export function startServer(
       answered = false;
       socket.ping();
     });
-    socket.on("close", () => { alive.delete(socket); manager.leave(ticket); });
+    socket.on("close", () => { alive.delete(socket); if (ticket) manager.leave(ticket); });
     socket.on("error", () => socket.close());
   });
 

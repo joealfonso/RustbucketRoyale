@@ -361,8 +361,8 @@ describe("Decoy Drones", () => {
     room.leave(a.id);
     run(room, [b], () => idle(), 3);
     expect(abilityMessages(b, "pop").map((m) => m.id).sort()).toEqual([...ids].sort());
-    // Only the Arbiter's own wreck is left: it dropped out of a running match.
-    expect(b.last().others.map((o) => [o.id, o.dead])).toEqual([[a.id, true]]);
+    // Only the Arbiter itself is left, standing and waiting for its player to reconnect.
+    expect(b.last().others.map((o) => [o.id, o.dead])).toEqual([[a.id, false]]);
   });
 
   it("fool a bot into shooting one", () => {

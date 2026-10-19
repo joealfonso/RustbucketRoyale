@@ -11,5 +11,6 @@
   "interpolationBufferMs": 15,
   "maxViewDelayMs": 200,
   "interestRange": 250,
-  "interestLeaveFactor": 1.15
+  "interestLeaveFactor": 1.15,
+  "rejoinGraceSeconds": 20
 }

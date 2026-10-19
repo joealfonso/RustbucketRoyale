@@ -154,6 +154,7 @@ export interface NetStats {
   maxViewDelayMs: number;
   interestRange: number; // a client is only sent mechs and events closer than this
   interestLeaveFactor: number; // a mech already being sent stays until it is this many times further away, so the edge does not flicker
+  rejoinGraceSeconds: number; // a mech whose connection drops mid match waits this long for its player to come back
   correctionSmoothing: number;
   snapDistance: number;
   spawnSpacing: number;
@@ -202,7 +203,7 @@ const BOT_KEYS: (keyof BotStats & string)[] = [
 
 const NET_KEYS: (keyof NetStats & string)[] = [
   "snapshotEvery", "maxPlayers", "maxInputsPerTick", "maxQueuedInputs", "maxMessagesPerSecond",
-  "floodKickBudget", "interpolationBufferMs", "maxViewDelayMs", "interestRange", "interestLeaveFactor", "correctionSmoothing", "snapDistance", "spawnSpacing",
+  "floodKickBudget", "interpolationBufferMs", "maxViewDelayMs", "interestRange", "interestLeaveFactor", "correctionSmoothing", "snapDistance", "spawnSpacing", "rejoinGraceSeconds",
 ];
 
 export const parseNetStats = (raw: unknown) => parseNumbers<NetStats>(raw, "net.json", NET_KEYS);

@@ -45,8 +45,8 @@ describe("roster mechs", () => {
     drive(room, [a, b], 30);
     expect(a.last().you.mech).toBe(stiletto); // no swapping mid fight
 
-    room.leave(b.id); // the last opponent walks out, so the match ends
-    drive(room, [a], 60);
+    room.leave(b.id); // the last opponent walks out, so the match ends once they are not back in time
+    drive(room, [a], Math.ceil(config.net.rejoinGraceSeconds / STEP) + 60);
     startMatch(room, a);
     drive(room, [a], 3);
     expect(a.last().you.mech).toBe(arbiter);

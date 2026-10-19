@@ -1,3 +1,4 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   FireGate, STEP, ZONE_ARMS, ZONE_COUNT, ZONE_LEGS, ZONE_TORSO, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule, partToRepair,
@@ -193,7 +194,7 @@ export class Room {
     const id = this.nextId++;
     const mech = this.dealtMech(id);
     this.players.set(id, {
-      id, slot, bot: this.newBot(), send: () => {}, gone: false, mech, state: this.freshState(slot, mech),
+      id, slot, bot: this.newBot(), send: () => {}, gone: false, goneTick: 0, rejoinToken: "", mech, state: this.freshState(slot, mech),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
       hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
@@ -289,7 +290,7 @@ export class Room {
     const id = this.nextId++;
     const mech = this.dealtMech(id);
     const player: Player = {
-      id, slot, bot: null, send, gone: false, mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(),
+      id, slot, bot: null, send, gone: false, goneTick: 0, rejoinToken: randomBytes(16).toString("hex"), mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(),
       queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
@@ -299,26 +300,53 @@ export class Room {
 
     // In the lobby a person arriving takes a bot's place. Mid match nothing changes.
     if (this.state === "lobby") this.fillBots();
-    send({ t: "welcome", id, code: this.code, seed: this.seed, tier: this.tier, tuning: this.tuningRaws !== null });
-    for (const tuned of this.tunes) send(tuned);
-    if (this.destroyedProps.length > 0) send({ t: "props", destroyed: [...this.destroyedProps] });
-    this.broadcastRoom();
+    this.welcome(player);
     return id;
+  }
+
+  // Everything a fresh connection needs to draw this room: who you are, its map, tuning and broken props.
+  private welcome(player: Player): void {
+    player.send({ t: "welcome", id: player.id, code: this.code, seed: this.seed, tier: this.tier, tuning: this.tuningRaws !== null, rejoin: player.rejoinToken });
+    for (const tuned of this.tunes) player.send(tuned);
+    if (this.destroyedProps.length > 0) player.send({ t: "props", destroyed: [...this.destroyedProps] });
+    this.broadcastRoom();
+  }
+
+  // A player whose connection dropped comes back to their own mech, still in the match, if they are in time.
+  // Returns their id, or null when there is nothing to come back to (too late, the match moved on, a wrong secret).
+  rejoin(id: number, token: string, send: (message: ServerMessage) => void): number | null {
+    const player = this.players.get(id);
+    if (!player || !player.gone || player.eliminated || !sameSecret(player.rejoinToken, token)) return null;
+    player.gone = false;
+    player.send = send;
+    player.queue.length = 0;
+    // The new connection starts with nothing: every mech in view and the pickups near you go again in full.
+    player.interested.clear();
+    player.sentPickupIds.length = 0;
+    this.welcome(player);
+    return id;
+  }
+
+  // Whether a dropped player's mech is still waiting for them, so the room must not be thrown away yet.
+  get holdingForRejoin(): boolean {
+    for (const p of this.players.values()) if (p.gone && !p.eliminated) return true;
+    return false;
   }
 
   leave(id: number): void {
     const player = this.players.get(id);
     if (!player) return;
     for (const d of [...this.decoys]) if (d.ownerId === id) this.popDecoy(d, null);
-    // Dropping out of a running match leaves your mech behind as a wreck, loot and all, like any knockout, so the
-    // fight you were in still has an ending. It is cleared at the next countdown.
+    // Dropping out of a running match: the mech stands and waits for its player to reconnect. If they do not in
+    // time it is knocked out and left as a wreck, loot and all, so the fight they were in still has an ending.
     if (this.state === "active" && player.participant && !player.eliminated) {
       player.gone = true;
+      player.goneTick = this.tickCount;
       player.send = () => {};
+      player.queue.length = 0;
       this.stopLooting(player);
       player.repairZone = -1;
       if (this.hostId === id) this.hostId = this.humans()[0]?.id ?? 0;
-      this.eliminate(player, null, true);
       this.broadcastRoom();
       return;
     }
@@ -411,6 +439,13 @@ export class Room {
       if (player.respawnTick > 0 && this.tickCount >= player.respawnTick && this.state !== "active") this.respawnForPractice(player);
       if (player.bot) {
         this.runBot(player);
+        this.recordHistory(player);
+        continue;
+      }
+      if (player.gone) {
+        if (!player.eliminated && this.tickCount - player.goneTick >= net.rejoinGraceSeconds / STEP) this.eliminate(player, null, true);
+        // Stands still, so a mech dropped mid jump comes down rather than hanging in the air.
+        if (!player.dead) this.processInput(player, Object.assign(this.botInput, createMechInput(), { aimYaw: player.state.bodyYaw }));
         this.recordHistory(player);
         continue;
       }
@@ -1347,4 +1382,10 @@ export class Room {
       });
     }
   }
+}
+
+// Compares two rejoin secrets in the same time however much of them matches.
+function sameSecret(a: string, b: string): boolean {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length && x.length > 0 && timingSafeEqual(x, y);
 }

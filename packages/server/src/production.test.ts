@@ -103,6 +103,40 @@ describe("production server", () => {
     healthy.close();
   });
 
+  it("lets a player whose connection dropped mid match back into their own mech, with their secret only", async () => {
+    // A room with a short countdown, so the match is running within a moment.
+    const quick = { ...config, match: { ...config.match, countdownSeconds: 0.1 } };
+    const manager = new RoomManager((code, tier, bots) => new Room(code, tier, quick, bots), ["small"], "small", 5);
+    server = await startServer(manager, 0, 0);
+    const port = server.port;
+    type Seen = { socket: WebSocket; text: Record<string, unknown>[] };
+    const connect = (query: string, first?: object) => new Promise<Seen>((resolve) => {
+      const socket = new WebSocket(`ws://localhost:${port}/${query}`);
+      const seen: Seen = { socket, text: [] };
+      socket.on("message", (data, isBinary) => { if (!isBinary) seen.text.push(JSON.parse(data.toString())); });
+      socket.on("open", () => { if (first) socket.send(JSON.stringify(first)); resolve(seen); });
+    });
+    const until = async (done: () => boolean) => { for (let i = 0; i < 200 && !done(); i++) await new Promise((r) => setTimeout(r, 10)); return done(); };
+    const welcomeOf = (s: Seen) => s.text.find((m) => m.t === "welcome") as { id: number; rejoin: string } | undefined;
+
+    const host = await connect("?room=RJNA&tier=small&bots=0");
+    const guest = await connect("?room=RJNA");
+    expect(await until(() => !!welcomeOf(host) && !!welcomeOf(guest))).toBe(true);
+    host.socket.send(JSON.stringify({ t: "start" }));
+    expect(await until(() => host.text.some((m) => m.t === "room" && m.state === "active"))).toBe(true);
+
+    const { id, rejoin } = welcomeOf(guest)!;
+    guest.socket.terminate(); // the connection just dies
+    const stranger = await connect("?room=RJNA&rejoin", { t: "rejoin", id, token: "f".repeat(32) });
+    expect(await until(() => stranger.text.some((m) => m.t === "refused" && m.rejoinFailed === true))).toBe(true);
+    const back = await connect("?room=RJNA&rejoin", { t: "rejoin", id, token: rejoin });
+    expect(await until(() => !!welcomeOf(back))).toBe(true);
+    expect(welcomeOf(back)!.id).toBe(id);
+    expect(host.text.some((m) => m.t === "eliminated")).toBe(false);
+    host.socket.close();
+    back.socket.close();
+  });
+
   it("checks origins against a list, or not at all in development", () => {
     expect(originAllowed("https://rust.example", "x", ["https://rust.example"])).toBe(true);
     expect(originAllowed("https://evil.example", "x", ["https://rust.example"])).toBe(false);

@@ -147,7 +147,7 @@ function serverAddress(): string {
   return `${base}/?${serverQuery(params)}`;
 }
 
-const net = online ? new NetClient(serverAddress()) : null;
+const net = online ? new NetClient(serverAddress(), netStats.rejoinGraceSeconds) : null;
 let tier = params.get("tier") ?? "medium";
 let seed = params.has("seed") ? Number(params.get("seed")) : Math.floor(Math.random() * 0x100000000);
 let roomCode = "";
@@ -539,6 +539,10 @@ if (net) {
     hint.classList.remove("hidden");
     hint.textContent = reason;
   };
+  // A dropped connection: the mech waits on the server while this tries to get back to it.
+  net.onReconnecting = (trying) => hud.feed(trying ? "Connection lost. Reconnecting..." : "Back in.");
+  // Too late to get back into that match: join the room afresh, as following the invite link would.
+  net.onRejoinFailed = () => { location.search = `?room=${encodeURIComponent(roomCode)}`; };
 }
 
 const crosshair = document.getElementById("crosshair")!;

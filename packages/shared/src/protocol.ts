@@ -168,7 +168,8 @@ export interface MatchProgress {
 }
 
 export type ServerMessage =
-  | { t: "welcome"; id: number; code: string; seed: number; tier: string; tuning: boolean }
+  // `rejoin` is this player's secret for getting their mech back after the connection drops (Room.rejoin).
+  | { t: "welcome"; id: number; code: string; seed: number; tier: string; tuning: boolean; rejoin: string }
   | { t: "tuned"; file: string; path: string; value: number } // a number in a data file changed for this room
   | {
       t: "room"; code: string; tier: string; state: MatchState; seed: number; hostId: number;
@@ -177,7 +178,7 @@ export type ServerMessage =
     }
   | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number; left?: boolean } // left: their connection closed
   | { t: "result"; winnerId: number | null }
-  | { t: "refused"; reason: string }
+  | { t: "refused"; reason: string; rejoinFailed?: boolean } // rejoinFailed: too late, join the room afresh
   | { t: "prop"; id: number } // a prop was destroyed
   | { t: "props"; destroyed: number[] } // every prop destroyed so far, sent to someone arriving mid way
   | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; looting: number; repairing: number; pickups: PickupState[] | null } // pickups null: unchanged since the last snapshot
@@ -191,6 +192,24 @@ const finite = (v: unknown): v is number => typeof v === "number" && Number.isFi
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 // Never trust a client. Anything malformed becomes null and is dropped, numbers are clamped into range.
+// The first message on a connection opened with `?rejoin` in its address: who you were and your secret. It travels
+// as a message, never in the address, because proxies log addresses.
+export interface RejoinMessage {
+  t: "rejoin";
+  id: number;
+  token: string;
+}
+
+export function parseRejoin(raw: string): RejoinMessage | null {
+  try {
+    const d = JSON.parse(raw) as Partial<RejoinMessage>;
+    if (d?.t !== "rejoin" || !Number.isInteger(d.id) || typeof d.token !== "string" || !/^[0-9a-f]{32}$/.test(d.token)) return null;
+    return { t: "rejoin", id: d.id!, token: d.token };
+  } catch {
+    return null;
+  }
+}
+
 export function parseClientMessage(raw: string): ClientMessage | null {
   let data: unknown;
   try {

@@ -1,10 +1,20 @@
-import { SnapshotMemory, decodeServerBinary, encodeInput, type AbilityMessage, type ExplodeMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
+import { SnapshotMemory, decodeServerBinary, encodeInput, type RejoinMessage, type AbilityMessage, type ExplodeMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
 
 type SnapshotMessage = Extract<ServerMessage, { t: "snapshot" }>;
 type ShotMessage = Extract<ServerMessage, { t: "shot" }>;
 type RoomMessage = Extract<ServerMessage, { t: "room" }>;
 type EliminatedMessage = Extract<ServerMessage, { t: "eliminated" }>;
 type ResultMessage = Extract<ServerMessage, { t: "result" }>;
+
+const RETRY_MS = 1000; // between tries to reconnect
+
+// The address to come back on: the same server, this room by its code, and nothing else from the first address
+// (which may say `create`).
+export function rejoinAddress(url: string, roomCode: string): string {
+  const address = new URL(url);
+  address.search = `?room=${encodeURIComponent(roomCode)}&rejoin`;
+  return address.toString();
+}
 
 // The browser side of the connection. Sends one input per sim step and hands snapshots and shots to the game.
 export class NetClient {
@@ -27,6 +37,10 @@ export class NetClient {
   onResult?: (result: ResultMessage) => void;
   onPropDestroyed?: (id: number) => void;
   onClose?: (reason: string) => void;
+  // A dropped connection mid game: true while trying to get back to the same mech, false once back.
+  onReconnecting?: (trying: boolean) => void;
+  // Back too late, the match moved on: the game should join the room afresh.
+  onRejoinFailed?: () => void;
 
   // Resolves with the map to build once the server says hello, or rejects if it never does.
   readonly welcome: Promise<{ seed: number; tier: string; code: string; tuning: boolean }>;
@@ -38,28 +52,70 @@ export class NetClient {
   // Set by the game: the mech being watched while knocked out, or 0.
   watchId: () => number = () => 0;
   private sentAt = new Float64Array(256);
-  private socket: WebSocket;
+  private socket!: WebSocket;
   private memory = new SnapshotMemory(); // what this connection was last sent, which snapshots are changes from
+  private rejoinToken = "";
+  private roomCode = ""; // from the welcome: a page that made its room has no code in its first address
+  private giveUpAt = 0; // while reconnecting, when to stop trying
+  private stopped = false; // refused, or gave up: no more tries
+  private welcomed: (map: { seed: number; tier: string; code: string; tuning: boolean }) => void = () => {};
+  private failed: (reason: Error) => void = () => {};
   // Reused every send so the frame loop does not build a new object each time.
   private message: InputMessage = {
     t: "input", seq: 0, moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0,
     run: false, jet: false, dash: false, fire: false, grenade: false, slot: 0, interact: false, repair: false, ability: false, targetX: 0, targetY: 0, targetZ: 0,
   };
 
-  constructor(url: string) {
-    let welcomed: (map: { seed: number; tier: string; code: string; tuning: boolean }) => void = () => {};
-    let failed: (reason: Error) => void = () => {};
-    this.welcome = new Promise((resolve, reject) => { welcomed = resolve; failed = reject; });
-    this.socket = new WebSocket(url);
-    this.socket.binaryType = "arraybuffer";
-    this.socket.onopen = () => { this.open = true; };
-    this.socket.onclose = () => { this.open = false; failed(new Error("The server closed the connection.")); this.onClose?.("The server closed the connection."); };
-    this.socket.onerror = () => { failed(new Error(`Could not reach the server at ${url}.`)); this.onClose?.(`Could not reach the server at ${url}.`); };
-    this.socket.onmessage = (event) => {
+  // `graceSeconds`: how long the server holds a dropped mech (net.json rejoinGraceSeconds), so how long to keep trying.
+  constructor(private url: string, private graceSeconds = 20) {
+    this.welcome = new Promise((resolve, reject) => { this.welcomed = resolve; this.failed = reject; });
+    this.connect(false);
+  }
+
+  // Opens a socket. On a rejoin it first says who this was, before anything else is sent.
+  private connect(rejoin: boolean): void {
+    const url = this.url;
+    const socket = new WebSocket(rejoin ? rejoinAddress(url, this.roomCode) : url);
+    this.socket = socket;
+    this.memory = new SnapshotMemory(); // a new connection starts from nothing on both sides
+    socket.binaryType = "arraybuffer";
+    socket.onopen = () => {
+      if (rejoin) socket.send(JSON.stringify({ t: "rejoin", id: this.id, token: this.rejoinToken } satisfies RejoinMessage));
+      this.open = true;
+    };
+    socket.onclose = () => {
+      if (socket !== this.socket) return;
+      this.open = false;
+      if (this.stopped) return;
+      // Dropped after joining: try to get back to the same mech while the server still holds it.
+      if (this.rejoinToken) {
+        if (this.giveUpAt === 0) { this.giveUpAt = performance.now() + this.graceSeconds * 1000; this.onReconnecting?.(true); }
+        if (performance.now() < this.giveUpAt) { setTimeout(() => this.connect(true), RETRY_MS); return; }
+        this.stopped = true;
+        this.onRejoinFailed?.();
+        return;
+      }
+      this.failed(new Error("The server closed the connection."));
+      this.onClose?.("The server closed the connection.");
+    };
+    // A failed try while reconnecting is followed by its close, which tries again.
+    socket.onerror = () => {
+      if (this.rejoinToken) return;
+      this.failed(new Error(`Could not reach the server at ${url}.`));
+      this.onClose?.(`Could not reach the server at ${url}.`);
+    };
+    socket.onmessage = (event) => {
       // Snapshots and shots arrive packed, everything else as text.
       const message = event.data instanceof ArrayBuffer ? decodeServerBinary(new Uint8Array(event.data), this.memory) : (JSON.parse(event.data as string) as ServerMessage);
       if (!message) return;
-      if (message.t === "welcome") { this.id = message.id; welcomed({ seed: message.seed, tier: message.tier, code: message.code, tuning: message.tuning }); }
+      if (message.t === "welcome") {
+        const back = this.rejoinToken !== "";
+        this.id = message.id;
+        this.rejoinToken = message.rejoin;
+        this.roomCode = message.code;
+        if (back) { this.giveUpAt = 0; this.onReconnecting?.(false); }
+        else this.welcomed({ seed: message.seed, tier: message.tier, code: message.code, tuning: message.tuning });
+      }
       else if (message.t === "tuned") this.onTuned?.(message.file, message.path, message.value);
       else if (message.t === "snapshot") this.onSnapshot?.(message);
       else if (message.t === "shot") this.onShot?.(message);
@@ -72,7 +128,12 @@ export class NetClient {
       else if (message.t === "grenade") this.onGrenade?.(message);
       else if (message.t === "explode") this.onExplode?.(message);
       else if (message.t === "ability") this.onAbility?.(message);
-      else if (message.t === "refused") { failed(new Error(message.reason)); this.onClose?.(message.reason); }
+      else if (message.t === "refused") {
+        this.stopped = true;
+        if (message.rejoinFailed) { this.onRejoinFailed?.(); return; }
+        this.failed(new Error(message.reason));
+        this.onClose?.(message.reason);
+      }
     };
   }
 
