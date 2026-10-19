@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { STEP, parseChunkSet, parsePropConfig, parseTiers } from "@rustbucket/shared";
 import { loadRoomConfig } from "../config";
+import { MapPool } from "../MapPool";
 import { Room } from "../Room";
 import { lcg } from "../testClient";
 import { HeadlessPlayer } from "./HeadlessPlayer";
@@ -39,11 +40,21 @@ const readData = (name: string) => JSON.parse(readFileSync(new URL(`../../../../
 // The room fills itself with bots, and a few headless players join that behave like real browsers. Every tick it
 // checks the state makes sense, and at the end it checks the time, bandwidth and prediction budgets.
 // Everything random comes from the seed, so a failing seed can be played again exactly.
-export function runSoak(tier: string, seed: number, options: SoakOptions = {}): SoakReport {
+// The match map is built on a map worker, as the real server does.
+export async function runSoak(tier: string, seed: number, options: SoakOptions = {}): Promise<SoakReport> {
+  const pool = new MapPool(1);
+  try {
+    return await playSoak(tier, seed, options, pool);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function playSoak(tier: string, seed: number, options: SoakOptions, pool: MapPool): Promise<SoakReport> {
   const { fakePlayers = 3, tickBudgetMs = 8, bandwidthKbps = 64, maxCorrection = 0.05 } = options;
   const base = loadRoomConfig({ maps: "generated", roster: true });
   const bots = options.fill === undefined ? base.bots : { ...base.bots, fill: { ...base.bots.fill, [tier]: options.fill } };
-  const config = { ...base, bots, random: lcg(seed) };
+  const config = { ...base, bots, random: lcg(seed), mapLater: (t: string, s: number) => pool.generate(t, s) };
   const chunks = parseChunkSet(readData("chunks.json"));
   const tiers = parseTiers(readData("tiers.json"));
   const room = new Room("SOAK", tier, config, null);
@@ -51,6 +62,9 @@ export function runSoak(tier: string, seed: number, options: SoakOptions = {}): 
   const problems: string[] = [];
   const problem = (text: string) => { if (problems.length < 20) problems.push(text); };
 
+  // Waiting for the map before pressing start, without ticking, keeps the match the same for the same seed however
+  // long the worker takes.
+  while (!room.nextMapReady) await new Promise((resolve) => setTimeout(resolve, 2));
   room.receive(players[0]!.id, JSON.stringify({ t: "start" }));
   const maxTicks = Math.ceil((config.match.countdownSeconds + config.match.matchSeconds + 30) / STEP);
   const zoneMax = config.zones.zones.map((z) => z.hp);
@@ -93,6 +107,10 @@ export function runSoak(tier: string, seed: number, options: SoakOptions = {}): 
   }
 
   if (room.matchState !== "results") problem("the match never finished");
+  // Results began, so the room has asked for the next match's map. It must arrive (and before the pool closes).
+  const asked = performance.now();
+  while (!room.nextMapReady && performance.now() - asked < 10_000) await new Promise((resolve) => setTimeout(resolve, 2));
+  if (room.matchState === "results" && !room.nextMapReady) problem("the next match's map never arrived");
   if (!players.some((p) => p.winnerSeen)) problem("nobody was told the result");
   const places = players[0]!.places;
   if (new Set(places).size !== places.length) problem(`places were handed out twice: ${places.join(", ")}`);

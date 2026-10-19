@@ -25,6 +25,9 @@ export class Pathfinder {
   private heap = new Int32Array(1024); // grows when a search needs more; `heapSize` entries are in use
   private heapSize = 0;
   private searchesLeft: number;
+  // Whether the last route found goes all the way, rather than stopping where the search ran out of cells. A whole
+  // route stays good on a map that never changes, so a bot only needs a new one when it strays from it.
+  reachedGoal = false;
 
   constructor(nav: NavGrid, private stats: BotPathStats) {
     this.searchesLeft = stats.searchesPerTick;
@@ -153,6 +156,7 @@ export class Pathfinder {
   // Returns false only when no route towards the goal could be found at all.
   findPath(startX: number, startZ: number, goalX: number, goalZ: number, out: number[]): boolean {
     out.length = 0;
+    this.reachedGoal = false;
     this.searchesLeft--;
     const start = this.nearestOpen(this.cellOf(startX, startZ));
     let goal = this.nearestOpen(this.cellOf(goalX, goalZ));
@@ -160,13 +164,17 @@ export class Pathfinder {
     // A goal that cannot be reached from here: go to the nearest spot that can.
     const exact = this.region[goal] === this.region[start];
     if (!exact) goal = this.nearestInRegion(goal, this.region[start]!);
-    if (start === goal) { out.push(exact ? goalX : this.centreX(goal), exact ? goalZ : this.centreZ(goal)); return true; }
+    if (start === goal) {
+      out.push(exact ? goalX : this.centreX(goal), exact ? goalZ : this.centreZ(goal));
+      this.reachedGoal = true;
+      return true;
+    }
 
     this.stamp++;
     const stamp = this.stamp;
     this.heapSize = 0;
     this.g[start] = 0;
-    this.f[start] = this.heuristic(start, goal);
+    this.f[start] = this.stats.heuristicWeight * this.heuristic(start, goal);
     this.parent[start] = -1;
     this.seenStamp[start] = stamp;
     this.push(start);
@@ -178,6 +186,7 @@ export class Pathfinder {
     // Locals rather than fields in the loop below: it runs thousands of times per search.
     const { cols, rows, blocked, closedStamp, seenStamp, g, f, parent } = this;
     const goalCol = goal % cols, goalRow = Math.floor(goal / cols);
+    const weight = this.stats.heuristicWeight;
 
     while (this.heapSize > 0 && expanded < this.stats.maxNodes) {
       const current = this.pop();
@@ -206,7 +215,7 @@ export class Pathfinder {
           g[next] = cost;
           parent[next] = current;
           const ax = Math.abs(nx - goalCol), az = Math.abs(nz - goalRow);
-          f[next] = cost + (Math.max(ax, az) + (DIAGONAL - 1) * Math.min(ax, az));
+          f[next] = cost + weight * (Math.max(ax, az) + (DIAGONAL - 1) * Math.min(ax, az));
           this.push(next);
         }
       }
@@ -214,6 +223,7 @@ export class Pathfinder {
 
     const end = reached ? goal : best;
     if (end === start) return false;
+    this.reachedGoal = reached;
     const cells: number[] = [];
     for (let c = end; c !== -1; c = this.parent[c]!) cells.push(c);
     cells.reverse();
@@ -237,6 +247,21 @@ export class Pathfinder {
       out.push(points[farthest * 2]!, points[farthest * 2 + 1]!);
       i = farthest;
     }
+  }
+
+  // Whether a mech can walk in a straight line between two spots without meeting anything the routes go round.
+  // The cell the walk starts in is not checked: a coarse cell is blocked by anything in it, so a mech walking along
+  // the edge of a building often stands in one.
+  canWalkStraight(ax: number, az: number, bx: number, bz: number): boolean {
+    const from = this.cellOf(ax, az);
+    const length = Math.hypot(bx - ax, bz - az);
+    const steps = Math.ceil(length / (this.cell * 0.5));
+    for (let s = 1; s < steps; s++) {
+      const t = s / steps;
+      const c = this.cellOf(ax + (bx - ax) * t, az + (bz - az) * t);
+      if (c !== from && this.blocked[c]) return false;
+    }
+    return true;
   }
 
   private lineClear(ax: number, az: number, bx: number, bz: number): boolean {

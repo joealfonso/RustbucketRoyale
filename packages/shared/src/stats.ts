@@ -109,6 +109,7 @@ export interface BotPathStats {
   minPathDistance: number; // nearer goals are walked to directly
   goalMoveReplan: number; // plan again when the goal has moved this far
   searchesPerTick: number; // route searches one room runs per tick, the rest wait a tick
+  heuristicWeight: number; // above 1 a search heads for the goal more eagerly: far fewer cells, routes a little longer
 }
 
 export interface BotLootStats {
@@ -210,7 +211,7 @@ export const parseCombatStats = (raw: unknown) => parseNumbers<CombatStats>(raw,
 export const parseBotStats = (raw: unknown, name = "bots.json") => parseNumbers<BotStats>(raw, name, BOT_KEYS);
 
 const LOD_KEYS: (keyof BotLodStats & string)[] = ["fullRangeMeters", "cheapEveryTicks", "abstractFightRange", "abstractFightSeconds", "abstractLoserDamage", "abstractWinnerDamage"];
-const PATH_KEYS: (keyof BotPathStats & string)[] = ["cellMeters", "maxNodes", "replanSeconds", "waypointReach", "minPathDistance", "goalMoveReplan", "searchesPerTick"];
+const PATH_KEYS: (keyof BotPathStats & string)[] = ["cellMeters", "maxNodes", "replanSeconds", "waypointReach", "minPathDistance", "goalMoveReplan", "searchesPerTick", "heuristicWeight"];
 
 export function parseBotConfig(raw: unknown): BotConfig {
   const d = raw as Record<string, Record<string, unknown>>;

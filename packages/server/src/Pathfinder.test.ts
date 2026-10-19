@@ -85,6 +85,51 @@ describe("Pathfinder", () => {
     expect(f.canSearch()).toBe(true);
   });
 
+  it("says whether a route goes all the way, or stops where the search ran out of cells", () => {
+    const wall = box(-5, -60, 5, 60);
+    const path: number[] = [];
+    const f = finder([wall]);
+    f.findPath(-50, 0, 50, 0, path);
+    expect(f.reachedGoal).toBe(true);
+    const short = new Pathfinder(buildNavGrid([wall], 200, 0, 0, { cellMeters: 2, stepHeight: mech.stepHeight, mechHeight: mech.height }), { ...pathStats, maxNodes: 20 });
+    expect(short.findPath(-50, 0, 50, 0, path)).toBe(true);
+    expect(short.reachedGoal).toBe(false);
+  });
+
+  it("tells whether a straight walk is clear, ignoring the cell the walk starts in", () => {
+    const f = finder([box(-5, -60, 5, 60)]);
+    expect(f.canWalkStraight(-50, 0, -10, 40)).toBe(true);
+    expect(f.canWalkStraight(-50, 0, 50, 0)).toBe(false);
+    expect(f.canWalkStraight(-6, 0, -40, 0)).toBe(true); // standing right against the wall, walking away from it
+  });
+
+  it("with a heuristic weight above 1, looks at far fewer cells on a real large map for routes only a little longer", () => {
+    const map = generateMap(7, "large", parseChunkSet(chunksJson), parseTiers(tiersJson), mech, parsePropConfig(propsJson));
+    const exact = new Pathfinder(map.nav, { ...pathStats, heuristicWeight: 1 });
+    const eager = new Pathfinder(map.nav, { ...pathStats, heuristicWeight: 1.5 });
+    let seed = 7;
+    const next = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296) * 1800 - 900;
+    const path: number[] = [];
+    let compared = 0, ratio = 0, eagerWhole = 0, exactWhole = 0, eagerMs = 0, exactMs = 0;
+    for (let i = 0; i < 150; i++) {
+      const a = next(), b = next(), c = next(), d = next();
+      let t = performance.now();
+      exact.findPath(a, b, c, d, path);
+      exactMs += performance.now() - t;
+      const exactLength = length([a, b], path);
+      t = performance.now();
+      eager.findPath(a, b, c, d, path);
+      eagerMs += performance.now() - t;
+      const eagerLength = length([a, b], path);
+      if (exact.reachedGoal) exactWhole++;
+      if (eager.reachedGoal) eagerWhole++;
+      if (exact.reachedGoal && eager.reachedGoal && exactLength > 0) { ratio += eagerLength / exactLength; compared++; }
+    }
+    expect(eagerWhole).toBeGreaterThanOrEqual(exactWhole);
+    expect(ratio / compared).toBeLessThan(1.1);
+    expect(eagerMs).toBeLessThan(exactMs);
+  });
+
   it("is quick on a real large map, across the whole of it, and nearly always finds a way", () => {
     const chunks = parseChunkSet(chunksJson);
     const tiers = parseTiers(tiersJson);

@@ -219,9 +219,62 @@ Medium seed 77 failed the soak at 67 kbps before and passes at 61 after. A full 
 **Still to do, ranked by gain for the effort** (owner in brackets):
 1. Serve `.glb` compressed, or quantise the mech models. The four roster models are 900 kB of the 1.2 MB first load when the host does not compress them (many do not for `model/gltf-binary`): brotli makes them 86 kB, gzip 156 kB. A host setting, no code. Failing that, `KHR_mesh_quantization` in the mech build scripts halves them raw with no loader change; meshopt or Draco would need a decoder. [deploy, then `scripts/mechs/`]
 2. Generate maps off the main thread on the server. A large map takes about 160 ms and stalls every room in the process at each match start: a worker thread, or generating the next map during the results screen in a worker. [server, `Room.beginCountdown`]
-3. Cheaper route searches for large rooms (one route field to the ring centre per ring stage, or a coarse grid for long routes): searches are 80% of a large room's tick, the limit on large rooms per process. [server, `Pathfinder.ts`, `Bot.ts`]
+3. Cheaper route searches for large rooms (one route field to the ring centre per ring stage, or a coarse grid for long routes): searches are 80% of a large room's tick, the limit on large rooms per process. [server, `Pathfinder.ts`, `Bot.ts`] Done, see "Cheaper route searches" below.
 4. Props past about 150 m drawn as plain boxes or not at all: even culled, a view across the map still sends 2.3 to 2.9M triangles, nearly all distant props a few pixels tall. Changes the look slightly far away, so it needs Joseph's eye. [`propView.ts`]
 5. `matrixAutoUpdate = false` on everything that never moves (map, dressing, props, backdrop, wall): `updateMatrixWorld` is the top JavaScript cost in a fight. Small, safe. [`main.ts` and the builders]
 6. Merge each remote mech's leg pieces per paint: a fight is 150 to 400 draw calls, mostly mech parts and their outlines. [`mechModel.ts`, `legRig.ts`]
 7. Load lil-gui and the debug panel on the first F1: 19 kB (6 kB gz) off the start. Small gain. [`main.ts`, `debugPanel.ts`]
 8. On the developer's disk only: `Library/` and `Logs/` in the repo folder are the Unity prototype's editor caches, 1.3 GB, ignored by git. Safe to delete when not working on the `unity-prototype` branch. [Joseph]
+
+### Roster mech models quantised (2026-10-19, recommendation 1 of the performance pass)
+`KHR_mesh_quantization` in the glb writer (`writeGlb(nodes, { quantize: true })`, used by the four roster scripts): positions as normalized 16-bit integers with each part's offset and one scale on its node, normals as 8-bit, indices 16-bit as before. 24 bytes per vertex become 12. Three's GLTFLoader reads it with no decoder. 8-bit positions were measured and dropped: only 12 of the 99 roster meshes are small enough to stay under 1 mm.
+
+| Model | Raw before / after | gzip -9 before / after | brotli -q11 before / after |
+| :- | :- | :- | :- |
+| Ironclad | 221 / 132 kB | 34.5 / 28.4 kB | 17.5 / 17.5 kB |
+| Stiletto | 203 / 123 kB | 36.6 / 30.1 kB | 21.7 / 19.1 kB |
+| Cataclysm | 314 / 189 kB | 54.1 / 43.2 kB | 26.3 / 25.8 kB |
+| Arbiter | 183 / 113 kB | 30.9 / 25.2 kB | 20.7 / 16.7 kB |
+| All four | 921 / 556 kB (-40%) | 156 / 127 kB (-19%) | 86 / 79 kB (-8%) |
+
+On a host that does not compress glb the first load drops by about 365 kB (1223 kB measured before, so about 860 kB; worked out, not measured). Compression still beats quantisation alone (79 kB brotli against 556 kB raw), so serving glb compressed stays worth doing.
+
+Accuracy, checking every part, state, level of detail and leg piece the game builds from the old and new files (scratch script, not in the repo): worst vertex 0.033 mm off, worst normal 0.35 degrees, part bounds within 0.03 mm. Leg pieces (the walk's cut at the joints) have the same vertex counts, and the Fx, Mount_Gun and Joint_* nodes are untouched. Hit boxes (`make-hitboxes.ts`, rounded to the centimetre): one value of 97 boxes moved, Cataclysm's first torso box centre z 0.03 to 0.02, a true 0.025 that now rounds the other way. Screenshots of style.html keys 4 and 6 before and after differ only in smoke and sparks and in single outline pixels.
+
+### Match maps built on worker threads (2026-10-19, recommendation 2 of the performance pass)
+`MapPool` keeps two worker threads (`MAP_WORKERS`, 0 builds on the main thread as before) that run `generateMap` from the same data files and send the map back as flat arrays (boxes and props as Float64Array, the nav grid's heights, which-prop-is-this-box), moved rather than copied; the main thread rebuilds the box objects and the World's lookup grid, about 2 ms on large. A room asks for its next map when it opens and when results begin, and starts the countdown once it is there; if it is not, the lobby or results screen holds and the room keeps ticking. The worker's map equals the main thread's, checked field by field for three seeds on every tier (`MapPool.test.ts`).
+
+`npx tsx scripts/measure-rooms.ts starts large 10`: ten large rooms with bots ticking in real time, hosts pressing start one room every half second. Work is one frame's starts plus a tick of every room; late is how far behind its time a frame began. Two runs each, alternating, the laptop busy with other agents:
+
+| Tier | Rooms | Map workers | Worst frame work ms | 99th percentile work ms | Worst late start ms | Longest wait for a map |
+| :- | :- | :- | :- | :- | :- | :- |
+| large | 10 | 0 (before) | 390 to 450 | 195 to 224 | 376 to 434 | none |
+| large | 10 | 2 | 14 to 18 | 4.7 to 5.2 | 15 to 22 | none |
+| medium | 10 | 0 (before) | 105 | 51 | 90 | none |
+| medium | 10 | 2 | 6.0 | 3.1 | 4.0 | none |
+
+The worst frame left with workers is the rest of a match start (path finder, bots, spawns) plus the occasional garbage collection. No start had to wait: maps asked for at the lobby or results are ready long before anyone presses start.
+
+`npx tsx scripts/load-test.ts large 10` (real server and WebSocket clients, which make each room and press start at once; the new column is the worst late tick over the whole step, while rooms were being made and started): 549 ms before, 363 ms with workers. What is left is making a room: its lobby map is still built on the main thread when the first person arrives (about 200 ms on large), because the room needs it to place them. Moving that too means joining a new room asynchronously in `RoomManager` and the transport; not done.
+
+### Cheaper route searches (2026-10-19, recommendation 3 of the performance pass)
+Measured first, by counting every route search in 10 large rooms (`measure-rooms.ts` conditions, 30 s) and in a whole large soak match, by what the bot was heading for and why it searched. The ring was not the problem: no search in the first 30 s and 5% of a whole match's were for the ring centre, so a shared route field to it would have saved almost nothing. 98 to 99% of search time was wander goals (a random spot in the ring, kept 12 s), and 80% was the 2 s replan clock finding the same route again on a map that never changes. The rest was long searches: 6% of routes used the whole 6000-cell cap and stopped short, and those were replanned on the clock at about 0.9 ms each.
+
+Two changes (see DECISIONS.md). The clock now replans only a bot that has been pushed off its route (it cannot walk straight to its next waypoint on the search grid) or is on the last leg of a route that stopped short; a new goal, a goal that moved, or no route still search at once, as before. And the search leans on its estimate of the distance left (`heuristicWeight` 1.5 in `data/bots.json`, 1 is the old exact search). 600 random searches on each of three large maps (seeds 5, 7, 11), weight 1 against 1.5: mean 0.33 to 0.10 ms, 99th percentile 0.95 to 0.35 ms, slowest 1.8 to 0.5 ms, routes that reach the goal 94% to 100%, routes 3% longer on average (worst 25%, a different side of a building). Bots behave the same: soak on four seeds, every tier passes with the same knocked-out counts and match lengths within the usual spread (large 418 to 446 s before, 424 to 452 after; medium 332 to 404 before, 285 to 399 after).
+
+Searches in 10 large rooms over 30 s: 6270 taking 2470 ms before, 1750 taking 640 ms with the clock change alone, 1700 taking 220 ms (0.13 ms each) with the weight too. In a whole large soak match (seed 5), 4284 searches before and 1129 with the clock change.
+
+`measure-rooms.ts` (worst tick added in a scratch copy), large, two runs each, alternating, the laptop busy with other agents:
+
+| Rooms | Mechs | Mean ms per tick before | After | 99th percentile ms before | After | Worst tick ms before | After |
+| :- | :- | :- | :- | :- | :- | :- | :- |
+| 10 | 400 | 1.61, 1.70 | 0.46, 0.40 | 5.50, 5.69 | 2.16, 1.91 | 7.8, 8.0 | 3.3, 2.9 |
+| 20 | 800 | 3.21, 3.29 | 0.80, 0.76 | 10.32, 10.60 | 3.99, 3.88 | 19.3, 13.3 | 5.0, 4.6 |
+| 30 | 1200 | 4.91, 5.03 | 1.11, 1.13 | 15.02, 15.52 | 5.74, 5.63 | 19.1, 18.5 | 6.8, 6.5 |
+| 40 | 1600 | 6.78, 6.50 | 1.61, 1.56 | 21.00, 20.13 | 7.90, 7.82 | 25.2, 22.9 | 9.1, 9.0 |
+
+Medium, one run: 40 rooms 2.10 to 1.48 ms mean, 99th percentile 5.64 to 3.43.
+
+`load-test.ts large 10,20,30` (real server, WebSocket clients), two runs each, alternating, mean / 99th percentile ms: 10 rooms 2.84 / 7.85 and 3.39 / 7.44 before, 1.57 / 4.06 and 1.81 / 4.96 after; 20 rooms 3.87 / 7.06 and 3.86 / 8.47 before, 2.64 / 5.62 and 2.33 / 5.35 after; 30 rooms 4.96 / 8.31 and 5.06 / 10.99 before, 3.25 / 6.10 and 2.79 / 5.29 after. Late starts stayed at 2.2 to 2.6 ms throughout. `npm run soak` large tick 99th percentile: 0.86 to 1.02 ms before, 0.14 to 0.26 after.
+
+Route searches no longer limit large rooms. Plan on about 30 large rooms per process on this laptop (it was 10), keeping the 8 ms budget with the real server, and half that on a cloud core until it is measured there. Medium stays at about 40.

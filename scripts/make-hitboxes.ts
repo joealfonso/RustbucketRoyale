@@ -2,8 +2,10 @@
 // part's hit zone (parts marked noHit, such as floating drones, are left out). The server and the client then check
 // shots against the shape you actually see. It also copies the gun muzzles (Mount_Gun, Mount_Gun_2, ...), which
 // shots leave from in turn. Run after changing a mech model: npx tsx scripts/make-hitboxes.ts
-// The extents come from the bounds every glTF model stores for its positions, plus the node's position. Rotated or
-// scaled part nodes are not handled (the roster scripts never use them); the script stops if it meets one.
+// The extents come from the bounds every glTF model stores for its positions, scaled and moved by the node. A
+// quantised model (KHR_mesh_quantization) stores bounds as integers, made metres by the node's one scale for all
+// three axes. Rotated or unevenly scaled part nodes are not handled (the roster scripts never make them); the script
+// stops if it meets one.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readGltfJson } from "./assets/glbCheck";
@@ -11,13 +13,15 @@ import { readGltfJson } from "./assets/glbCheck";
 interface Gltf {
   nodes?: { name?: string; mesh?: number; translation?: number[]; rotation?: number[]; scale?: number[] }[];
   meshes?: { primitives: { attributes: { POSITION?: number } }[] }[];
-  accessors?: { min?: number[]; max?: number[] }[];
+  accessors?: { min?: number[]; max?: number[]; componentType?: number; normalized?: boolean }[];
 }
 
 const root = new URL("..", import.meta.url).pathname;
 const kitsPath = join(root, "data/mechKits.json");
 const kits = JSON.parse(readFileSync(kitsPath, "utf8"));
 const round = (n: number) => Math.round(n * 100) / 100;
+// What a normalized integer accessor divides by, by component type: signed byte, unsigned byte, signed and unsigned short.
+const NORMALIZED_MAX: Record<number, number> = { 5120: 127, 5121: 255, 5122: 32767, 5123: 65535 };
 
 for (const [id, kit] of Object.entries(kits.kits) as [string, { file?: string; parts: Record<string, { zone: string; noHit?: boolean }>; hitboxes?: unknown; muzzles?: number[][] }][]) {
   if (!kit.file) continue;
@@ -27,12 +31,14 @@ for (const [id, kit] of Object.entries(kits.kits) as [string, { file?: string; p
     if (part.noHit) continue;
     const node = gltf.nodes?.find((n) => n.name === name);
     if (!node || node.mesh === undefined) throw new Error(`${id}: no mesh for part ${name}`);
-    if (node.rotation || node.scale) throw new Error(`${id}: part ${name} is rotated or scaled, which this script does not handle`);
+    const scale = node.scale ?? [1, 1, 1];
+    if (node.rotation || scale[0]! <= 0 || scale.some((s) => s !== scale[0])) throw new Error(`${id}: part ${name} is rotated or unevenly scaled, which this script does not handle`);
     const at = node.translation ?? [0, 0, 0];
     const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
     for (const p of gltf.meshes![node.mesh]!.primitives) {
       const a = gltf.accessors![p.attributes.POSITION!]!;
-      for (let i = 0; i < 3; i++) { min[i] = Math.min(min[i]!, a.min![i]! + at[i]!); max[i] = Math.max(max[i]!, a.max![i]! + at[i]!); }
+      const s = scale[0]! * (a.normalized ? 1 / NORMALIZED_MAX[a.componentType!]! : 1);
+      for (let i = 0; i < 3; i++) { min[i] = Math.min(min[i]!, a.min![i]! * s + at[i]!); max[i] = Math.max(max[i]!, a.max![i]! * s + at[i]!); }
     }
     boxes[part.zone]!.push({ center: [0, 1, 2].map((i) => round((min[i]! + max[i]!) / 2)), size: [0, 1, 2].map((i) => round(max[i]! - min[i]!)) });
   }

@@ -7,7 +7,7 @@ let failed = false;
 for (const tier of tiers) {
   const seed = process.env.SEED !== undefined ? Number(process.env.SEED) : Math.floor(Math.random() * 1_000_000_000);
   const started = Date.now();
-  const r = runSoak(tier, seed);
+  const r = await runSoak(tier, seed);
   const verdict = r.problems.length === 0 ? "PASS" : "FAIL";
   console.log(
     `${verdict} ${tier} seed ${seed}: ${r.matchSeconds.toFixed(0)} s match, ${r.eliminations} knocked out, ` +

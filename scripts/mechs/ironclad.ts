@@ -244,6 +244,6 @@ const parts: NodeData[] = [
 
 const dir = join(new URL("../..", import.meta.url).pathname, "assets/models/mechs/ironclad");
 mkdirSync(dir, { recursive: true });
-writeFileSync(join(dir, "Mech_Ironclad.glb"), writeGlb(parts));
+writeFileSync(join(dir, "Mech_Ironclad.glb"), writeGlb(parts, { quantize: true }));
 const total = parts.reduce((s, p) => s + (p.mesh ? triangles(p.mesh) : 0), 0);
 console.log(`Wrote ${join(dir, "Mech_Ironclad.glb")} (${total} triangles)`);

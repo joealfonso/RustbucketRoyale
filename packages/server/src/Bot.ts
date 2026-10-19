@@ -46,6 +46,7 @@ export class Bot {
   private pathGoalZ = 0;
   private replanIn = 0;
   private needsPlan = true; // no route for the current goal yet
+  private pathWhole = false; // the route goes all the way to the goal, not just as far as the search got
   private heading = { x: 0, z: 0 };
   private heardX = 0;
   private heardZ = 0;
@@ -247,6 +248,12 @@ export class Bot {
 
     if (this.finder && straight > this.pathStats.minPathDistance) {
       const goalMoved = Math.hypot(goalX - this.pathGoalX, goalZ - this.pathGoalZ) > this.pathStats.goalMoveReplan;
+      // Replanning on the clock used to be most of a large room's tick, and on a map that never changes it mostly
+      // found the same route again. So the clock only replans when the bot has been pushed off its route (it can no
+      // longer walk straight to its next waypoint), or is on the last leg of one that stopped short of the goal.
+      if (this.replanIn <= 0 && !this.needsPlan && !goalMoved && this.onRoute(self)) {
+        this.replanIn = this.pathStats.replanSeconds * (0.8 + this.random() * 0.4);
+      }
       // A failed search waits for the next replan too, rather than trying again every tick.
       if ((this.needsPlan || this.replanIn <= 0 || goalMoved) && this.finder.canSearch()) {
         this.needsPlan = false;
@@ -254,6 +261,7 @@ export class Bot {
         this.pathGoalX = goalX; this.pathGoalZ = goalZ;
         this.replanIn = this.pathStats.replanSeconds * (0.8 + this.random() * 0.4);
         if (!this.finder.findPath(self.x, self.z, goalX, goalZ, this.path)) this.path.length = 0;
+        this.pathWhole = this.path.length > 0 && this.finder.reachedGoal;
       }
       while (this.pathIndex * 2 < this.path.length - 2 && Math.hypot(this.path[this.pathIndex * 2]! - self.x, this.path[this.pathIndex * 2 + 1]! - self.z) < this.pathStats.waypointReach) this.pathIndex++;
       if (this.path.length > 0 && this.pathIndex * 2 < this.path.length) {
@@ -269,6 +277,12 @@ export class Bot {
     const distance = Math.hypot(dx, dz);
     if (distance > 3) { out.x = dx / distance; out.z = dz / distance; } else { out.x = 0; out.z = 0; }
     return out;
+  }
+
+  private onRoute(self: MechState): boolean {
+    if (this.pathIndex * 2 >= this.path.length) return false;
+    if (!this.pathWhole && this.pathIndex * 2 >= this.path.length - 2) return false;
+    return this.finder!.canWalkStraight(self.x, self.z, this.path[this.pathIndex * 2]!, this.path[this.pathIndex * 2 + 1]!);
   }
 
   private pickTarget(self: MechState, targets: readonly BotTarget[], world: World): BotTarget | null {

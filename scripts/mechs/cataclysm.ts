@@ -234,6 +234,6 @@ const nodes: NodeData[] = [
 ];
 
 mkdirSync(dirname(out), { recursive: true });
-writeFileSync(out, writeGlb(nodes));
+writeFileSync(out, writeGlb(nodes, { quantize: true }));
 const total = nodes.reduce((s, n) => s + (n.mesh ? triangles(n.mesh) : 0), 0);
 console.log(`Wrote ${out} (${total} triangles)`);

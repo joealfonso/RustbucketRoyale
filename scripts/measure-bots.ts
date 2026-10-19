@@ -12,7 +12,8 @@ const fills = new Map((process.env.FILL ?? "").split(",").filter(Boolean).map((p
 console.log("| Tier | Fill | Seeds | Match s (median) | Knockouts a minute | Alone, share of living time | First contact s (median) |\n| :- | :- | :- | :- | :- | :- | :- |");
 for (const tier of tiers) {
   const fill = fills.get(tier);
-  const runs = Array.from({ length: seeds }, (_, i) => runSoak(tier, 1000 + i, { fill }));
+  const runs = [];
+  for (let i = 0; i < seeds; i++) runs.push(await runSoak(tier, 1000 + i, { fill }));
   const failed = runs.filter((r) => r.problems.length > 0).length;
   const row = [
     tier, fill ?? "data", seeds,

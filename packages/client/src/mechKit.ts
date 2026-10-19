@@ -73,15 +73,27 @@ export function parseKits(raw: unknown): KitsData {
   return d;
 }
 
+// A position or normal attribute as plain 32-bit floats. Quantised models (KHR_mesh_quantization) store small
+// integers, often interleaved with padding, and moving them into the model's frame below would write metres back
+// into those integers; the getters return the real values, so the copy is exact.
+function floatsOf(a: THREE.BufferAttribute | THREE.InterleavedBufferAttribute): THREE.BufferAttribute {
+  const out = new Float32Array(a.count * 3);
+  for (let i = 0; i < a.count; i++) { out[i * 3] = a.getX(i); out[i * 3 + 1] = a.getY(i); out[i * 3 + 2] = a.getZ(i); }
+  return new THREE.BufferAttribute(out, 3);
+}
+
 // The geometry of an object and everything under it, in the model's own frame, as one mesh. Only position and
-// normal are kept, which is all the toon look uses, so meshes from any exporter merge cleanly.
+// normal are kept, which is all the toon look uses, so meshes from any exporter merge cleanly. Runs once per kit.
 function geometryOf(node: THREE.Object3D): THREE.BufferGeometry | null {
   const pieces: THREE.BufferGeometry[] = [];
   node.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
-    const g = (child.geometry as THREE.BufferGeometry).clone();
-    for (const name of Object.keys(g.attributes)) if (name !== "position" && name !== "normal") g.deleteAttribute(name);
-    if (!g.attributes.normal) g.computeVertexNormals();
+    const source = child.geometry as THREE.BufferGeometry;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", floatsOf(source.attributes.position!));
+    if (source.index) g.setIndex(source.index.clone());
+    if (source.attributes.normal) g.setAttribute("normal", floatsOf(source.attributes.normal));
+    else g.computeVertexNormals();
     pieces.push(g.applyMatrix4(child.matrixWorld));
   });
   if (pieces.length === 0) return null;

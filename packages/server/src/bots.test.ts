@@ -215,6 +215,39 @@ describe("bots with a route", () => {
   });
 });
 
+describe("bots replanning", () => {
+  // A wall across the way to a far goal, so the route has a corner in it.
+  const wall = { minX: -60, maxX: 60, minZ: -1, maxZ: 1, minY: 0, maxY: 30 };
+  const ring: RingNow = { cx: 0, cz: 150, radius: 15, stage: 1, shrinking: false, damagePerSecond: 2, secondsToChange: 99 };
+
+  function setup() {
+    const nav = buildNavGrid([wall], 400, 0, 0, { cellMeters: 2, stepHeight: config.mech.stepHeight, mechHeight: config.mech.height });
+    const finder = new Pathfinder(nav, botConfig.path);
+    let searches = 0;
+    const findPath = finder.findPath.bind(finder);
+    finder.findPath = (...args) => { searches++; return findPath(...args); };
+    const bot = new Bot(stats, random, botConfig.path, finder);
+    const self = createMechState(config.mech, 0, 0, -40, 0);
+    const input = createMechInput();
+    const think = (ticks: number) => { for (let i = 0; i < ticks; i++) { finder.newTick(); bot.think(self, [], ring, flat, DT, input); } };
+    return { self, think, searches: () => searches };
+  }
+
+  it("keep a whole route rather than searching again on the clock", () => {
+    const { think, searches } = setup();
+    think(60 * botConfig.path.replanSeconds * 4); // standing still, the route stays good
+    expect(searches()).toBe(1);
+  });
+
+  it("search again once pushed somewhere the next waypoint cannot be walked to in a straight line", () => {
+    const { self, think, searches } = setup();
+    think(1);
+    self.x = 0; self.z = -5; // shoved onto the wall, so the way to the next waypoint runs along it
+    think(60 * botConfig.path.replanSeconds * 2);
+    expect(searches()).toBeGreaterThan(1);
+  });
+});
+
 describe("rooms that fill themselves", () => {
   it("top up to the tier size with people counted, make room for people who arrive, and refill when they leave", () => {
     const { room, config: c } = makeRoom(undefined, "small", null);

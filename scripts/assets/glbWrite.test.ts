@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { countTriangles, readGltfJson } from "./glbCheck";
-import { boxMesh, writeGlb } from "./glbWrite";
+import { boxMesh, quantizePositions, writeGlb } from "./glbWrite";
 
 describe("glb writer", () => {
   it("writes a file the checker reads back, with its nodes, material and triangle count", () => {
@@ -19,5 +19,20 @@ describe("glb writer", () => {
       const n = m.indices[t]! * 3;
       expect(cross[0]! * m.normals[n]! + cross[1]! * m.normals[n + 1]! + cross[2]! * m.normals[n + 2]!).toBeGreaterThan(0);
     }
+  });
+
+  it("quantises positions to within a fraction of a millimetre, with the bounds and the triangle count unchanged", () => {
+    const mesh = boxMesh([-0.3, 0.1, -1.2], [1.7, 2.45, 0.4], 3);
+    const q = quantizePositions(mesh.positions);
+    let worst = 0;
+    for (let v = 0; v < mesh.positions.length / 3; v++) {
+      for (let i = 0; i < 3; i++) worst = Math.max(worst, Math.abs(q.offset[i]! + (q.scale * q.values[v * 4 + i]!) / 32767 - mesh.positions[v * 3 + i]!));
+    }
+    expect(worst).toBeLessThan(0.0001);
+    const gltf = readGltfJson(writeGlb([{ name: "LOD0", translation: [0, 1, 0], mesh }], { quantize: true })) as ReturnType<typeof readGltfJson> & { extensionsRequired?: string[]; nodes: { translation?: number[]; scale?: number[] }[] };
+    expect(gltf.extensionsRequired).toEqual(["KHR_mesh_quantization"]);
+    [0.7, 2.275, -0.4].forEach((t, i) => expect(gltf.nodes[0]!.translation![i]).toBeCloseTo(t, 9));
+    for (const s of gltf.nodes[0]!.scale!) expect(s).toBeCloseTo(1.175, 9); // half the longest side, 2.35 m along y
+    expect(countTriangles(gltf)).toBe(6 * 3 * 3 * 2);
   });
 });

@@ -220,6 +220,6 @@ const nodes: NodeData[] = [
 
 const dir = join(new URL("../..", import.meta.url).pathname, "assets/models/mechs/arbiter");
 mkdirSync(dir, { recursive: true });
-writeFileSync(join(dir, "Mech_Arbiter.glb"), writeGlb(nodes));
+writeFileSync(join(dir, "Mech_Arbiter.glb"), writeGlb(nodes, { quantize: true }));
 const total = nodes.reduce((s, n) => s + (n.mesh ? triangles(n.mesh) : 0), 0);
 console.log(`Mech_Arbiter.glb: ${total} triangles`);

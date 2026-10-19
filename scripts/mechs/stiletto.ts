@@ -240,7 +240,7 @@ const markers: NodeData[] = [
 const root = new URL("../..", import.meta.url).pathname;
 const dir = join(root, "assets/models/mechs/stiletto");
 mkdirSync(dir, { recursive: true });
-writeFileSync(join(dir, "Mech_Stiletto.glb"), writeGlb([...parts.map((p) => ({ name: p.name, mesh: p.mesh })), ...markers]));
+writeFileSync(join(dir, "Mech_Stiletto.glb"), writeGlb([...parts.map((p) => ({ name: p.name, mesh: p.mesh })), ...markers], { quantize: true }));
 const kitParts = Object.fromEntries(parts.map(({ name, mesh: _mesh, ...look }) => [name, look]));
 writeFileSync(join(root, "scripts/mechs/stiletto.kit.json"), `${JSON.stringify({ scheme, parts: kitParts }, null, 2)}\n`);
 const total = parts.reduce((s, p) => s + triangles(p.mesh), 0);

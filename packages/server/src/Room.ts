@@ -55,6 +55,10 @@ export interface RoomConfig {
   abilities: AbilitySet;
   // Builds the map for a tier and seed. The room asks for a fresh one at the start of every match.
   mapFor: (tier: string, seed: number) => MapForRoom;
+  // The real server builds match maps on worker threads (MapPool) through this. With it, the room asks for the next
+  // match's map early and starts the countdown once it has arrived, never building one on the tick. Without it
+  // (tests, the range) mapFor builds each match's map on the spot.
+  mapLater?: (tier: string, seed: number) => Promise<MapForRoom>;
   random?: () => number;
   // Dev only (DEV_TUNING=1): the raw data files, so players in a room can change numbers live. Each room tunes its
   // own copy, so a playtest in one room never changes another.
@@ -90,6 +94,8 @@ export class Room {
   private hostId = 0;
   private seed: number;
   private map: MapForRoom;
+  private upcoming: { seed: number; map: MapForRoom | null; failed: boolean } | null = null; // with mapLater only
+  private startWanted = false; // a countdown is owed as soon as the upcoming map arrives
   private ring: RingSchedule | null = null;
   private propHp: Float32Array = new Float32Array(0);
   private destroyedProps: number[] = [];
@@ -144,6 +150,7 @@ export class Room {
     this.finder = new Pathfinder(this.map.nav, config.bots.path);
     this.fixedBots = botCount;
     this.fillBots();
+    this.prepareNextMap(); // the lobby usually lasts long enough that the first match never waits
   }
 
   // Adds or removes bots so people plus bots match the tier's target, or the fixed bot count, within the spawns.
@@ -223,6 +230,41 @@ export class Room {
 
   private newSeed(): number {
     return Math.floor(this.random() * 0x100000000);
+  }
+
+  // True when the next match's map has been built and is waiting. Lets the soak start its match at a fixed tick.
+  get nextMapReady(): boolean {
+    return this.upcoming?.map != null;
+  }
+
+  // With mapLater: starts building the next match's map now, on another thread, unless one is already coming.
+  // The seed is chosen now, so it is the seed the match will be played on.
+  private prepareNextMap(): void {
+    if (!this.config.mapLater || this.upcoming) return;
+    const upcoming = { seed: this.newSeed(), map: null as MapForRoom | null, failed: false };
+    this.upcoming = upcoming;
+    this.config.mapLater(this.tier, upcoming.seed).then(
+      (map) => { upcoming.map = map; },
+      (error: unknown) => {
+        // A seed with no valid map, or a crashed worker: the next try asks again with a new seed.
+        console.error(`Room ${this.code}: map for seed ${upcoming.seed} failed: ${error instanceof Error ? error.message : String(error)}`);
+        upcoming.failed = true;
+      },
+    );
+  }
+
+  // The next match's seed and map, or null while it is still being built.
+  private takeNextMap(): { seed: number; map: MapForRoom } | null {
+    if (!this.config.mapLater) {
+      const seed = this.newSeed();
+      return { seed, map: this.config.mapFor(this.tier, seed) };
+    }
+    if (this.upcoming?.failed) this.upcoming = null;
+    this.prepareNextMap();
+    const { seed, map } = this.upcoming!;
+    if (!map) return null;
+    this.upcoming = null;
+    return { seed, map };
   }
 
   // Returns the new player's id, or null if the room is full.
@@ -341,6 +383,7 @@ export class Room {
 
     if (this.state === "countdown" && this.tickCount >= this.phaseEndTick) this.beginMatch();
     else if (this.state === "results" && this.tickCount >= this.phaseEndTick) this.afterResults();
+    else if (this.state === "lobby" && this.startWanted) this.beginCountdown();
 
     if (this.state === "active" && this.ring) ringAt(this.ring, this.elapsedSeconds(), this.ringNow);
     this.anchors = this.humans().filter((p) => p.participant && !p.dead);
@@ -486,10 +529,15 @@ export class Room {
 
   // ---- match flow
 
-  // Builds a fresh map, puts everyone on a spawn, and starts the countdown.
+  // Swaps in the next map, puts everyone on a spawn, and starts the countdown. If the map is still being built the
+  // room stays as it is (lobby or results) and tries again each tick, so a slow machine holds the countdown back
+  // rather than stalling every room in the process.
   private beginCountdown(): void {
-    this.seed = this.newSeed();
-    this.map = this.config.mapFor(this.tier, this.seed);
+    const next = this.takeNextMap();
+    this.startWanted = next === null;
+    if (!next) return;
+    this.seed = next.seed;
+    this.map = next.map;
     this.resetProps();
     this.pendingBlasts = [];
     this.decoys = [];
@@ -580,6 +628,7 @@ export class Room {
     const message: ServerMessage = { t: "result", winnerId: winner?.id ?? null };
     for (const p of this.players.values()) p.send(message);
     this.broadcastRoom();
+    this.prepareNextMap();
   }
 
   private afterResults(): void {
