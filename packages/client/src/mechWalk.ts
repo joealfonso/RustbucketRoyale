@@ -29,7 +29,11 @@ export function walkMech(model: MechModel, config: GaitConfig, input: GaitInput,
     // A stride longer than the leg (a heavy mech at speed) keeps the foot planted and sliding at the end of its
     // reach rather than lifting it off the ground.
     const z = clamp(a.z + g.feet[i * 3 + 2]!, h.z - leg.reach, h.z + leg.reach);
-    const x = a.x + g.feet[i * 3]!, y = a.y + g.feet[i * 3 + 1]! - body.position.y;
+    // Each foot keeps to its own side of the body, so a sideways step never sweeps it through the other leg.
+    // The limit is a share of the leg's own standing width, so a wide-footed mech keeps a gap between its feet.
+    const inner = a.x * config.footInward;
+    const x = a.x > 0 ? Math.max(inner, a.x + g.feet[i * 3]!) : Math.min(inner, a.x + g.feet[i * 3]!);
+    const y = a.y + g.feet[i * 3 + 1]! - body.position.y;
     const y1 = y * cp - z * sp, z1 = y * sp + z * cp;
     const x2 = x * cr - y1 * sr, y2 = x * sr + y1 * cr;
     // Sideways steps swing the whole leg out at the hip; the bend itself stays in the leg's own side view.

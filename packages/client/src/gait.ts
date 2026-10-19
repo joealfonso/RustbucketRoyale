@@ -22,6 +22,7 @@ export interface MechGait {
   stepPitch: number; // footfall sound: below 1 a heavier stomp, above 1 a lighter step
   braceDrop: number; // metres the body sinks while braced (a mortar strike being called in): planted, not standing about
   dashStance: number; // metres the feet spread fore and aft in a dash: a braced lunge it slides in, not a sprint
+  sideStride: number; // share of the stride left when stepping sideways: legs cannot reach across the body like they reach ahead
 }
 
 export interface GaitConfig {
@@ -29,18 +30,19 @@ export interface GaitConfig {
   smoothing: number; // how quickly speed, direction and leaning follow the mech, per second
   stepLoudness: number; // footfall volume while walking
   hearWalkMeters: number; // someone else walking is heard this close; running is heard as far as any sound
+  footInward: number; // share of its standing width a foot may close in to, so legs never sweep across each other
   runStepLoudness: number;
   dustSeconds: number; // how long a footfall's dust lasts
   dustMeters: number; // and how big it gets
   mechs: Record<string, MechGait>;
 }
 
-const GAIT_KEYS: (keyof MechGait)[] = ["walkStride", "runStride", "stance", "runStance", "stepHeight", "runStepHeight", "bob", "runBob", "sway", "lean", "dashLean", "tuck", "limp", "turnStep", "stepPitch", "braceDrop", "dashStance"];
+const GAIT_KEYS: (keyof MechGait)[] = ["walkStride", "runStride", "stance", "runStance", "stepHeight", "runStepHeight", "bob", "runBob", "sway", "lean", "dashLean", "tuck", "limp", "turnStep", "stepPitch", "braceDrop", "dashStance", "sideStride"];
 
 // Fails loudly on a bad data file, like the rest of data/.
 export function parseGait(raw: unknown): GaitConfig {
   const d = raw as Record<string, unknown>;
-  for (const key of ["farMeters", "smoothing", "stepLoudness", "runStepLoudness", "hearWalkMeters", "dustSeconds", "dustMeters"]) {
+  for (const key of ["farMeters", "smoothing", "stepLoudness", "runStepLoudness", "hearWalkMeters", "footInward", "dustSeconds", "dustMeters"]) {
     if (typeof d?.[key] !== "number" || !Number.isFinite(d[key])) throw new Error(`gait.json: "${key}" must be a number`);
   }
   const mechs = d.mechs as Record<string, Record<string, unknown>> | undefined;
@@ -132,7 +134,8 @@ export function stepGait(s: GaitState, input: GaitInput, g: MechGait, sides: rea
 
   const run = clamp01((s.speed - input.walkSpeed) / Math.max(0.1, input.runSpeed - input.walkSpeed));
   s.loud = run;
-  const stride = g.walkStride + (g.runStride - g.walkStride) * run;
+  // Sideways the stride shrinks and the cycle runs quicker, so steps get shorter without the planted feet skidding.
+  const stride = (g.walkStride + (g.runStride - g.walkStride) * run) * (1 - (1 - g.sideStride) * Math.abs(s.dirX));
   const lift = g.stepHeight + (g.runStepHeight - g.stepHeight) * run;
   const stance = g.stance + (g.runStance - g.stance) * run;
 
