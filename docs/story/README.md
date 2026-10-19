@@ -236,6 +236,13 @@ The glowing orange balls that stood in for every effect are gone. Each weapon ha
 
 The game starts in the Aegis Dynamics hangar where pilots load up, built from Joseph's brief: a hex grid of light strips, blue holograms of each mech, gantries and engineers. The rules that ban those looks in the junkyard make an exception here, because this is the clean factory the mechs leave from. Pick a mech and it walks out to the loading bay. A new setting picks how hard the bots are. A performance pass came with it, so the large map runs about twice as fast and the bandwidth dropped.
 
+## 32. Hills you fight on
+*Passed 16:55. Commit `2f1358e`.*
+
+![A large map from a spawn: the junkyard rolling over low hills, buildings on level ground, dirt on the slopes and moss in the hollows](32-11a-hills-you-fight-on.jpg)
+
+The flat yard became rolling hills, after Joseph showed a reference of hills, pines and mountains and chose hills in play, the toon look kept. The hills come from the map seed with integer math, so the server and every client build the same ones. Buildings sit on level pads that ease into the slopes, no slope is too steep to walk, and hills block shots and sight lines, so a ridge is cover. Bots route over them. The first cut dug quarry walls round every building; the aprons were softened before the playtest. Built with two agents in parallel, one for the server and one for the client. Water, forests and mountains come next (11b, 11c).
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
