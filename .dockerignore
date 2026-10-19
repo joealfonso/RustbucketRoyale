@@ -1,0 +1,10 @@
+.git
+.claude
+node_modules
+packages/*/node_modules
+packages/*/dist
+artifacts
+docs
+Library
+Logs
+UserSettings

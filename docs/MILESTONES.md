@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: none (M1 to M9 done)
+Current code milestone: M10, gate 10a built
 Current visual milestone: V4, V5a and V6 passed. Nothing in progress
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -15,6 +15,7 @@ Update the two lines above when a gate passes. Claude Code reads this file first
 - M7: part damage, broken states, crawl, repair.
 - M8: upgrades, tuning pass with the debug panel, perf pass, bot count tuning from soak data, first load test for rooms per server.
 - M9: mech classes. Each roster mech plays its own way: its own movement and toughness (9a), then one ability each on Q (9b, 9c), and bots that use them.
+- M10: playable by link. 10a: one server that serves the page and the game from one address, compressed, with an origin check, a health URL, live tuning locked off, and a container image. 10b: hosted on Joseph's pick of host, deployed from CI after the gauntlet. 10c: real lag with real friends, drop-outs, the next match in one click over the internet. Gate: Joseph and a friend on different networks play two full matches from an invite link.
 
 ## Visual
 - V1 style test: one grey-box mech and one chunk in the browser with the toon shader, outline, palette, and lighting. Gate: screenshots at 10 m, 50 m, and 150 m read well on a mid-range laptop before any more assets get made. Draw three thumbnail silhouettes of the first mech on paper before opening Blender, and keep the scan of the chosen one in the repo next to the screenshots. Also build the asset import checker (`scripts/check-assets.ts`, run by the gauntlet; it was a Unity editor script before the move to the web) that fails a glTF model over the triangle budget, with the wrong naming, or without the master toon material.
@@ -118,3 +119,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-19: Performance and size pass on Joseph's call: props culled to the camera (large tier 4.4-8.2 ms to 2.3-5.0 ms a frame, uncapped, M4), garbage per frame 154 to 35 kB, spectator camera cuts no longer freeze for 60-90 ms, your own state sends only non-zero numbers (about 5-7 kbps less per player), route searches about 19% faster, three.js in its own chunk, unused font files gone. Ranked next steps in docs/PERF.md (compressed .glb serving first).
 - 2026-10-19: Joseph's playtest passed gates V6a, V6b, V4a, V4b and V5a, the title screen with bot difficulty, the dash slide and the performance pass. No milestone in progress.
 - 2026-10-19: The top three performance recommendations, on Joseph's call: the mech models are quantised (921 to 556 kB raw, no visible change); each match's map is built on worker threads (MAP_WORKERS, default 2), so a match start no longer stalls other rooms (10 large rooms: worst frame 390-450 ms to 14-18 ms); bot route searches replan only when needed and use a weighted search, so large rooms per process go from about 10 to about 30 on this laptop. Left: a brand-new room still builds its lobby map on the main thread (about 200 ms on large).
+- 2026-10-19: M10 started on Joseph's go. Gate 10a built, waiting for its check. `npm run build` then `npm start` serves the game and its page on one address (PORT, default 8080): open http://localhost:8080, create a room, play. Files go out brotli or gzip compressed (Ironclad's model 132 kB to 17 kB); game connections are let in only from the server's own pages (or ALLOWED_ORIGINS); GET /health answers with the room count; DEV_TUNING is refused in production; a built page ignores `?server=`. A Dockerfile builds the same thing as an image (not built here: Docker is not on this Mac). The gauntlet now starts the production server and checks it. 10b needs Joseph's choice of host, domain and monthly budget.

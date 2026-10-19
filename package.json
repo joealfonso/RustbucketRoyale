@@ -12,7 +12,8 @@
     "test": "vitest run",
     "gauntlet": "bash scripts/gauntlet.sh",
     "server": "npm run start -w @rustbucket/server",
-    "soak": "tsx scripts/soak.ts"
+    "soak": "tsx scripts/soak.ts",
+    "start": "NODE_ENV=production tsx packages/server/src/main.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

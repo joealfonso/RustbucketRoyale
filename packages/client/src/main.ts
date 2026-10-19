@@ -137,8 +137,13 @@ if (!offline && !online) {
   await new Promise(() => {}); // nothing more to do until a button reloads the page
 }
 
+// A built game is served by the game server itself, so it connects back to the address it came from (wss on https).
+// In development the page comes from Vite and the server is on 8080, or wherever `?server=` says; a built game
+// ignores `?server=`, so an invite link can never send players to some other server.
 function serverAddress(): string {
-  const base = params.get("server") ?? `ws://${location.hostname}:8080`;
+  const base = import.meta.env.DEV
+    ? params.get("server") ?? `ws://${location.hostname}:8080`
+    : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
   return `${base}/?${serverQuery(params)}`;
 }
 

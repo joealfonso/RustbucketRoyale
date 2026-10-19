@@ -2,6 +2,7 @@ import { loadRoomConfig, loadTuningRaws, tierNames } from "./config";
 import { MapPool } from "./MapPool";
 import { Room } from "./Room";
 import { RoomManager } from "./RoomManager";
+import { loadStaticSite } from "./staticSite";
 import { startServer } from "./transport";
 
 const port = Number(process.env.PORT ?? 8080);
@@ -11,8 +12,21 @@ const maxRooms = Number(process.env.MAX_ROOMS ?? 50);
 // Set DEFAULT_BOTS to a number to give new rooms that many instead, or 0 for none.
 const defaultBots = process.env.DEFAULT_BOTS === undefined ? null : Number(process.env.DEFAULT_BOTS);
 
+// NODE_ENV=production is the public host: the server also serves the built client (npm run build first), only pages
+// it served may connect (or the origins in ALLOWED_ORIGINS, comma separated), and live tuning is refused.
+const production = process.env.NODE_ENV === "production";
 // DEV_TUNING=1 lets anyone in a room change gameplay numbers live from the tuning panel. Never set it on a public host.
 const devTuning = process.env.DEV_TUNING === "1";
+if (production && devTuning) {
+  console.error("DEV_TUNING is refused with NODE_ENV=production: it lets any player change the game for everyone in their room.");
+  process.exit(1);
+}
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean);
+const site = production ? loadStaticSite(new URL("../../client/dist", import.meta.url).pathname) : null;
+if (site && site.fileCount === 0) {
+  console.error("No built client in packages/client/dist: run npm run build first.");
+  process.exit(1);
+}
 // Match maps are built on this many worker threads, so building one never stalls the rooms. 0 builds them on the
 // main thread instead (the old way, for comparing).
 const mapWorkers = Number(process.env.MAP_WORKERS ?? 2);
@@ -39,5 +53,13 @@ if (onTick) {
     lateTimes.length = 0;
   }, 5000);
 }
-const server = await startServer(manager, port, defaultBots, onTick);
-console.log(`Rustbucket Royale server listening on ws://localhost:${server.port} (default ${defaultTier}, up to ${maxRooms} rooms, ${defaultBots === null ? "bots fill to the tier size" : `${defaultBots} bots by default`}${devTuning ? ", live tuning ON" : ""}, ${mapWorkers} map workers)`);
+const server = await startServer(manager, port, defaultBots, onTick, { site, origins: production ? (allowedOrigins?.length ? allowedOrigins : "same-host") : null });
+// A line a minute while the room count changes, for the host's logs. Room codes and counts only, never who is playing.
+if (production) {
+  let logged = -1;
+  setInterval(() => {
+    if (manager.roomCount !== logged) console.log(`rooms ${manager.roomCount}`);
+    logged = manager.roomCount;
+  }, 60_000).unref();
+}
+console.log(`Rustbucket Royale server listening on ${production ? `http://localhost:${server.port} (the game and its page)` : `ws://localhost:${server.port}`} (default ${defaultTier}, up to ${maxRooms} rooms, ${defaultBots === null ? "bots fill to the tier size" : `${defaultBots} bots by default`}${devTuning ? ", live tuning ON" : ""}, ${mapWorkers} map workers)`);

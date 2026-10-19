@@ -1,7 +1,8 @@
-import type { IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import { WebSocketServer } from "ws";
 import { STEP, SnapshotMemory, encodeServerBinary, parseBotDifficulty } from "@rustbucket/shared";
 import type { RoomManager, Ticket } from "./RoomManager";
+import type { StaticSite } from "./staticSite";
 
 const MAX_MESSAGE_BYTES = 4096;
 const MAX_CATCH_UP_TICKS = 5;
@@ -10,6 +11,25 @@ const MAX_BOTS_REQUESTED = 64; // the room trims this to what the map has spawns
 // burst a joined player may send before the room's flood kick (net.json: 150 a second, kicked at 100 over), so an
 // early burst is treated no better than a later one.
 const MAX_MESSAGES_WHILE_WAITING = 250;
+
+export interface ServerOptions {
+  site?: StaticSite | null; // the built client, served from the same address
+  // Which pages may open a game connection, by their Origin header. null lets anyone in: local development, where
+  // the page comes from Vite on another port, and tools that send no Origin. "same-host" lets in only pages served
+  // by this server's own host name; a list names each allowed origin (https://example.com).
+  origins?: string[] | "same-host" | null;
+}
+
+// Whether a connection's page may play here. A browser always sends its page's origin and a page cannot fake it, so
+// this stops other sites embedding the game against this server; it is not a lock against hand made clients.
+export function originAllowed(origin: string | undefined, host: string | undefined, origins: ServerOptions["origins"]): boolean {
+  if (!origins) return true;
+  if (!origin) return false;
+  if (origins === "same-host") {
+    try { return new URL(origin).host === host; } catch { return false; }
+  }
+  return origins.includes(origin);
+}
 
 export interface RunningServer {
   port: number;
@@ -24,10 +44,25 @@ export interface RunningServer {
 // the room topped up to its tier's target size.
 // `onTick`, if given, hears how long each tick of every room took (packing and sending included) and how late it
 // started, for load testing.
+// The same port answers plain web requests: GET /health (for the host's checks: up, and how many rooms) and the
+// built client's files when `site` is given.
 export function startServer(
-  manager: RoomManager, port: number, defaultBots: number | null = 0, onTick?: (ms: number, lateMs: number) => void,
+  manager: RoomManager, port: number, defaultBots: number | null = 0, onTick?: (ms: number, lateMs: number) => void, options: ServerOptions = {},
 ): Promise<RunningServer> {
-  const wss = new WebSocketServer({ port, maxPayload: MAX_MESSAGE_BYTES });
+  const http = createServer((request, response) => {
+    if (request.url === "/health") {
+      response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      response.end(JSON.stringify({ ok: true, rooms: manager.roomCount }));
+      return;
+    }
+    if (options.site?.serve(request, response)) return;
+    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end("Not found");
+  });
+  const wss = new WebSocketServer({
+    server: http, maxPayload: MAX_MESSAGE_BYTES,
+    verifyClient: ({ origin, req }: { origin: string; req: IncomingMessage }) => originAllowed(origin, req.headers.host, options.origins),
+  });
 
   wss.on("connection", (socket, request: IncomingMessage) => {
     const query = new URL(request.url ?? "/", "http://localhost").searchParams;
@@ -79,15 +114,15 @@ export function startServer(
   loop();
 
   return new Promise((resolve) => {
-    wss.on("listening", () => {
-      const address = wss.address();
+    http.listen(port, () => {
+      const address = http.address();
       const actualPort = typeof address === "object" && address ? address.port : port;
       resolve({
         port: actualPort,
         close: () => new Promise((done) => {
           clearTimeout(timer);
           for (const client of wss.clients) client.terminate();
-          wss.close(() => done());
+          wss.close(() => http.close(() => done()));
         }),
       });
     });
