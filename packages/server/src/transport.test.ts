@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { createMechInput, decodeServerBinary, encodeInput, type InputMessage, type ServerMessage } from "@rustbucket/shared";
 import { loadRoomConfig } from "./config";
-import { Room } from "./Room";
+import { Room, type MapForRoom } from "./Room";
 import { RoomManager } from "./RoomManager";
 import { startServer, type RunningServer } from "./transport";
 
@@ -134,5 +134,60 @@ describe("bots by link", () => {
     } finally {
       await running.close();
     }
+  });
+});
+
+describe("a new room whose map is built elsewhere", () => {
+  // Lobby maps arrive `delayMs` after they are asked for, as from the worker pool.
+  async function startPrepared(delayMs: number): Promise<{ running: RunningServer; manager: RoomManager }> {
+    const manager = new RoomManager(
+      (code, tier, bots, difficulty, lobby) => new Room(code, tier, config, bots, difficulty, lobby), ["small"], "small", 5, Math.random,
+      (tier, seed) => new Promise<MapForRoom>((resolve) => setTimeout(() => resolve(config.mapFor(tier, seed)), delayMs)),
+    );
+    server = await startServer(manager, 0);
+    return { running: server, manager };
+  }
+  const closedOf = (socket: WebSocket) => new Promise<void>((resolve) => socket.on("close", () => resolve()));
+
+  it("holds the first players until the room opens, then welcomes them all into it", async () => {
+    const { running } = await startPrepared(150);
+    const a = await connect(running.port, "?room=WAIT");
+    const b = await connect(running.port, "?room=wait");
+    await wait(50);
+    expect(a.messages).toHaveLength(0);
+    await wait(250);
+    expect(a.messages.find((m) => m.t === "welcome")).toMatchObject({ code: "WAIT" });
+    expect(b.messages.find((m) => m.t === "welcome")).toMatchObject({ code: "WAIT" });
+    const snapshot = b.messages.filter((m) => m.t === "snapshot").at(-1);
+    expect(snapshot?.t === "snapshot" && snapshot.others.length).toBe(1);
+    a.socket.close(); b.socket.close();
+  });
+
+  it("drops a room whose only player left while it was being prepared", async () => {
+    const { running, manager } = await startPrepared(150);
+    const a = await connect(running.port, "?room=LEFT");
+    await wait(20);
+    expect(manager.roomCount).toBe(1);
+    a.socket.close();
+    await wait(50);
+    expect(manager.roomCount).toBe(0);
+    await wait(200);
+    expect(manager.roomCount).toBe(0);
+  });
+
+  it("closes a connection that floods while waiting, and one that floods once it is in", async () => {
+    const { running } = await startPrepared(150);
+    const early = await connect(running.port, "?room=SPAM");
+    const earlyClosed = closedOf(early.socket);
+    for (let i = 0; i < 300; i++) early.socket.send(JSON.stringify({ t: "start" }));
+    await earlyClosed;
+    expect(early.messages.some((m) => m.t === "welcome")).toBe(false);
+
+    const late = await connect(running.port, "?room=FLUD");
+    await wait(250);
+    expect(late.messages.some((m) => m.t === "welcome")).toBe(true);
+    const lateClosed = closedOf(late.socket);
+    for (let i = 0; i < 300; i++) late.socket.send(JSON.stringify({ t: "start" }));
+    await lateClosed;
   });
 });

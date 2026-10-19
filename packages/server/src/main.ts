@@ -22,7 +22,11 @@ const config = {
   ...(devTuning ? { tuningRaws: loadTuningRaws() } : {}),
   ...(pool ? { mapLater: (tier: string, seed: number) => pool.generate(tier, seed) } : {}),
 };
-const manager = new RoomManager((code, tier, bots, difficulty) => new Room(code, tier, config, bots, difficulty), tierNames(), defaultTier, maxRooms);
+// With workers a new room's lobby map is built on them too, so making a room never stalls the others.
+const manager = new RoomManager(
+  (code, tier, bots, difficulty, lobby) => new Room(code, tier, config, bots, difficulty, lobby), tierNames(), defaultTier, maxRooms, Math.random,
+  pool ? (tier, seed) => pool.generate(tier, seed) : undefined,
+);
 // LOAD_STATS=1 prints a line of tick timings every 5 s, for scripts/load-test.ts.
 const tickTimes: number[] = [], lateTimes: number[] = [];
 const onTick = process.env.LOAD_STATS === "1" ? (ms: number, late: number) => { tickTimes.push(ms); lateTimes.push(late); } : undefined;

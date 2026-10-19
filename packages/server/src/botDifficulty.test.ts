@@ -37,9 +37,9 @@ describe("a room's bot difficulty", () => {
 
   it("is set by whoever makes the room, and joining by code never changes it", () => {
     const manager = new RoomManager((code, tier, bots, difficulty) => new Room(code, tier, config, bots, difficulty), ["small"], "small", 3, lcg(3));
-    const made = manager.join(null, "small", quiet, 0, "hard")!;
+    const made = manager.join(null, "small", quiet, 0, "hard")!.joined!;
     expect(made.room.difficulty).toBe("hard");
-    const joined = manager.join(made.room.code, null, quiet, 0, "easy")!;
+    const joined = manager.join(made.room.code, null, quiet, 0, "easy")!.joined!;
     expect(joined.room).toBe(made.room);
     expect(made.room.difficulty).toBe("hard");
   });

@@ -255,7 +255,7 @@ Accuracy, checking every part, state, level of detail and leg piece the game bui
 
 The worst frame left with workers is the rest of a match start (path finder, bots, spawns) plus the occasional garbage collection. No start had to wait: maps asked for at the lobby or results are ready long before anyone presses start.
 
-`npx tsx scripts/load-test.ts large 10` (real server and WebSocket clients, which make each room and press start at once; the new column is the worst late tick over the whole step, while rooms were being made and started): 549 ms before, 363 ms with workers. What is left is making a room: its lobby map is still built on the main thread when the first person arrives (about 200 ms on large), because the room needs it to place them. Moving that too means joining a new room asynchronously in `RoomManager` and the transport; not done.
+`npx tsx scripts/load-test.ts large 10` (real server and WebSocket clients, which make each room and press start at once; the new column is the worst late tick over the whole step, while rooms were being made and started): 549 ms before, 363 ms with workers. What is left is making a room: its lobby map is still built on the main thread when the first person arrives (about 200 ms on large), because the room needs it to place them. Moving that too means joining a new room asynchronously in `RoomManager` and the transport; done since, see "New rooms prepared on the map workers" below.
 
 ### Cheaper route searches (2026-10-19, recommendation 3 of the performance pass)
 Measured first, by counting every route search in 10 large rooms (`measure-rooms.ts` conditions, 30 s) and in a whole large soak match, by what the bot was heading for and why it searched. The ring was not the problem: no search in the first 30 s and 5% of a whole match's were for the ring centre, so a shared route field to it would have saved almost nothing. 98 to 99% of search time was wander goals (a random spot in the ring, kept 12 s), and 80% was the 2 s replan clock finding the same route again on a map that never changes. The rest was long searches: 6% of routes used the whole 6000-cell cap and stopped short, and those were replanned on the clock at about 0.9 ms each.
@@ -278,3 +278,17 @@ Medium, one run: 40 rooms 2.10 to 1.48 ms mean, 99th percentile 5.64 to 3.43.
 `load-test.ts large 10,20,30` (real server, WebSocket clients), two runs each, alternating, mean / 99th percentile ms: 10 rooms 2.84 / 7.85 and 3.39 / 7.44 before, 1.57 / 4.06 and 1.81 / 4.96 after; 20 rooms 3.87 / 7.06 and 3.86 / 8.47 before, 2.64 / 5.62 and 2.33 / 5.35 after; 30 rooms 4.96 / 8.31 and 5.06 / 10.99 before, 3.25 / 6.10 and 2.79 / 5.29 after. Late starts stayed at 2.2 to 2.6 ms throughout. `npm run soak` large tick 99th percentile: 0.86 to 1.02 ms before, 0.14 to 0.26 after.
 
 Route searches no longer limit large rooms. Plan on about 30 large rooms per process on this laptop (it was 10), keeping the 8 ms budget with the real server, and half that on a cloud core until it is measured there. Medium stays at about 40.
+
+### New rooms prepared on the map workers (2026-10-19)
+A new room's lobby map is now built on the map workers too. `RoomManager` takes the code, asks the pool for the map and keeps the room as "preparing": the joining socket is held with no welcome yet (the client already says "Connecting..."), anyone else using the code waits in line behind it, and when the map arrives the room is made (about 2 ms to rebuild the World, plus the room's own setup) and everyone in line is welcomed in order. A failed map retries with a new seed, and after three failures everyone waiting is refused with a reason. A room everyone gave up on is dropped and its map thrown away. Without workers (`MAP_WORKERS=0`, tests, the range) rooms are made on the spot as before.
+
+`npx tsx scripts/measure-rooms.ts starts large 10`, which now makes each room through the `RoomManager` (one every half second) and has its host press start as soon as they are in; `LOBBY_ON_MAIN=1` builds the lobby map on the main thread, as before. Match maps on 2 workers in both. Two runs each, alternating:
+
+| Tier | Rooms | Lobby maps | Worst frame work ms | 99th percentile work ms | Worst late start ms | Longest from making to countdown ms |
+| :- | :- | :- | :- | :- | :- | :- |
+| large | 10 | main thread (before) | 286, 245 | 183, 177 | 275, 229 | 567, 433 |
+| large | 10 | workers | 7.5, 6.1 | 3.5, 3.7 | 13.2, 7.3 | 600, 550 |
+| medium | 10 | main thread (before) | 72 | 49 | 57 | 167 |
+| medium | 10 | workers | 4.1 | 2.2 | 3.0 | 167 |
+
+`npx tsx scripts/load-test.ts large 10`, worst late tick over the step while rooms were made and started: 357 and 189 ms before, 8 and 25 ms after; tick mean and 99th percentile unchanged (1.27 / 3.07 to 3.31 before, 1.14 to 1.23 / 2.17 to 2.54 after). A new large room now takes a few tenths of a second longer to welcome its first player, since its map waits behind any other builds in the pool; nobody else pays for it.

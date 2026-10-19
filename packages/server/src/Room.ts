@@ -37,6 +37,12 @@ export interface MapForRoom {
   meters: number;
 }
 
+// A map and the seed it was built from, which clients need to build the same map.
+export interface SeededMap {
+  seed: number;
+  map: MapForRoom;
+}
+
 export interface RoomConfig {
   mech: MechStats;
   bots: BotConfig;
@@ -125,9 +131,11 @@ export class Room {
   // `botCount` is how many computer players to keep, up to the spawns the people present leave free. `null` means keep
   // the room topped up to its tier's target size. Either way a bot gives up its spawn to a person arriving in the lobby.
   // `difficulty` makes every bot that one, or "mixed" deals each its own by the mix in data/bots.json.
+  // `lobby` is the lobby's map when it was built elsewhere (RoomManager has a worker build it); without it the room
+  // builds its own with mapFor.
   constructor(
     readonly code: string, readonly tier: string, private config: RoomConfig, botCount: number | null = 0,
-    readonly difficulty: BotDifficulty = "mixed",
+    readonly difficulty: BotDifficulty = "mixed", lobby?: SeededMap,
   ) {
     if (config.tuningRaws) {
       this.tuningRaws = JSON.parse(JSON.stringify(config.tuningRaws)) as TuningRaws;
@@ -144,8 +152,8 @@ export class Room {
     this.random = config.random ?? Math.random;
     this.pickups = new Pickups(config.loot.maxPickups);
     this.historyLength = Math.ceil(config.combat.historyMs / (STEP * 1000));
-    this.seed = this.newSeed();
-    this.map = config.mapFor(tier, this.seed);
+    this.seed = lobby?.seed ?? this.newSeed();
+    this.map = lobby?.map ?? config.mapFor(tier, this.seed);
     this.resetProps();
     this.finder = new Pathfinder(this.map.nav, config.bots.path);
     this.fixedBots = botCount;

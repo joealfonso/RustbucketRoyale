@@ -1,10 +1,11 @@
 // How many rooms one server process can run: N rooms at once, each in a match with two people walking about and
 // shooting, and the rest filled with bots. Times only the server's work. Run: npx tsx scripts/measure-rooms.ts
-// `npx tsx scripts/measure-rooms.ts starts [tier] [rooms]` instead times match starts (see measureStarts below).
+// `npx tsx scripts/measure-rooms.ts starts [tier] [rooms]` instead times making rooms and starting matches (see measureStarts below).
 import { STEP, createMechInput, encodeInput, type InputMessage } from "../packages/shared/src";
 import { loadRoomConfig } from "../packages/server/src/config";
 import { MapPool } from "../packages/server/src/MapPool";
 import { Room } from "../packages/server/src/Room";
+import { RoomManager, type Ticket } from "../packages/server/src/RoomManager";
 import { lcg } from "../packages/server/src/testClient";
 
 const config = { ...loadRoomConfig({ maps: "generated" }), random: lcg(99) };
@@ -49,19 +50,26 @@ for (const [tier, counts] of [["medium", [10, 20, 40]], ["large", [5, 10, 20]]] 
   }
 }
 
-// The worst stall around match starts. Rooms tick in real time, as on the server, and the hosts press start one
-// room every half second. A frame's work is the starts handled in it plus one tick of every room; "late" is how
-// long after its time a frame began, which also catches work done between frames (a map arriving from a worker).
-// MAP_WORKERS=0 builds maps on the main thread, the way the server did before the map workers.
+// The worst stall around making rooms and starting matches. Rooms tick in real time, as on the server. A new room is
+// made every half second, through the RoomManager as a player's link would, and its host presses start as soon as
+// they are in. A frame's work is the joins and starts handled in it plus one tick of every room; "late" is how long
+// after its time a frame began, which also catches work done between frames (a map arriving from a worker).
+// MAP_WORKERS=0 builds every map on the main thread, the way the server did before the map workers.
+// LOBBY_ON_MAIN=1 keeps the workers for match maps but builds a new room's lobby map on the main thread, the way
+// it was before rooms were prepared asynchronously.
 async function measureStarts(tier: string, count: number): Promise<void> {
   const workers = Number(process.env.MAP_WORKERS ?? 2);
+  const lobbyOnMain = process.env.LOBBY_ON_MAIN === "1";
   const pool = workers > 0 ? new MapPool(workers) : null;
   const startsConfig = pool ? { ...config, mapLater: (t: string, seed: number) => pool.generate(t, seed) } : config;
-  const rooms = Array.from({ length: count }, (_, i) => new Room(`S${i}`, tier, startsConfig, null));
-  const hosts = rooms.map((room) => room.join(() => {})!);
+  const manager = new RoomManager(
+    (code, t, bots, difficulty, lobby) => new Room(code, t, startsConfig, bots, difficulty, lobby), [tier], tier, count, lcg(7),
+    pool && !lobbyOnMain ? (t, seed) => pool.generate(t, seed) : undefined,
+  );
   const frame = STEP * 1000;
   const work: number[] = [], late: number[] = [];
-  const pressed = new Array<number>(count).fill(-1), counting = new Array<number>(count).fill(-1);
+  const tickets: (Ticket | null)[] = new Array<Ticket | null>(count).fill(null);
+  const made = new Array<number>(count).fill(-1), pressed = new Array<boolean>(count).fill(false), counting = new Array<number>(count).fill(-1);
   const frames = Math.ceil((1 + count * 0.5 + 6) / STEP);
   let next = performance.now();
   for (let f = 0; f < frames; f++) {
@@ -69,19 +77,24 @@ async function measureStarts(tier: string, count: number): Promise<void> {
     const began = performance.now();
     late.push(Math.max(0, began - next));
     for (let i = 0; i < count; i++) {
-      if (pressed[i] !== -1 || f * STEP < 1 + i * 0.5) continue;
-      pressed[i] = f;
-      rooms[i]!.receive(hosts[i]!, JSON.stringify({ t: "start" }));
+      if (made[i] === -1 && f * STEP >= 1 + i * 0.5) {
+        made[i] = f;
+        tickets[i] = manager.join(null, tier, () => {}, null);
+      }
+      const joined = tickets[i]?.joined;
+      if (!joined || pressed[i]) continue;
+      pressed[i] = true;
+      joined.room.receive(joined.id, JSON.stringify({ t: "start" }));
     }
-    for (const r of rooms) r.tick();
-    rooms.forEach((r, k) => { if (counting[k] === -1 && r.matchState === "countdown") counting[k] = f; });
+    manager.tick();
+    tickets.forEach((t, k) => { if (counting[k] === -1 && t?.joined?.room.matchState === "countdown") counting[k] = f; });
     work.push(performance.now() - began);
     next += frame;
   }
   await pool?.close();
   const worst = (v: number[]) => Math.max(...v);
   const p99 = (v: number[]) => [...v].sort((a, b) => a - b)[Math.floor(v.length * 0.99)]!;
-  const holds = counting.map((c, k) => (c - pressed[k]!) * frame);
-  console.log(`| Tier | Rooms | Map workers | Worst frame work ms | 99th percentile work ms | Worst late start ms | Longest wait for a map ms |\n| :- | :- | :- | :- | :- | :- | :- |`);
-  console.log(`| ${tier} | ${count} | ${workers} | ${worst(work).toFixed(1)} | ${p99(work).toFixed(2)} | ${worst(late).toFixed(1)} | ${worst(holds).toFixed(0)} |`);
+  const waits = counting.map((c, k) => (c - made[k]!) * frame);
+  console.log(`| Tier | Rooms | Map workers | Lobby maps | Worst frame work ms | 99th percentile work ms | Worst late start ms | Longest from making to countdown ms |\n| :- | :- | :- | :- | :- | :- | :- | :- |`);
+  console.log(`| ${tier} | ${count} | ${workers} | ${pool && !lobbyOnMain ? "workers" : "main thread"} | ${worst(work).toFixed(1)} | ${p99(work).toFixed(2)} | ${worst(late).toFixed(1)} | ${worst(waits).toFixed(0)} |`);
 }
