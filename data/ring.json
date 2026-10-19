@@ -84,26 +84,26 @@
     "large": [
       {
         "radiusFraction": 0.45,
-        "waitSeconds": 35,
-        "shrinkSeconds": 125,
+        "waitSeconds": 33,
+        "shrinkSeconds": 135,
         "damagePerSecond": 2
       },
       {
         "radiusFraction": 0.26,
-        "waitSeconds": 30,
-        "shrinkSeconds": 90,
+        "waitSeconds": 28,
+        "shrinkSeconds": 97,
         "damagePerSecond": 3
       },
       {
         "radiusFraction": 0.12,
-        "waitSeconds": 25,
-        "shrinkSeconds": 65,
+        "waitSeconds": 24,
+        "shrinkSeconds": 70,
         "damagePerSecond": 5
       },
       {
         "radiusFraction": 0.04,
-        "waitSeconds": 20,
-        "shrinkSeconds": 40,
+        "waitSeconds": 19,
+        "shrinkSeconds": 43,
         "damagePerSecond": 8
       }
     ]
