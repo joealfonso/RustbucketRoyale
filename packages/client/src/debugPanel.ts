@@ -103,6 +103,7 @@ export class DebugPanel {
     look.add(cameraStats, "shoulderX", -2, 2);
     look.add(cameraStats, "fov", 40, 110);
     look.add(cameraStats, "dashFovKick", 0, 30);
+    look.add(cameraStats, "walkBob", 0, 1).name("walkBob (camera)");
     look.add({ copy: () => this.copy(cameraStats) }, "copy").name("Copy camera.json");
 
     const files = this.gui.addFolder("Data files");
@@ -167,6 +168,20 @@ export class DebugPanel {
 
   get visible(): boolean {
     return !this.gui._hidden;
+  }
+
+  // Walking looks (data/gait.json): yours alone like the camera, since nothing about it reaches the server.
+  addGait(gait: object): void {
+    const f = this.gui.addFolder("Walking (gait.json)").close();
+    const add = (folder: GUI, node: Record<string, unknown>) => {
+      for (const [key, value] of Object.entries(node)) {
+        if (typeof value === "number") folder.add(node, key);
+        else if (typeof value === "object" && value !== null) add(folder.addFolder(key).close(), value as Record<string, unknown>);
+      }
+    };
+    add(f, gait as Record<string, unknown>);
+    f.add({ copy: () => this.copy(gait) }, "copy").name("Copy gait.json");
+    f.close();
   }
 
   toggle(): boolean {

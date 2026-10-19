@@ -43,6 +43,18 @@ describe("RemoteMechs", () => {
     expect(serverNow - drawnAt).toBeCloseTo(remotes.viewDelayMs / 1000, 1);
   });
 
+  it("tells the walk how fast a mech is moving where it is drawn, and that it stands still once updates stop", () => {
+    const { remotes } = make();
+    const last = feed(remotes, 300, 20, () => 0);
+    remotes.update(last + 4);
+    let speed = -1;
+    remotes.forEachNear(0, 0, 1e6, (_model, _mech, vx, vy, vz) => { speed = Math.hypot(vx, vy, vz); });
+    expect(speed).toBeCloseTo(10, 3);
+    remotes.update(last + 1000); // long past the newest snapshot: it holds still, so its legs must too
+    remotes.forEachNear(0, 0, 1e6, (_model, _mech, vx) => { speed = vx; });
+    expect(speed).toBe(0);
+  });
+
   it("moves smoothly through steady jitter instead of stuttering", () => {
     const { remotes, scene } = make();
     // Snapshots every 50 ms, each arriving 20 ms plus up to 24 ms late in a repeating pattern, and a frame every 16.7 ms.

@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { MeshData, NodeData } from "../assets/glbWrite";
 import { writeGlb } from "../assets/glbWrite";
+import { bothLegs } from "./joints";
 import { box, convex, cylinder, merge, mirrorX, prism, triangles, turn, wedge, type V3 } from "../../packages/client/src/dressing/shapes";
 
 const deg = Math.PI / 180;
@@ -208,6 +209,8 @@ const nodes: NodeData[] = [
   { name: "Torso_Fx", translation: [0, 2.6, -0.34] },
   { name: "Arm_R_Fx", translation: [1.08, 2.34, -0.3] },
   { name: "Leg_L_Fx", translation: [-legX, 1.02, -0.3] },
+  // The two-bone chain ends at the hock; the short bone to the ankle and the magnetic foot stay as they are.
+  ...bothLegs(hip, knee, hock, [legX, 0, ankle[2]]),
 ];
 
 const dir = join(new URL("../..", import.meta.url).pathname, "assets/models/mechs/arbiter");

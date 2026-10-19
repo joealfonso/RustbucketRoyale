@@ -7,6 +7,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { writeGlb, type MeshData, type NodeData } from "../assets/glbWrite";
+import { legJoints, mirrorX as mirrorPointX, mirrorZ as mirrorPointZ } from "./joints";
 import { box, cylinder, empty, merge, mirrorX, prism, triangles, turn, type V3 } from "../../packages/client/src/dressing/shapes";
 
 const out = join(new URL("../..", import.meta.url).pathname, "assets/models/mechs/cataclysm/Mech_Cataclysm.glb");
@@ -222,6 +223,10 @@ const nodes: NodeData[] = [
   { name: "Torso_Fx", translation: [0, 2.5, 1.15] },
   { name: "Arm_R_Fx", translation: [0.4, 3.0, 0.3] },
   { name: "Leg_FL_Fx", translation: [-knee[0], knee[1], knee[2]] },
+  ...legJoints("FR", hip, knee, ankle),
+  ...legJoints("FL", mirrorPointX(hip), mirrorPointX(knee), mirrorPointX(ankle)),
+  ...legJoints("BR", mirrorPointZ(hip), mirrorPointZ(knee), mirrorPointZ(ankle)),
+  ...legJoints("BL", mirrorPointX(mirrorPointZ(hip)), mirrorPointX(mirrorPointZ(knee)), mirrorPointX(mirrorPointZ(ankle))),
 ];
 
 mkdirSync(dirname(out), { recursive: true });

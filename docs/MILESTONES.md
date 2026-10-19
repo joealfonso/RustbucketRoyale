@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: M9 mech classes (gate 9a built, waiting for its playtest)
-Current visual milestone: V3 done (junkyard dressing, props). V4 (HUD and radar) not started
+Current visual milestone: V2d walk cycles built, waiting for its playtest (V3 done; V4 HUD and radar not started)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -18,7 +18,7 @@ Update the two lines above when a gate passes. Claude Code reads this file first
 
 ## Visual
 - V1 style test: one grey-box mech and one chunk in the browser with the toon shader, outline, palette, and lighting. Gate: screenshots at 10 m, 50 m, and 150 m read well on a mid-range laptop before any more assets get made. Draw three thumbnail silhouettes of the first mech on paper before opening Blender, and keep the scan of the chosen one in the repo next to the screenshots. Also build the asset import checker (`scripts/check-assets.ts`, run by the gauntlet; it was a Unity editor script before the move to the web) that fails a glTF model over the triangle budget, with the wrong naming, or without the master toon material.
-- V2 mech kit: modular parts, three damage states each, LODs, VFX hooks.
+- V2 mech kit: modular parts, three damage states each, LODs, VFX hooks. V2d (added on Joseph's call): walk cycles.
 - V3 junkyard chunk kit and destructible props.
 - V4 HUD and radar.
 - V5 VFX pass.
@@ -99,3 +99,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: The four roster mechs rebuilt to docs/MECH_ROSTER.md on Joseph's call: own factory paint per mech, glowing sensors and accents, pilot accent markings, Ironclad's recessed eye and ramming shield, Stiletto's raptor head and jump-pack fins, Cataclysm's lens array, claws and point-defence turrets, Arbiter's four drones on pylons. Serial numbers left for the decal font. Check: style.html key 4, and any match.
 - 2026-10-18: M9 started on Joseph's go, in gates 9a (pick a mech, each with its own speed, jets and toughness), 9b and 9c (one ability each on Q, bots using them).
 - 2026-10-18: Gate 9a built, waiting for its playtest. Check: pick a mech on the start menu (it is remembered) or on the pause screen (Esc); in the lobby it swaps where you stand, mid match the HUD says "Next match: ..." and it swaps at the next one. Stiletto-B is fast with long, quick jets and is fragile; Ironclad-IV and Cataclysm are slow, short on jets and tough; Arbiter is the all-rounder until its ability in 9c. Bots are dealt all four. The numbers are first guesses in data/roster.json, tunable in F1 (Data files, roster.json). Soak passes on all tiers at 42 to 51 kbps.
+- 2026-10-18: Walk cycles started on Joseph's call ("the mech need walk cycles") as gate V2d, before 9b, while 9a waits for its playtest.
+- 2026-10-18: Gate V2d built, waiting for its playtest. Check: walk, sprint, dash, jet and land in any match: feet plant and stay put instead of skating, the body bobs and leans into a run and a dash, legs tuck up in the air and every foot thumps down on landing; other mechs and bots walk too. Each mech has its own gait (Ironclad short heavy steps, Stiletto long bird strides, Cataclysm a diagonal trot, Arbiter smooth). Shot-up legs limp; broken legs still crawl. On style.html, 4 then W cycles standing, walking, running, dashing, in the air, limping, and 6 frames one mech up close from the side. Tune in F1 under "Walking (gait.json)", then Copy. Camera bob is walkBob under Look and camera, off. Please read F1 Performance on your laptop on large: legs add 20 to 30 draw calls per mech.

@@ -12,6 +12,9 @@ interface Sample {
 
 interface Remote {
   model: MechModel;
+  vx: number; vy: number; vz: number; // how fast it is moving where it is drawn, for its walk
+  jetting: boolean;
+  running: boolean;
   mech: number; // the roster mech it is drawn as. A new one swaps the model.
   dead: boolean;
   looted: boolean;
@@ -93,6 +96,16 @@ export class RemoteMechs {
     return best;
   }
 
+  // Calls `fn` for every mech within `range` of a point, with how it is moving where it is drawn, for its walk.
+  // Allocates nothing.
+  forEachNear(x: number, z: number, range: number, fn: (model: MechModel, mech: number, vx: number, vy: number, vz: number, jetting: boolean, running: boolean) => void): void {
+    for (const r of this.remotes.values()) {
+      const p = r.model.group.position;
+      if (Math.abs(p.x - x) > range || Math.abs(p.z - z) > range) continue;
+      fn(r.model, r.mech, r.vx, r.vy, r.vz, r.jetting, r.running);
+    }
+  }
+
   // Whether a wreck that still has something in it is within range of a spot, for the "hold E" prompt.
   fullWreckNear(x: number, z: number, range: number): boolean {
     for (const r of this.remotes.values()) {
@@ -139,12 +152,14 @@ export class RemoteMechs {
         remote.mech = o.mech;
       }
       if (!remote) {
-        remote = { model: this.makeModel(o), mech: o.mech, dead: false, looted: false, bot: o.bot, samples: [], seen: true };
+        remote = { model: this.makeModel(o), mech: o.mech, vx: 0, vy: 0, vz: 0, jetting: false, running: false, dead: false, looted: false, bot: o.bot, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;
       remote.dead = o.dead;
       remote.looted = o.looted;
+      remote.jetting = o.jetting;
+      remote.running = o.running;
       remote.model.repairing = o.repairing;
       setMechDamage(remote.model, o.hp, o.dead);
       setMechGear(remote.model, this.weaponColors[o.weapon] ?? "#d9731a", o.armor);
@@ -178,6 +193,11 @@ export class RemoteMechs {
       const t = span > 0 ? Math.min(1, Math.max(0, (renderTime - a.time) / span)) : 0;
 
       remote.model.group.position.set(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t);
+      // The speed between the two samples it is drawn between; standing still once it runs past the newest.
+      const moving = span > 0 && renderTime < b.time;
+      remote.vx = moving ? ((b.x - a.x) / span) * 1000 : 0;
+      remote.vy = moving ? ((b.y - a.y) / span) * 1000 : 0;
+      remote.vz = moving ? ((b.z - a.z) / span) * 1000 : 0;
       let dyaw = b.yaw - a.yaw;
       dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
       remote.model.group.rotation.y = a.yaw + dyaw * t;

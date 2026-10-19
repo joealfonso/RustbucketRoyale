@@ -6,5 +6,6 @@
   "radius": 0.3,
   "near": 0.1,
   "pullOutSpeed": 12,
-  "dashFovKick": 12
+  "dashFovKick": 12,
+  "walkBob": 0
 }

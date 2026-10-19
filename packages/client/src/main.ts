@@ -23,6 +23,9 @@ import lookJson from "../../../data/look.json";
 import mechKitsJson from "../../../data/mechKits.json";
 import rosterJson from "../../../data/roster.json";
 import { mechCards, savedMech } from "./mechPicker";
+import gaitJson from "../../../data/gait.json";
+import { parseGait, type GaitInput } from "./gait";
+import { footInWorld, walkMech } from "./mechWalk";
 import { loadKit, loadRoster, parseKits } from "./mechKit";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import botsJson from "../../../data/bots.json";
@@ -46,7 +49,7 @@ import { BreakFx } from "./props/breakFx";
 import propFxJson from "../../../data/propFx.json";
 import dressingJson from "../../../data/dressing.json";
 import chunksJsonForDressing from "../../../data/chunks.json";
-import { createMechModel, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
+import { createMechModel, legsLimping, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
 import { NetClient } from "./net";
 import { Projectiles } from "./projectiles";
 import { Radar } from "./radar";
@@ -197,6 +200,38 @@ projectiles.onImpact = (x, y, z) => sound.play("impact", { x, y, z });
 // Browsers only allow sound after a click, and the click that locks the mouse is the first one.
 for (const el of [canvas, hint]) el.addEventListener("click", () => sound.start());
 const blasts = new Fireballs(scene, 8);
+// Walking (gait.ts): each mech's legs follow how fast it is really going. Footfalls kick up dust (art hook for V5).
+const gaitConfig = parseGait(gaitJson);
+const dust = new TimedEffects(scene, 32, gaitConfig.dustMeters, new THREE.MeshBasicMaterial({ color: "#a39a86", transparent: true, opacity: 0.45 }));
+const gaitInput: GaitInput = { vx: 0, vz: 0, yaw: 0, grounded: true, dashing: false, limping: false, walkSpeed: 0, runSpeed: 0 };
+const footAt = new THREE.Vector3();
+// Dust under each foot that came down, and one thud for them. `audible` is false for someone else walking:
+// walking makes no sound (NOISE_KINDS), so sneaking past someone still works; their run you hear.
+function footfalls(model: MechModel, feet: number, audible: boolean): void {
+  let thud = audible;
+  for (let leg = 0; leg < model.legs.length; leg++) {
+    if (!(feet & (1 << leg))) continue;
+    footInWorld(model, leg, footAt);
+    dust.spawn(footAt.x, footAt.y, footAt.z, gaitConfig.dustSeconds);
+    if (thud) {
+      const loud = gaitConfig.stepLoudness + (gaitConfig.runStepLoudness - gaitConfig.stepLoudness) * model.gait!.loud;
+      sound.play("step", footAt, loud);
+      thud = false;
+    }
+  }
+}
+const walkRemote = (model: MechModel, m: number, vx: number, vy: number, vz: number, jetting: boolean, running: boolean) => {
+  const stats = statsFor(m);
+  gaitInput.vx = vx; gaitInput.vz = vz; gaitInput.yaw = model.group.rotation.y;
+  // Others carry no grounded flag: jets on, or rising or falling fast, means in the air.
+  gaitInput.grounded = !jetting && Math.abs(vy) < 2;
+  gaitInput.dashing = Math.hypot(vx, vz) > stats.runSpeed * 1.15;
+  gaitInput.limping = legsLimping(model);
+  gaitInput.walkSpeed = stats.walkSpeed; gaitInput.runSpeed = stats.runSpeed;
+  const feet = walkMech(model, gaitConfig, gaitInput, fxDt);
+  if (feet) footfalls(model, feet, running);
+};
+
 // Art hook: a puff where a prop broke. Replace with real debris at V5.
 const debris = new TimedEffects(scene, 12, 1.6, new THREE.MeshBasicMaterial({ color: "#8c8577", transparent: true, opacity: 0.6 }));
 const grenades = new ClientGrenades(scene, 8, grenadeStats);
@@ -237,6 +272,7 @@ const applyLocally = (file: string, path: string, value: number) => {
 const frameMs = new FrameTimes(240);
 const workMs = new FrameTimes(240); // time spent on the frame before the GPU takes over: the headroom a locked 60 fps hides
 const panel = new DebugPanel(mechStats, tuningRaws, cameraStats, (file, path, value) => (net ? net.sendTune(file, path, value) : applyLocally(file, path, value)));
+panel.addGait(gaitConfig);
 if (net) {
   net.onTuned = (file, path, value) => { applyLocally(file, path, value); panel.refresh(); };
   void net.welcome.then((w) => panel.setServerTuning(w.tuning), () => {});
@@ -473,7 +509,6 @@ window.addEventListener("resize", () => {
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 let accumulator = 0;
-let stepDistance = 0;
 let lastCountdown = -1;
 const camForward = new THREE.Vector3();
 let simTime = 0;
@@ -524,11 +559,6 @@ function frame(now: number): void {
     const dashBefore = mech.dashTime;
     const seq = predictor.step(mechInput, STEP);
     if (dashBefore <= 0 && mech.dashTime > 0) sound.play("dash", { x: mech.x, y: mech.y + 1, z: mech.z });
-    // Heavy footfalls, further apart when walking than when running.
-    if (mech.grounded && !health.dead) {
-      stepDistance += Math.hypot(mech.vx, mech.vz) * STEP;
-      if (stepDistance > (mech.running ? 4.2 : 3)) { stepDistance = 0; sound.play("step", { x: mech.x, y: mech.y, z: mech.z }); }
-    }
     net?.sendInput(seq, mechInput);
     if (net === null && mech.y < KILL_HEIGHT) respawnOffline();
 
@@ -570,6 +600,17 @@ function frame(now: number): void {
   mechGroup.rotation.y = mechStats.turnSpeedDegrees > 0 ? mech.bodyYaw : aim.yaw;
   remotes.update(performance.now());
 
+  // Walking: your legs from your predicted speed, everyone else's from how they move on screen. Looks only.
+  fxDt = frameTime;
+  const ownStats = statsFor(mech.mech);
+  gaitInput.vx = mech.vx; gaitInput.vz = mech.vz; gaitInput.yaw = mechGroup.rotation.y;
+  gaitInput.grounded = mech.grounded; gaitInput.dashing = mech.dashTime > 0; gaitInput.limping = legsLimping(ownModel);
+  gaitInput.walkSpeed = ownStats.walkSpeed; gaitInput.runSpeed = ownStats.runSpeed;
+  const ownFeet = walkMech(ownModel, gaitConfig, gaitInput, frameTime);
+  if (ownFeet && !health.dead) footfalls(ownModel, ownFeet, true);
+  remotes.forEachNear(mechGroup.position.x, mechGroup.position.z, gaitConfig.farMeters, walkRemote);
+  dust.update(frameTime);
+
   // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.
   rig.setFovKick(mech.dashTime > 0 ? mech.dashTime / mechStats.dashSeconds : 0, frameTime);
   // A knocked out player (or someone who arrived mid match) watches a mech that is still standing.
@@ -586,7 +627,9 @@ function frame(now: number): void {
     input.takeClick(); // keep the click from piling up
   }
   mechGroup.visible = !(spectating && myPlace === null); // someone who never had a mech has nothing to show
-  rig.update(viewX, viewY + cameraStats.pivotHeight, viewZ, aim.yaw, aim.pitch, map.world, frameTime);
+  // The camera can ride a little of your walk's bob (camera.json walkBob, off by default).
+  const bob = spectating ? 0 : (ownModel.gait?.bob ?? 0) * cameraStats.walkBob;
+  rig.update(viewX, viewY + cameraStats.pivotHeight + bob, viewZ, aim.yaw, aim.pitch, map.world, frameTime);
   dressing.update(viewX, viewZ);
 
   const matchSeconds = progress.state === "active" ? progress.seconds + (performance.now() - progressAt) / 1000 : 0;
@@ -621,7 +664,6 @@ function frame(now: number): void {
     fill.classList.toggle("damaged", state === ZONE_DAMAGED);
     fill.parentElement!.classList.toggle("broken", state === ZONE_BROKEN); // the bar is empty, so the track shows it
   });
-  fxDt = frameTime;
   if (mech.mech !== shownMech) swapOwnMech(mech.mech);
   const next = picked !== null && picked !== mech.mech ? picked : -1;
   if (next !== shownNext) { shownNext = next; hud.setMech(roster.mechs[mech.mech]!, next >= 0 ? roster.mechs[next]!.name : null); }

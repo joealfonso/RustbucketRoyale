@@ -139,6 +139,7 @@ export interface CameraStats {
   near: number;
   pullOutSpeed: number;
   dashFovKick: number; // extra degrees of field of view at the start of a dash
+  walkBob: number; // share of your mech's walking bob the camera follows. 0 keeps it still (M1's shot bounce felt bad)
 }
 
 export interface NetStats {
@@ -184,7 +185,7 @@ const WEAPON_KEYS: (keyof WeaponStats & string)[] = [
   "shotsPerSecond", "projectileSpeed", "projectileLifetime", "spreadDegrees", "maxAimDistance", "shakeForce", "damage", "pellets",
 ];
 const CAMERA_KEYS: (keyof CameraStats & string)[] = [
-  "fov", "distance", "shoulderX", "pivotHeight", "radius", "near", "pullOutSpeed", "dashFovKick",
+  "fov", "distance", "shoulderX", "pivotHeight", "radius", "near", "pullOutSpeed", "dashFovKick", "walkBob",
 ];
 
 const GRENADE_KEYS: (keyof GrenadeStats & string)[] = [

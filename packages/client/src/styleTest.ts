@@ -1,5 +1,10 @@
 import * as THREE from "three";
-import { parseChunkSet, parsePropConfig, parseZones } from "@rustbucket/shared";
+import { mechStatsFor, parseChunkSet, parseMechStats, parsePropConfig, parseRoster, parseZones } from "@rustbucket/shared";
+import mechJson from "../../../data/mech.json";
+import rosterJson from "../../../data/roster.json";
+import gaitJson from "../../../data/gait.json";
+import { parseGait } from "./gait";
+import { walkMech } from "./mechWalk";
 import chunksJson from "../../../data/chunks.json";
 import propsJson from "../../../data/props.json";
 import zonesJson from "../../../data/zones.json";
@@ -7,7 +12,7 @@ import paletteJson from "../../../data/palette.json";
 import lookJson from "../../../data/look.json";
 import damageFxJson from "../../../data/damageFx.json";
 import { parseDamageFx } from "./damageFx";
-import { createMechModel, setCrawlLook, setMechDamage } from "./mechModel";
+import { createMechModel, setCrawlLook, setMechDamage, type MechModel } from "./mechModel";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import mechKitsJson from "../../../data/mechKits.json";
 import { loadKit, parseKits, type LoadedKit } from "./mechKit";
@@ -89,13 +94,37 @@ if (kitModel) {
   scene.add(kitModel.group);
 }
 const ROSTER_Z = half + 32;
+const rosterModels: MechModel[] = [];
 roster.forEach((r, i) => {
   const model = createMechModel(i === 0 ? palette.mech.youAccent : palette.mech.othersAccent, zoneMaxHp, toon, palette.mech.body, r.kit, palette.mech.trim);
   model.group.position.set(i * 6 - ((roster.length - 1) * 6) / 2 + 5, 0, ROSTER_Z);
   model.group.rotation.y = Math.PI;
   scene.add(model.group);
+  rosterModels.push(model);
 });
+
+// Key W: the roster walks on the spot, as on a treadmill, so each gait (data/gait.json) can be judged side by side.
+const gait = parseGait(gaitJson);
+const rosterStats = parseRoster(rosterJson);
+const statsFor = mechStatsFor(parseMechStats(mechJson), rosterStats);
+const WALKS = ["standing", "walking", "running", "dashing", "in the air", "limping"] as const;
+let walk = 0;
+const clock = new THREE.Clock();
+function walkRoster(dt: number): void {
+  const mode = WALKS[walk]!;
+  rosterModels.forEach((model, i) => {
+    const stats = statsFor(rosterStats.mechs.findIndex((m) => m.id === roster[i]!.id));
+    const speed = mode === "standing" || mode === "in the air" ? 0 : mode === "walking" || mode === "limping" ? stats.walkSpeed : mode === "dashing" ? stats.dashSpeed : stats.runSpeed;
+    const yaw = model.group.rotation.y;
+    setMechDamage(model, mode === "limping" ? [zoneMaxHp[0]! * 0.3, zoneMaxHp[1]!, zoneMaxHp[2]!] : zoneMaxHp, false);
+    walkMech(model, gait, {
+      vx: -Math.sin(yaw) * speed, vz: -Math.cos(yaw) * speed, yaw, grounded: mode !== "in the air", dashing: mode === "dashing",
+      limping: mode === "limping", walkSpeed: stats.walkSpeed, runSpeed: stats.runSpeed,
+    }, dt);
+  });
+}
 let lookingAtRoster = false;
+let closeUp = -1; // key 6: one roster mech up close, from the side, to judge its walk; -1 for none
 let lookingAtProps = false; // key 5: the props row, from above and in front, where the mechs do not block it
 
 const showKitDamage = () => kitModel && setMechDamage(kitModel, KIT_DAMAGE[kitDamage]!.map((f, z) => f * zoneMaxHp[z]!), false);
@@ -106,23 +135,29 @@ let turn = 0.6;
 const label = document.getElementById("label")!;
 function place(): void {
   // The middle of the line-up being looked at: the damage row, or the roster further out.
-  const target = lookingAtProps ? new THREE.Vector3(3, 0.5, half + 4) : new THREE.Vector3(5, 2, lookingAtRoster ? ROSTER_Z : half + 12);
+  const close = rosterModels[closeUp];
+  rosterModels.forEach((m, i) => { m.group.visible = !close || i === closeUp; }); // the others would stand in the way
+  const target = close ? close.group.position.clone().setY(1.6) : lookingAtProps ? new THREE.Vector3(3, 0.5, half + 4) : new THREE.Vector3(5, 2, lookingAtRoster ? ROSTER_Z : half + 12);
   const lift = lookingAtProps ? 0.9 : 0.18; // looking down onto the props, over the mechs
-  camera.position.set(target.x + Math.sin(turn) * distance, target.y + 1.5 + distance * lift, target.z + Math.cos(turn) * distance);
+  camera.position.set(target.x + Math.sin(turn) * distance, close ? 1.4 : target.y + 1.5 + distance * lift, target.z + Math.cos(turn) * distance);
   camera.lookAt(target);
   label.textContent = lookingAtProps
     ? "Props, standing and broken: crate, junk pile, barrel · 1 / 2 / 3: back to the damage row · Q / E: turn"
+    : close
+    ? `${roster[closeUp]!.id} up close · W: ${WALKS[walk]} · 6: next mech · Q / E: turn · 4: the whole roster`
     : lookingAtRoster
-    ? `Roster: ${roster.map((r) => r.id).join(", ") || "none loaded"} · 1 / 2 / 3: back to the damage row · Q / E: turn`
+    ? `Roster: ${roster.map((r) => r.id).join(", ") || "none loaded"} · W: ${WALKS[walk]} · 1 / 2 / 3: back to the damage row · Q / E: turn`
     : `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · 4: the roster · 5: the props · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · behind, left to right: you (clean), then 75%, 40%, 15%, arms and legs broken`;
 }
 window.addEventListener("keydown", (e) => {
   const index = ["Digit1", "Digit2", "Digit3"].indexOf(e.code);
-  if (index >= 0) { distance = DISTANCES[index]!; lookingAtRoster = false; lookingAtProps = false; }
-  if (e.code === "Digit4") { distance = 14; lookingAtRoster = true; lookingAtProps = false; }
-  if (e.code === "Digit5") { distance = 9; lookingAtProps = true; lookingAtRoster = false; }
+  if (index >= 0) { distance = DISTANCES[index]!; lookingAtRoster = false; lookingAtProps = false; closeUp = -1; }
+  if (e.code === "Digit4") { distance = 14; lookingAtRoster = true; lookingAtProps = false; closeUp = -1; }
+  if (e.code === "Digit6" && rosterModels.length > 0) { closeUp = (closeUp + 1) % rosterModels.length; distance = 7; turn = Math.PI / 2; lookingAtRoster = true; }
+  if (e.code === "Digit5") { distance = 9; lookingAtProps = true; lookingAtRoster = false; closeUp = -1; }
   if (e.code === "KeyQ") turn -= 0.3;
   if (e.code === "KeyE") turn += 0.3;
+  if (e.code === "KeyW") walk = (walk + 1) % WALKS.length;
   if (e.code === "KeyD") { kitDamage = (kitDamage + 1) % KIT_DAMAGE.length; showKitDamage(); }
   place();
 });
@@ -132,4 +167,7 @@ window.addEventListener("resize", () => {
   camera.updateProjectionMatrix();
 });
 place();
-renderer.setAnimationLoop(() => renderer.render(scene, camera));
+renderer.setAnimationLoop(() => {
+  walkRoster(Math.min(0.05, clock.getDelta()));
+  renderer.render(scene, camera);
+});

@@ -2,6 +2,8 @@ import * as THREE from "three";
 import type { UpgradeDef } from "@rustbucket/shared";
 import type { Toon } from "./toonMaterial";
 import type { LoadedKit } from "./mechKit";
+import { createGait, type GaitState } from "./gait";
+import { SEGMENTS_PER_LEG, segmentOf } from "./legRig";
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const materials = new Map<string, THREE.MeshStandardMaterial>();
@@ -42,13 +44,20 @@ export interface MechModel {
   fxTimers: number[]; // per zone: seconds until the next spark, then the next puff of smoke. Last: welding sparks
   // A mech built from a kit: each part's intact, damaged and broken versions (each with its levels of detail), and
   // the point in each hit zone that sparks and smoke come from. Empty for the grey-box mech.
-  kitParts: { zone: number; states: (THREE.LOD | null)[] }[]; // intact, damaged, broken; a missing one falls back
+  kitParts: { zone: number; states: (THREE.Object3D[] | null)[] }[]; // intact, damaged, broken; a missing one falls back
   fxAnchors: (THREE.Object3D | null)[];
   gunParts: THREE.Object3D[]; // hidden with the arms when they are broken
   // A kit's painted materials beyond the one per zone: white body paint and the pilot's accent, each zone its own,
   // so any part can carry either and still rust with its zone.
   paints: { zone: number; material: THREE.MeshToonMaterial; base: THREE.Color }[];
   glows: { material: THREE.MeshBasicMaterial; base: THREE.Color }[]; // sensors and energy accents, dark once the torso breaks
+  // Walking (gait.ts, mechWalk.ts): one hip, knee and ankle joint per leg under the body, with the leg pieces hung
+  // on them, and where each joint sits at rest. Empty for a mech whose kit marks no leg joints.
+  legs: { side: string; hip: THREE.Group; knee: THREE.Group; ankle: THREE.Group; restHip: THREE.Vector3; restKnee: THREE.Vector3; restAnkle: THREE.Vector3 }[];
+  legSides: string[]; // each leg's side name, in the same order (L, R, or FL, FR, BL, BR)
+  gait: GaitState | null;
+  gaitId: string; // which mech's numbers in data/gait.json it walks with
+  crawlDrop: number; crawlTilt: number; // the crawl pose, which walking adds its bob and lean to
 }
 
 // How a crawling mech sits. Read from data/damageFx.json once at startup.
@@ -62,6 +71,12 @@ let damagedBelow = 0.5; // a zone under this share of its hit points shows its d
 export function setCrawlLook(look: CrawlLook, damagedBelowFraction = damagedBelow): void {
   crawlLook = look;
   damagedBelow = damagedBelowFraction;
+}
+
+// Legs hurt but still there: the mech limps (gait.ts).
+export function legsLimping(model: MechModel): boolean {
+  const legs = model.hp[0]!;
+  return legs > 0 && legs / model.zoneMaxHp[0]! < damagedBelow;
 }
 
 const WRECK = new THREE.Color("#262626");
@@ -111,7 +126,28 @@ export function createMechModel(
   const kitParts: MechModel["kitParts"] = [];
   const fxAnchors: MechModel["fxAnchors"] = [null, null, null];
   let gunMount: THREE.Vector3 | null = null;
+  const legs: MechModel["legs"] = [];
+  // A segment's joint group: thigh pieces hang from the hip, shin from the knee, foot from the ankle.
+  const segmentGroup = (piece: number) => {
+    const leg = legs[Math.floor(piece / SEGMENTS_PER_LEG)]!;
+    return [leg.hip, leg.knee, leg.ankle][piece % SEGMENTS_PER_LEG]!;
+  };
+  const segmentRest = (piece: number) => {
+    const leg = legs[Math.floor(piece / SEGMENTS_PER_LEG)]!;
+    return [leg.restHip, leg.restKnee, leg.restAnkle][piece % SEGMENTS_PER_LEG]!;
+  };
   if (kit && toon) {
+    for (const j of kit.legs) {
+      const hip = new THREE.Group(), knee = new THREE.Group(), ankle = new THREE.Group();
+      hip.rotation.order = "ZYX"; // the leg swings sideways after it bends, so the bend stays in the leg's plane
+      hip.position.copy(j.hip);
+      knee.position.subVectors(j.knee, j.hip);
+      ankle.position.subVectors(j.ankle, j.knee);
+      hip.add(knee);
+      knee.add(ankle);
+      body.add(hip);
+      legs.push({ side: j.side, hip, knee, ankle, restHip: j.hip.clone(), restKnee: j.knee.clone(), restAnkle: j.ankle.clone() });
+    }
     // Each part's states are levels-of-detail objects; damage shows one state at a time.
     for (const p of kit.parts) {
       if (p.paint === "weapon") hasModelledGun = true;
@@ -125,17 +161,30 @@ export function createMechModel(
       } else if (p.rusts) mat = paintFor(p.zone, paintColor);
       else mat = toon.material(paintColor);
       const outlineColor = p.paint === "weapon" ? trimColor : paintColor;
-      const states = p.states.map((state, i) => {
-        if (!state) return null;
+      const makeLod = (lods: THREE.BufferGeometry[], visible: boolean): THREE.LOD => {
         const lod = new THREE.LOD();
-        state.lods.forEach((geometry, level) => {
+        lods.forEach((geometry, level) => {
           const holder = new THREE.Group();
           holder.add(new THREE.Mesh(geometry, mat), new THREE.Mesh(geometry, toon.shellOutline(outlineColor)));
           lod.addLevel(holder, level === 0 ? 0 : kit.lodDistances[level - 1]!);
         });
-        lod.visible = i === 0;
-        body.add(lod);
+        lod.visible = visible;
         return lod;
+      };
+      const states = p.states.map((state, i) => {
+        if (!state) return null;
+        // A leg part is hung piece by piece on its joints, placed so it sits where it was modelled while at rest.
+        if (state.pieces && legs.length > 0) {
+          return state.pieces.map(({ piece, lods }) => {
+            const lod = makeLod(lods, i === 0);
+            lod.position.copy(segmentRest(piece)).negate();
+            segmentGroup(piece).add(lod);
+            return lod;
+          });
+        }
+        const lod = makeLod(state.lods, i === 0);
+        body.add(lod);
+        return [lod];
       });
       kitParts.push({ zone: p.zone, states });
       const intact = p.states[0]!; // the loader guarantees every part has its intact version
@@ -178,8 +227,17 @@ export function createMechModel(
     outline(mesh, "#a9b8c4");
     return mesh;
   };
+  const legPlates = [plate([-0.6, 0.9, -0.4], [0.65, 1.0, 0.12]), plate([0.6, 0.9, -0.4], [0.65, 1.0, 0.12])];
+  // On a walking mech the leg plates ride on the leg piece they sit nearest.
+  if (kit && legs.length > 0) {
+    for (const p of legPlates) {
+      const piece = segmentOf(p.position, kit.legs);
+      p.position.sub(segmentRest(piece));
+      segmentGroup(piece).add(p);
+    }
+  }
   const plates = [
-    [plate([-0.6, 0.9, -0.4], [0.65, 1.0, 0.12]), plate([0.6, 0.9, -0.4], [0.65, 1.0, 0.12])],
+    legPlates,
     [plate([-1.48, 2.4, 0], [0.1, 0.9, 0.45]), plate([1.48, 2.4, -0.4], [0.1, 0.5, 0.9])],
     [plate([0, 2.5, -0.66], [1.5, 1.1, 0.12]), plate([0, 2.5, 0.66], [1.5, 1.1, 0.12])],
   ];
@@ -187,6 +245,7 @@ export function createMechModel(
     group, body, legMeshes, zoneMaterials, toon, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
     hp: [...zoneMaxHp], dead: false, repairing: false, upgradeParts: [], fxTimers: [0, 0, 0, 0, 0, 0, 0],
     kitParts, fxAnchors, gunParts, paints, glows,
+    legs, legSides: legs.map((l) => l.side), gait: legs.length > 0 ? createGait(legs.length) : null, gaitId: kit?.id ?? "", crawlDrop: 0, crawlTilt: 0,
   };
 }
 
@@ -226,12 +285,14 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
     // No damaged version: the intact one stays, darkening, sparking and smoking. No broken version: the part is
     // gone (an arm shot off; legs gone and the mech crawls on its belly).
     if (state === 1 && !part.states[1]) state = 0;
-    part.states.forEach((lod, i) => { if (lod) lod.visible = i === state; });
+    part.states.forEach((objects, i) => { if (objects) for (const o of objects) o.visible = i === state; });
   }
   // Crawling: the body drops onto stubs and tips forward, so a legless mech reads at a distance.
   const crawling = hp[0]! <= 0 && !dead;
-  model.body.position.y = crawling ? -crawlLook.dropMeters : 0;
-  model.body.rotation.x = crawling ? -(crawlLook.tiltDegrees * Math.PI) / 180 : 0;
+  model.crawlDrop = crawling ? -crawlLook.dropMeters : 0;
+  model.crawlTilt = crawling ? -(crawlLook.tiltDegrees * Math.PI) / 180 : 0;
+  model.body.position.y = model.crawlDrop;
+  model.body.rotation.set(model.crawlTilt, 0, 0);
   for (const leg of model.legMeshes) {
     // A stub hangs from the bottom of the torso (1.6 m up in the body's frame).
     const length = crawling ? 1.6 * crawlLook.legStubScale : 1.6;

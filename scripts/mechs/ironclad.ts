@@ -8,6 +8,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeGlb, type MeshData, type NodeData } from "../assets/glbWrite";
+import { bothLegs } from "./joints";
 import { box, cylinder, merge, mirrorX, prism, triangles, turn, type V3 } from "../../packages/client/src/dressing/shapes";
 
 type UV = [number, number];
@@ -238,6 +239,7 @@ const parts: NodeData[] = [
   { name: "Torso_Fx", translation: [0, 3.0, 0.25] },
   { name: "Arm_R_Fx", translation: [1.2, 2.66, -0.45] },
   { name: "Leg_L_Fx", translation: [-0.82, 1.1, 0.05] },
+  ...bothLegs(HIP, KNEE, ANKLE),
 ];
 
 const dir = join(new URL("../..", import.meta.url).pathname, "assets/models/mechs/ironclad");

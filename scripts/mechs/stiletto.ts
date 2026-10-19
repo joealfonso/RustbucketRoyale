@@ -8,6 +8,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeGlb, type MeshData, type NodeData } from "../assets/glbWrite";
+import { bothLegs } from "./joints";
 import { box, convex, cylinder, merge, mirrorX, prism, triangles, turn, type V3 } from "../../packages/client/src/dressing/shapes";
 
 const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -230,6 +231,8 @@ const markers: NodeData[] = [
   { name: "Torso_Fx", translation: [0.3, 2.9, -0.42] },
   { name: "Arm_R_Fx", translation: ELBOW_R },
   { name: "Leg_L_Fx", translation: mirrorPoint(KNEE) },
+  // The two-bone chain ends at the hock; the long bird foot from hock to ball stays as it is.
+  ...bothLegs(HIP, KNEE, HOCK, BALL),
 ];
 
 const root = new URL("../..", import.meta.url).pathname;

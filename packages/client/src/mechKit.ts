@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { readLegJoints, splitBySegment, type LegJoints } from "./legRig";
 
 // A mech kit: the model a mech is drawn from, split into seven parts (torso, jets, sensor, two legs, two arms), each
 // belonging to one hit zone. Two ways to supply it (data/mechKits.json says which):
@@ -37,6 +38,9 @@ export interface KitState {
   lods: THREE.BufferGeometry[]; // nearest first, one or more
   fx: THREE.Vector3 | null;
   mount: THREE.Vector3 | null;
+  // A leg part of a kit with leg joints, cut into thigh, shin and foot pieces per leg (legRig.ts), each with its own
+  // levels of detail. The mech bends them at the joints. Absent on every other part.
+  pieces?: { piece: number; lods: THREE.BufferGeometry[] }[];
 }
 
 export interface KitPart {
@@ -50,8 +54,10 @@ export interface KitPart {
 }
 
 export interface LoadedKit {
+  id: string; // its name in data/mechKits.json, which also names its walk in data/gait.json
   parts: KitPart[];
   lodDistances: number[];
+  legs: LegJoints[]; // empty for a kit whose model marks no leg joints: it glides instead of walking
 }
 
 export function parseKits(raw: unknown): KitsData {
@@ -110,28 +116,47 @@ export async function loadKit(id: string, data: KitsData, base = "/"): Promise<L
   const loader = new GLTFLoader();
   const load = async (file: string) => (await loader.loadAsync(`${base}${file}`)).scene;
   try {
-    let parts: KitPart[];
-    if (kit.file) {
-      const scene = await load(kit.file);
-      parts = Object.entries(kit.parts).map(([name, p]) => ({ name, ...partLook(kit.scheme, p), states: readOneFileStates(scene, name) }));
-    } else {
-      parts = await Promise.all(Object.entries(kit.parts).map(async ([name, p]) => ({
-        name, ...partLook(kit.scheme, p),
-        states: await Promise.all(STATES.map(async (state, i) => {
-          const file = `${kit.folder}/Mech_${kit.name}_${name}_${state}.glb`;
-          // Only the intact part has to exist; a missing damaged or broken file falls back.
-          const scene = i === 0 ? await load(file) : await load(file).catch(() => null);
-          return scene ? readPartFile(scene) : null;
-        })),
-      })));
-    }
+    if (kit.file) return kitFromScene(id, data, await load(kit.file));
+    // One file per part and state. These kits mark no leg joints, so they do not walk.
+    const parts: KitPart[] = await Promise.all(Object.entries(kit.parts).map(async ([name, p]) => ({
+      name, ...partLook(kit.scheme, p),
+      states: await Promise.all(STATES.map(async (state, i) => {
+        const file = `${kit.folder}/Mech_${kit.name}_${name}_${state}.glb`;
+        // Only the intact part has to exist; a missing damaged or broken file falls back.
+        const scene = i === 0 ? await load(file) : await load(file).catch(() => null);
+        return scene ? readPartFile(scene) : null;
+      })),
+    })));
     const missing = parts.filter((p) => !p.states[0]).map((p) => p.name);
     if (missing.length > 0) throw new Error(`no intact ${missing.join(", ")}`);
-    return { parts, lodDistances: data.lodDistances };
+    return { id, parts, lodDistances: data.lodDistances, legs: [] };
   } catch (error) {
     console.warn(`Mech kit "${id}" could not be loaded, using the grey-box mech:`, error);
     return null;
   }
+}
+
+// A one-file kit from its loaded model: every part, and its legs cut at their joints when the model marks them.
+// Throws if an intact part is missing.
+export function kitFromScene(id: string, data: KitsData, scene: THREE.Object3D): LoadedKit {
+  const kit = data.kits[id]!;
+  const legs = readLegJoints(scene);
+  const parts: KitPart[] = Object.entries(kit.parts).map(([name, p]) => ({ name, ...partLook(kit.scheme, p), states: readOneFileStates(scene, name) }));
+  const missing = parts.filter((p) => !p.states[0]).map((p) => p.name);
+  if (missing.length > 0) throw new Error(`no intact ${missing.join(", ")}`);
+  if (legs.length > 0) for (const part of parts) if (part.zone === ZONE_INDEX.legs) for (const state of part.states) if (state) state.pieces = cutLegs(state.lods, legs);
+  return { id, parts, lodDistances: data.lodDistances, legs };
+}
+
+// One leg part's levels of detail cut into leg pieces. A piece a simpler level has lost keeps the level before it.
+function cutLegs(lods: THREE.BufferGeometry[], legs: LegJoints[]): NonNullable<KitState["pieces"]> {
+  const levels = lods.map((g) => splitBySegment(g, legs));
+  const pieces = [...new Set(levels.flatMap((m) => [...m.keys()]))].sort((a, b) => a - b);
+  return pieces.map((piece) => {
+    const out: THREE.BufferGeometry[] = [];
+    levels.forEach((m, level) => out.push(m.get(piece) ?? out[level - 1] ?? new THREE.BufferGeometry()));
+    return { piece, lods: out };
+  });
 }
 
 // A part's states from a whole-mech file: Torso, Torso_Damaged, Torso_Broken, each with optional _LOD1 and _LOD2.

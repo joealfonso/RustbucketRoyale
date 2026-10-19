@@ -24,7 +24,7 @@ async function loadStandin(): Promise<LoadedKit> {
       return readPartFile(gltf.scene);
     })),
   })));
-  return { parts, lodDistances: kits.lodDistances };
+  return { id: "test", parts, lodDistances: kits.lodDistances, legs: [] };
 }
 
 describe("mech kit", () => {
@@ -46,7 +46,7 @@ describe("mech kit", () => {
     const toon = new Toon(parseLook(lookJson), parsePalette(paletteJson));
     const max = [60, 60, 100];
     const model = createMechModel("#ffffff", max, toon, "scrapSteel", kit);
-    const shown = (zone: number) => model.kitParts.filter((p) => p.zone === zone).map((p) => p.states.findIndex((s) => s?.visible));
+    const shown = (zone: number) => model.kitParts.filter((p) => p.zone === zone).map((p) => p.states.findIndex((s) => s?.[0]?.visible));
     expect(shown(0)).toEqual([0, 0]);
     setMechDamage(model, [10, 0, 100], false);
     expect(shown(0)).toEqual([1, 1]); // legs damaged
@@ -83,8 +83,8 @@ describe("mech kit", () => {
       name, zone: { legs: 0, arms: 1, torso: 2 }[p.zone]!, paint: p.paint, color: null, glow: false, rusts: p.paint !== "trim" && p.paint !== "weapon", states: readOneFileStates(gltf.scene, name),
     }));
     const toon = new Toon(parseLook(lookJson), parsePalette(paletteJson));
-    const model = createMechModel("#ffffff", [60, 60, 100], toon, "scrapSteel", { parts, lodDistances: kits.lodDistances });
-    const legsShown = () => model.kitParts.filter((p) => p.zone === 0).map((p) => p.states[0]!.visible);
+    const model = createMechModel("#ffffff", [60, 60, 100], toon, "scrapSteel", { id: "test", parts, lodDistances: kits.lodDistances, legs: [] });
+    const legsShown = () => model.kitParts.filter((p) => p.zone === 0).map((p) => p.states[0]![0]!.visible);
     setMechDamage(model, [10, 60, 100], false);
     expect(legsShown()).toEqual([true, true]); // damaged: still there
     setMechDamage(model, [0, 60, 100], false);
