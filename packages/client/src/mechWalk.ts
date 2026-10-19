@@ -33,14 +33,23 @@ export function walkMech(model: MechModel, config: GaitConfig, input: GaitInput,
     // The limit is a share of the leg's own standing width, so a wide-footed mech keeps a gap between its feet.
     const inner = a.x * config.footInward;
     const x = a.x > 0 ? Math.max(inner, a.x + g.feet[i * 3]!) : Math.min(inner, a.x + g.feet[i * 3]!);
-    const y = a.y + g.feet[i * 3 + 1]! - body.position.y;
+    // An insect leg (a short thigh up to a high knee, a long shin down) stands nearly folded, so lifting its foot by
+    // bending the knee whips the thigh round in a frame. It lifts the way an insect does: the whole leg swings out
+    // and up at the hip, and the knee only works forward and back.
+    const outward = params.liftOutward > 0;
+    const lift = g.feet[i * 3 + 1]!;
+    const y = a.y + (outward ? 0 : lift) - body.position.y;
     const y1 = y * cp - z * sp, z1 = y * sp + z * cp;
     const x2 = x * cr - y1 * sr, y2 = x * sr + y1 * cr;
     // Sideways steps swing the whole leg out at the hip; the bend itself stays in the leg's own side view.
     const drop = h.y - a.y;
-    const swing = Math.asin(clamp((x2 - a.x) / drop, -0.6, 0.6));
+    const lateral = Math.asin(clamp((x2 - a.x) / drop, -0.6, 0.6));
+    // The angle follows the lift in proportion, so it eases in and out with the step; matching the height exactly
+    // would make it shoot up near the ground.
+    const raise = outward ? Math.sign(a.x) * clamp(lift / (drop * 0.4), 0, 0.9) : 0;
+    const swing = lateral + raise;
     leg.hip.rotation.z = swing;
-    solveLeg(h.y, h.z, k.y, k.z, a.y, a.z, y2 - drop * (1 - Math.cos(swing)), z1, solved);
+    solveLeg(h.y, h.z, k.y, k.z, a.y, a.z, y2 - drop * (1 - Math.cos(lateral)), z1, solved);
     leg.hip.rotation.x = solved[0]!;
     leg.knee.rotation.x = solved[1]!;
     // The foot stays level with the ground whatever the leg and body are doing.

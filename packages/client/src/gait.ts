@@ -22,6 +22,7 @@ export interface MechGait {
   stepPitch: number; // footfall sound: below 1 a heavier stomp, above 1 a lighter step
   braceDrop: number; // metres the body sinks while braced (a mortar strike being called in): planted, not standing about
   dashStance: number; // metres the feet spread fore and aft in a dash: a braced lunge it slides in, not a sprint
+  liftOutward: number; // 1 for insect legs (Cataclysm): a foot lifts by the leg swinging out at the hip, not by the knee
   sideStride: number; // share of the stride left when stepping sideways: legs cannot reach across the body like they reach ahead
 }
 
@@ -37,7 +38,7 @@ export interface GaitConfig {
   mechs: Record<string, MechGait>;
 }
 
-const GAIT_KEYS: (keyof MechGait)[] = ["walkStride", "runStride", "stance", "runStance", "stepHeight", "runStepHeight", "bob", "runBob", "sway", "lean", "dashLean", "tuck", "limp", "turnStep", "stepPitch", "braceDrop", "dashStance", "sideStride"];
+const GAIT_KEYS: (keyof MechGait)[] = ["walkStride", "runStride", "stance", "runStance", "stepHeight", "runStepHeight", "bob", "runBob", "sway", "lean", "dashLean", "tuck", "limp", "turnStep", "stepPitch", "braceDrop", "dashStance", "sideStride", "liftOutward"];
 
 // Fails loudly on a bad data file, like the rest of data/.
 export function parseGait(raw: unknown): GaitConfig {
