@@ -41,7 +41,8 @@ import noiseJson from "../../../data/noise.json";
 import combatJson from "../../../data/combat.json";
 import { DamageFx, parseDamageFx } from "./damageFx";
 import { setAimTarget } from "./aimTarget";
-import { DebugPanel, FrameTimes } from "./debugPanel";
+import type { DebugPanel } from "./debugPanel";
+import { FrameTimes } from "./frameTimes";
 import { Crt, parseCrt } from "./crt";
 import crtJson from "../../../data/crt.json";
 import { Input } from "./input";
@@ -331,13 +332,28 @@ const applyLocally = (file: string, path: string, value: number) => {
 // Offline a change applies at once. Online it goes to the server, which sends it back to everyone, this client too.
 const frameMs = new FrameTimes(240);
 const workMs = new FrameTimes(240); // time spent on the frame before the GPU takes over: the headroom a locked 60 fps hides
-const panel = new DebugPanel(mechStats, tuningRaws, cameraStats, (file, path, value) => (net ? net.sendTune(file, path, value) : applyLocally(file, path, value)));
-panel.addGait(gaitConfig);
-panel.addHud(crt.setting, (v) => crt.setIntensity(v));
-addVfxQualityControl(panel.gui);
+// The panel and lil-gui load on the first F1, so they are not part of the start download.
+let panel: DebugPanel | null = null;
+let panelLoading = false;
+let serverTuning: boolean | null = null;
+async function loadPanel(): Promise<DebugPanel> {
+  const { DebugPanel } = await import("./debugPanel");
+  const p = new DebugPanel(mechStats, tuningRaws, cameraStats, (file, path, value) => (net ? net.sendTune(file, path, value) : applyLocally(file, path, value)));
+  p.addGait(gaitConfig);
+  p.addHud(crt.setting, (v) => crt.setIntensity(v));
+  addVfxQualityControl(p.gui);
+  if (serverTuning !== null) p.setServerTuning(serverTuning);
+  return p;
+}
+function togglePanel(p: DebugPanel): void {
+  const open = p.toggle();
+  input.setPanelOpen(open);
+  if (open) input.unlock();
+  else input.lock();
+}
 if (net) {
-  net.onTuned = (file, path, value) => { applyLocally(file, path, value); panel.refresh(); };
-  void net.welcome.then((w) => panel.setServerTuning(w.tuning), () => {});
+  net.onTuned = (file, path, value) => { applyLocally(file, path, value); panel?.refresh(); };
+  void net.welcome.then((w) => { serverTuning = w.tuning; panel?.setServerTuning(w.tuning); }, () => {});
 }
 // The rig re-applies the field of view from the tuning value every frame, so the slider needs no callback.
 
@@ -679,10 +695,15 @@ function frame(now: number): void {
   fps += (1 / Math.max(frameTime, 1e-4) - fps) * 0.1;
 
   if (input.wasPressed("F1")) {
-    const open = panel.toggle();
-    input.setPanelOpen(open);
-    if (open) input.unlock();
-    else input.lock();
+    if (panel) togglePanel(panel);
+    else if (!panelLoading) {
+      panelLoading = true;
+      void loadPanel().then((p) => { panel = p; togglePanel(p); }, (err: unknown) => {
+        panelLoading = false;
+        console.error("Tuning panel failed to load", err);
+        hud.feed("Tuning panel failed to load");
+      });
+    }
   }
   if (net === null && input.wasPressed("KeyR")) respawnOffline();
   if (input.wasPressed("KeyM")) hud.feed(sound.toggleMute() ? "Sound off (M)" : "Sound on (M)");
@@ -888,13 +909,13 @@ function frame(now: number): void {
     : health.dead && progress.state !== "active" ? `Destroyed. Back in ${Math.ceil(health.respawnIn)}...` : "";
   fuelBar.classList.toggle("locked", mech.fuel.locked);
   staminaBar.classList.toggle("locked", mech.stamina.locked);
-  if (panel.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection, net?.rttMs ?? 0, net ? remotes.viewDelayMs : 0);
+  if (panel?.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection, net?.rttMs ?? 0, net ? remotes.viewDelayMs : 0);
 
   shotFx.draw(rig.camera, frameTime);
   renderer.render(scene, rig.camera);
   frameMs.record(frameTime * 1000);
   workMs.record(performance.now() - workStarted);
-  if (panel.visible) panel.updateRender(frameMs, workMs, renderer.info.render.calls, renderer.info.render.triangles);
+  if (panel?.visible) panel.updateRender(frameMs, workMs, renderer.info.render.calls, renderer.info.render.triangles);
   requestAnimationFrame(frame);
 }
 // Effects sit in the scene from the start with nothing to draw, so their shaders build now rather than in the frame
