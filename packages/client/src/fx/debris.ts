@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { addOutlineNormals } from "../outlineNormals";
 import type { Toon } from "../toonMaterial";
 import { SlotRing, stepped } from "./flipbook";
 
@@ -43,7 +44,7 @@ export function chunkScale(c: Chunk, sinkShare: number): number {
   return c.size * (1 - stepped((t - (1 - sinkShare)) / sinkShare, 3));
 }
 
-const PIECE = new THREE.BoxGeometry(1, 0.5, 0.7); // a flat chunk of plate, so it tumbles visibly
+const PIECE = addOutlineNormals(new THREE.BoxGeometry(1, 0.5, 0.7)); // a flat chunk of plate, so it tumbles visibly
 
 // Flung chunks of scrap in the toon look, drawn as one instanced mesh with its outline: explosions, prop breaks,
 // slams. A fixed pool made at startup; the quality level caps how many are in use, reusing the oldest.

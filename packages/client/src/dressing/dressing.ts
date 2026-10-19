@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { addOutlineNormals } from "../outlineNormals";
 import type { PlayMap } from "../loadMap";
 import type { MapMeshes } from "../mapRenderer";
 import type { Toon } from "../toonMaterial";
@@ -206,5 +207,5 @@ export function toGeometry(meshes: MeshData[]): THREE.BufferGeometry {
   geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
   geometry.setIndex(new THREE.BufferAttribute(index, 1));
   geometry.computeBoundingSphere();
-  return geometry;
+  return addOutlineNormals(geometry);
 }

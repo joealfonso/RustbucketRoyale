@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { addOutlineNormals } from "./outlineNormals";
 
 // The legs of a kit mech, for walking. A model marks each leg's joints with empty nodes (Joint_Hip_R, Joint_Knee_R,
 // Joint_Ankle_R and an optional Joint_Toe_R; see scripts/mechs/joints.ts). The leg parts stay as they were made, and
@@ -103,7 +104,7 @@ export function splitBySegment(geometry: THREE.BufferGeometry, legs: readonly Le
     });
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
-    out.set(piece, g);
+    out.set(piece, addOutlineNormals(g));
   }
   return out;
 }

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { readLegJoints, splitBySegment, type LegJoints } from "./legRig";
+import { addOutlineNormals } from "./outlineNormals";
 
 // A mech kit: the model a mech is drawn from, split into seven parts (torso, jets, sensor, two legs, two arms), each
 // belonging to one hit zone. Two ways to supply it (data/mechKits.json says which):
@@ -97,7 +98,7 @@ function geometryOf(node: THREE.Object3D): THREE.BufferGeometry | null {
     pieces.push(g.applyMatrix4(child.matrixWorld));
   });
   if (pieces.length === 0) return null;
-  return pieces.length === 1 ? pieces[0]! : mergeGeometries(pieces.map((g) => (g.index ? g.toNonIndexed() : g)));
+  return addOutlineNormals(pieces.length === 1 ? pieces[0]! : mergeGeometries(pieces.map((g) => (g.index ? g.toNonIndexed() : g))));
 }
 
 const pointOf = (scene: THREE.Object3D, name: string): THREE.Vector3 | null => {

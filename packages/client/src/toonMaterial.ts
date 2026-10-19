@@ -250,7 +250,11 @@ export class Toon {
       m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(this.look.outline.darken), side: THREE.BackSide });
       const width = this.look.outline.widthMeters;
       m.onBeforeCompile = (shader) => {
-        shader.vertexShader = shader.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>\n  transformed += normalize(normal) * ${width.toFixed(4)};`);
+        // outlineNormal (outlineNormals.ts) keeps flat-shaded shells closed at the edges; every geometry drawn with
+        // this material gets it where it is built.
+        shader.vertexShader = shader.vertexShader
+          .replace("#include <common>", "#include <common>\nattribute vec3 outlineNormal;")
+          .replace("#include <begin_vertex>", `#include <begin_vertex>\n  transformed += normalize(outlineNormal) * ${width.toFixed(4)};`);
       };
       m.customProgramCacheKey = () => `shell-${width}`;
       this.shellOutlines.set(hex, m);
