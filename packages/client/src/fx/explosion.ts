@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import type { Terrain } from "@rustbucket/shared";
+import { groundTilt } from "../groundTilt";
 import type { ChunkPhysics, Debris } from "./debris";
 import type { FxSprites } from "./fxSprites";
 import { vfxLevel } from "./quality";
@@ -43,12 +45,20 @@ export class Explosions {
   private light: THREE.PointLight;
   private lightAge: number;
   private chunkColors: THREE.Color[];
+  private terrain: Terrain | null = null;
+  private tilt = { x: 0, z: 0 };
+  private normal = [0, 1, 0];
 
   constructor(scene: THREE.Scene, private sprites: FxSprites, private debris: Debris, private config: ExplosionFxConfig, color: (name: string) => string) {
     this.light = new THREE.PointLight(color(config.flash.color), 0, config.flash.meters, 1.5);
     this.lightAge = config.flash.seconds;
     scene.add(this.light);
     this.chunkColors = config.debris.colors.map((c) => new THREE.Color(color(c)));
+  }
+
+  // The hills of the map being played, so rings and scorches lie along the slope. Null for level ground.
+  setTerrain(terrain: Terrain | null): void {
+    this.terrain = terrain;
   }
 
   // A blast reaching `radius` metres, centred at (x, y, z), over ground at height `floor`.
@@ -100,6 +110,8 @@ export class Explosions {
       if (s) {
         s.mode = FLAT;
         s.x = x; s.y = floor + scorch.lift; s.z = z;
+        groundTilt(this.terrain, x, z, floor, this.tilt, this.normal);
+        s.tiltX = this.tilt.x; s.tiltZ = this.tilt.z;
         s.life = scorch.seconds;
         s.size0 = s.size1 = radius * scorch.sizePerMeter * 2;
         s.frame0 = FRAMES.scorch.first + Math.floor(Math.random() * FRAMES.scorch.count);
@@ -126,6 +138,8 @@ export class Explosions {
     if (!s) return;
     s.mode = FLAT;
     s.x = x; s.y = floor + ring.lift; s.z = z;
+    groundTilt(this.terrain, x, z, floor, this.tilt, this.normal);
+    s.tiltX = this.tilt.x; s.tiltZ = this.tilt.z;
     s.life = seconds;
     const width = radius * ring.radiusPerMeter * 2;
     s.size0 = width * ring.startShare; s.size1 = width;

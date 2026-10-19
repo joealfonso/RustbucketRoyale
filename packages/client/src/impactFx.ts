@@ -46,12 +46,13 @@ export class ImpactFx {
     this.boxColors = boxColors;
   }
 
-  // A bullet hit a map box (`box`, or -1 if unknown) on the face with normal (nx, ny, nz).
+  // A bullet hit a map box (`box`) or the hills (TERRAIN_HIT, -1) on the face with normal (nx, ny, nz).
   world(fx: WeaponFx["impact"], x: number, y: number, z: number, nx: number, ny: number, nz: number, box: number): void {
     x += nx * LIFT_OFF_SURFACE; y += ny * LIFT_OFF_SURFACE; z += nz * LIFT_OFF_SURFACE;
     const count = fx.sparks[0] + Math.floor(Math.random() * (fx.sparks[1] - fx.sparks[0] + 1));
     for (let i = 0; i < count; i++) this.spark(this.worldSparks, fx, x, y, z, nx, ny, nz);
-    const family = this.familyOfColor[this.boxColors[box] ?? -1] ?? 0;
+    // The hills throw up ground-coloured grit: colour 0 is the ground's on every map.
+    const family = this.familyOfColor[this.boxColors[box] ?? 0] ?? 0;
     for (let i = 0; i < fx.grit; i++) this.puff(this.grit[family]!, fx.gritScale, x, y, z, i);
   }
 

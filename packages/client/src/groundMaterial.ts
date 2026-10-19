@@ -24,11 +24,28 @@ export interface GroundLook {
   oil: { cellMeters: number; chance: number; minRadius: number; maxRadius: number; ragged: number; color: string; strength: number; core: number; coreStrength: number };
   // Straight pairs of tyre ruts, `gauge` apart, broken by gaps. Each fits inside its own cell, so none is cut off.
   tracks: { cellMeters: number; chance: number; minLength: number; maxLength: number; gauge: number; width: number; gaps: number; color: string; strength: number };
+  // The hills (M11). Low ground leans to dark moss and high ground to dry grass, by up to `bias` noise units once
+  // `meters` below or above the map's edge height. Ground rising more than `dirt.rise` metres per metre is bare dirt,
+  // more than `rock.rise` is rock with darker strata `strataMeters` apart (wavering by up to `wobble` of a layer),
+  // so ridges and steep faces read from far off. `ragged` (rise units) breaks those edges up with the brush noise.
+  // Gravel, oil and tyre tracks only lie on ground flatter than `flatBelow`.
+  hills: {
+    hollow: { meters: number; bias: number };
+    crest: { meters: number; bias: number };
+    dirt: { color: string; rise: number };
+    rock: { color: string; strata: string; rise: number; strataMeters: number; strataShare: number; wobble: number };
+    ragged: number;
+    flatBelow: number;
+  };
 }
 
 export function parseGroundLook(raw: unknown): GroundLook {
   const g = raw as GroundLook;
-  if (!g?.regions || !g.breakup || !g.gravel || !g.brush || !g.oil || !g.tracks) throw new Error("ground.json: needs regions, breakup, gravel, brush, oil and tracks");
+  if (!g?.regions || !g.breakup || !g.gravel || !g.brush || !g.oil || !g.tracks || !g.hills) throw new Error("ground.json: needs regions, breakup, gravel, brush, oil, tracks and hills");
+  const { hills } = g;
+  if (!(hills.hollow.meters > 0 && hills.crest.meters > 0)) throw new Error("ground.json: hills hollow and crest meters must be above 0");
+  if (!(hills.flatBelow > 0 && hills.flatBelow <= hills.dirt.rise && hills.dirt.rise < hills.rock.rise)) throw new Error("ground.json: hills must go flatBelow <= dirt rise < rock rise");
+  if (!(hills.rock.strataMeters > 0 && hills.rock.strataShare >= 0 && hills.rock.strataShare <= 1)) throw new Error("ground.json: rock strataMeters above 0, strataShare between 0 and 1");
   const { regions, oil, tracks } = g;
   if (!(regions.darkMoss.below < regions.dryGrass.above && regions.dryGrass.above < regions.dirt.above)) throw new Error("ground.json: regions must go darkMoss below < dryGrass above < dirt above");
   // A stain sits in the middle half of its cell, so it never crosses into the next one, where it would be cut off.
@@ -58,7 +75,7 @@ const GROUND_GLSL = `
 
 // The ground's fragment code: picks a colour for this spot from the patches, then the bands light it as usual.
 export function groundShaderCode(g: GroundLook): string {
-  const { regions, breakup, gravel, brush, oil, tracks } = g;
+  const { regions, breakup, gravel, brush, oil, tracks, hills } = g;
   const angle = (brush.angleDegrees * Math.PI) / 180;
   return `
     {
@@ -67,21 +84,32 @@ export function groundShaderCode(g: GroundLook): string {
       float fine = gKeep(1.0 / ${f(breakup.scale)}, pixel);
       vec3 c = diffuseColor.rgb;
       float ragged = (gNoise(gp * ${f(breakup.scale)}) - 0.5) * ${f(breakup.amount)} * fine;
-      float n = gNoise(gp * ${f(regions.scale)}) * 0.7 + gNoise(gp * ${f(regions.scale * 2.3)} + 31.0) * 0.3 + ragged;
+      // Hollows lean to dark moss, crests to dry grass: the same patches, pushed by height.
+      float lean = clamp(vGroundY / ${f(hills.crest.meters)}, 0.0, 1.0) * ${f(hills.crest.bias)} - clamp(-vGroundY / ${f(hills.hollow.meters)}, 0.0, 1.0) * ${f(hills.hollow.bias)};
+      float n = gNoise(gp * ${f(regions.scale)}) * 0.7 + gNoise(gp * ${f(regions.scale * 2.3)} + 31.0) * 0.3 + ragged + lean;
       if (n < ${f(regions.darkMoss.below)}) c = groundDarkMoss;
       else if (n > ${f(regions.dirt.above)}) c = groundDirt;
       else if (n > ${f(regions.dryGrass.above)}) c = groundDryGrass;
+      // How steep the ground is here, metres up per metre across, its edges broken up like the patches.
+      float up = clamp(vGroundUp, 0.05, 1.0);
+      float rise = sqrt(1.0 - up * up) / up + ragged / ${f(Math.max(breakup.amount, 1e-4))} * ${f(hills.ragged)};
+      bool gentle = rise < ${f(hills.flatBelow)};
       float gr = gNoise(gp * ${f(gravel.scale)} + 71.0) + ragged;
-      if (gr > ${f(gravel.above)}) {
+      if (gentle && gr > ${f(gravel.above)}) {
         float speck = step(gHash(floor(gp / ${f(gravel.speckMeters)})), ${f(gravel.speckCover)}) * gKeep(${f(gravel.speckMeters)}, pixel);
         c = mix(groundGravel, groundSpeck, speck);
       }
       vec2 bp = vec2(gp.x * ${f(Math.cos(angle))} + gp.y * ${f(Math.sin(angle))}, -gp.x * ${f(Math.sin(angle))} + gp.y * ${f(Math.cos(angle))});
       float stroke = gNoise(vec2(bp.x * ${f(brush.scale / brush.stretch)}, bp.y * ${f(brush.scale)}) + 5.0);
+      if (rise > ${f(hills.rock.rise)}) {
+        // Rock, in level layers: a hard light and dark stripe that follows the contour round the hill.
+        float layer = fract(vGroundY / ${f(hills.rock.strataMeters)} + gNoise(gp * ${f(breakup.scale)} + 13.0) * ${f(hills.rock.wobble)});
+        c = layer < ${f(hills.rock.strataShare)} ? groundStrata : groundRock;
+      } else if (rise > ${f(hills.dirt.rise)}) c = groundSlope;
       if (stroke > ${f(brush.above)}) c *= 1.0 + ${f(brush.strength)} * gKeep(1.0 / ${f(brush.scale)}, pixel);
 
       vec2 oilCell = floor(gp / ${f(oil.cellMeters)});
-      if (gHash(oilCell + 17.0) < ${f(oil.chance)}) {
+      if (gentle && gHash(oilCell + 17.0) < ${f(oil.chance)}) {
         vec2 centre = (oilCell + 0.25 + vec2(gHash(oilCell + 3.0), gHash(oilCell + 11.0)) * 0.5) * ${f(oil.cellMeters)};
         float radius = mix(${f(oil.minRadius)}, ${f(oil.maxRadius)}, gHash(oilCell + 5.0));
         float d = length(gp - centre) / radius + (gNoise(gp * 0.9 + 3.0) - 0.5) * ${f(oil.ragged)};
@@ -89,7 +117,7 @@ export function groundShaderCode(g: GroundLook): string {
       }
 
       vec2 trackCell = floor(gp / ${f(tracks.cellMeters)});
-      if (gHash(trackCell + 41.0) < ${f(tracks.chance)}) {
+      if (gentle && gHash(trackCell + 41.0) < ${f(tracks.chance)}) {
         float turn = gHash(trackCell + 7.0) * 3.14159;
         vec2 dir = vec2(cos(turn), sin(turn));
         vec2 rel = gp - (trackCell + 0.5) * ${f(tracks.cellMeters)};
@@ -108,27 +136,34 @@ export function groundShaderCode(g: GroundLook): string {
 }
 
 // The ground material: the toon bands with no rim (a rim on a big flat floor draws a hard line where it turns away),
-// over the patches. It keeps the standard fog, so the scene's haze lies over it like everything else.
+// over the patches. It keeps the standard fog, so the scene's haze lies over it like everything else. Used for the
+// hills (terrainMesh.ts) and for the flat floor box of the range and the style test.
 export function groundMaterial(hex: string, ramp: THREE.Texture, color: (name: string) => string, g: GroundLook = groundLook): THREE.MeshToonMaterial {
   const m = new THREE.MeshToonMaterial({ color: hex, gradientMap: ramp });
   const colors: Record<string, string> = {
     groundDarkMoss: g.regions.darkMoss.color, groundDryGrass: g.regions.dryGrass.color, groundDirt: g.regions.dirt.color,
     groundGravel: g.gravel.color, groundSpeck: g.gravel.speck, groundOil: g.oil.color, groundTrack: g.tracks.color,
+    groundSlope: g.hills.dirt.color, groundRock: g.hills.rock.color, groundStrata: g.hills.rock.strata,
   };
   const code = groundShaderCode(g);
   m.onBeforeCompile = (shader) => {
     for (const [name, value] of Object.entries(colors)) shader.uniforms[name] = { value: new THREE.Color(color(value)) };
     shader.vertexShader = shader.vertexShader
-      .replace("void main() {", "varying vec2 vGroundPos;\nvoid main() {")
+      .replace("void main() {", "varying vec2 vGroundPos;\nvarying float vGroundY;\nvarying float vGroundUp;\nvoid main() {")
       .replace("#include <begin_vertex>", `#include <begin_vertex>
         vec4 groundPos = vec4(transformed, 1.0);
+        vec3 groundNormal = objectNormal;
         #ifdef USE_INSTANCING
           groundPos = instanceMatrix * groundPos;
+          groundNormal = mat3(instanceMatrix) * groundNormal;
         #endif
-        vGroundPos = (modelMatrix * groundPos).xz;`);
+        groundPos = modelMatrix * groundPos;
+        vGroundPos = groundPos.xz;
+        vGroundY = groundPos.y;
+        vGroundUp = normalize(mat3(modelMatrix) * groundNormal).y;`);
     const declarations = Object.keys(colors).map((name) => `uniform vec3 ${name};`).join("\n");
     shader.fragmentShader = shader.fragmentShader
-      .replace("void main() {", `varying vec2 vGroundPos;\n${declarations}\n${GROUND_GLSL}\nvoid main() {`)
+      .replace("void main() {", `varying vec2 vGroundPos;\nvarying float vGroundY;\nvarying float vGroundUp;\n${declarations}\n${GROUND_GLSL}\nvoid main() {`)
       .replace("#include <color_fragment>", `#include <color_fragment>\n${code}`);
   };
   m.customProgramCacheKey = () => "toon-ground";

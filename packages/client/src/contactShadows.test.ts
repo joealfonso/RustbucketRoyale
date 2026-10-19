@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { World, type Box } from "@rustbucket/shared";
+import { Terrain, World, type Box } from "@rustbucket/shared";
 import groundJson from "../../../data/ground.json";
 import { parseShadowLook, shadowFootprint, shadowScale, shadowStrength, surfaceBelow, type Footprint } from "./contactShadows";
 
@@ -24,6 +24,31 @@ describe("static contact shadows", () => {
     expect(shadowFootprint(box(-500, -1, -500, 500, 0, 500), look.static, out)).toBe(false);
     expect(shadowFootprint(box(0, 0, 0, 10, 0.05, 10), look.static, out)).toBe(false);
     expect(shadowFootprint(box(0, 2.6, 0, 6, 5.2, 2.4), look.static, out)).toBe(false);
+  });
+});
+
+describe("contact shadows on the hills", () => {
+  // A 40 m map, 4 m cells, rising 0.5 m per metre along x from -10 m at its west edge.
+  const corners = 11;
+  const heights = new Int32Array(corners * corners);
+  for (let j = 0; j < corners; j++) for (let i = 0; i < corners; i++) heights[j * corners + i] = Math.round((i * 4 - 20) * 50);
+  const terrain = new Terrain(40, 4, heights, 0.5);
+
+  it("go under a box standing on a raised pad, at the pad, and skip one stacked on it", () => {
+    expect(shadowFootprint(box(-1, 5, -1, 1, 7, 1), look.static, out, 5)).toBe(true);
+    expect(out.y).toBe(5);
+    expect(shadowFootprint(box(-1, 7, -1, 1, 9, 1), look.static, out, 5)).toBe(false);
+    // A box in a valley below 0 is still on the ground there.
+    expect(shadowFootprint(box(-1, -6, -1, 1, -4, 1), look.static, out, -6)).toBe(true);
+    expect(out.y).toBe(-6);
+  });
+
+  it("land on the hillside under a mech, or on a box top above it", () => {
+    const world = new World([box(-30, -30, -30, 30, -29, 30), box(8, 0, -2, 12, 9, 2)], 16, terrain);
+    const found: number[] = [];
+    expect(surfaceBelow(world, -15, 20, 3, found)).toBeCloseTo(terrain.heightAt(-15, 3));
+    expect(surfaceBelow(world, 10, 12, 0, found)).toBeCloseTo(9);
+    expect(surfaceBelow(world, 10, 8, 0, found)).toBeCloseTo(terrain.heightAt(10, 0));
   });
 });
 

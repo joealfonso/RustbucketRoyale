@@ -10,6 +10,7 @@ export class RingView {
 
   // `color` is the zone magenta: the only magenta in the world, so the ring can never be mistaken for anything else.
   constructor(scene: THREE.Scene, color: string) {
+    // 400 m tall from 50 m down: from below the deepest valley (about 16 m on the large tier) to far over any jet.
     const geometry = new THREE.CylinderGeometry(1, 1, 400, 96, 1, true);
     // No haze on the zone wall: it is the one thing that must read from anywhere on the map.
     const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false, fog: false });

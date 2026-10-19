@@ -35,6 +35,23 @@ describe("scatter", () => {
     expect(problems.slice(0, 5)).toEqual([]);
   });
 
+  it("lies on the hills: every piece is set down on the ground under it, and stays low over it", () => {
+    const groundAt = (x: number, z: number) => 0.4 * x - 0.25 * z + 3;
+    const flat = scatter(chunk, blockers, 40);
+    const draped = scatter({ ...chunk, groundAt }, blockers, 40);
+    expect(draped.length).toBe(flat.length); // the same choices: only the heights move
+    const problems: string[] = [];
+    draped.forEach((piece, n) => {
+      const p = piece.mesh.positions, q = flat[n]!.mesh.positions;
+      for (let i = 0; i < p.length; i += 3) {
+        if (p[i] !== q[i] || p[i + 2] !== q[i + 2]) problems.push(`piece ${n} moved sideways`);
+        const above = p[i + 1]! - groundAt(p[i]!, p[i + 2]!);
+        if (Math.abs(above - q[i + 1]!) > 1e-9) problems.push(`piece ${n}: ${above} over the hill, ${q[i + 1]} over flat ground`);
+      }
+    });
+    expect(problems.slice(0, 5)).toEqual([]);
+  });
+
   it("stays cheap", () => {
     expect(triangleCount(scatter(chunk, blockers, 40))).toBeLessThan(3000);
   });

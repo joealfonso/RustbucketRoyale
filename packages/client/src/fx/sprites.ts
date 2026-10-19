@@ -36,6 +36,7 @@ export interface Sprite {
   ax: number; ay: number; az: number; // AXIS: the direction it stretches in; ignored when `streak` is above 0
   streak: number; // AXIS: seconds of travel its tail shows, the tail pointing back along its velocity
   floor: number; // it stops falling at this height
+  tiltX: number; tiltZ: number; // FLAT: the ground's rise per metre along x and z, so the mark lies on a slope
 }
 
 export interface SpriteLook {
@@ -79,7 +80,10 @@ const VERTEX = /* glsl */ `
       vec3 side = normalize(cross(axis, normalize(cameraPosition - aPos)) + vec3(1e-5, 0.0, 0.0));
       mvPosition = viewMatrix * vec4(aPos + side * c.x * aSize.x + axis * (c.y + 0.5) * aSize.y, 1.0);
     } else {
-      mvPosition = viewMatrix * vec4(aPos + vec3(c.x * k - c.y * s, 0.0, c.x * s + c.y * k) * aSize.xxy, 1.0);
+      // aAxis.xz carries the slope here, so a mark on a hillside leans with it.
+      vec3 lying = vec3(c.x * k - c.y * s, 0.0, c.x * s + c.y * k) * aSize.xxy;
+      lying.y = lying.x * aAxis.x + lying.z * aAxis.z;
+      mvPosition = viewMatrix * vec4(aPos + lying, 1.0);
     }
     vUv = uv;
     vLook = aLook.xyz;
@@ -218,6 +222,7 @@ export class SpritePool {
     const frame = s.fps > 0 ? flickerFrame(s.age, s.fps, s.frames) : flipbookFrame(s.age, s.life, s.frames);
     let length = width * s.aspect;
     let ax = s.ax, ay = s.ay, az = s.az;
+    if (s.mode === FLAT) { ax = s.tiltX; ay = 0; az = s.tiltZ; }
     if (s.mode === AXIS && s.streak > 0) {
       ax = -s.vx; ay = -s.vy; az = -s.vz;
       length = width * s.aspect + Math.hypot(ax, ay, az) * s.streak;
@@ -242,6 +247,6 @@ function reset(s: Sprite): Sprite {
   s.x = 0; s.y = 0; s.z = 0; s.vx = 0; s.vy = 0; s.vz = 0; s.gravity = 0; s.drag = 0;
   s.age = 0; s.life = 0; s.size0 = 1; s.size1 = 1; s.aspect = 1; s.frame0 = 0; s.frames = 1; s.fps = 0;
   s.shade0 = 0; s.shade1 = 0; s.dissolve0 = 0; s.fadeShare = 0; s.spin = 0; s.spinRate = 0; s.mode = BILLBOARD;
-  s.ax = 0; s.ay = -1; s.az = 0; s.streak = 0; s.floor = -Infinity;
+  s.ax = 0; s.ay = -1; s.az = 0; s.streak = 0; s.floor = -Infinity; s.tiltX = 0; s.tiltZ = 0;
   return s;
 }

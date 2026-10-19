@@ -1,5 +1,7 @@
 import * as THREE from "three";
+import type { Terrain } from "@rustbucket/shared";
 import { freeze } from "../freeze";
+import { onHills } from "../groundTilt";
 import { addOutlineNormals } from "../outlineNormals";
 import type { Toon } from "../toonMaterial";
 import { SlotRing, stepped } from "./flipbook";
@@ -12,7 +14,9 @@ export interface Chunk {
   x: number; y: number; z: number;
   vx: number; vy: number; vz: number;
   rx: number; rz: number; spin: number;
-  floor: number; // the ground height under where it was thrown
+  floor: number; // the ground height under where it was thrown, or under where it is now when it follows the hills
+  hills: boolean; // thrown from the hills: its floor is the hillside under it wherever it flies
+  rest: number; // how far above the ground it lies, so it does not sink into it
   age: number; life: number;
   size: number;
   bounced: boolean;
@@ -60,6 +64,7 @@ export class Debris {
   private euler = new THREE.Euler();
   private at = new THREE.Vector3();
   private scale = new THREE.Vector3();
+  private terrain: Terrain | null = null;
 
   constructor(scene: THREE.Scene, toon: Toon, capacity: number, private limit: () => number, private physics: ChunkPhysics) {
     // White paint, so each chunk's own instance colour is its colour.
@@ -74,10 +79,15 @@ export class Debris {
       scene.add(m);
     }
     for (let i = 0; i < capacity; i++) {
-      this.chunks.push({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, rz: 0, spin: 0, floor: 0, age: 0, life: 0, size: 1, bounced: false });
+      this.chunks.push({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, rz: 0, spin: 0, floor: 0, hills: false, rest: 0, age: 0, life: 0, size: 1, bounced: false });
       this.colors.push(new THREE.Color());
       this.mesh.setColorAt(i, this.colors[i]!);
     }
+  }
+
+  // The hills of the map being played, so chunks thrown on a hillside land on it. Null for level ground.
+  setTerrain(terrain: Terrain | null): void {
+    this.terrain = terrain;
   }
 
   // `count` chunks out of a point, `speed` metres a second outwards and `lift` times that upwards, painted from
@@ -92,7 +102,9 @@ export class Debris {
       c.vx = Math.cos(angle) * out; c.vz = Math.sin(angle) * out; c.vy = speed * lift * (0.5 + Math.random() * 0.6);
       c.rx = Math.random() * 6; c.rz = Math.random() * 6;
       c.spin = (Math.random() - 0.5) * 2 * this.physics.spin;
-      c.floor = floor + size * 0.2;
+      c.rest = size * 0.2;
+      c.floor = floor + c.rest;
+      c.hills = onHills(this.terrain, x, z, floor);
       c.age = 0; c.life = life * (0.7 + Math.random() * 0.6);
       c.size = size * (0.6 + Math.random() * 0.8);
       c.bounced = false;
@@ -105,6 +117,7 @@ export class Debris {
     for (let i = 0; i < this.chunks.length; i++) {
       const c = this.chunks[i]!;
       if (c.age >= c.life) continue;
+      if (c.hills && this.terrain) c.floor = this.terrain.heightAt(c.x, c.z) + c.rest;
       stepChunk(c, dt, this.physics);
       const s = chunkScale(c, this.physics.sinkShare);
       if (s <= 0) continue;

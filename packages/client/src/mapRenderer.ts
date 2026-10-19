@@ -4,8 +4,9 @@ import type { PlayMap } from "./loadMap";
 import type { Toon, ToonInstances } from "./toonMaterial";
 
 // The map's boxes, drawn in the toon look with one instanced mesh per colour plus one for its outlines, so thousands
-// of boxes cost a handful of draw calls. The floor (colour 0) gets the bands with no rim or outline. A box can be
-// hidden while the junkyard dressing stands in for it nearby (see dressing/dressing.ts).
+// of boxes cost a handful of draw calls. On the range the floor (colour 0) gets the bands with no rim or outline; on
+// a map with hills the floor box lies out of sight under the lowest valley and the hills are drawn instead
+// (terrainMesh.ts). A box can be hidden while the junkyard dressing stands in for it nearby (see dressing/dressing.ts).
 export class MapMeshes {
   readonly group = new THREE.Group();
   private slot: { boxes: ToonInstances; instance: number }[] = [];
@@ -15,6 +16,7 @@ export class MapMeshes {
     const byColor = new Map<number, number[]>();
     map.colors.forEach((color, box) => {
       if (map.propOfBox[box]! >= 0) return; // props are drawn by PropView, so they can disappear
+      if (color === 0 && map.terrain) return;
       const list = byColor.get(color);
       if (list) list.push(box);
       else byColor.set(color, [box]);

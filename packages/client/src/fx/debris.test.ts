@@ -4,7 +4,7 @@ import { chunkScale, stepChunk, type Chunk } from "./debris";
 
 const physics = explosionFxJson.chunks;
 const DT = 1 / 60;
-const chunk = (): Chunk => ({ x: 0, y: 1, z: 0, vx: 4, vy: 6, vz: 0, rx: 0, rz: 0, spin: 5, floor: 0, age: 0, life: 5, size: 0.3, bounced: false });
+const chunk = (): Chunk => ({ x: 0, y: 1, z: 0, vx: 4, vy: 6, vz: 0, rx: 0, rz: 0, spin: 5, floor: 0, hills: false, rest: 0, age: 0, life: 5, size: 0.3, bounced: false });
 
 describe("stepChunk", () => {
   it("falls, bounces once off the ground with less speed, then lies still on its second landing", () => {

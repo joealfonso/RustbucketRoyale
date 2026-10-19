@@ -26,12 +26,23 @@ describe("ground look", () => {
     expect(() => parseGroundLook(chance)).toThrow(/chance/);
   });
 
+  it("refuses hill bands out of order", () => {
+    const steep = copy();
+    steep.hills.rock.rise = steep.hills.dirt.rise / 2;
+    expect(() => parseGroundLook(steep)).toThrow(/hills/);
+    const strata = copy();
+    strata.hills.rock.strataShare = 2;
+    expect(() => parseGroundLook(strata)).toThrow(/strata/);
+  });
+
   it("bakes the numbers into the shader and keeps the bands and fog", () => {
     const g = parseGroundLook(groundJson);
     const code = groundShaderCode(g);
     expect(code).toContain(g.regions.scale.toFixed(4));
     expect(code).toContain((g.tracks.gauge / 2).toFixed(4));
     expect(code).not.toContain("sin(dot"); // the hash must not depend on how a graphics card does sin()
+    expect(code).toContain(g.hills.rock.rise.toFixed(4));
+    expect(code).not.toMatch(/\bflat\b/); // a reserved word in GLSL ES 3, which fails the whole shader
     const m = groundMaterial("#5E7F3A", new THREE.Texture(), (c) => c);
     expect(m.fog).toBe(true);
     expect(m.gradientMap).toBeTruthy();

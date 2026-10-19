@@ -4,7 +4,7 @@ import { box, cylinder, merge, turn, type MeshData } from "./shapes";
 
 // Loose junk and grass on open ground. Nothing here collides, so everything stays low and small enough that it never
 // reads as cover. Each item is built around the origin, turned about y, dropped at a seeded spot, and kept only if its
-// real footprint stays inside the chunk and clear of every box standing there.
+// real footprint stays inside the chunk and clear of every box standing there; then it is set down on the hills.
 
 const CLEARANCE = 0.5; // metres kept between an item and any box footprint, so nothing pokes out of a wall
 const MAX_HEIGHT = 0.9;
@@ -96,6 +96,15 @@ function fits(pieces: DressPiece[], minX: number, minZ: number, size: number, bo
   return true;
 }
 
+// Sets an item down on the hills: every corner moves up or down by the ground's height under it, so a tyre or a
+// plate lies along the slope and a blade of grass stays upright. Items are small, so the slant this gives their
+// normals does not show.
+function drape(mesh: MeshData, groundAt: (x: number, z: number) => number): MeshData {
+  const p = mesh.positions;
+  for (let i = 0; i < p.length; i += 3) p[i + 1]! += groundAt(p[i]!, p[i + 2]!);
+  return mesh;
+}
+
 export const scatter: Scatter = (chunk, boxes, count) => {
   const r = rng(chunk.seed);
   const out: DressPiece[] = [];
@@ -105,7 +114,11 @@ export const scatter: Scatter = (chunk, boxes, count) => {
     for (let t = 0; t < TRIES; t++) {
       const x = chunk.minX + r() * chunk.size, z = chunk.minZ + r() * chunk.size;
       const placed = pieces.map((p) => ({ paint: p.paint, mesh: turn(p.mesh, [0, spin, 0], [0, 0, 0], [x, 0, z]) }));
-      if (fits(placed, chunk.minX, chunk.minZ, chunk.size, boxes)) { out.push(...placed); break; }
+      if (!fits(placed, chunk.minX, chunk.minZ, chunk.size, boxes)) continue;
+      const { groundAt } = chunk;
+      if (groundAt) for (const p of placed) drape(p.mesh, groundAt);
+      out.push(...placed);
+      break;
     }
   }
   return out;

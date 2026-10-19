@@ -14,8 +14,12 @@ export interface DressingConfig {
   buildAtOnce: number; // a move needing more unbuilt chunks than this (a spectator cut) builds them one per frame
 }
 
-// Things lying about on open ground in one chunk. Visual only: nothing here collides.
-export type Scatter = (chunk: { minX: number; minZ: number; size: number; seed: number }, boxes: readonly DressBox[], count: number) => DressPiece[];
+// Things lying about on open ground in one chunk. Visual only: nothing here collides. `groundAt` is the height of
+// the hills; without it the ground is level at 0.
+export type Scatter = (
+  chunk: { minX: number; minZ: number; size: number; seed: number; groundAt?: (x: number, z: number) => number },
+  boxes: readonly DressBox[], count: number,
+) => DressPiece[];
 
 // The junkyard dressing: near you, map boxes are replaced on screen by models built for their kind (a ribbed container,
 // a corrugated wall) and open ground gets scattered junk. Collision never changes: the dressing stays inside each box.
@@ -32,12 +36,15 @@ export class Dressing {
   private wanted = new Set<number>(); // the chunks to dress around centreKey, shown once all are built
   private missing: number[] = []; // wanted chunks still to build, nearest last
   private perChunk: number;
+  private groundAt: ((x: number, z: number) => number) | undefined;
 
   constructor(
     private scene: THREE.Scene, private toon: Toon, private map: PlayMap, private mapMeshes: MapMeshes,
     private builders: Record<string, KindBuilder>, private scatter: Scatter | null, private config: DressingConfig,
   ) {
     this.perChunk = Math.ceil(map.meters / config.chunkMeters);
+    const terrain = map.terrain;
+    this.groundAt = terrain ? (x, z) => terrain.heightAt(x, z) : undefined;
     map.boxes.forEach((b, i) => {
       const kind = map.kinds[i]!;
       if (kind < 0 || !builders[map.kindNames[kind]!]) return;
@@ -47,8 +54,9 @@ export class Dressing {
       else this.chunkBoxes.set(key, [i]);
     });
     // Every box standing above the ground, filed under each chunk it touches (big ones span several).
+    const groundUnder = (b: { minX: number; maxX: number; minZ: number; maxZ: number }) => map.terrain?.heightAt((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2) ?? 0;
     map.boxes.forEach((b, i) => {
-      if (i === 0 || b.maxY < 0.05) return;
+      if (i === 0 || b.maxY < groundUnder(b) + 0.05) return;
       const [x0, z0] = this.cellAt(b.minX, b.minZ), [x1, z1] = this.cellAt(b.maxX, b.maxZ);
       for (let z = z0; z <= z1; z++) {
         for (let x = x0; x <= x1; x++) {
@@ -159,7 +167,7 @@ export class Dressing {
         const b = this.map.boxes[i]!;
         return { min: [b.minX, b.minY, b.minZ], max: [b.maxX, b.maxY, b.maxZ], seed: 0, color: "" };
       });
-      add(this.scatter({ minX, minZ, size, seed: seedOf(this.map.seed, 100000 + key) }, blockers, this.config.scatterPerChunk));
+      add(this.scatter({ minX, minZ, size, seed: seedOf(this.map.seed, 100000 + key), groundAt: this.groundAt }, blockers, this.config.scatterPerChunk));
     }
     this.chunkPieces.set(key, byPaint);
     return byPaint;

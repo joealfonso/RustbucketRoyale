@@ -5,9 +5,10 @@ import { SeededRng, deriveSeed } from "./SeededRng";
 // ground. Three steps:
 //  1. Rolling noise: a few octaves of smoothly blended random heights on a coarse lattice.
 //  2. Level pads: ground under and around anything built is held at its chunk's pad height, and the pads of
-//     neighbouring chunks are pulled close enough that the ground between them stays walkable.
-//  3. A slope limit: everything else is squeezed between "no steeper than the limit up from any pad" and "no steeper
-//     down", which keeps the pads exact and the hills walkable. The map's outer edge is a pad at height 0, so the
+//     neighbouring chunks are pulled close enough that the ground between them can ease from one to the other.
+//  3. Aprons: everything else is squeezed between "no steeper than the apron slope up from any pad" and "no steeper
+//     down", which keeps the pads exact and eases the hills into them instead of cutting cliffs. The noise itself is
+//     gentler than the slope cap, so nothing anywhere is steeper than the cap. The map's outer edge is a pad at height 0, so the
 //     edge wall and the junkyard beyond it stand on level ground.
 
 const ONE = 4096; // fixed point 1 for blend weights
@@ -54,45 +55,74 @@ export function riseOver(meters: number, settings: TerrainSettings): number {
   return Math.floor(meters * settings.maxRisePercent);
 }
 
-// Step 2: each built chunk's pad height, from the hills at its middle, then lowered where needed so no two
-// neighbouring pads (sides or corners) differ by more than the slope allows across the gap between them. `built`
-// marks the chunks with anything on them; the rest get no pad. Returns centimetres per chunk.
-export function padHeights(noise: Int32Array, meters: number, chunkSize: number, built: Uint8Array, settings: TerrainSettings): Int32Array {
+// A level area: ground inside it is held at its chunk's pad height. Metres, already widened by the pad margin.
+export interface Rect {
+  minX: number; minZ: number; maxX: number; maxZ: number;
+}
+
+// Shortest distance between two rectangles, 0 when they touch or overlap.
+function gapBetween(a: Rect, b: Rect): number {
+  const dx = Math.max(0, a.minX - b.maxX, b.minX - a.maxX), dz = Math.max(0, a.minZ - b.maxZ, b.minZ - a.maxZ);
+  return Math.sqrt(dx * dx + dz * dz);
+}
+
+// Step 2: each built chunk's pad height. It starts from the hills at the chunk's middle, then is bounded so the
+// ground between any two neighbouring pads, and between a pad and the map's edge (held at 0), can ease from one to
+// the other at the gentle apron slope across the real gap between them. Wide gaps allow big height changes, so the
+// hills still roll; buildings packed close together share a level. `held` lists each chunk's level areas (empty for
+// an unbuilt chunk). Returns centimetres per chunk.
+export function padHeights(noise: Int32Array, meters: number, chunkSize: number, held: readonly Rect[][], settings: TerrainSettings): Int32Array {
   const n = cornersFor(meters, settings.cellMeters);
   const chunks = meters / chunkSize;
   const perChunk = chunkSize / settings.cellMeters;
-  const pads = new Int32Array(chunks * chunks);
+  const half = meters / 2;
+  const count = chunks * chunks;
+  const pads = new Int32Array(count);
+  const built = (c: number) => held[c]!.length > 0;
   for (let z = 0; z < chunks; z++) for (let x = 0; x < chunks; x++) {
     const ci = Math.min(n - 1, x * perChunk + Math.floor(perChunk / 2)), cj = Math.min(n - 1, z * perChunk + Math.floor(perChunk / 2));
     pads[z * chunks + x] = noise[cj * n + ci]!;
   }
-  const step = riseOver(settings.padGapMeters, settings);
-  // The highest each pad may be: no higher than any built neighbour allows (step per chunk apart), and the outer ring
-  // no higher than the edge (held at 0) allows. Lowering only, so it settles.
+  const rise = (gap: number) => Math.floor(gap * settings.apronRisePercent);
+  // How much each chunk's pad may differ from the edge, and from each built neighbour.
+  const fromEdge = new Int32Array(count);
+  const neighbours: number[][] = [];
   for (let z = 0; z < chunks; z++) for (let x = 0; x < chunks; x++) {
-    if (x === 0 || z === 0 || x === chunks - 1 || z === chunks - 1) pads[z * chunks + x] = Math.min(pads[z * chunks + x]!, step);
-  }
-  for (let pass = 0; pass < chunks * chunks; pass++) {
-    let changed = false;
-    for (let z = 0; z < chunks; z++) for (let x = 0; x < chunks; x++) {
-      const a = z * chunks + x;
-      if (!built[a]) continue;
+    const a = z * chunks + x;
+    let edgeGap = Infinity;
+    for (const r of held[a]!) edgeGap = Math.min(edgeGap, r.minX + half, half - r.maxX, r.minZ + half, half - r.maxZ);
+    fromEdge[a] = Number.isFinite(edgeGap) ? rise(Math.max(0, edgeGap)) : FAR;
+    const list: number[] = [];
+    if (built(a)) {
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
         const nx = x + dx, nz = z + dz;
         if ((dx === 0 && dz === 0) || nx < 0 || nz < 0 || nx >= chunks || nz >= chunks) continue;
         const b = nz * chunks + nx;
-        if (!built[b]) continue;
-        if (pads[a]! > pads[b]! + step) { pads[a] = pads[b]! + step; changed = true; }
+        if (!built(b)) continue;
+        let gap = Infinity;
+        for (const ra of held[a]!) for (const rb of held[b]!) gap = Math.min(gap, gapBetween(ra, rb));
+        list.push(b, rise(gap));
+      }
+    }
+    neighbours.push(list);
+  }
+  // Highest each pad may be (from its own hill, its neighbours and the edge), and lowest (from the edge through its
+  // neighbours). Each moves by at most the allowed rise between neighbours, so the larger of the two does too.
+  const upper = new Int32Array(count), lower = new Int32Array(count);
+  for (let a = 0; a < count; a++) { upper[a] = Math.min(pads[a]!, fromEdge[a]!); lower[a] = -fromEdge[a]!; }
+  for (let pass = 0; pass < count; pass++) {
+    let changed = false;
+    for (let a = 0; a < count; a++) {
+      const list = neighbours[a]!;
+      for (let k = 0; k < list.length; k += 2) {
+        const b = list[k]!, step = list[k + 1]!;
+        if (upper[a]! > upper[b]! + step) { upper[a] = upper[b]! + step; changed = true; }
+        if (lower[a]! < lower[b]! - step) { lower[a] = lower[b]! - step; changed = true; }
       }
     }
     if (!changed) break;
   }
-  // And no lower than the edge allows: one step down per chunk in from the outer ring. Both bounds change by at most
-  // one step between neighbours, so the larger of them still does.
-  for (let z = 0; z < chunks; z++) for (let x = 0; x < chunks; x++) {
-    const ring = Math.min(x, z, chunks - 1 - x, chunks - 1 - z);
-    pads[z * chunks + x] = Math.max(pads[z * chunks + x]!, -step * (ring + 1));
-  }
+  for (let a = 0; a < count; a++) pads[a] = Math.max(upper[a]!, lower[a]!);
   return pads;
 }
 
@@ -127,7 +157,7 @@ export function shapeTerrain(noise: Int32Array, meters: number, pads: readonly P
 
   // Upper and lower bounds: from every held corner, the highest and lowest the ground may be at each other corner.
   // Two sweeps of a 3x3 chamfer (straight and diagonal steps), forward then back, reach every corner.
-  const straight = riseOver(cell, settings), diagonal = riseOver(cell * Math.SQRT2, settings);
+  const straight = Math.floor(cell * settings.apronRisePercent), diagonal = Math.floor(cell * Math.SQRT2 * settings.apronRisePercent);
   const upper = new Int32Array(n * n).fill(FAR), lower = new Int32Array(n * n).fill(-FAR);
   for (let k = 0; k < n * n; k++) if (fixed[k]) { upper[k] = value[k]!; lower[k] = value[k]!; }
   const relax = (k: number, from: number, rise: number) => {

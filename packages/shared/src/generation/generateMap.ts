@@ -1,6 +1,6 @@
 import { World, type Box } from "../world";
 import { Terrain } from "../terrain";
-import { cornersFor, noiseHeights, padHeights, shapeTerrain, type Pad } from "./terrainGen";
+import { cornersFor, noiseHeights, padHeights, shapeTerrain, type Pad, type Rect } from "./terrainGen";
 import { addProp, type PropConfig, type PropInstance } from "../props";
 import { orient, type ChunkSet } from "./chunks";
 import { buildNavGrid, floodFill, navCell, raised, type NavGrid, type NavParams } from "./navGrid";
@@ -145,17 +145,25 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   // The hills: noise first, then each built chunk's pad height (terrainGen.ts).
   const flatCorners = cornersFor(def.meters, chunks.size);
   const noise = settings ? noiseHeights(seed, tier, def.meters, settings) : new Int32Array(flatCorners * flatCorners);
-  const built = new Uint8Array(n * n);
-  for (let cell = 0; cell < n * n; cell++) built[cell] = templates[grid[cell]!]!.boxes.length > 0 ? 1 : 0;
-  const padOf = settings ? padHeights(noise, def.meters, chunks.size, built, settings) : new Int32Array(n * n);
+  // Where each chunk's level ground will be: its boxes' footprints, widened by the pad margin.
+  const padMargin = settings?.padMarginMeters ?? 0;
+  const oriented = { center: [0, 0, 0] as [number, number, number], size: [0, 0, 0] as [number, number, number] };
+  const held: Rect[][] = [];
+  for (let cell = 0; cell < n * n; cell++) {
+    const x = cell % n, z = (cell - x) / n;
+    held.push(templates[grid[cell]!]!.boxes.map((b) => {
+      orient(b, chunks.size, turnsOf[cell]!, mirrorOf[cell] === 1, oriented);
+      const cx = x * chunks.size - half + oriented.center[0], cz = z * chunks.size - half + oriented.center[2];
+      return { minX: cx - oriented.size[0] / 2 - padMargin, maxX: cx + oriented.size[0] / 2 + padMargin, minZ: cz - oriented.size[2] / 2 - padMargin, maxZ: cz + oriented.size[2] / 2 + padMargin };
+    }));
+  }
+  const padOf = settings ? padHeights(noise, def.meters, chunks.size, held, settings) : new Int32Array(n * n);
 
   // Each chunk's boxes stand on its pad, and the ground round each box is held level.
-  const oriented = { center: [0, 0, 0] as [number, number, number], size: [0, 0, 0] as [number, number, number] };
   const spawnCandidates: number[] = [];
   const firstBoxOf = new Int32Array(n * n);
   const lastBoxOf = new Int32Array(n * n);
   const pads: Pad[] = [];
-  const padMargin = settings?.padMarginMeters ?? 0;
   for (let z = 0; z < n; z++) {
     for (let x = 0; x < n; x++) {
       const cell = z * n + x;

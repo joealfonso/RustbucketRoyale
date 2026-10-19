@@ -3,8 +3,9 @@ import * as THREE from "three";
 // Warm haze in place of Three's fog, for every material that takes fog (toon, world, ground, outlines, props, mechs)
 // with no work per material: the four fog shader chunks are swapped once, before anything compiles.
 // It reuses the fog uniforms Three already sends each frame: fogColor, and fogNear / fogFar from a THREE.Fog, read
-// as "haze starts here" and "ground-level haze is 98% thick here". The haze is thickest at the ground (y = 0 on
-// every map) and thins with height, so tall things far away stay readable and the open ground melts into the sky.
+// as "haze starts here" and "ground-level haze is 98% thick here". The haze is thickest at the ground (y = 0, the
+// height of every map's edge; valleys dip a little into thicker haze and hilltops rise out of it) and thins with
+// height, so tall things far away stay readable and the open ground melts into the sky.
 // The thinning rate is one number for the whole game, baked into the shader, because the fog uniforms are all spoken for.
 
 let installedFalloff: number | null = null;

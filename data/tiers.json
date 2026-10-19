@@ -30,8 +30,8 @@
   "terrain": {
     "cellMeters": 4,
     "maxRisePercent": 57,
+    "apronRisePercent": 30,
     "padMarginMeters": 4,
-    "padGapMeters": 4,
     "snapMeters": 0.5,
     "tiers": {
       "arena": {

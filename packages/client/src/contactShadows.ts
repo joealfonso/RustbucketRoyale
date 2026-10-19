@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import type { Box, World } from "@rustbucket/shared";
+import type { Box, Terrain, World } from "@rustbucket/shared";
 import { freeze } from "./freeze";
+import { onHills } from "./groundTilt";
 
 // Soft dark patches on the ground under things, so crates, walls and mechs sit on the floor instead of floating
 // over it. Not real shadows: no light direction, just the darkening where an object meets the ground.
@@ -36,11 +37,12 @@ export interface Footprint {
 }
 
 // The patch under one map box, or false for a box that does not stand on the ground (the floor itself, flat strips,
-// anything stacked on top of something else, whose patch would be hidden under what it stands on).
-export function shadowFootprint(box: Box, look: ShadowLook["static"], out: Footprint): boolean {
-  const base = Math.max(0, box.minY);
+// anything stacked on top of something else, whose patch would be hidden under what it stands on). `ground` is the
+// height of the hills under the middle of the box, 0 on a map with none.
+export function shadowFootprint(box: Box, look: ShadowLook["static"], out: Footprint, ground = 0): boolean {
+  const base = Math.max(ground, box.minY);
   const height = box.maxY - base;
-  if (box.minY > look.nearGround || height < look.minHeight) return false;
+  if (box.minY > ground + look.nearGround || height < look.minHeight) return false;
   const grow = Math.min(look.maxGrow, Math.max(look.minGrow, height * look.growPerMeter));
   out.x = (box.minX + box.maxX) / 2;
   out.z = (box.minZ + box.maxZ) / 2;
@@ -61,11 +63,11 @@ export function shadowScale(height: number, look: ShadowLook["moving"]): number 
   return 1 - (1 - look.minScale) * Math.min(1, Math.max(0, height / look.fadeHeight));
 }
 
-// The highest surface at or below `y` under the point (x, z): a box top or the floor. 0 off the map.
-// `found` is reused, so this allocates nothing.
+// The highest surface at or below `y` under the point (x, z): a box top, the hills, or the floor (0 on a map with
+// no hills). `found` is reused, so this allocates nothing.
 export function surfaceBelow(world: World, x: number, y: number, z: number, found: number[]): number {
   const n = world.query(x, z, x, z, found);
-  let best = 0;
+  let best = world.terrain ? world.groundAt(x, z) : 0;
   for (let k = 0; k < n; k++) {
     const b = world.boxes[found[k]!]!;
     if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) continue;
@@ -123,8 +125,18 @@ const placed = new THREE.Matrix4();
 const at = new THREE.Vector3();
 const sized = new THREE.Vector3();
 const noTurn = new THREE.Quaternion();
+const leaning = new THREE.Quaternion();
+const up = new THREE.Vector3(0, 1, 0);
+const slope = new THREE.Vector3();
+const normal = [0, 1, 0];
 const gone = new THREE.Matrix4().makeScale(0, 0, 0);
 const footprint: Footprint = { x: 0, z: 0, y: 0, sizeX: 0, sizeZ: 0, soft: 0 };
+
+// The turn that lays a flat patch along the hillside at (x, z). Shared scratch: use it before the next call.
+function leanOn(terrain: Terrain, x: number, z: number): THREE.Quaternion {
+  terrain.normalAt(x, z, normal);
+  return leaning.setFromUnitVectors(up, slope.set(normal[0]!, normal[1]!, normal[2]!));
+}
 
 function shadowMesh(material: THREE.Material, count: number): { mesh: THREE.InstancedMesh; shape: THREE.InstancedBufferAttribute } {
   const geometry = flatQuad.clone();
@@ -162,13 +174,16 @@ export class ContactShadows {
     this.world = world;
     this.instanceOfBox = new Int32Array(boxes.length).fill(-1);
     let count = 0;
-    boxes.forEach((b, i) => { if (shadowFootprint(b, this.look.static, footprint)) this.instanceOfBox[i] = count++; });
+    const groundUnder = (b: Box) => (world.terrain ? world.groundAt((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2) : 0);
+    boxes.forEach((b, i) => { if (shadowFootprint(b, this.look.static, footprint, groundUnder(b))) this.instanceOfBox[i] = count++; });
     const still = shadowMesh(this.material, Math.max(1, count));
     still.mesh.count = count;
     boxes.forEach((b, i) => {
       const instance = this.instanceOfBox[i]!;
-      if (instance < 0 || !shadowFootprint(b, this.look.static, footprint)) return;
-      still.mesh.setMatrixAt(instance, placed.compose(at.set(footprint.x, footprint.y + this.look.lift, footprint.z), noTurn, sized.set(footprint.sizeX, 1, footprint.sizeZ)));
+      if (instance < 0 || !shadowFootprint(b, this.look.static, footprint, groundUnder(b))) return;
+      // Buildings stand on level pads, but a crate or barrel can sit on open hillside: lean its patch with the slope.
+      const turn = world.terrain ? leanOn(world.terrain, footprint.x, footprint.z) : noTurn;
+      still.mesh.setMatrixAt(instance, placed.compose(at.set(footprint.x, footprint.y + this.look.lift, footprint.z), turn, sized.set(footprint.sizeX, 1, footprint.sizeZ)));
       still.shape.setXY(instance, this.look.static.darkness, footprint.soft);
     });
     still.mesh.instanceMatrix.needsUpdate = true;
@@ -199,7 +214,10 @@ export class ContactShadows {
     if (strength <= 0.01) return;
     const size = this.look.moving.radius * 2 * shadowScale(y - ground, this.look.moving);
     const i = this.movingCount++;
-    this.moving.mesh.setMatrixAt(i, placed.compose(at.set(x, ground + this.look.lift, z), noTurn, sized.set(size, 1, size)));
+    // On a hillside the patch leans with the slope, so it neither sinks in uphill nor floats downhill.
+    const terrain = this.world.terrain;
+    const turn = terrain && onHills(terrain, x, z, ground) ? leanOn(terrain, x, z) : noTurn;
+    this.moving.mesh.setMatrixAt(i, placed.compose(at.set(x, ground + this.look.lift, z), turn, sized.set(size, 1, size)));
     // Soft all the way in: a round patch, darkest in the middle.
     this.moving.shape.setXY(i, strength, size / 2);
   };

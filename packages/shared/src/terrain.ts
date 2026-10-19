@@ -10,18 +10,19 @@ export interface TerrainSettings {
   cellMeters: number;
   maxRisePercent: number; // the steepest the ground gets: this many metres up per 100 across (57 is about 30 degrees)
   padMarginMeters: number; // ground kept level this far around anything built on it, at least one cell
-  padGapMeters: number; // the narrowest gap assumed between two neighbouring chunks' buildings, for their pad heights
+  apronRisePercent: number; // ground round a level pad eases into it no steeper than this (metres per 100), so no cliffs
   snapMeters: number; // a walking mech stays on the ground when it drops by up to this in one step (downhill)
   tiers: Record<string, { octaves: { spacingMeters: number; amplitudeMeters: number }[] }>;
 }
 
 export function parseTerrainSettings(raw: unknown): TerrainSettings {
   const d = raw as TerrainSettings;
-  for (const key of ["cellMeters", "maxRisePercent", "padMarginMeters", "padGapMeters", "snapMeters"] as const) {
+  for (const key of ["cellMeters", "maxRisePercent", "padMarginMeters", "apronRisePercent", "snapMeters"] as const) {
     if (typeof d?.[key] !== "number" || !(d[key] > 0)) throw new Error(`terrain.json: ${key} must be a positive number`);
   }
   // A box's edge can fall anywhere in a cell, so the level ground round it must reach that cell's far corner.
   if (d.padMarginMeters < d.cellMeters) throw new Error("terrain.json: padMarginMeters must be at least cellMeters");
+  if (!Number.isInteger(d.apronRisePercent) || d.apronRisePercent > d.maxRisePercent) throw new Error("terrain.json: apronRisePercent must be a whole number no steeper than maxRisePercent");
   if (!Number.isInteger(d.maxRisePercent) || d.maxRisePercent > 170) throw new Error("terrain.json: maxRisePercent must be a whole number up to 170");
   for (const [tier, t] of Object.entries(d.tiers ?? {})) {
     for (const o of t.octaves ?? []) {

@@ -24,6 +24,18 @@ function setup(scatterPerChunk = 40) {
 const setsEqual = (a: Set<number>, b: Set<number>) => a.size === b.size && [...a].every((i) => b.has(i));
 
 describe("junkyard dressing", () => {
+  it("hands the scatter the map's hills, so loose junk lies on them", () => {
+    const map = buildPlayMap("small", 11, parseMechStats(mechJson));
+    const scene = new THREE.Scene();
+    const toon = new Toon(parseLook(lookJson), parsePalette(paletteJson));
+    const seen: ((x: number, z: number) => number)[] = [];
+    const spy: typeof scatter = (chunk, boxes, count) => { if (chunk.groundAt) seen.push(chunk.groundAt); return scatter(chunk, boxes, count); };
+    const dressing = new Dressing(scene, toon, map, new MapMeshes(scene, map, toon), BUILDERS, spy, { radiusMeters: 60, chunkMeters: 50, scatterPerChunk: 5, buildAtOnce: 2 });
+    dressing.update(0, 0);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen[0]!(31, -47)).toBe(map.terrain!.heightAt(31, -47));
+  });
+
   it("every box kind in the chunk data has a builder or is plain", () => {
     const { map } = setup();
     for (const kind of map.kindNames) expect(kind === "plain" || kind in BUILDERS).toBe(true);

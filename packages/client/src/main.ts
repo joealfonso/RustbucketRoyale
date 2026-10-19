@@ -57,6 +57,7 @@ import damageDiagramJson from "../../../data/damageDiagram.json";
 import { Warnings, createWarningInput, parseWarnings } from "./warnings";
 import warningsJson from "../../../data/warnings.json";
 import { MapMeshes } from "./mapRenderer";
+import { TerrainMeshes, parseTerrainMeshLook } from "./terrainMesh";
 import { ContactShadows, parseShadowLook } from "./contactShadows";
 import groundJson from "../../../data/ground.json";
 import { BUILDERS, Dressing, scatter } from "./dressing";
@@ -207,6 +208,10 @@ toon.light(scene, toon.presetFor(map.seed, forcedLook));
 if (params.has("overview")) scene.fog = null;
 
 let mapMeshes = new MapMeshes(scene, map, toon);
+// The hills (data/ground.json mesh), in the ground's toon look. The range has none: its floor is a box.
+const terrainLook = parseTerrainMeshLook(groundJson.mesh);
+const makeTerrain = () => (map.terrain ? new TerrainMeshes(scene, map.terrain, toon.ground(palette.world.ground), terrainLook) : null);
+let terrainMeshes = makeTerrain();
 // Near you, map boxes are drawn as junkyard models of their kind and open ground gets scattered junk (data/dressing.json).
 const dressingConfig = { ...dressingJson, chunkMeters: chunksJsonForDressing.size };
 const makeDressing = () => new Dressing(scene, toon, map, mapMeshes, BUILDERS, scatter, dressingConfig);
@@ -225,6 +230,8 @@ const explosionFx = parseExplosionFx(explosionFxJson);
 const fxSprites = new FxSprites(scene, (c) => toon.color(c), explosionFx.scorch);
 const chunks = new Debris(scene, toon, mostOf(vfxConfig, "debris"), () => vfxLevel().debris ?? 0, explosionFx.chunks);
 const explosions = new Explosions(scene, fxSprites, chunks, explosionFx, (c) => toon.color(c));
+chunks.setTerrain(map.terrain);
+explosions.setTerrain(map.terrain);
 const thrusters = new Thrusters(fxSprites, parseThrusterFx(thrusterFxJson));
 const breakFx = new BreakFx(chunks, fxSprites, parsePropFx(propFxJson), (c) => toon.color(c));
 scene.add(propView.group);
@@ -266,7 +273,7 @@ const whistleAt = { x: 0, y: 0, z: 0 };
 const mortarWarnings = new MortarWarnings(scene, abilityFxConfig.warning, (c) => toon.color(c), (x, y, z) => {
   whistleAt.x = x; whistleAt.y = y; whistleAt.z = z;
   sound.play("shellIncoming", whistleAt);
-});
+}, (x, z) => map.world.groundAt(x, z));
 // Walking (gait.ts): each mech's legs follow how fast it is really going. Footfalls kick up dust.
 const gaitConfig = parseGait(gaitJson);
 const gaitInput: GaitInput = { vx: 0, vz: 0, yaw: 0, grounded: true, dashing: false, limping: false, braced: false, walkSpeed: 0, runSpeed: 0 };
@@ -415,6 +422,10 @@ function swapMap(newSeed: number, newTier: string): void {
   map = buildPlayMap(newTier, newSeed, mechStats);
   toon.useLight(toon.presetFor(newSeed, forcedLook));
   mapMeshes = new MapMeshes(scene, map, toon);
+  terrainMeshes?.dispose();
+  terrainMeshes = makeTerrain();
+  chunks.setTerrain(map.terrain);
+  explosions.setTerrain(map.terrain);
   showSurfaces();
   dressing.dispose();
   dressing = makeDressing();
@@ -612,10 +623,12 @@ function shakeNear(x: number, y: number, z: number, radius: number, force: numbe
 }
 
 const groundHit = createRayHit();
-// The ground under a spot: the top of whatever box is below it, or the map floor (y = 0 on every map).
+// The ground under a spot: the top of whatever box is below it, or the hillside. The ray reaches down past the lowest
+// valley; on the range, with no hills, it meets the floor box.
 function groundBelow(x: number, y: number, z: number): number {
   const from = y + 0.5;
-  return map.world.raycast(x, from, z, 0, -1, 0, from, groundHit) ? from - groundHit.distance : 0;
+  const reach = from - Math.min(0, map.terrain?.minHeight ?? 0) + 1;
+  return map.world.raycast(x, from, z, 0, -1, 0, reach, groundHit) ? from - groundHit.distance : map.terrain?.heightAt(x, z) ?? 0;
 }
 
 function showBlast(x: number, y: number, z: number): void {
@@ -875,6 +888,7 @@ function frame(now: number): void {
     rig.camera.lookAt(0, 0, 0);
   }
   edgeBarrier.update(rig.camera.position);
+  terrainMeshes?.update(rig.camera.position);
   propView.cull(rig.camera);
 
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;

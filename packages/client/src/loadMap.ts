@@ -1,6 +1,6 @@
 import {
   World, buildRange, generateMap, parseChunkSet, parsePropConfig, parseTiers,
-  type Box, type MechStats, type PropInstance, type RangeData,
+  type Box, type MechStats, type PropInstance, type RangeData, type Terrain,
 } from "@rustbucket/shared";
 import chunksJson from "../../../data/chunks.json";
 import tiersJson from "../../../data/tiers.json";
@@ -21,6 +21,8 @@ export interface PlayMap {
   spawn: [number, number, number];
   props: PropInstance[];
   propOfBox: Int32Array;
+  // The hills, drawn by terrainMesh.ts. Null on the range, whose floor is box 0 drawn as a plain box.
+  terrain: Terrain | null;
 }
 
 const chunks = parseChunkSet(chunksJson);
@@ -40,12 +42,12 @@ export function buildPlayMap(tier: string, seed: number, mech: MechStats): PlayM
     });
     return {
       tier, seed, meters: 600, world: new World(range.boxes), boxes: range.boxes, colors, palette, kinds: new Int8Array(range.boxes.length).fill(-1), kindNames: [],
-      spawn: data.spawn, props: range.props, propOfBox: range.propOfBox,
+      spawn: data.spawn, props: range.props, propOfBox: range.propOfBox, terrain: null,
     };
   }
   const map = generateMap(seed, tier, chunks, tiers, mech, propConfig);
   return {
     tier, seed, meters: map.meters, world: map.world, boxes: map.boxes, colors: map.colors, palette: map.palette, kinds: map.kinds, kindNames: map.kindNames, spawn: map.spawns[0]!,
-    props: map.props, propOfBox: map.propOfBox,
+    props: map.props, propOfBox: map.propOfBox, terrain: map.terrain,
   };
 }
