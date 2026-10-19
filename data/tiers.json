@@ -26,5 +26,53 @@
       "spawns": 56,
       "spawnSeparationChunks": 3
     }
+  },
+  "terrain": {
+    "cellMeters": 4,
+    "maxRisePercent": 57,
+    "padMarginMeters": 4,
+    "padGapMeters": 4,
+    "snapMeters": 0.5,
+    "tiers": {
+      "arena": {
+        "octaves": []
+      },
+      "small": {
+        "octaves": [
+          {
+            "spacingMeters": 80,
+            "amplitudeMeters": 5
+          },
+          {
+            "spacingMeters": 28,
+            "amplitudeMeters": 1.2
+          }
+        ]
+      },
+      "medium": {
+        "octaves": [
+          {
+            "spacingMeters": 140,
+            "amplitudeMeters": 11
+          },
+          {
+            "spacingMeters": 44,
+            "amplitudeMeters": 2.5
+          }
+        ]
+      },
+      "large": {
+        "octaves": [
+          {
+            "spacingMeters": 160,
+            "amplitudeMeters": 13
+          },
+          {
+            "spacingMeters": 48,
+            "amplitudeMeters": 3
+          }
+        ]
+      }
+    }
   }
 }

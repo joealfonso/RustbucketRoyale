@@ -59,10 +59,11 @@ export function parsePropConfig(raw: unknown): PropConfig {
 }
 
 // Adds one prop standing on the ground at (x, z). Its box goes into `boxes`, and the prop into `props`.
-export function addProp(boxes: Box[], props: PropInstance[], config: PropConfig, type: number, x: number, z: number): PropInstance {
+// `baseY` is the ground it stands on: the lowest point under it, so no corner floats on a slope.
+export function addProp(boxes: Box[], props: PropInstance[], config: PropConfig, type: number, x: number, z: number, baseY = 0): PropInstance {
   const [sx, sy, sz] = config.types[type]!.size;
-  boxes.push({ minX: x - sx / 2, maxX: x + sx / 2, minY: 0, maxY: sy, minZ: z - sz / 2, maxZ: z + sz / 2 });
-  const prop: PropInstance = { id: props.length, type, boxIndex: boxes.length - 1, x, y: sy / 2, z };
+  boxes.push({ minX: x - sx / 2, maxX: x + sx / 2, minY: baseY, maxY: baseY + sy, minZ: z - sz / 2, maxZ: z + sz / 2 });
+  const prop: PropInstance = { id: props.length, type, boxIndex: boxes.length - 1, x, y: baseY + sy / 2, z };
   props.push(prop);
   return prop;
 }

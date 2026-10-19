@@ -169,10 +169,12 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
     s.vy = s.grounded && s.vy < 0 ? STICK_TO_GROUND : Math.max(s.vy - stats.gravity * dt, -stats.maxFallSpeed);
   }
 
+  const wasGrounded = s.grounded;
   s.grounded = false;
   moveHorizontal(s, stats, s.vx * dt, 0, world);
   moveHorizontal(s, stats, 0, s.vz * dt, world);
   moveVertical(s, stats, s.vy * dt, world);
+  standOnTerrain(s, world, wasGrounded);
 
   if (ramming && s.abilityTime > 0 && Math.hypot(s.vx, s.vz) < ability.speed * RAM_BLOCKED_FRACTION) {
     s.abilityTime = 0;
@@ -213,6 +215,22 @@ function launchPounce(s: MechState, input: MechInput, p: PounceStats, stats: Mec
   s.vz = s.abilityZ * speed;
   s.vy = p.lift;
   s.abilityTime = flightTime + POUNCE_GRACE_SECONDS;
+}
+
+// The hills: never below the ground, and a mech walking downhill stays on it rather than skipping off each step.
+// Slopes are capped at walking steepness when the map is made, so the ground never blocks sideways movement.
+function standOnTerrain(s: MechState, world: World, wasGrounded: boolean): void {
+  const terrain = world.terrain;
+  if (!terrain) return;
+  const ground = terrain.heightAt(s.x, s.z);
+  if (s.y < ground) {
+    s.y = ground;
+    if (s.vy < 0) s.vy = 0;
+    s.grounded = true;
+  } else if (!s.grounded && wasGrounded && s.vy <= 0 && !s.jetting && s.y - ground <= terrain.snapMeters) {
+    s.y = ground;
+    s.grounded = true;
+  }
 }
 
 // Touching is not overlapping. Without a little room for rounding, a mech pushed flush against a wall can read

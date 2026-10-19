@@ -1,7 +1,9 @@
 import { World, type Box } from "../world";
+import { Terrain } from "../terrain";
+import { cornersFor, noiseHeights, padHeights, shapeTerrain, type Pad } from "./terrainGen";
 import { addProp, type PropConfig, type PropInstance } from "../props";
 import { orient, type ChunkSet } from "./chunks";
-import { buildNavGrid, floodFill, navCell, type NavGrid, type NavParams } from "./navGrid";
+import { buildNavGrid, floodFill, navCell, raised, type NavGrid, type NavParams } from "./navGrid";
 import { SeededRng, deriveSeed } from "./SeededRng";
 import type { TierSet } from "./tiers";
 
@@ -21,6 +23,7 @@ export interface GeneratedMap {
   propOfBox: Int32Array; // for each box, the prop it belongs to, or -1
   world: World;
   nav: NavGrid;
+  terrain: Terrain; // the hills; flat when tiers.json has no terrain section
 }
 
 export interface MechSize {
@@ -38,6 +41,7 @@ export interface ValidationReport {
 // Builds one map from one seed, with no checks. Deterministic: same inputs, same output, on any machine.
 // Placement decisions are integer only; the box numbers that come out are sums of exact values.
 function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, propConfig: PropConfig): Omit<GeneratedMap, "seed" | "usedSeed" | "attempts" | "world" | "nav"> {
+  const settings = tiers.terrain;
   const def = tiers.tiers[tier];
   if (!def) throw new Error(`Unknown tier "${tier}"`);
   if (def.meters % chunks.size !== 0) throw new Error(`Tier ${tier}: ${def.meters} m is not a whole number of ${chunks.size} m chunks`);
@@ -90,7 +94,8 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
     colors.push(color);
   };
 
-  // The ground and a tall wall round the edge, so nobody walks off the map.
+  // The ground and a tall wall round the edge, so nobody walks off the map. The ground slab is a floor under the
+  // lowest valley, so nothing can ever fall out of the world; it is moved down once the hills are known.
   const margin = tiers.edgeWallThickness;
   add(0, -0.5, 0, def.meters + margin * 2, 1, def.meters + margin * 2, 0);
   const wallColor = palette.length; // one extra colour for the edge wall
@@ -108,7 +113,8 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   // Breakable props scattered in a chunk, on a 1 m grid, clear of the chunk's own boxes, of each other, and of the
   // middle of a chunk where mechs may start. The same number of random draws happens whatever is decided, so the
   // rest of the map does not depend on how crowded one chunk was.
-  const placeProps = (firstBox: number, originX: number, originZ: number, keepMiddleClear: boolean) => {
+  let propBase = (_x: number, _z: number, _sx: number, _sz: number) => 0;
+  const placeProps = (firstBox: number, lastBox: number, originX: number, originZ: number, keepMiddleClear: boolean) => {
     const { min, max } = propConfig.perChunk;
     const count = min + rng.nextInt(max - min + 1);
     const edge = 3;
@@ -124,34 +130,62 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
         const m = propConfig.margin;
         const hits = (b: Box) => x - sx / 2 - m < b.maxX && x + sx / 2 + m > b.minX && z - sz / 2 - m < b.maxZ && z + sz / 2 + m > b.minZ;
         let blocked = false;
-        for (let k = firstBox; k < boxes.length && !blocked; k++) blocked = hits(boxes[k]!);
+        for (let k = firstBox; k < lastBox && !blocked; k++) blocked = hits(boxes[k]!);
         for (const p of chunkProps) if (!blocked) blocked = hits(boxes[p.boxIndex]!);
         const middleX = originX + chunks.size / 2, middleZ = originZ + chunks.size / 2;
         if (keepMiddleClear && Math.abs(x - middleX) < propConfig.keepClearOfSpawn + sx / 2 && Math.abs(z - middleZ) < propConfig.keepClearOfSpawn + sz / 2) blocked = true;
         if (blocked) continue;
-        chunkProps.push(addProp(boxes, props, propConfig, type, x, z));
+        chunkProps.push(addProp(boxes, props, propConfig, type, x, z, propBase(x, z, sx, sz)));
         colors.push(propColor + type);
         break;
       }
     }
   };
 
+  // The hills: noise first, then each built chunk's pad height (terrainGen.ts).
+  const noise = settings ? noiseHeights(seed, tier, def.meters, settings) : new Int32Array(cornersFor(def.meters, chunks.size) ** 2);
+  const built = new Uint8Array(n * n);
+  for (let cell = 0; cell < n * n; cell++) built[cell] = templates[grid[cell]!]!.boxes.length > 0 ? 1 : 0;
+  const padOf = settings ? padHeights(noise, def.meters, chunks.size, built, settings) : new Int32Array(n * n);
+
+  // Each chunk's boxes stand on its pad, and the ground round each box is held level.
   const oriented = { center: [0, 0, 0] as [number, number, number], size: [0, 0, 0] as [number, number, number] };
   const spawnCandidates: number[] = [];
+  const firstBoxOf = new Int32Array(n * n);
+  const lastBoxOf = new Int32Array(n * n);
+  const pads: Pad[] = [];
+  const padMargin = settings?.padMarginMeters ?? 0;
   for (let z = 0; z < n; z++) {
     for (let x = 0; x < n; x++) {
       const cell = z * n + x;
       const template = templates[grid[cell]!]!;
       const originX = x * chunks.size - half;
       const originZ = z * chunks.size - half;
-      const firstBox = boxes.length;
+      const padY = padOf[cell]! / 100;
+      firstBoxOf[cell] = boxes.length;
       for (const b of template.boxes) {
         orient(b, chunks.size, turnsOf[cell]!, mirrorOf[cell] === 1, oriented);
-        add(originX + oriented.center[0], oriented.center[1], originZ + oriented.center[2], oriented.size[0], oriented.size[1], oriented.size[2], b.colorIndex + 1);
+        add(originX + oriented.center[0], padY + oriented.center[1], originZ + oriented.center[2], oriented.size[0], oriented.size[1], oriented.size[2], b.colorIndex + 1);
         boxKind[boxes.length - 1] = b.kindIndex;
+        const placed = boxes[boxes.length - 1]!;
+        pads.push({ minX: placed.minX - padMargin, minZ: placed.minZ - padMargin, maxX: placed.maxX + padMargin, maxZ: placed.maxZ + padMargin, height: padOf[cell]! });
       }
-      placeProps(firstBox, originX, originZ, template.spawnable);
+      lastBoxOf[cell] = boxes.length;
       if (template.spawnable) spawnCandidates.push(cell);
+    }
+  }
+  const heights = settings ? shapeTerrain(noise, def.meters, pads, settings) : noise;
+  const terrain = new Terrain(def.meters, settings?.cellMeters ?? chunks.size, heights, settings?.snapMeters ?? 0.5);
+  const ground = boxes[0]!;
+  ground.maxY = Math.min(0, terrain.minHeight) - 1;
+  ground.minY = ground.maxY - 1;
+
+  // Props, chunk by chunk in the same order as before, so the random draws are unchanged; each stands on the ground.
+  propBase = (x, z, sx, sz) => Math.min(terrain.heightAt(x, z), terrain.heightAt(x - sx / 2, z - sz / 2), terrain.heightAt(x + sx / 2, z - sz / 2), terrain.heightAt(x - sx / 2, z + sz / 2), terrain.heightAt(x + sx / 2, z + sz / 2));
+  for (let z = 0; z < n; z++) {
+    for (let x = 0; x < n; x++) {
+      const cell = z * n + x;
+      placeProps(firstBoxOf[cell]!, lastBoxOf[cell]!, x * chunks.size - half, z * chunks.size - half, templates[grid[cell]!]!.spawnable);
     }
   }
 
@@ -165,14 +199,15 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
     const x = cell % n, z = (cell - x) / n;
     if (chosen.some((c) => Math.max(Math.abs((c % n) - x), Math.abs(Math.floor(c / n) - z)) < sep)) continue;
     chosen.push(cell);
-    spawns.push([x * chunks.size - half + chunks.size / 2, 0.05, z * chunks.size - half + chunks.size / 2]);
+    const sx = x * chunks.size - half + chunks.size / 2, sz = z * chunks.size - half + chunks.size / 2;
+    spawns.push([sx, terrain.heightAt(sx, sz) + 0.05, sz]);
   }
 
   const propOfBox = new Int32Array(boxes.length).fill(-1);
   for (const p of props) propOfBox[p.boxIndex] = p.id;
   const kinds = new Int8Array(boxes.length).fill(-1);
   boxKind.forEach((kind, i) => { kinds[i] = kind; });
-  return { tier, meters: def.meters, boxes, colors, palette, kinds, kindNames: chunks.kinds, spawns, props, propOfBox };
+  return { tier, meters: def.meters, boxes, colors, palette, kinds, kindNames: chunks.kinds, spawns, props, propOfBox, terrain };
 }
 
 const nearby: number[] = [];
@@ -227,7 +262,7 @@ export function validateMap(
     // Of the cells a mech could stand on at ground level, how many can the first spawn reach?
     let ground = 0, groundReached = 0;
     for (let i = 0; i < grid.top.length; i++) {
-      if (grid.top[i]! <= mech.stepHeight) {
+      if (raised(grid, i) <= mech.stepHeight) {
         ground++;
         if (reached[i]) groundReached++;
       }
@@ -247,8 +282,8 @@ export function generateMap(seed: number, tier: string, chunks: ChunkSet, tiers:
   for (let attempt = 0; attempt < tiers.maxAttempts; attempt++) {
     const usedSeed = attempt === 0 ? seed >>> 0 : deriveSeed(seed, attempt);
     const built = build(usedSeed, tier, chunks, tiers, propConfig);
-    const world = new World(built.boxes);
-    const navGrid = buildNavGrid(built.boxes, built.meters, 0, 0, nav);
+    const world = new World(built.boxes, 16, built.terrain);
+    const navGrid = buildNavGrid(built.boxes, built.meters, 0, 0, nav, built.terrain);
     const map: GeneratedMap = { ...built, seed: seed >>> 0, usedSeed, attempts: attempt + 1, world, nav: navGrid };
     const report = validateMap(map, tiers, mech, propConfig);
     if (report.ok) return map;

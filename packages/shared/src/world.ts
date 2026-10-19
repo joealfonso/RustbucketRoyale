@@ -1,4 +1,6 @@
-// Axis aligned boxes are the whole world for now: ground, cover, walls, targets.
+import { Terrain } from "./terrain";
+
+// The world a mech moves in: axis aligned boxes (cover, walls, buildings, props) standing on the terrain's hills.
 export interface Box {
   minX: number; minY: number; minZ: number;
   maxX: number; maxY: number; maxZ: number;
@@ -71,6 +73,9 @@ function rayBox(
 
 const normalScratch = [0, 0, 0];
 
+// RayHit.index for a ray that hit the ground rather than a box.
+export const TERRAIN_HIT = -1;
+
 // Ray against a plain list of boxes, keeping the nearest hit. Fine for a handful of boxes (a mech's hit zones);
 // use World for the map. Writes into `out` so nothing is allocated.
 export function raycastBoxes(
@@ -107,9 +112,12 @@ export class World {
   private readonly seen: Int32Array;
   private readonly off: Uint8Array; // boxes switched off, like a prop that has been destroyed
   private stamp = 0;
+  // The ground under everything. Flat at 0 when a world is made without one (tests, the style page).
+  readonly terrain: Terrain | null;
 
-  constructor(boxes: readonly Box[], cellSize = 16) {
+  constructor(boxes: readonly Box[], cellSize = 16, terrain: Terrain | null = null) {
     this.boxes = boxes;
+    this.terrain = terrain;
     this.cellSize = cellSize;
 
     let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
@@ -176,8 +184,26 @@ export class World {
     return count;
   }
 
-  // Nearest box along a ray. Walks the grid cell by cell and stops as soon as a hit is nearer than the next cell.
+  // The ground height under (x, z): the terrain, or -Infinity with none (then the ground is whatever box is there).
+  groundAt(x: number, z: number): number {
+    return this.terrain ? this.terrain.heightAt(x, z) : -Infinity;
+  }
+
+  // Nearest box or hillside along a ray. A hillside hit has index TERRAIN_HIT.
   raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDistance: number, out: RayHit): boolean {
+    const found = this.raycastBoxes(ox, oy, oz, dx, dy, dz, maxDistance, out);
+    if (!this.terrain) return found;
+    const t = this.terrain.raycast(ox, oy, oz, dx, dy, dz, found ? out.distance : maxDistance);
+    if (t < 0 || (found && t >= out.distance)) return found;
+    out.distance = t;
+    out.index = TERRAIN_HIT;
+    this.terrain.normalAt(ox + dx * t, oz + dz * t, normalScratch);
+    out.normalX = normalScratch[0]!; out.normalY = normalScratch[1]!; out.normalZ = normalScratch[2]!;
+    return true;
+  }
+
+  // Nearest box along a ray. Walks the grid cell by cell and stops as soon as a hit is nearer than the next cell.
+  private raycastBoxes(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDistance: number, out: RayHit): boolean {
     this.stamp++;
     let best = maxDistance;
     let found = false;

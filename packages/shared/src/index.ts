@@ -2,6 +2,7 @@ export * from "./MechInput";
 export * from "./Meter";
 export * from "./stats";
 export * from "./world";
+export * from "./terrain";
 export * from "./mechStep";
 export * from "./look";
 export * from "./protocol";

@@ -1,3 +1,5 @@
+import { parseTerrainSettings, type TerrainSettings } from "../terrain";
+
 export interface TierDef {
   meters: number;
   spawns: number;
@@ -12,6 +14,7 @@ export interface TierSet {
   navCellMeters: number;
   groundColor: string;
   tiers: Record<string, TierDef>;
+  terrain?: TerrainSettings; // the hills (terrain.ts); without it every map is flat
 }
 
 export function parseTiers(raw: unknown): TierSet {
@@ -27,5 +30,6 @@ export function parseTiers(raw: unknown): TierSet {
       if (typeof t[key] !== "number" || !Number.isInteger(t[key]) || (t[key] as number) <= 0) throw new Error(`tiers.json: ${name}.${key} must be a whole number above 0`);
     }
   }
+  if (d.terrain !== undefined) parseTerrainSettings(d.terrain);
   return d as unknown as TierSet;
 }
