@@ -120,16 +120,14 @@ describe("Pathfinder", () => {
     let seed = 7;
     const next = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296) * 1800 - 900;
     const path: number[] = [];
-    let compared = 0, ratio = 0, eagerWhole = 0, exactWhole = 0, eagerMs = 0, exactMs = 0;
+    let compared = 0, ratio = 0, eagerWhole = 0, exactWhole = 0, eagerCells = 0, exactCells = 0;
     for (let i = 0; i < 150; i++) {
       const a = next(), b = next(), c = next(), d = next();
-      let t = performance.now();
       exact.findPath(a, b, c, d, path);
-      exactMs += performance.now() - t;
+      exactCells += exact.cellsSearched;
       const exactLength = length([a, b], path);
-      t = performance.now();
       eager.findPath(a, b, c, d, path);
-      eagerMs += performance.now() - t;
+      eagerCells += eager.cellsSearched;
       const eagerLength = length([a, b], path);
       if (exact.reachedGoal) exactWhole++;
       if (eager.reachedGoal) eagerWhole++;
@@ -137,24 +135,26 @@ describe("Pathfinder", () => {
     }
     expect(eagerWhole).toBeGreaterThanOrEqual(exactWhole);
     expect(ratio / compared).toBeLessThan(1.1);
-    expect(eagerMs).toBeLessThan(exactMs);
+    expect(eagerCells).toBeLessThan(exactCells / 2);
   });
 
-  it("is quick on a real large map, across the whole of it, and nearly always finds a way", () => {
+  // Cost is counted in cells looked at, not milliseconds: a clock is at the mercy of whatever else the computer is doing
+  // (the whole suite runs in parallel), and a cell count is the same everywhere. How fast each cell is gets watched by
+  // the soak's tick budget. On seed 5 a search looks at about 460 cells on average, about 1.2 ms on a MacBook Air M4.
+  it("is cheap on a real large map, across the whole of it, and nearly always finds a way", () => {
     const chunks = parseChunkSet(chunksJson);
     const tiers = parseTiers(tiersJson);
     const map = generateMap(5, "large", chunks, tiers, mech, parsePropConfig(propsJson));
     const f = new Pathfinder(map.nav, pathStats);
     const path: number[] = [];
-    const started = Date.now();
-    let found = 0;
+    let found = 0, cells = 0;
     for (let i = 0; i < 20; i++) {
       const a = map.spawns[i % map.spawns.length]!, b = map.spawns[(i * 7 + 3) % map.spawns.length]!;
       if (f.findPath(a[0], a[2], b[0], b[2], path)) found++;
+      cells += f.cellsSearched;
     }
-    const perSearch = (Date.now() - started) / 20;
     // A spawn can sit in a pocket that the coarse grid closes off. Then the bot just heads straight, which is fine.
     expect(found).toBeGreaterThanOrEqual(18);
-    expect(perSearch).toBeLessThan(15);
+    expect(cells / 20).toBeLessThan(1000);
   });
 });

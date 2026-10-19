@@ -31,6 +31,8 @@ export class Pathfinder {
   // Whether the last route found goes all the way, rather than stopping where the search ran out of cells. A whole
   // route stays good on a map that never changes, so a bot only needs a new one when it strays from it.
   reachedGoal = false;
+  // Cells the last search looked at: its cost, the same on any computer however busy.
+  cellsSearched = 0;
 
   constructor(nav: NavGrid, private stats: BotPathStats) {
     this.searchesLeft = stats.searchesPerTick;
@@ -160,6 +162,7 @@ export class Pathfinder {
   findPath(startX: number, startZ: number, goalX: number, goalZ: number, out: number[]): boolean {
     out.length = 0;
     this.reachedGoal = false;
+    this.cellsSearched = 0;
     this.searchesLeft--;
     const start = this.nearestOpen(this.cellOf(startX, startZ));
     let goal = this.nearestOpen(this.cellOf(goalX, goalZ));
@@ -218,7 +221,7 @@ export class Pathfinder {
       if (closedStamp[current] === stamp) continue;
       closedStamp[current] = stamp;
       expanded++;
-      if (current === goal) { this.best = best; return true; }
+      if (current === goal) { this.best = best; this.cellsSearched = expanded; return true; }
 
       const cx = current % cols, cz = Math.floor(current / cols);
       const h = octile(cx - goalX, cz - goalZ);
@@ -248,6 +251,7 @@ export class Pathfinder {
       }
     }
     this.best = best;
+    this.cellsSearched = expanded;
     return false;
   }
 
