@@ -194,6 +194,13 @@ Before this, the mechs slid across the ground like chess pieces. Now they walk. 
 
 The four mechs stopped being skins. You now pick one on the start menu, or on the pause screen between fights, and it plays differently. Stiletto-B is fast with long jets but fragile. Ironclad-IV and Cataclysm are slow and short on fuel but shrug off hits. Arbiter sits in the middle until it gets its tricks. In the lobby you swap on the spot; mid match you wait for the next one, so nobody swaps out of a losing fight. Bots are dealt all four. Every difference is a few numbers in one data file, tunable live.
 
+## 26. Gate 9b: Shield Ram and Pounce
+*Passed 21:45. Commits `cc15066` and `a6a389c`.*
+
+![Ironclad-IV from behind in the arena, the HUD reading "Ironclad-IV, Heavy brawler" and below it "Q Shield Ram" in amber](26-9b-shield-ram-and-pounce.jpg)
+
+Two mechs got a button that changes how a fight goes. Ironclad-IV's Q is a Shield Ram: a straight charge with the shield up, shoving and hurting whatever it hits and smashing crates on the way. Stiletto-B's Q is a Pounce: a leap toward the crosshair that slams down on whoever is underneath. Both are worked out by the same code on your machine and on the server, so they feel instant and can't be cheated. Bots use them too. The work was split into three pieces, each built by its own helper: the shared rules, the server, the client. Putting them together, a soak run caught the ram ending a step apart on the client and the server; the cause was the rounding of one number in each update. In the playtest you asked for two fixes. Every gun had been firing from the same spot on the right arm, so each mech now shoots from its own gun: Stiletto's carbine on its left arm, Cataclysm's twin mortar barrels, Arbiter's two wrist guns in turn. And the sounds were rebuilt so laptop speakers carry them, with footsteps you can hear.
+
 ---
 
-*Next: 9b, the first abilities on Q.*
+*Next: 9c, Cataclysm's mortar and Arbiter's decoy drones, and bots that use them.*
