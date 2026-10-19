@@ -21,6 +21,7 @@ export interface MechGait {
   turnStep: number; // metres of stepping for each radian turned on the spot, so turning shuffles the feet
   stepPitch: number; // footfall sound: below 1 a heavier stomp, above 1 a lighter step
   braceDrop: number; // metres the body sinks while braced (a mortar strike being called in): planted, not standing about
+  dashStance: number; // metres the feet spread fore and aft in a dash: a braced lunge it slides in, not a sprint
 }
 
 export interface GaitConfig {
@@ -34,7 +35,7 @@ export interface GaitConfig {
   mechs: Record<string, MechGait>;
 }
 
-const GAIT_KEYS: (keyof MechGait)[] = ["walkStride", "runStride", "stance", "runStance", "stepHeight", "runStepHeight", "bob", "runBob", "sway", "lean", "dashLean", "tuck", "limp", "turnStep", "stepPitch", "braceDrop"];
+const GAIT_KEYS: (keyof MechGait)[] = ["walkStride", "runStride", "stance", "runStance", "stepHeight", "runStepHeight", "bob", "runBob", "sway", "lean", "dashLean", "tuck", "limp", "turnStep", "stepPitch", "braceDrop", "dashStance"];
 
 // Fails loudly on a bad data file, like the rest of data/.
 export function parseGait(raw: unknown): GaitConfig {
@@ -78,6 +79,7 @@ export interface GaitState {
   stepping: number; // 0 to 1: how much the feet lift (also when turning on the spot)
   air: number; // 0 on the ground to 1 in the air, smoothed
   brace: number; // 0 to 1, smoothed: how far into the braced crouch
+  dash: number; // 0 to 1, smoothed: how far into the dash lunge
   lastYaw: number;
   planted: number; // bit per leg: which feet were down last frame
   started: boolean;
@@ -91,7 +93,7 @@ export interface GaitState {
 
 export function createGait(legs: number): GaitState {
   return {
-    phase: 0, speed: 0, dirX: 0, dirZ: -1, move: 0, stepping: 0, air: 0, brace: 0, lastYaw: 0, planted: (1 << legs) - 1, started: false,
+    phase: 0, speed: 0, dirX: 0, dirZ: -1, move: 0, stepping: 0, air: 0, brace: 0, dash: 0, lastYaw: 0, planted: (1 << legs) - 1, started: false,
     feet: new Float32Array(legs * 3), bob: 0, pitch: 0, roll: 0, footfalls: 0, loud: 0,
   };
 }
@@ -125,6 +127,8 @@ export function stepGait(s: GaitState, input: GaitInput, g: MechGait, sides: rea
   const onGround = 1 - s.air;
   s.move += (clamp01(s.speed / 1.5) - s.move) * follow;
   s.brace += ((input.braced ? 1 : 0) - s.brace) * follow;
+  // A dash is thrust, not running: quick into the lunge, a little slower out of it.
+  s.dash += ((input.dashing ? 1 : 0) - s.dash) * Math.min(1, follow * (input.dashing ? 3 : 1.5));
 
   const run = clamp01((s.speed - input.walkSpeed) / Math.max(0.1, input.runSpeed - input.walkSpeed));
   s.loud = run;
@@ -135,7 +139,8 @@ export function stepGait(s: GaitState, input: GaitInput, g: MechGait, sides: rea
   // The cycle moves on by ground covered, so a planted foot moves back exactly as fast as the body moves forward.
   // Turning on the spot shuffles the feet too. A limping mech hurries off its bad leg. Braced, the feet stay put
   // even while it turns to aim, so it reads as dug in.
-  const advance = input.braced ? 0 : (s.speed + (turned / Math.max(dt, 1e-6)) * g.turnStep) * dt * onGround;
+  // Dashing, the legs hold a lunge and slide, so the cycle stops rather than spinning up to dash speed.
+  const advance = input.braced || input.dashing ? 0 : (s.speed + (turned / Math.max(dt, 1e-6)) * g.turnStep) * dt * onGround;
   const badDown = input.limping && ((s.phase + legOffset(sides[0] ?? "L")) % 1) < stance;
   const hurry = input.limping ? (badDown ? 1 + g.limp * 0.6 : 1 - g.limp * 0.25) : 1;
   s.phase = (s.phase + (advance / stride) * hurry) % 1;
@@ -158,21 +163,27 @@ export function stepGait(s: GaitState, input: GaitInput, g: MechGait, sides: rea
       along = -reach + eased * 2 * reach;
       up = Math.sin(t * Math.PI) * lift * Math.max(s.stepping, s.move);
     }
+    // In a dash the feet slide into a lunge along the direction of travel: the first leg of each pair leads.
+    const lunge = (legOffset(sides[leg]!) === 0 ? 1 : -1) * g.dashStance;
+    along = along * s.move * (1 - s.dash) + lunge * s.dash;
+    up *= 1 - s.dash;
     // In the air the feet hang tucked up a little behind, and the stride fades out.
     const o = leg * 3;
-    s.feet[o] = s.dirX * along * s.move * onGround;
+    s.feet[o] = s.dirX * along * onGround;
     s.feet[o + 1] = up * onGround + g.tuck * s.air;
-    s.feet[o + 2] = s.dirZ * along * s.move * onGround + 0.15 * s.air;
+    s.feet[o + 2] = s.dirZ * along * onGround + 0.15 * s.air;
   }
   const landed = wasInAir && s.air <= 0.5;
-  s.footfalls = landed ? (1 << sides.length) - 1 : s.air > 0.5 ? 0 : planted & ~s.planted;
+  // No footfalls while sliding in a dash: the feet count as down the whole time, so the first step after it lands.
+  if (s.dash > 0.3) planted = (1 << sides.length) - 1;
+  s.footfalls = landed ? (1 << sides.length) - 1 : s.air > 0.5 || s.dash > 0.3 ? 0 : planted & ~s.planted;
   s.planted = planted;
 
   // The body dips as each foot lands, rolls over the planted foot, and leans into where it is going.
   const bob = g.bob + (g.runBob - g.bob) * run;
   const beat = 0.5 + 0.5 * Math.cos(s.phase * Math.PI * 4);
   const limpDip = badDown ? g.limp * bob : 0;
-  const bobNow = -(bob * beat + limpDip) * s.move * onGround - g.braceDrop * s.brace;
+  const bobNow = -(bob * beat + limpDip) * s.move * onGround * (1 - s.dash) - g.braceDrop * s.brace;
   const rollNow = (Math.sin(s.phase * Math.PI * 2) * g.sway * (1 + (badDown ? g.limp : 0))) * DEG * s.move * onGround
     - clampUnit(lx / Math.max(1, input.runSpeed)) * g.lean * 0.5 * DEG;
   // Leaning grows up to run speed and no further: a dash adds its own lean on top, not a doubled run lean.

@@ -90,6 +90,24 @@ describe("gait", () => {
     expect(thumps).toBe(1);
   });
 
+  it("slides through a dash in a lunge with no footsteps, then steps again", () => {
+    const g = createGait(2);
+    for (let i = 0; i < 120; i++) stepGait(g, walking(6.8), ironclad, sides, config.smoothing, DT);
+    let steps = 0;
+    for (let i = 0; i < 12; i++) {
+      stepGait(g, { ...walking(38), dashing: true }, ironclad, sides, config.smoothing, DT);
+      if (i > 2 && g.footfalls) steps++;
+    }
+    expect(steps).toBe(0);
+    // Leading foot ahead (forward is -z), trailing foot behind, both on the ground.
+    expect(g.feet[2]!).toBeLessThan(-ironclad.dashStance * 0.5);
+    expect(g.feet[5]!).toBeGreaterThan(ironclad.dashStance * 0.5);
+    expect(Math.max(g.feet[1]!, g.feet[4]!)).toBeLessThan(0.05);
+    let after = 0;
+    for (let i = 0; i < 120; i++) { stepGait(g, walking(6.8), ironclad, sides, config.smoothing, DT); if (g.footfalls) after++; }
+    expect(after).toBeGreaterThan(2);
+  });
+
   it("leans forward when running and into a dash", () => {
     const g = createGait(2);
     for (let i = 0; i < 120; i++) stepGait(g, walking(13.6), ironclad, sides, config.smoothing, DT);
