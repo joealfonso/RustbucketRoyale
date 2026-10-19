@@ -15,10 +15,10 @@ const ROOM_GAP_MS = 1500;
 const BUDGET_MS = 8; // half the 16.7 ms tick, the same budget as the soak test
 
 const server = spawn("npx", ["tsx", "packages/server/src/main.ts"], {
-  env: { ...process.env, PORT: String(PORT), LOAD_STATS: "1", MAX_ROOMS: "500", TIER: tier },
+  env: { ...process.env, PORT: String(PORT), LOAD_STATS: "1", MAX_ROOMS: "500", TIER: tier, MAP_WORKERS: process.env.MAP_WORKERS ?? "2" },
   stdio: ["ignore", "pipe", "inherit"],
 });
-let latest: { rooms: number; meanMs: number; p99Ms: number; lateP99Ms: number; lateMaxMs: number } | null = null;
+let latest: { rooms: number; meanMs: number; p99Ms: number; lateP99Ms: number; lateMaxMs: number; rssMb: number } | null = null;
 let worstLate = 0; // the longest any tick started late since the last row, including while rooms were made and started
 let ready: () => void;
 const listening = new Promise<void>((resolve) => { ready = resolve; });
@@ -64,7 +64,7 @@ function player(code: string | null, seed: number): Promise<string> {
 }
 
 await listening;
-console.log(`| Tier | Rooms | People | Mean ms per tick (all rooms) | 99th percentile ms | 99th percentile late start ms | Worst late start ms (whole step) | kbps per person | Fits ${BUDGET_MS} ms |\n| :- | :- | :- | :- | :- | :- | :- | :- | :- |`);
+console.log(`| Tier | Rooms | People | Mean ms per tick (all rooms) | 99th percentile ms | 99th percentile late start ms | Worst late start ms (whole step) | kbps per person | Server memory MB | Fits ${BUDGET_MS} ms |\n| :- | :- | :- | :- | :- | :- | :- | :- | :- | :- |`);
 let rooms = 0;
 for (const target of steps) {
   for (; rooms < target; rooms++) {
@@ -79,7 +79,7 @@ for (const target of steps) {
   await new Promise((r) => setTimeout(r, 5500));
   const s = latest!;
   const kbps = (bytesIn * 8) / 5.5 / 1000 / clients.length;
-  console.log(`| ${tier} | ${s.rooms} | ${clients.length} | ${s.meanMs.toFixed(2)} | ${s.p99Ms.toFixed(2)} | ${s.lateP99Ms.toFixed(2)} | ${worstLate.toFixed(0)} | ${kbps.toFixed(0)} | ${s.p99Ms <= BUDGET_MS ? "yes" : "no"} |`);
+  console.log(`| ${tier} | ${s.rooms} | ${clients.length} | ${s.meanMs.toFixed(2)} | ${s.p99Ms.toFixed(2)} | ${s.lateP99Ms.toFixed(2)} | ${worstLate.toFixed(0)} | ${kbps.toFixed(0)} | ${s.rssMb.toFixed(0)} | ${s.p99Ms <= BUDGET_MS ? "yes" : "no"} |`);
   worstLate = 0;
   if (s.p99Ms > BUDGET_MS * 2) break; // well past the budget, no point going further
 }

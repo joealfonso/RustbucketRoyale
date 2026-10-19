@@ -39,4 +39,7 @@ primary_region = "iad" # a guess (US east): pick the region nearest the players 
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "1gb" # a guess with headroom: measure a full large room and lower it in docs/PERF.md
+  # Measured (docs/PERF.md, "Server memory per room"): about 130 MB empty, 10 medium rooms 227 MB, 5 large 301 MB.
+  # 20 rooms that all happen to be large would be about 760 MB, so 1 GB holds MAX_ROOMS = 20 in the worst case.
+  # 512 MB would do with MAX_ROOMS = 10.
+  memory = "1gb"

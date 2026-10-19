@@ -377,3 +377,15 @@ Snapshots were 99% of what a player is sent, and other mechs about 73% of a snap
 | medium | 43 | 21 to 22 | 56 | 26 to 35 | 101 to 135 |
 
 The busiest second on small is the opening brawl just after the countdown: snapshots about 3.9 kB, shots about 1.2 kB and hit, ability and grenade messages about 1 kB that second. Shot origins then went to 16-bit numbers at 5 cm (24 to 18 bytes a shot, about a quarter off the shots in that second); small soak 23 kbps. Next if it is ever needed: the readable hit and ability messages packed.
+
+### Server memory per room (2026-10-19, M10 10b, MacBook Air M4, Node 25, one map worker as on Fly)
+`MAP_WORKERS=1 npx tsx scripts/load-test.ts <tier> <rooms>`: the server process's resident memory with two real WebSocket players per room and bots filling the rest. Sizes the Fly machine in fly.toml.
+
+| Tier | Rooms | People | Server memory MB | 99th percentile tick ms |
+| :- | :- | :- | :- | :- |
+| small | 1 / 5 / 10 | 2 / 10 / 20 | 132 / 137 / 154 | 0.97 / 2.42 / 2.44 |
+| medium | 1 / 5 / 10 | 2 / 10 / 20 | 137 / 167 / 227 | 1.90 / 2.76 / 3.82 |
+| large | 1 / 3 / 5 | 2 / 6 / 10 | 195 / 277 / 301 | 2.44 / 2.28 / 4.41 |
+
+About 130 MB before any room, then roughly 2 to 3 MB a small room, 9 a medium and 30 to 40 a large. Linux on Fly will differ somewhat from macOS; read `fly status` memory after the first real evening. Ping through the internet is not measured yet: read F1, Ping ms, from a phone on cellular during the 10b check.
+

@@ -48,7 +48,7 @@ if (onTick) {
   setInterval(() => {
     const p99 = (v: number[]) => [...v].sort((a, b) => a - b)[Math.floor(v.length * 0.99)] ?? 0;
     const mean = tickTimes.reduce((a, b) => a + b, 0) / Math.max(1, tickTimes.length);
-    console.log(`LOAD ${JSON.stringify({ rooms: manager.roomCount, ticks: tickTimes.length, meanMs: mean, p99Ms: p99(tickTimes), lateP99Ms: p99(lateTimes), lateMaxMs: Math.max(0, ...lateTimes) })}`);
+    console.log(`LOAD ${JSON.stringify({ rooms: manager.roomCount, ticks: tickTimes.length, meanMs: mean, p99Ms: p99(tickTimes), lateP99Ms: p99(lateTimes), lateMaxMs: Math.max(0, ...lateTimes), rssMb: process.memoryUsage().rss / 1e6 })}`);
     tickTimes.length = 0;
     lateTimes.length = 0;
   }, 5000);
