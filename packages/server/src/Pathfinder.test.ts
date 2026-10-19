@@ -73,6 +73,16 @@ describe("Pathfinder", () => {
     expect(Math.hypot(last[0]! - 0, last[1]! - 0)).toBeLessThan(45); // right outside the walls, which end 34 m out
   });
 
+  it("with a heuristic weight, takes a route no longer than that many times the shortest", () => {
+    const walls = [box(-5, -60, 5, 60), box(30, -90, 36, 20), box(-40, 40, -34, 95)];
+    const shortest: number[] = [], weighted: number[] = [];
+    const nav = buildNavGrid(walls, 200, 0, 0, { cellMeters: 2, stepHeight: mech.stepHeight, mechHeight: mech.height });
+    new Pathfinder(nav, { ...pathStats, heuristicWeight: 1 }).findPath(-60, 80, 70, -70, shortest);
+    new Pathfinder(nav, { ...pathStats, heuristicWeight: 2 }).findPath(-60, 80, 70, -70, weighted);
+    expect(weighted.slice(-2)).toEqual([70, -70]);
+    expect(length([-60, 80], weighted)).toBeLessThanOrEqual(length([-60, 80], shortest) * 2);
+  });
+
   it("allows a set number of searches per tick, then more on the next", () => {
     const f = finder([]);
     const path: number[] = [];

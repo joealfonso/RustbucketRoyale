@@ -125,7 +125,7 @@ Medium moves from 24 to 28: a quarter less time alone, inside the bandwidth budg
 | large | 15 | 30 | 4.37 | 12.33 | 1.35 | 24 | no |
 | large | 20 | 40 | 5.27 | 11.46 | 1.32 | 25 | no |
 
-About 40 medium rooms per process on this laptop. Large has slow ticks (9 to 12 ms in the worst 1%) from 5 rooms up, yet ticks never start more than about 1.5 ms late and the average stays at 2.5 to 5 ms even with 20 rooms. So the process keeps up, but something on large spikes now and then. Profiled below. Until the rest is fixed, plan on 10 large rooms per process, and half these numbers on a cloud core.
+About 40 medium rooms per process on this laptop. Large has slow ticks (9 to 12 ms in the worst 1%) from 5 rooms up, yet ticks never start more than about 1.5 ms late and the average stays at 2.5 to 5 ms even with 20 rooms. So the process keeps up, but something on large spikes now and then. Profiled below. Since fixed: see "Cheaper route searches" below, which brings 20 large rooms under 8 ms. Plan on half these numbers on a cloud core.
 
 #### Large tier slow ticks, profiled (2026-10-17)
 `--trace-gc` and `--cpu-prof` on the server under `load-test.ts large 5`, plus timing every route search inside each slow tick. Garbage collection is not the cause: the young generation is swept every 100 to 200 ms but each sweep pauses only 0.1 to 0.4 ms. Route searches are: they are about three quarters of all room tick time on large, and every tick over 6 ms held 4 to 11 searches of 1 to 2 ms each. On the 250 by 250 cell search grid (40% blocked) a search looks at about 2000 cells, and 12% use the full 6000-cell cap, two thirds of those because the goal sits in a sealed pocket. Snapshot building did not show up. Two changes (see DECISIONS.md): at most one search per room per tick (`searchesPerTick` in `data/bots.json`), and goals in unreachable pockets are swapped for the nearest reachable cell.
@@ -139,6 +139,26 @@ Before and after, run alternately on the same afternoon. The laptop was busier t
 | 20 | 10.5, 15.1, 11.4 | 12.5, 9.1, 11.1 |
 
 The spikes in a single room are gone: 5 rooms now fit 8 ms. From 10 rooms up it helps little. Each room can still run its one search on the same tick as every other room, so the worst tick grows with the number of rooms. What remains is plain search volume: bots replan every 2 s whether they need to or not. Doubling `replanSeconds` to 4 made no clear difference in a quick try, and spreading the searches over more rooms on one cache was not the issue either (one pathfinder and twenty used in turn cost the same, 0.38 ms a search). The next step would be cheaper searches, such as one shared route field to the ring centre per ring stage, or a coarser grid for long routes. Still plan on 10 large rooms per process.
+
+#### Cheaper route searches (2026-10-19, MacBook, Node 25)
+Measured on a side branch, merged later. The weight that shipped is 1.5, together with replanning only when needed: see "Cheaper route searches (recommendation 3)" below. The rewritten loop from here is kept. Rooms are no longer built on the main thread either ("Match maps built on worker threads"), so the stall in the last paragraph is gone.
+
+Every route search in two whole large soak matches was recorded (7,700 searches) and replayed offline. Split by goal: wander 98% of search time, ring centre 1%, noises, loot and targets under 1% together. Wander goals are a random point inside the ring, which on 2000 m is 850 m away on average, and the plain shortest-route search looked at about 1900 cells for one (8% hit the 6000 cap). A shared field to the ring centre would only have sped up the 1%. Two changes:
+
+- The search loop rewritten with the same routes (checked identical on every replayed search): the heap in a typed array, moving a hole instead of swapping, and the line checks for straightening worked out inline. About 1.2x.
+- Weighted A*, `heuristicWeight` 1.3 in `data/bots.json`. On the replayed searches: 2.7x faster on average, the slowest 1% of searches 2.3 ms down to 1.1 ms, about 490 cells looked at instead of 1900, none at the cap. Routes are about 5% longer (676 m to 714 m on average) and the first leg heads the same way (within 20 degrees) 93% of the time; otherwise it goes the other way round a building. 1.1 gave 1.55x for 3% longer routes, 1.6 gave 3.3x for 7% longer.
+
+Before and after, run alternately on the same evening, 99th percentile ms per tick. Load test (`load-test.ts large 5,10,20`, two runs each) and in-process (`measure-rooms.ts`, large only, one run each):
+
+| Rooms | Load test before | Load test after | In-process before | In-process after |
+| :- | :- | :- | :- | :- |
+| 5 | 5.63, 4.87 | 1.87, 4.07 | 4.74 | 1.81 |
+| 10 | 6.82, 4.53 | 3.12, 4.26 | 7.99 | 2.97 |
+| 20 | 10.33, 8.33 | 6.09, 5.70 | 12.78 | 6.52 |
+
+Mean tick time for 20 rooms went from 3.7 to 4.0 ms down to 2.4 to 3.0 ms (load test), and from 3.8 to 2.0 ms (in-process). 20 large rooms now fit the 8 ms budget on this laptop: plan on 20 large rooms per process here, and about 10 on a cloud core until it is measured there. The second load test pair ran with ticks starting up to 2.4 ms late, so the machine was busier for it. A whole large soak match still passes (403 s, 39 knocked out, tick p99 0.46 ms).
+
+The load test made its rooms back to back, and a large room takes about 0.8 s to build, with the whole process stopped meanwhile. The players already in kept sending inputs with no ticks to refill their message budget and were kicked for flooding, so the test was quietly measuring 3 rooms whatever it asked for. It now waits 1.5 s between rooms. The same stall hits real players: everyone in every room on the process freezes for most of a second whenever someone makes a large room.
 
 ### Junkyard dressing builds (2026-10-18, MacBook, Node 25, large map seed 5)
 Timed outside the browser on the real map with the real builders. The first build of the 25 or so chunks within 120 m takes 110 ms, once, at spawn while the map is loading. Crossing into a new chunk costs 4 to 6 ms (the merge), because the chunks just beyond are built ahead, one per quiet frame, at up to 7 ms each. Before building ahead, a crossing cost 17 to 25 ms, a dropped frame every few seconds at a sprint.

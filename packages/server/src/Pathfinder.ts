@@ -22,8 +22,11 @@ export class Pathfinder {
   private seenStamp: Int32Array;
   private closedStamp: Int32Array;
   private stamp = 0;
-  private heap = new Int32Array(1024); // grows when a search needs more; `heapSize` entries are in use
+  private heap = new Int32Array(1024);
   private heapSize = 0;
+  private best = 0; // after a search that fell short, the cell it got closest to
+  private cells: number[] = [];
+  private points: number[] = [];
   private searchesLeft: number;
   // Whether the last route found goes all the way, rather than stopping where the search ran out of cells. A whole
   // route stays good on a map that never changes, so a bot only needs a new one when it strays from it.
@@ -170,69 +173,82 @@ export class Pathfinder {
       return true;
     }
 
-    this.stamp++;
-    const stamp = this.stamp;
-    this.heapSize = 0;
-    this.g[start] = 0;
-    this.f[start] = this.stats.heuristicWeight * this.heuristic(start, goal);
-    this.parent[start] = -1;
-    this.seenStamp[start] = stamp;
-    this.push(start);
-
-    let best = start;
-    let bestH = this.f[start]!;
-    let expanded = 0;
-    let reached = false;
-    // Locals rather than fields in the loop below: it runs thousands of times per search.
-    const { cols, rows, blocked, closedStamp, seenStamp, g, f, parent } = this;
-    const goalCol = goal % cols, goalRow = Math.floor(goal / cols);
-    const weight = this.stats.heuristicWeight;
-
-    while (this.heapSize > 0 && expanded < this.stats.maxNodes) {
-      const current = this.pop();
-      if (closedStamp[current] === stamp) continue;
-      closedStamp[current] = stamp;
-      expanded++;
-      if (current === goal) { reached = true; break; }
-
-      const cx = current % cols, cz = Math.floor(current / cols);
-      const hx = Math.abs(cx - goalCol), hz = Math.abs(cz - goalRow);
-      const h = Math.max(hx, hz) + (DIAGONAL - 1) * Math.min(hx, hz);
-      if (h < bestH) { bestH = h; best = current; }
-
-      for (let dz = -1; dz <= 1; dz++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dz === 0) continue;
-          const nx = cx + dx, nz = cz + dz;
-          if (nx < 0 || nz < 0 || nx >= cols || nz >= rows) continue;
-          const next = nz * cols + nx;
-          if (blocked[next] || closedStamp[next] === stamp) continue;
-          // No cutting across the corner of a blocked cell.
-          if (dx !== 0 && dz !== 0 && (blocked[cz * cols + nx] || blocked[nz * cols + cx])) continue;
-          const cost = g[current]! + (dx !== 0 && dz !== 0 ? DIAGONAL : 1);
-          if (seenStamp[next] === stamp && cost >= g[next]!) continue;
-          seenStamp[next] = stamp;
-          g[next] = cost;
-          parent[next] = current;
-          const ax = Math.abs(nx - goalCol), az = Math.abs(nz - goalRow);
-          f[next] = cost + weight * (Math.max(ax, az) + (DIAGONAL - 1) * Math.min(ax, az));
-          this.push(next);
-        }
-      }
-    }
-
-    const end = reached ? goal : best;
+    const reached = this.search(start, goal);
+    const end = reached ? goal : this.best;
     if (end === start) return false;
     this.reachedGoal = reached;
-    const cells: number[] = [];
+    const cells = this.cells;
+    cells.length = 0;
     for (let c = end; c !== -1; c = this.parent[c]!) cells.push(c);
     cells.reverse();
 
-    const points: number[] = [startX, startZ];
+    const points = this.points;
+    points.length = 0;
+    points.push(startX, startZ);
     for (let i = 1; i < cells.length; i++) points.push(this.centreX(cells[i]!), this.centreZ(cells[i]!));
     if (reached && exact) points[points.length - 2] = goalX, points[points.length - 1] = goalZ;
     this.pull(points, out);
     return true;
+  }
+
+  // A* from start to goal over the open cells, at most maxNodes cells looked at. Returns whether it got there;
+  // if not, `best` is the cell it got closest to. This loop is most of a large room's tick. Wander goals on the large
+  // map are 800 m away on average, and the plain shortest-route search looked at about 1900 cells for one. Weighting the
+  // distance still to go (`heuristicWeight`) pulls the search towards the goal: fewer cells looked at for slightly
+  // longer routes (numbers in docs/PERF.md).
+  private search(start: number, goal: number): boolean {
+    const { cols, rows, blocked, g, f, parent, seenStamp, closedStamp } = this;
+    const goalX = goal % cols, goalZ = Math.floor(goal / cols);
+    const stamp = ++this.stamp;
+    this.heapSize = 0;
+    g[start] = 0;
+    f[start] = octile(start % cols - goalX, Math.floor(start / cols) - goalZ);
+    parent[start] = -1;
+    seenStamp[start] = stamp;
+    this.push(start);
+
+    let best = start;
+    let bestH = f[start]!;
+    let expanded = 0;
+    const maxNodes = this.stats.maxNodes;
+    const weight = this.stats.heuristicWeight;
+
+    while (this.heapSize > 0 && expanded < maxNodes) {
+      const current = this.pop();
+      if (closedStamp[current] === stamp) continue;
+      closedStamp[current] = stamp;
+      expanded++;
+      if (current === goal) { this.best = best; return true; }
+
+      const cx = current % cols, cz = Math.floor(current / cols);
+      const h = octile(cx - goalX, cz - goalZ);
+      if (h < bestH) { bestH = h; best = current; }
+
+      const here = g[current]!;
+      for (let dz = -1; dz <= 1; dz++) {
+        const nz = cz + dz;
+        if (nz < 0 || nz >= rows) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dz === 0) continue;
+          const nx = cx + dx;
+          if (nx < 0 || nx >= cols) continue;
+          const next = nz * cols + nx;
+          if (blocked[next] || closedStamp[next] === stamp) continue;
+          const diagonal = dx !== 0 && dz !== 0;
+          // No cutting across the corner of a blocked cell.
+          if (diagonal && (blocked[cz * cols + nx] || blocked[nz * cols + cx])) continue;
+          const cost = here + (diagonal ? DIAGONAL : 1);
+          if (seenStamp[next] === stamp && cost >= g[next]!) continue;
+          seenStamp[next] = stamp;
+          g[next] = cost;
+          parent[next] = current;
+          f[next] = cost + weight * octile(nx - goalX, nz - goalZ);
+          this.push(next);
+        }
+      }
+    }
+    this.best = best;
+    return false;
   }
 
   // Straightens the route: from each point, jump to the furthest later point that can be reached in a straight line.
@@ -264,25 +280,24 @@ export class Pathfinder {
     return true;
   }
 
+  // Samples the line every half cell. Straightening tries many lines per route, so this works out the cells inline,
+  // the same way cellOf does.
   private lineClear(ax: number, az: number, bx: number, bz: number): boolean {
-    const length = Math.hypot(bx - ax, bz - az);
-    const steps = Math.ceil(length / (this.cell * 0.5));
+    const { blocked, cols, rows, originX, originZ, cell } = this;
+    const steps = Math.ceil(Math.hypot(bx - ax, bz - az) / (cell * 0.5));
+    const lastCol = cols - 1, lastRow = rows - 1;
     for (let s = 1; s < steps; s++) {
       const t = s / steps;
-      if (this.blocked[this.cellOf(ax + (bx - ax) * t, az + (bz - az) * t)]) return false;
+      let cx = Math.floor((ax + (bx - ax) * t - originX) / cell);
+      let cz = Math.floor((az + (bz - az) * t - originZ) / cell);
+      cx = cx < 0 ? 0 : cx > lastCol ? lastCol : cx;
+      cz = cz < 0 ? 0 : cz > lastRow ? lastRow : cz;
+      if (blocked[cz * cols + cx]) return false;
     }
     return true;
   }
 
-  private heuristic(a: number, b: number): number {
-    const dx = Math.abs((a % this.cols) - (b % this.cols));
-    const dz = Math.abs(Math.floor(a / this.cols) - Math.floor(b / this.cols));
-    return Math.max(dx, dz) + (DIAGONAL - 1) * Math.min(dx, dz);
-  }
-
-  // A plain binary heap ordered by f, in a typed array, moving a hole rather than swapping: route searches are most
-  // of a large room's tick, and the swaps' throwaway arrays were a good part of that (docs/PERF.md). It makes the
-  // same comparisons in the same order as the swapping version, so the routes are exactly the same.
+  // A binary heap of cells ordered by f. A cell can sit in it more than once; the stale copies are skipped when popped.
   private push(node: number): void {
     if (this.heapSize === this.heap.length) {
       const bigger = new Int32Array(this.heap.length * 2);
@@ -290,11 +305,11 @@ export class Pathfinder {
       this.heap = bigger;
     }
     const heap = this.heap, f = this.f;
-    const value = f[node]!;
+    const key = f[node]!;
     let i = this.heapSize++;
     while (i > 0) {
       const parent = (i - 1) >> 1;
-      if (f[heap[parent]!]! <= value) break;
+      if (f[heap[parent]!]! <= key) break;
       heap[i] = heap[parent]!;
       i = parent;
     }
@@ -307,14 +322,14 @@ export class Pathfinder {
     const size = --this.heapSize;
     if (size > 0) {
       const last = heap[size]!;
-      const value = f[last]!;
+      const key = f[last]!;
       let i = 0;
       for (;;) {
         const left = i * 2 + 1, right = left + 1;
-        let smallest = i, smallestValue = value;
-        if (left < size && f[heap[left]!]! < smallestValue) { smallest = left; smallestValue = f[heap[left]!]!; }
-        if (right < size && f[heap[right]!]! < smallestValue) smallest = right;
-        if (smallest === i) break;
+        let smallest = -1, smallestKey = key;
+        if (left < size && f[heap[left]!]! < smallestKey) { smallest = left; smallestKey = f[heap[left]!]!; }
+        if (right < size && f[heap[right]!]! < smallestKey) smallest = right;
+        if (smallest < 0) break;
         heap[i] = heap[smallest]!;
         i = smallest;
       }
@@ -322,4 +337,11 @@ export class Pathfinder {
     }
     return top;
   }
+}
+
+// The length of the shortest grid walk over this many cells across and down, with diagonal steps allowed.
+function octile(dx: number, dz: number): number {
+  if (dx < 0) dx = -dx;
+  if (dz < 0) dz = -dz;
+  return Math.max(dx, dz) + (DIAGONAL - 1) * Math.min(dx, dz);
 }
