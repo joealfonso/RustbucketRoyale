@@ -187,6 +187,13 @@ The things you shoot for loot got faces. Crates are strapped wooden boxes with a
 
 Before this, the mechs slid across the ground like chess pieces. Now they walk. Each model marks its hips, knees and ankles. The game cuts every leg into thigh, shin and foot, and bends them so each foot lands where the step puts it and stays planted while the body moves over it. Steps come from how fast the mech is really going, so legs keep time with what you see, yours and everyone else's. Each mech moves its own way: Ironclad in short heavy steps, Stiletto in long bird strides, Cataclysm in a diagonal four-legged trot, Arbiter smoothly. Bodies bob and lean into a sprint or a dash, legs tuck up on jets, every foot thumps down on landing, and a shot-up leg limps. Footfalls kick up dust. These mechs are fast for their legs, so a walk is really a jog with a little hop between steps. The hit boxes never moved. You asked for it while the mech-picking gate (9a) waited for its playtest.
 
+## 25. Gate 9a: pick your mech
+*Passed 20:52. Commit `f839134`.*
+
+![The start menu with four mech cards, Ironclad-IV, Stiletto-B, Cataclysm and Arbiter, each with speed, jets and armour bars](25-9a-pick-your-mech.jpg)
+
+The four mechs stopped being skins. You now pick one on the start menu, or on the pause screen between fights, and it plays differently. Stiletto-B is fast with long jets but fragile. Ironclad-IV and Cataclysm are slow and short on fuel but shrug off hits. Arbiter sits in the middle until it gets its tricks. In the lobby you swap on the spot; mid match you wait for the next one, so nobody swaps out of a losing fight. Bots are dealt all four. Every difference is a few numbers in one data file, tunable live.
+
 ---
 
-*Next: the 9a playtest (pick your mech), then 9b, the first abilities on Q.*
+*Next: 9b, the first abilities on Q.*

@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M9 mech classes (gate 9a built, waiting for its playtest)
+Current code milestone: M9 mech classes (9a passed; 9b abilities not started)
 Current visual milestone: V3 done, with V2d walk cycles passed after it. V4 (HUD and radar) not started
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -102,3 +102,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Walk cycles started on Joseph's call ("the mech need walk cycles") as gate V2d, before 9b, while 9a waits for its playtest.
 - 2026-10-18: Gate V2d built, waiting for its playtest. Check: walk, sprint, dash, jet and land in any match: feet plant and stay put instead of skating, the body bobs and leans into a run and a dash, legs tuck up in the air and every foot thumps down on landing; other mechs and bots walk too. Each mech has its own gait (Ironclad short heavy steps, Stiletto long bird strides, Cataclysm a diagonal trot, Arbiter smooth). Shot-up legs limp; broken legs still crawl. On style.html, 4 then W cycles standing, walking, running, dashing, in the air, limping, and 6 frames one mech up close from the side. Tune in F1 under "Walking (gait.json)", then Copy. Camera bob is walkBob under Look and camera, off. Please read F1 Performance on your laptop on large: legs add 20 to 30 draw calls per mech.
 - 2026-10-18: Gate V2d passed by Joseph's call. Mechs walk with their own gaits. 9a (pick your mech) still waits for its playtest; 9b not started.
+- 2026-10-18: Gate 9a passed by Joseph's call. Pick your mech, each with its own speed, jets and toughness. 9b (abilities on Q) not started.
