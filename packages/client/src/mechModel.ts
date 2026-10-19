@@ -5,6 +5,7 @@ import type { LoadedKit } from "./mechKit";
 import { createGait, type GaitState } from "./gait";
 import { SEGMENTS_PER_LEG, segmentOf } from "./legRig";
 import { mergedPieces, type FillLook } from "./mechMerge";
+import { serialTexture } from "./mechSerials";
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const materials = new Map<string, THREE.MeshStandardMaterial>();
@@ -49,6 +50,7 @@ export interface MechModel {
   kitPieces: { zone: number; shownIn: number; object: THREE.LOD }[];
   fxAnchors: (THREE.Object3D | null)[];
   gunParts: THREE.Object3D[]; // hidden with the arms when they are broken
+  serials: { zone: number; object: THREE.Object3D }[]; // painted serial numbers, gone with their zone's part
   // A kit's painted materials beyond the one per zone: each zone's paint (its colours on the corners, so the base is
   // white) and the pilot's accent, so every painted part rusts with its zone.
   paints: { zone: number; material: THREE.MeshToonMaterial; base: THREE.Color }[];
@@ -133,6 +135,7 @@ export function createMechModel(
     return material;
   };
   const kitPieces: MechModel["kitPieces"] = [];
+  const serials: MechModel["serials"] = [];
   const fxAnchors: MechModel["fxAnchors"] = [null, null, null];
   let gunMount: THREE.Vector3 | null = null;
   const legs: MechModel["legs"] = [];
@@ -198,6 +201,25 @@ export function createMechModel(
       } else body.add(lod);
       kitPieces.push({ zone: piece.zone, shownIn: piece.shownIn, object: lod });
     }
+    // Serial numbers: paint like the hull's, so they rust and darken with their zone. Past the first level of detail
+    // they would be a pixel or two, so they are not drawn there.
+    for (const placed of kit.serials) {
+      const paint = toon.ownMaterial(placed.color, true);
+      paint.map = serialTexture(placed.text);
+      paint.alphaTest = 0.5;
+      paints.push({ zone: placed.zone, material: paint, base: new THREE.Color(toon.color(placed.color)) });
+      const lod = new THREE.LOD();
+      lod.addLevel(new THREE.Mesh(placed.geometry, paint), 0);
+      lod.addLevel(new THREE.Object3D(), kit.lodDistances[0]!);
+      lod.position.copy(placed.point);
+      lod.quaternion.copy(placed.turn);
+      if (placed.zone === 0 && legs.length > 0) {
+        const piece = segmentOf(placed.point, kit.legs);
+        lod.position.sub(segmentRest(piece));
+        segmentGroup(piece).add(lod);
+      } else body.add(lod);
+      serials.push({ zone: placed.zone, object: lod });
+    }
   } else {
     part(2, [0, 2.4, 0], [1.8, 1.6, 1.2]);
     // Legs hang from the hips (pivot at the top) so a broken one can shrink to a stub under the body.
@@ -246,7 +268,7 @@ export function createMechModel(
   return {
     group, body, legMeshes, zoneMaterials, toon, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
     hp: [...zoneMaxHp], dead: false, repairing: false, upgradeParts: [], fxTimers: [0, 0, 0, 0, 0, 0, 0],
-    kitPieces, fxAnchors, gunParts, paints, glows,
+    kitPieces, fxAnchors, gunParts, serials, paints, glows,
     legs, legSides: legs.map((l) => l.side), gait: legs.length > 0 ? createGait(legs.length) : null, gaitId: kit?.id ?? "", crawlDrop: 0, crawlTilt: 0,
   };
 }
@@ -308,6 +330,7 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
     const state = hp[piece.zone]! <= 0 ? 2 : fraction < damagedBelow ? 1 : 0;
     piece.object.visible = (piece.shownIn & (1 << state)) !== 0;
   }
+  for (const serial of model.serials) serial.object.visible = hp[serial.zone]! > 0;
   // Crawling: the body drops onto stubs and tips forward, so a legless mech reads at a distance.
   const crawling = hp[0]! <= 0 && !dead;
   model.crawlDrop = crawling ? -crawlLook.dropMeters : 0;

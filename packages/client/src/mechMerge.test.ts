@@ -29,7 +29,7 @@ async function standinKit(): Promise<LoadedKit> {
     name, zone: { legs: 0, arms: 1, torso: 2 }[p.zone]!, paint: p.paint, color: null, glow: false, rusts: p.paint !== "trim" && p.paint !== "weapon",
     states: await Promise.all(STATES.map(async (state) => readPartFile(await parse(`${k.folder}/Mech_${k.name}_${name}_${state}.glb`)))),
   })));
-  return { id: "standin", parts, lodDistances: kits.lodDistances, legs: [] };
+  return { id: "standin", parts, lodDistances: kits.lodDistances, legs: [], serials: [] };
 }
 
 const triangles = (g: THREE.BufferGeometry | null | undefined) => (!g ? 0 : (g.index ? g.index.count : g.attributes.position?.count ?? 0) / 3);

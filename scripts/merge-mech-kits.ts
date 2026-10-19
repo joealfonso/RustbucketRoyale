@@ -1,6 +1,6 @@
 // Copies each roster mech's paint scheme and parts list from its script's side file (scripts/mechs/<name>.kit.json,
-// written alongside the model) into data/mechKits.json, keeping the file path. Run after rebuilding a mech, then
-// scripts/make-hitboxes.ts. Run: npx tsx scripts/merge-mech-kits.ts
+// written alongside the model) into data/mechKits.json, keeping the file path, hit boxes, muzzles and serials.
+// Run after rebuilding a mech, then scripts/make-hitboxes.ts. Run: npx tsx scripts/merge-mech-kits.ts
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -12,7 +12,7 @@ for (const id of kits.roster as string[]) {
   if (!existsSync(side)) { console.log(`${id}: no ${id}.kit.json, left as it is`); continue; }
   const { scheme, parts } = JSON.parse(readFileSync(side, "utf8"));
   const kit = kits.kits[id];
-  kits.kits[id] = { file: kit.file, scheme, parts, ...(kit.hitboxes ? { hitboxes: kit.hitboxes } : {}), ...(kit.muzzles ? { muzzles: kit.muzzles } : {}) };
+  kits.kits[id] = { file: kit.file, scheme, parts, ...(kit.hitboxes ? { hitboxes: kit.hitboxes } : {}), ...(kit.muzzles ? { muzzles: kit.muzzles } : {}), ...(kit.serials ? { serials: kit.serials } : {}) };
   console.log(`${id}: ${Object.keys(parts).length} parts, ${Object.keys(scheme).length} colours`);
 }
 writeFileSync(kitsPath, `${JSON.stringify(kits, null, 2)}\n`);

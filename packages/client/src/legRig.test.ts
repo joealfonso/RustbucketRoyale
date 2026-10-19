@@ -42,7 +42,9 @@ describe("leg rig", () => {
     // At rest a hung piece's world matrix is plain: no turn and no offset left over from the joints.
     for (const leg of model.legs) {
       for (const joint of [leg.hip, leg.knee, leg.ankle]) {
-        for (const lod of joint.children.filter((c) => c instanceof THREE.LOD)) {
+        // Serial numbers ride on leg pieces too, but sit on the surface, not at the piece's origin.
+        const serials = new Set(model.serials.map((s) => s.object));
+        for (const lod of joint.children.filter((c) => c instanceof THREE.LOD && !serials.has(c))) {
           const e = lod.matrixWorld.elements;
           expect(Math.hypot(e[12]!, e[13]!, e[14]!)).toBeLessThan(1e-6);
         }

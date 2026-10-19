@@ -24,7 +24,7 @@ async function loadStandin(): Promise<LoadedKit> {
       return readPartFile(gltf.scene);
     })),
   })));
-  return { id: "test", parts, lodDistances: kits.lodDistances, legs: [] };
+  return { id: "test", parts, lodDistances: kits.lodDistances, legs: [], serials: [] };
 }
 
 describe("mech kit", () => {
@@ -84,7 +84,7 @@ describe("mech kit", () => {
       name, zone: { legs: 0, arms: 1, torso: 2 }[p.zone]!, paint: p.paint, color: null, glow: false, rusts: p.paint !== "trim" && p.paint !== "weapon", states: readOneFileStates(gltf.scene, name),
     }));
     const toon = new Toon(parseLook(lookJson), parsePalette(paletteJson));
-    const model = createMechModel("#ffffff", [60, 60, 100], toon, "scrapSteel", { id: "test", parts, lodDistances: kits.lodDistances, legs: [] });
+    const model = createMechModel("#ffffff", [60, 60, 100], toon, "scrapSteel", { id: "test", parts, lodDistances: kits.lodDistances, legs: [], serials: [] });
     const legsShown = () => model.kitPieces.filter((p) => p.zone === 0).map((p) => p.object.visible);
     setMechDamage(model, [10, 60, 100], false);
     expect(legsShown()).toEqual([true]); // damaged: still there (both legs are one piece, intact and damaged)

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { readLegJoints, splitBySegment, type LegJoints } from "./legRig";
+import { FACINGS, placeSerials, type PlacedSerial, type SerialData } from "./mechSerials";
 import { addOutlineNormals } from "./outlineNormals";
 
 // A mech kit: the model a mech is drawn from, split into seven parts (torso, jets, sensor, two legs, two arms), each
@@ -32,6 +33,7 @@ export interface KitsData {
     file?: string; folder?: string; name?: string; scheme?: Record<string, string>;
     parts: Record<string, { zone: string; paint: Paint; noHit?: boolean; glow?: boolean; rusts?: boolean }>;
     hitboxes?: Record<string, { center: number[]; size: number[] }[]>;
+    serials?: SerialData[];
   }>;
 }
 
@@ -59,6 +61,7 @@ export interface LoadedKit {
   parts: KitPart[];
   lodDistances: number[];
   legs: LegJoints[]; // empty for a kit whose model marks no leg joints: it glides instead of walking
+  serials: PlacedSerial[]; // its serial numbers, placed on its parts (mechSerials.ts)
 }
 
 export function parseKits(raw: unknown): KitsData {
@@ -69,6 +72,11 @@ export function parseKits(raw: unknown): KitsData {
     for (const [part, p] of Object.entries(kit.parts)) {
       if (!(p.zone in ZONE_INDEX)) throw new Error(`mechKits.json: ${id} ${part} has unknown zone "${p.zone}"`);
       if (!["body", "accent", "trim", "weapon"].includes(p.paint) && !kit.scheme?.[p.paint]) throw new Error(`mechKits.json: ${id} ${part} has paint "${p.paint}", which is not in its scheme`);
+    }
+    for (const s of kit.serials ?? []) {
+      const ok = typeof s?.text === "string" && s.text.length > 0 && FACINGS.includes(s.facing) && Array.isArray(s.at) && s.at.length === 2
+        && s.at.every(Number.isFinite) && typeof s.height === "number" && s.height > 0 && !!kit.scheme?.[s.paint];
+      if (!ok) throw new Error(`mechKits.json: ${id} has a serial that needs text, a facing (${FACINGS.join(", ")}), at [across, up], a height and a paint from its scheme`);
     }
   }
   return d;
@@ -142,7 +150,7 @@ export async function loadKit(id: string, data: KitsData, base = "/"): Promise<L
     })));
     const missing = parts.filter((p) => !p.states[0]).map((p) => p.name);
     if (missing.length > 0) throw new Error(`no intact ${missing.join(", ")}`);
-    return { id, parts, lodDistances: data.lodDistances, legs: [] };
+    return { id, parts, lodDistances: data.lodDistances, legs: [], serials: serialsOf(kit, parts) };
   } catch (error) {
     console.warn(`Mech kit "${id}" could not be loaded, using the grey-box mech:`, error);
     return null;
@@ -158,7 +166,12 @@ export function kitFromScene(id: string, data: KitsData, scene: THREE.Object3D):
   const missing = parts.filter((p) => !p.states[0]).map((p) => p.name);
   if (missing.length > 0) throw new Error(`no intact ${missing.join(", ")}`);
   if (legs.length > 0) for (const part of parts) if (part.zone === ZONE_INDEX.legs) for (const state of part.states) if (state) state.pieces = cutLegs(state.lods, legs);
-  return { id, parts, lodDistances: data.lodDistances, legs };
+  return { id, parts, lodDistances: data.lodDistances, legs, serials: serialsOf(kit, parts) };
+}
+
+// A kit's serial numbers placed on the nearest level of its intact parts.
+function serialsOf(kit: KitsData["kits"][string], parts: KitPart[]): PlacedSerial[] {
+  return placeSerials(kit.serials ?? [], parts.map((p) => ({ geometry: p.states[0]!.lods[0]!, zone: p.zone })), (paint) => kit.scheme![paint]!);
 }
 
 // One leg part's levels of detail cut into leg pieces. A piece a simpler level has lost keeps the level before it.
