@@ -1,7 +1,12 @@
 import * as THREE from "three";
+import { groundMaterial } from "./groundMaterial";
+import { installHaze } from "./haze";
+import { parseLight, presetColors, presetForSeed, presetNamed, type LightConfig, type LightPreset } from "./lightPresets";
+import { Sky, parseSky, type SkyConfig } from "./sky";
 
 // The look of the game, from data/look.json and data/palette.json: one master toon material for everything (three
-// flat bands of light plus a hard rim), a dark outline round every box, and one warm key light with cool fill and fog.
+// flat bands of light plus a hard rim), a dark outline round every box, and one warm key light with cool fill, a sky
+// and warm haze, from one of the light presets.
 // Colours are named from the palette in DESIGN.md. Art hook: real models get the same material from `material()`.
 
 export interface Palette {
@@ -9,7 +14,7 @@ export interface Palette {
   // youAccent marks your own mech; everyone else gets one of pilotAccents by player number, so two of the same
   // mech can be told apart. othersAccent is the fallback.
   mech: { body: string; trim: string; youAccent: string; othersAccent: string; pilotAccents?: string[] };
-  world: { ground: string; sky: string; remap: Record<string, string> };
+  world: { ground: string; remap: Record<string, string> };
 }
 
 export interface LookConfig {
@@ -28,13 +33,10 @@ export interface LookConfig {
     streaks: { color: string; scale: number; cover: number; strength: number };
     grime: { color: string; height: number; strength: number };
   };
-  light: {
-    key: { color: string; intensity: number; direction: [number, number, number] };
-    fillSky: string;
-    fillGround: string;
-    fillIntensity: number;
-    fog: { color: string; near: number; far: number };
-  };
+  light: LightConfig;
+  // How fast the haze thins with height, per metre (see haze.ts). The haze colour and distances are per preset.
+  haze: { heightFalloff: number };
+  sky: SkyConfig;
 }
 
 export function parsePalette(raw: unknown): Palette {
@@ -48,6 +50,9 @@ export function parseLook(raw: unknown): LookConfig {
   const l = raw as LookConfig;
   if (!Array.isArray(l?.bands) || l.bands.length < 2 || l.bandEdges?.length !== l.bands.length - 1) throw new Error("look.json: needs bands and one fewer bandEdges");
   if (typeof l.outline?.widthMeters !== "number" || typeof l.rim?.strength !== "number") throw new Error("look.json: needs outline and rim");
+  if (typeof l.haze?.heightFalloff !== "number" || l.haze.heightFalloff < 0) throw new Error("look.json: needs haze.heightFalloff");
+  parseLight(l.light);
+  parseSky(l.sky);
   return l;
 }
 
@@ -72,6 +77,11 @@ export class Toon {
   private outlines = new Map<string, THREE.MeshBasicMaterial>();
   private shellOutlines = new Map<string, THREE.MeshBasicMaterial>();
   private rimColor: THREE.Color;
+  // Made by `light`, changed in place by `useLight`, so a new match only changes numbers and compiles nothing.
+  private fill = new THREE.HemisphereLight();
+  private key = new THREE.DirectionalLight();
+  private haze = new THREE.Fog(0xffffff);
+  private sky: Sky;
 
   constructor(private look: LookConfig, private palette: Palette) {
     // The bands as a tiny texture read with no blending, so light falls in flat steps.
@@ -88,6 +98,10 @@ export class Toon {
     this.ramp.magFilter = THREE.NearestFilter;
     this.ramp.needsUpdate = true;
     this.rimColor = new THREE.Color(this.color(look.rim.color));
+    for (const preset of look.light.presets) {
+      for (const c of presetColors(preset)) if (!/^#[0-9a-fA-F]{6}$/.test(this.color(c))) throw new Error(`look.json: light preset ${preset.name} names ${c}, which is not in palette.json`);
+    }
+    this.sky = new Sky(look.sky, (c) => this.color(c));
   }
 
   // A palette name, an old map colour remapped onto the palette, or a plain hex colour.
@@ -113,7 +127,7 @@ export class Toon {
     const hex = this.color(name);
     let m = this.groundMaterials.get(hex);
     if (!m) {
-      m = new THREE.MeshToonMaterial({ color: hex, gradientMap: this.ramp });
+      m = groundMaterial(hex, this.ramp, (c) => this.color(c));
       this.groundMaterials.set(hex, m);
     }
     return m;
@@ -283,15 +297,37 @@ export class Toon {
     return new ToonInstances(this, name, count, this.look.outline.widthMeters, ground);
   }
 
-  // Lights, fog and sky for a scene.
-  light(scene: THREE.Scene): void {
-    const { light } = this.look;
-    scene.background = new THREE.Color(this.palette.world.sky);
-    scene.fog = new THREE.Fog(light.fog.color, light.fog.near, light.fog.far);
-    scene.add(new THREE.HemisphereLight(this.color(light.fillSky), this.color(light.fillGround), light.fillIntensity));
-    const key = new THREE.DirectionalLight(this.color(light.key.color), light.key.intensity);
-    key.position.set(...light.key.direction).multiplyScalar(100);
-    scene.add(key);
+  // The light preset for a map seed, or the one named by `forced` (?look=<name>) when there is one by that name.
+  presetFor(seed: number, forced: string | null = null): LightPreset {
+    return (forced !== null ? presetNamed(this.look.light, forced) : null) ?? presetForSeed(this.look.light, seed);
+  }
+
+  get presets(): readonly LightPreset[] {
+    return this.look.light.presets;
+  }
+
+  // Lights, sky and haze for a scene, in one preset's colours. Call before anything renders: the haze replaces
+  // Three's fog shader code, which every material compiles in.
+  light(scene: THREE.Scene, preset: LightPreset): void {
+    installHaze(this.look.haze.heightFalloff);
+    scene.fog = this.haze;
+    // The haze colour is the sky's horizon too; as the background it only shows if the sky is ever taken out.
+    scene.background = this.haze.color;
+    scene.add(this.fill, this.key, this.sky.mesh);
+    this.useLight(preset);
+  }
+
+  useLight(preset: LightPreset): void {
+    this.fill.color.set(this.color(preset.fillSky));
+    this.fill.groundColor.set(this.color(preset.fillGround));
+    this.fill.intensity = preset.fillIntensity;
+    this.key.color.set(this.color(preset.key.color));
+    this.key.intensity = preset.key.intensity;
+    this.key.position.set(...preset.key.direction).multiplyScalar(100);
+    this.haze.color.set(this.color(preset.haze.color));
+    this.haze.near = preset.haze.near;
+    this.haze.far = preset.haze.far;
+    this.sky.use(preset);
   }
 }
 

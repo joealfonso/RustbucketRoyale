@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none (M1 to M9 done)
-Current visual milestone: V3 done, with V2d walk cycles passed after it. V4 (HUD and radar) not started
+Current visual milestone: V6a and V6b (environment pass, moved ahead of V4) built, waiting for their playtest. V4 (HUD and radar) next
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -108,3 +108,6 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Gate 9b passed by Joseph's call, with the own-gun muzzles and rebuilt sounds. 9c (Cataclysm and Arbiter abilities) not started.
 - 2026-10-18: Gate 9c built, waiting for its playtest. Check: as Cataclysm press Q aiming 15 to 120 m out: it plants and booms, a red ring appears at the target for everyone, a whistle, then three shells; stand in someone else's ring and run. As Arbiter press Q: two copies of you run off at angles (see-through to you, real-looking to everyone else, damage and all); bots shoot them; one hit pops them in a teal fizz. Bots use both. HUD shows "Q Mortar Strike" and "Q Decoy Drones". On style.html W also cycles a "braced" pose. Numbers in data/abilities.json, data/abilityFx.json, data/gait.json braceDrop and data/bots.json abilities. Soak passes on all tiers at 43 to 58 kbps.
 - 2026-10-18: Gate 9c passed by Joseph's call. M9 is done: four mechs with their own movement, toughness and Q ability, used by bots. No code milestone is next; V4 (HUD and radar) not started.
+- 2026-10-19: On Joseph's call after the HUD direction study (https://claude.ai/artifact/VTRjUG1r8RQ1ijiVQmYXPa), the environment pass (V6) goes before V4, and the HUD font becomes Chakra Petch + Share Tech Mono + Barlow (pairing A), to be written into DESIGN.md with V4.
+- 2026-10-19: Gates V6a and V6b built, waiting for their playtest. Check: a sky with sun and toon clouds, warm haze that melts the distance, three light looks picked by the map seed (force one with ?look=golden+afternoon, hazy+dusk or overcast; style.html key L cycles them), a worn floor of moss, dirt, gravel, oil and tyre tracks, soft shadows under walls, props and mechs, the map edge as a junkyard wall of corrugated steel, containers and a fence, and scrap mountains, cranes and stacks beyond it. Before and after: docs/style/v6-before.jpg, v6-golden-afternoon.jpg, v6-hazy-dusk.jpg. Read F1 Performance on large on your laptop: about 26 more draw calls.
+- 2026-10-19: During the build: a dash now slides in a lunge instead of a sprint of footsteps (Joseph: "shift currently applies step noises").

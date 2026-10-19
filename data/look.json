@@ -18,23 +18,92 @@
     "darken": 0.35
   },
   "light": {
-    "key": {
-      "color": "warmLight",
-      "intensity": 2.2,
-      "direction": [
-        -0.5,
-        1.0,
-        0.35
-      ]
-    },
-    "fillSky": "#8FA3AD",
-    "fillGround": "soot",
-    "fillIntensity": 0.9,
-    "fog": {
-      "color": "#B5B7A8",
-      "near": 120,
-      "far": 900
-    }
+    "presets": [
+      {
+        "name": "golden afternoon",
+        "key": {
+          "color": "warmLight",
+          "intensity": 2.2,
+          "direction": [
+            -0.6,
+            0.5,
+            0.4
+          ]
+        },
+        "fillSky": "fillBlue",
+        "fillGround": "soot",
+        "fillIntensity": 0.9,
+        "sky": {
+          "zenith": "skyPale",
+          "sun": "sunDisc"
+        },
+        "clouds": {
+          "lit": "cloudLit",
+          "shade": "cloudShade"
+        },
+        "haze": {
+          "color": "hazeGold",
+          "near": 60,
+          "far": 1300
+        }
+      },
+      {
+        "name": "hazy dusk",
+        "key": {
+          "color": "duskAmber",
+          "intensity": 2.0,
+          "direction": [
+            -0.8,
+            0.3,
+            -0.35
+          ]
+        },
+        "fillSky": "duskFill",
+        "fillGround": "soot",
+        "fillIntensity": 0.85,
+        "sky": {
+          "zenith": "duskZenith",
+          "sun": "duskSun"
+        },
+        "clouds": {
+          "lit": "duskCloudLit",
+          "shade": "duskCloudShade"
+        },
+        "haze": {
+          "color": "duskHaze",
+          "near": 40,
+          "far": 850
+        }
+      },
+      {
+        "name": "overcast",
+        "key": {
+          "color": "overcastLight",
+          "intensity": 1.6,
+          "direction": [
+            -0.3,
+            1.0,
+            0.2
+          ]
+        },
+        "fillSky": "overcastFill",
+        "fillGround": "soot",
+        "fillIntensity": 1.15,
+        "sky": {
+          "zenith": "overcastZenith",
+          "sun": "overcastSun"
+        },
+        "clouds": {
+          "lit": "overcastCloudLit",
+          "shade": "overcastCloudShade"
+        },
+        "haze": {
+          "color": "overcastHaze",
+          "near": 30,
+          "far": 650
+        }
+      }
+    ]
   },
   "rust": {
     "color": "rustOrange",
@@ -64,5 +133,40 @@
       "height": 0.5,
       "strength": 0.4
     }
+  },
+  "haze": {
+    "heightFalloff": 0.015
+  },
+  "sky": {
+    "zenithCurve": 0.55,
+    "sunDegrees": 2.6,
+    "ringDegrees": 0.9,
+    "ringMix": 0.45,
+    "clouds": [
+      {
+        "baseDegrees": 2.0,
+        "heightDegrees": 5.0,
+        "frequency": 3.2,
+        "cover": 0.55,
+        "shade": 0.4,
+        "seed": 11
+      },
+      {
+        "baseDegrees": 9.0,
+        "heightDegrees": 6.0,
+        "frequency": 5.0,
+        "cover": 0.45,
+        "shade": 0.45,
+        "seed": 37
+      },
+      {
+        "baseDegrees": 20.0,
+        "heightDegrees": 4.0,
+        "frequency": 7.0,
+        "cover": 0.35,
+        "shade": 0.5,
+        "seed": 73
+      }
+    ]
   }
 }

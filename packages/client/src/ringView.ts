@@ -11,7 +11,8 @@ export class RingView {
   // `color` is the zone magenta: the only magenta in the world, so the ring can never be mistaken for anything else.
   constructor(scene: THREE.Scene, color: string) {
     const geometry = new THREE.CylinderGeometry(1, 1, 400, 96, 1, true);
-    const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false });
+    // No haze on the zone wall: it is the one thing that must read from anywhere on the map.
+    const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false, fog: false });
     this.wall = new THREE.Mesh(geometry, material);
     this.wall.visible = false;
     this.wall.position.y = 150;

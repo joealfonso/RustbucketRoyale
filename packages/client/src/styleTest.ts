@@ -21,7 +21,7 @@ import { toGeometry } from "./dressing/dressing";
 
 // The V1 style test (style.html): one chunk, its props and three mechs in the game's look, seen from 10, 50 and
 // 150 m, so the palette, bands, outline and light can be judged before any real art is made. Keys 1, 2, 3 move the
-// camera; Q and E turn round the mechs.
+// camera; Q and E turn round the mechs; L steps through the light presets (data/look.json).
 const palette = parsePalette(paletteJson);
 const toon = new Toon(parseLook(lookJson), palette);
 const chunks = parseChunkSet(chunksJson);
@@ -40,7 +40,8 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-toon.light(scene);
+let preset = 0;
+toon.light(scene, toon.presets[preset]!);
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 3000);
 
 // Ground, then the chunk with its middle on the origin.
@@ -141,13 +142,13 @@ function place(): void {
   const lift = lookingAtProps ? 0.9 : 0.18; // looking down onto the props, over the mechs
   camera.position.set(target.x + Math.sin(turn) * distance, close ? 1.4 : target.y + 1.5 + distance * lift, target.z + Math.cos(turn) * distance);
   camera.lookAt(target);
-  label.textContent = lookingAtProps
+  label.textContent = `Light: ${toon.presets[preset]!.name} (L) · ` + (lookingAtProps
     ? "Props, standing and broken: crate, junk pile, barrel · 1 / 2 / 3: back to the damage row · Q / E: turn"
     : close
     ? `${roster[closeUp]!.id} up close · W: ${WALKS[walk]} · 6: next mech · Q / E: turn · 4: the whole roster`
     : lookingAtRoster
     ? `Roster: ${roster.map((r) => r.id).join(", ") || "none loaded"} · W: ${WALKS[walk]} · 1 / 2 / 3: back to the damage row · Q / E: turn`
-    : `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · 4: the roster · 5: the props · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · behind, left to right: you (clean), then 75%, 40%, 15%, arms and legs broken`;
+    : `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · 4: the roster · 5: the props · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · behind, left to right: you (clean), then 75%, 40%, 15%, arms and legs broken`);
 }
 window.addEventListener("keydown", (e) => {
   const index = ["Digit1", "Digit2", "Digit3"].indexOf(e.code);
@@ -158,6 +159,7 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "KeyQ") turn -= 0.3;
   if (e.code === "KeyE") turn += 0.3;
   if (e.code === "KeyW") walk = (walk + 1) % WALKS.length;
+  if (e.code === "KeyL") { preset = (preset + 1) % toon.presets.length; toon.useLight(toon.presets[preset]!); }
   if (e.code === "KeyD") { kitDamage = (kitDamage + 1) % KIT_DAMAGE.length; showKitDamage(); }
   place();
 });

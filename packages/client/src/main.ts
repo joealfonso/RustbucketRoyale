@@ -44,6 +44,8 @@ import { PickupView } from "./pickupView";
 import { setMechGear } from "./mechModel";
 import { Hud } from "./hud";
 import { MapMeshes } from "./mapRenderer";
+import { ContactShadows, parseShadowLook } from "./contactShadows";
+import groundJson from "../../../data/ground.json";
 import { BUILDERS, Dressing, scatter } from "./dressing";
 import { PROP_MODELS } from "./props";
 import { BreakFx } from "./props/breakFx";
@@ -52,6 +54,12 @@ import abilityFxJson from "../../../data/abilityFx.json";
 import { AbilityFx, abilityMoment, parseAbilityFx } from "./abilityFx";
 import { MortarWarnings } from "./mortarWarning";
 import dressingJson from "../../../data/dressing.json";
+import backdropJson from "../../../data/backdrop.json";
+import tiersJson from "../../../data/tiers.json";
+import { EdgeBarrier } from "./dressing/edgeBarrier";
+import { parseBarrier } from "./dressing/edgeLayout";
+import { Backdrop } from "./backdrop/backdrop";
+import { parseBackdrop } from "./backdrop/layout";
 import chunksJsonForDressing from "../../../data/chunks.json";
 import { createMechModel, legsLimping, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
 import { NetClient } from "./net";
@@ -166,11 +174,13 @@ const canvas = document.getElementById("game") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-// The game's look (V1): palette, toon bands and outlines, warm key light, fog. See DESIGN.md and toonMaterial.ts.
+// The game's look (V1): palette, toon bands and outlines, warm key light, sky and haze. See DESIGN.md and toonMaterial.ts.
+// The map seed picks the light preset, so everyone in a room sees the same sky; offline ?look=<name> forces one.
 const palette = parsePalette(paletteJson);
 const toon = new Toon(parseLook(lookJson), palette);
+const forcedLook = offline ? params.get("look") : null;
 const scene = new THREE.Scene();
-toon.light(scene);
+toon.light(scene, toon.presetFor(map.seed, forcedLook));
 if (params.has("overview")) scene.fog = null;
 
 let mapMeshes = new MapMeshes(scene, map, toon);
@@ -178,10 +188,21 @@ let mapMeshes = new MapMeshes(scene, map, toon);
 const dressingConfig = { ...dressingJson, chunkMeters: chunksJsonForDressing.size };
 const makeDressing = () => new Dressing(scene, toon, map, mapMeshes, BUILDERS, scatter, dressingConfig);
 let dressing = makeDressing();
+// The edge walls drawn as a junkyard perimeter, and the world beyond them (data/backdrop.json). The backdrop is the
+// same for every map of one size, so it is only rebuilt when the size changes.
+const barrierConfig = parseBarrier(backdropJson.barrier);
+const backdropConfig = parseBackdrop(backdropJson.backdrop);
+let edgeBarrier = new EdgeBarrier(scene, toon, map, mapMeshes, barrierConfig);
+const makeBackdrop = () => (map.tier === "range" ? null : new Backdrop(scene, toon, map.meters, tiersJson.edgeWallThickness, backdropConfig));
+let backdrop = makeBackdrop();
 let propView = new PropView(map, propConfig, toon, PROP_MODELS);
 const breakFx = new BreakFx(scene, toon, propFxJson);
 scene.add(propView.group);
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
+// Soft dark patches under map boxes and mechs, so nothing floats over the ground (data/ground.json shadows).
+const shadowLook = parseShadowLook(groundJson.shadows);
+const contactShadows = new ContactShadows(scene, shadowLook, toon.color(shadowLook.color));
+contactShadows.setMap(map.boxes, map.world);
 const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters) : null;
 
 // Each mech is drawn as its roster mech's kit, by the mech number the server sends. ?kit=grey draws everyone as the
@@ -261,6 +282,7 @@ const thrown = createGrenade();
 const damageFx = new DamageFx(scene, damageFxConfig, zoneSet);
 let fxDt = 0;
 const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
+const shadowUnder = (model: MechModel) => contactShadows.addObject(model.group);
 // Everyone else wears the same accent: telling friend from foe is by name and behaviour, not colour.
 const pilotAccents = palette.mech.pilotAccents ?? [];
 const accentFor = (id: number) => (pilotAccents.length > 0 ? pilotAccents[id % pilotAccents.length]! : palette.mech.othersAccent);
@@ -344,10 +366,18 @@ function swapMap(newSeed: number, newTier: string): void {
   scene.remove(propView.group);
   propView.dispose();
   map = buildPlayMap(newTier, newSeed, mechStats);
+  toon.useLight(toon.presetFor(newSeed, forcedLook));
   mapMeshes = new MapMeshes(scene, map, toon);
   dressing.dispose();
   dressing = makeDressing();
+  edgeBarrier.dispose();
+  edgeBarrier = new EdgeBarrier(scene, toon, map, mapMeshes, barrierConfig);
+  if (map.tier === "range" || backdrop?.meters !== map.meters) {
+    backdrop?.dispose();
+    backdrop = makeBackdrop();
+  }
   propView = new PropView(map, propConfig, toon, PROP_MODELS);
+  contactShadows.setMap(map.boxes, map.world);
   scene.add(propView.group);
   pickupView.clear();
   predictor.setWorld(map.world);
@@ -442,6 +472,7 @@ if (net) {
     const prop = map.props[id];
     if (!prop || map.world.isDisabled(prop.boxIndex)) return;
     map.world.disable(prop.boxIndex);
+    contactShadows.hideBox(prop.boxIndex);
     propView.destroy(id);
     debris.spawn(prop.x, prop.y, prop.z, 0.3);
     breakFx.burst(propConfig.types[prop.type]!.id, prop.x, prop.y, prop.z);
@@ -765,6 +796,7 @@ function frame(now: number): void {
     rig.camera.position.set(0, map.meters * 0.75, 1);
     rig.camera.lookAt(0, 0, 0);
   }
+  edgeBarrier.update(rig.camera.position);
 
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;
   staminaFill.style.width = `${mech.stamina.fraction * 100}%`;
@@ -780,6 +812,10 @@ function frame(now: number): void {
   hud.setAbility(ownAbilityStats?.name ?? null, mech.abilityCooldown, ownAbilityStats?.cooldownSeconds ?? 0);
   damageFx.emitFrom(ownModel, frameTime);
   remotes.forEachModel(emitDamage);
+  contactShadows.beginMoving();
+  contactShadows.addObject(mechGroup);
+  remotes.forEachModel(shadowUnder);
+  contactShadows.endMoving();
   damageFx.update(frameTime);
   hud.setLoadout(loadout, weaponSet.weapons, lootConfig.armorPlates, upgradeSet.upgrades);
   setMechUpgrades(ownModel, loadout.upgrades, upgradeSet.upgrades);

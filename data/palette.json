@@ -11,7 +11,27 @@
     "zoneMagenta": "#E83F8B",
     "warningRed": "#FF4D3D",
     "paintWhite": "#E6E2D6",
-    "frameNavy": "#2B3A55"
+    "frameNavy": "#2B3A55",
+    "fillBlue": "#8FA3AD",
+    "hazeGold": "#E0CFA6",
+    "skyPale": "#8FB0C8",
+    "sunDisc": "#FFF4D6",
+    "cloudLit": "#F4E9D0",
+    "cloudShade": "#B9B4A2",
+    "duskAmber": "#F0B97A",
+    "duskFill": "#7E8BA0",
+    "duskHaze": "#D6A57C",
+    "duskZenith": "#8E9CAD",
+    "duskSun": "#FFDDA8",
+    "duskCloudLit": "#EDC79E",
+    "duskCloudShade": "#8F8890",
+    "overcastLight": "#E6E0D0",
+    "overcastFill": "#9AA7AA",
+    "overcastHaze": "#C2BFB0",
+    "overcastZenith": "#D2D5CF",
+    "overcastSun": "#ECE8DC",
+    "overcastCloudLit": "#DEDCD2",
+    "overcastCloudShade": "#ABACA4"
   },
   "mech": {
     "body": "paintWhite",
@@ -29,7 +49,6 @@
   },
   "world": {
     "ground": "moss",
-    "sky": "#A9B6B4",
     "remap": {
       "#8a5a3c": "deepRust",
       "#7a4a42": "rustOrange",

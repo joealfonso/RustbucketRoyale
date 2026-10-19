@@ -1,0 +1,187 @@
+{
+  "barrier": {
+    "bayMeters": 24,
+    "baysPerChunk": 4,
+    "nearMeters": 150,
+    "recheckMeters": 8,
+    "panelMeters": 6,
+    "sheetMeters": [
+      3,
+      7
+    ],
+    "girderEveryMeters": 12,
+    "seam": 0.08,
+    "coreDepth": 0.4,
+    "sheetDepth": 0.12,
+    "ribDepth": 0.1,
+    "ribWidth": 0.2,
+    "ribSpacing": 0.9,
+    "ribBandMeters": 7,
+    "patchChance": 0.08,
+    "patchDepth": 0.06,
+    "postWidth": 0.5,
+    "postDepth": 0.55,
+    "girderHeight": 0.45,
+    "girderDepth": 0.35,
+    "corePaint": "soot",
+    "steelPaint": "soot",
+    "panelPaints": [
+      "scrapSteel",
+      "scrapSteel",
+      "scrapSteel",
+      "deepRust"
+    ],
+    "patchPaints": [
+      "deepRust",
+      "scrapSteel"
+    ],
+    "container": {
+      "length": 12,
+      "height": 2.6,
+      "depth": 1.0,
+      "stackChance": 0.6,
+      "maxStack": 5,
+      "offsetChance": 0.35,
+      "ribSpacing": 1.2,
+      "ribDepth": 0.07,
+      "frame": 0.2,
+      "paints": [
+        "rustOrange",
+        "deepRust",
+        "scrapSteel",
+        "frameNavy"
+      ]
+    },
+    "fence": {
+      "height": 3,
+      "postSpacing": 3,
+      "postSize": 0.22,
+      "strands": 3,
+      "strandSize": 0.14,
+      "armLength": 1.1,
+      "paint": "soot"
+    },
+    "columnRepaintChance": 0.12
+  },
+  "backdrop": {
+    "seed": 4242,
+    "clearMeters": 40,
+    "apron": {
+      "outMeters": 1150,
+      "paint": "#4C5045"
+    },
+    "heaps": {
+      "spacingMeters": 150,
+      "outMeters": [
+        110,
+        320
+      ],
+      "heightMeters": [
+        45,
+        110
+      ],
+      "radiusMeters": [
+        60,
+        130
+      ],
+      "sides": [
+        7,
+        10
+      ],
+      "junkPerHeap": 3,
+      "paints": [
+        "#5C4B40",
+        "#56504A",
+        "deepRust"
+      ]
+    },
+    "mountains": {
+      "spacingMeters": 260,
+      "outMeters": [
+        380,
+        780
+      ],
+      "heightMeters": [
+        130,
+        270
+      ],
+      "radiusMeters": [
+        170,
+        320
+      ],
+      "sides": [
+        8,
+        11
+      ],
+      "junkPerHeap": 2,
+      "paints": [
+        "#4B4C55",
+        "#514B4C"
+      ]
+    },
+    "landmarks": {
+      "spacingMeters": 420,
+      "outMeters": [
+        170,
+        460
+      ],
+      "kinds": [
+        "crane",
+        "gantry",
+        "stack",
+        "cooling"
+      ],
+      "crane": {
+        "heightMeters": [
+          110,
+          160
+        ],
+        "mast": 5,
+        "jib": [
+          55,
+          80
+        ],
+        "paint": "#3F4549",
+        "accent": "#7A5A2E"
+      },
+      "gantry": {
+        "heightMeters": [
+          60,
+          85
+        ],
+        "span": [
+          50,
+          70
+        ],
+        "leg": 4,
+        "paint": "#3F4549",
+        "accent": "deepRust"
+      },
+      "stack": {
+        "heightMeters": [
+          120,
+          180
+        ],
+        "radius": [
+          5,
+          8
+        ],
+        "bands": 2,
+        "paint": "#5A5552",
+        "accent": "deepRust"
+      },
+      "cooling": {
+        "heightMeters": [
+          90,
+          130
+        ],
+        "radius": [
+          32,
+          45
+        ],
+        "paint": "#625E58",
+        "accent": "#56504A"
+      }
+    }
+  }
+}

@@ -1,0 +1,221 @@
+import * as THREE from "three";
+import type { Box, World } from "@rustbucket/shared";
+
+// Soft dark patches on the ground under things, so crates, walls and mechs sit on the floor instead of floating
+// over it. Not real shadows: no light direction, just the darkening where an object meets the ground.
+// Static ones go under every map box that stands on the ground, built once per map; moving ones follow the mechs.
+// Each set is one instanced mesh of flat quads, so all of it costs two draw calls.
+
+export interface ShadowLook {
+  color: string; // hex or palette name
+  lift: number; // metres above the surface, so the quad does not flicker into it
+  falloff: number; // how quickly the dark fades toward the rim: 1 even, higher keeps more of it near the middle
+  // Under map boxes: boxes starting no higher than `nearGround` and at least `minHeight` tall. The patch reaches past
+  // the footprint by `growPerMeter` of the box's height, kept between `minGrow` and `maxGrow`, and fades over that.
+  static: { darkness: number; nearGround: number; minHeight: number; growPerMeter: number; minGrow: number; maxGrow: number };
+  // Under mechs: a disc `radius` metres across the middle, shrinking to `minScale` and fading out by `fadeHeight`
+  // metres above the ground. `maxCount` caps how many are drawn.
+  moving: { darkness: number; radius: number; fadeHeight: number; minScale: number; maxCount: number };
+}
+
+export function parseShadowLook(raw: unknown): ShadowLook {
+  const s = raw as ShadowLook;
+  if (!s?.static || !s.moving || typeof s.color !== "string") throw new Error("ground.json shadows: needs color, static and moving");
+  if (!(s.static.minGrow > 0 && s.static.minGrow <= s.static.maxGrow)) throw new Error("ground.json shadows: static needs 0 < minGrow <= maxGrow");
+  if (!(s.moving.fadeHeight > 0 && s.moving.radius > 0 && s.moving.maxCount >= 1)) throw new Error("ground.json shadows: moving needs fadeHeight, radius and maxCount above 0");
+  for (const d of [s.static.darkness, s.moving.darkness, s.moving.minScale]) if (!(d >= 0 && d <= 1)) throw new Error("ground.json shadows: darkness and minScale run 0 to 1");
+  return s;
+}
+
+export interface Footprint {
+  x: number; z: number; // middle
+  y: number; // the surface it lies on
+  sizeX: number; sizeZ: number; // the whole patch, metres
+  soft: number; // how far in from the rim it fades, metres
+}
+
+// The patch under one map box, or false for a box that does not stand on the ground (the floor itself, flat strips,
+// anything stacked on top of something else, whose patch would be hidden under what it stands on).
+export function shadowFootprint(box: Box, look: ShadowLook["static"], out: Footprint): boolean {
+  const base = Math.max(0, box.minY);
+  const height = box.maxY - base;
+  if (box.minY > look.nearGround || height < look.minHeight) return false;
+  const grow = Math.min(look.maxGrow, Math.max(look.minGrow, height * look.growPerMeter));
+  out.x = (box.minX + box.maxX) / 2;
+  out.z = (box.minZ + box.maxZ) / 2;
+  out.y = base;
+  out.sizeX = box.maxX - box.minX + grow * 2;
+  out.sizeZ = box.maxZ - box.minZ + grow * 2;
+  out.soft = grow;
+  return true;
+}
+
+// How dark a mech's patch is at `height` metres over the ground: full on the ground, gone at fadeHeight.
+export function shadowStrength(height: number, look: ShadowLook["moving"]): number {
+  return look.darkness * (1 - Math.min(1, Math.max(0, height / look.fadeHeight)));
+}
+
+// How big it is: full size on the ground, minScale at fadeHeight and above.
+export function shadowScale(height: number, look: ShadowLook["moving"]): number {
+  return 1 - (1 - look.minScale) * Math.min(1, Math.max(0, height / look.fadeHeight));
+}
+
+// The highest surface at or below `y` under the point (x, z): a box top or the floor. 0 off the map.
+// `found` is reused, so this allocates nothing.
+export function surfaceBelow(world: World, x: number, y: number, z: number, found: number[]): number {
+  const n = world.query(x, z, x, z, found);
+  let best = 0;
+  for (let k = 0; k < n; k++) {
+    const b = world.boxes[found[k]!]!;
+    if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) continue;
+    // A little slack: a mech standing on a box is at its top, give or take rounding.
+    if (b.maxY <= y + 0.05 && b.maxY > best) best = b.maxY;
+  }
+  return best;
+}
+
+// The one shared soft disc, drawn once at startup. Art hook: a painted blob texture can replace it.
+export function makeShadowTexture(falloff: number, size = 64): THREE.Texture {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  const stops = 8;
+  for (let i = 0; i <= stops; i++) {
+    const t = i / stops;
+    gradient.addColorStop(t, `rgba(255,255,255,${(1 - t) ** falloff})`);
+  }
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+  return texture;
+}
+
+// The disc stretched to any rectangle without stretching its rim: the middle stays full and only the outer `soft`
+// metres fade, with rounded corners, so a long wall gets an even band and a mech a round patch.
+// Per instance: `shadowShape` holds (strength, soft metres); the size comes from the instance's scale.
+function makeShadowMaterial(texture: THREE.Texture, color: string): THREE.MeshBasicMaterial {
+  const m = new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.shadowDisc = { value: texture };
+    shader.vertexShader = shader.vertexShader
+      .replace("void main() {", "attribute vec2 shadowShape;\nvarying vec2 vShadowAt;\nvarying vec2 vShadowHalf;\nvarying vec2 vShadowShape;\nvoid main() {")
+      .replace("#include <begin_vertex>", `#include <begin_vertex>
+        vec2 shadowSize = vec2(length(instanceMatrix[0].xyz), length(instanceMatrix[2].xyz));
+        vShadowAt = position.xz * shadowSize;
+        vShadowHalf = shadowSize * 0.5;
+        vShadowShape = shadowShape;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace("void main() {", "uniform sampler2D shadowDisc;\nvarying vec2 vShadowAt;\nvarying vec2 vShadowHalf;\nvarying vec2 vShadowShape;\nvoid main() {")
+      .replace("#include <alphamap_fragment>", `#include <alphamap_fragment>
+        float shadowSoft = max(min(vShadowShape.y, min(vShadowHalf.x, vShadowHalf.y)), 0.001);
+        vec2 intoRim = max(abs(vShadowAt) - (vShadowHalf - shadowSoft), 0.0) / shadowSoft;
+        diffuseColor.a *= texture2D(shadowDisc, 0.5 + 0.5 * intoRim).a * vShadowShape.x;`);
+  };
+  m.customProgramCacheKey = () => "contact-shadow";
+  return m;
+}
+
+const flatQuad = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+const placed = new THREE.Matrix4();
+const at = new THREE.Vector3();
+const sized = new THREE.Vector3();
+const noTurn = new THREE.Quaternion();
+const gone = new THREE.Matrix4().makeScale(0, 0, 0);
+const footprint: Footprint = { x: 0, z: 0, y: 0, sizeX: 0, sizeZ: 0, soft: 0 };
+
+function shadowMesh(material: THREE.Material, count: number): { mesh: THREE.InstancedMesh; shape: THREE.InstancedBufferAttribute } {
+  const geometry = flatQuad.clone();
+  const shape = new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2);
+  geometry.setAttribute("shadowShape", shape);
+  const mesh = new THREE.InstancedMesh(geometry, material, count);
+  // Drawn first among the see-through things, under dust, ghosts and the zone wall.
+  mesh.renderOrder = -1;
+  return { mesh, shape };
+}
+
+export class ContactShadows {
+  private material: THREE.MeshBasicMaterial;
+  private still: { mesh: THREE.InstancedMesh; shape: THREE.InstancedBufferAttribute } | null = null;
+  private instanceOfBox = new Int32Array(0);
+  private moving: { mesh: THREE.InstancedMesh; shape: THREE.InstancedBufferAttribute };
+  private movingCount = 0;
+  private world: World | null = null;
+  private found: number[] = [];
+
+  constructor(private scene: THREE.Scene, private look: ShadowLook, color: string) {
+    this.material = makeShadowMaterial(makeShadowTexture(look.falloff), color);
+    this.moving = shadowMesh(this.material, look.moving.maxCount);
+    // They move every frame, so the bounds are never right for culling. There are only a few.
+    this.moving.mesh.frustumCulled = false;
+    this.moving.mesh.count = 0;
+    scene.add(this.moving.mesh);
+  }
+
+  // Lays the patches under a new map's boxes, replacing the last map's.
+  setMap(boxes: readonly Box[], world: World): void {
+    this.disposeStill();
+    this.world = world;
+    this.instanceOfBox = new Int32Array(boxes.length).fill(-1);
+    let count = 0;
+    boxes.forEach((b, i) => { if (shadowFootprint(b, this.look.static, footprint)) this.instanceOfBox[i] = count++; });
+    const still = shadowMesh(this.material, Math.max(1, count));
+    still.mesh.count = count;
+    boxes.forEach((b, i) => {
+      const instance = this.instanceOfBox[i]!;
+      if (instance < 0 || !shadowFootprint(b, this.look.static, footprint)) return;
+      still.mesh.setMatrixAt(instance, placed.compose(at.set(footprint.x, footprint.y + this.look.lift, footprint.z), noTurn, sized.set(footprint.sizeX, 1, footprint.sizeZ)));
+      still.shape.setXY(instance, this.look.static.darkness, footprint.soft);
+    });
+    still.mesh.instanceMatrix.needsUpdate = true;
+    still.shape.needsUpdate = true;
+    still.mesh.computeBoundingSphere();
+    this.scene.add(still.mesh);
+    this.still = still;
+  }
+
+  // A broken prop's patch goes with it.
+  hideBox(boxIndex: number): void {
+    const instance = this.instanceOfBox[boxIndex] ?? -1;
+    if (!this.still || instance < 0) return;
+    this.still.mesh.setMatrixAt(instance, gone);
+    this.still.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // Each frame: `beginMoving`, `addUnder` for every mech, then `endMoving`.
+  beginMoving(): void {
+    this.movingCount = 0;
+  }
+
+  // A patch on the surface under something at (x, y, z), its feet at y. Bound once, so it can be handed to a loop.
+  addUnder = (x: number, y: number, z: number): void => {
+    if (this.movingCount >= this.look.moving.maxCount || !this.world) return;
+    const ground = surfaceBelow(this.world, x, y, z, this.found);
+    const strength = shadowStrength(y - ground, this.look.moving);
+    if (strength <= 0.01) return;
+    const size = this.look.moving.radius * 2 * shadowScale(y - ground, this.look.moving);
+    const i = this.movingCount++;
+    this.moving.mesh.setMatrixAt(i, placed.compose(at.set(x, ground + this.look.lift, z), noTurn, sized.set(size, 1, size)));
+    // Soft all the way in: a round patch, darkest in the middle.
+    this.moving.shape.setXY(i, strength, size / 2);
+  };
+
+  addObject = (object: THREE.Object3D): void => {
+    if (object.visible) this.addUnder(object.position.x, object.position.y, object.position.z);
+  };
+
+  endMoving(): void {
+    this.moving.mesh.count = this.movingCount;
+    this.moving.mesh.instanceMatrix.needsUpdate = true;
+    this.moving.shape.needsUpdate = true;
+  }
+
+  private disposeStill(): void {
+    if (!this.still) return;
+    this.scene.remove(this.still.mesh);
+    this.still.mesh.geometry.dispose();
+    this.still.mesh.dispose();
+    this.still = null;
+  }
+}

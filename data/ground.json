@@ -1,0 +1,20 @@
+{
+  "regions": {
+    "scale": 0.022,
+    "darkMoss": { "color": "#4F6C34", "below": 0.3 },
+    "dryGrass": { "color": "#848049", "above": 0.65 },
+    "dirt": { "color": "#76624A", "above": 0.76 }
+  },
+  "breakup": { "scale": 0.8, "amount": 0.07 },
+  "gravel": { "color": "#76786F", "speck": "#64665E", "scale": 0.045, "above": 0.74, "speckMeters": 0.4, "speckCover": 0.3 },
+  "brush": { "scale": 0.5, "stretch": 5, "angleDegrees": 28, "above": 0.62, "strength": 0.05 },
+  "oil": { "cellMeters": 30, "chance": 0.12, "minRadius": 1.2, "maxRadius": 3.2, "ragged": 0.45, "color": "soot", "strength": 0.45, "core": 0.55, "coreStrength": 0.65 },
+  "tracks": { "cellMeters": 52, "chance": 0.3, "minLength": 16, "maxLength": 44, "gauge": 2.4, "width": 0.5, "gaps": 0.32, "color": "#4A4232", "strength": 0.22 },
+  "shadows": {
+    "color": "soot",
+    "lift": 0.04,
+    "falloff": 1.1,
+    "static": { "darkness": 0.6, "nearGround": 0.3, "minHeight": 0.2, "growPerMeter": 0.3, "minGrow": 0.5, "maxGrow": 1.4 },
+    "moving": { "darkness": 0.65, "radius": 1.8, "fadeHeight": 9, "minScale": 0.45, "maxCount": 128 }
+  }
+}

@@ -148,3 +148,6 @@ Cutting the legs into thigh, shin and foot pieces adds draw calls: per mech at t
 
 ### Abilities and bandwidth (2026-10-18, soak, all tiers)
 Snapshots grew for 9b: your own state carries the ability's time, cooldown and direction (self block 65 to 81 bytes) and each other mech one more byte (20 to 21). Soak: 44 kbps arena, 57 small, 59 medium, 47 large, against the 64 kbps budget. Medium and small are now within about 10% of it, so the next thing added to snapshots should pay for itself, for example by sending the ability fields only while they change.
+
+### Environment pass (2026-10-19, large tier seed 7, F1 at spawn)
+Sky, haze, ground and contact shadows (V6a): 127 to 130 draw calls, 4.78M to 4.81M triangles, work about 2.2 to 2.3 ms. Border barrier and backdrop (V6b): 130 to 153 draw calls, 4.81M to 4.92M triangles. Frame times were read in a hidden browser pane, which throttles frames, so they are not trustworthy; the number to trust is Joseph's laptop on large (F1, Performance).
