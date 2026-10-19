@@ -1,11 +1,12 @@
-import type { BotPathStats, NavGrid } from "@rustbucket/shared";
+import { raised, type BotPathStats, type NavGrid } from "@rustbucket/shared";
 
 const DIAGONAL = Math.SQRT2;
 
 // Finds a walkable route across the map for bots, on a coarse grid of 8 m cells made from the navigation grid.
-// A coarse cell is blocked if anything a mech cannot step over stands anywhere in it, so routes keep to open ground
-// and go round buildings, walls and hills. Searches are capped, and when a goal cannot be reached the route goes
-// as near as it can, so a bot is never left without somewhere to head.
+// A coarse cell is blocked if anything a mech cannot step over stands up off the ground anywhere in it, so routes
+// keep to open ground and go round buildings and walls. Bare hillside never blocks: slopes are capped at walking
+// steepness when the map is made, so routes go straight over hills. Searches are capped, and when a goal cannot be
+// reached the route goes as near as it can, so a bot is never left without somewhere to head.
 export class Pathfinder {
   private cell: number;
   private cols: number;
@@ -45,7 +46,7 @@ export class Pathfinder {
     this.blocked = new Uint8Array(this.cols * this.rows);
     for (let z = 0; z < nav.rows; z++) {
       for (let x = 0; x < nav.cols; x++) {
-        if (nav.top[z * nav.cols + x]! > nav.stepHeight) this.blocked[Math.floor(z / factor) * this.cols + Math.floor(x / factor)] = 1;
+        if (raised(nav, z * nav.cols + x) > nav.stepHeight) this.blocked[Math.floor(z / factor) * this.cols + Math.floor(x / factor)] = 1;
       }
     }
     const n = this.cols * this.rows;

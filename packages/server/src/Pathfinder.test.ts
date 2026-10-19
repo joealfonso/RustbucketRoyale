@@ -4,7 +4,7 @@ import botsJson from "../../../data/bots.json";
 import mechJson from "../../../data/mech.json";
 import tiersJson from "../../../data/tiers.json";
 import propsJson from "../../../data/props.json";
-import { buildNavGrid, generateMap, parseBotConfig, parseChunkSet, parseMechStats, parsePropConfig, parseTiers, type Box } from "@rustbucket/shared";
+import { Terrain, buildNavGrid, generateMap, parseBotConfig, parseChunkSet, parseMechStats, parsePropConfig, parseTiers, type Box } from "@rustbucket/shared";
 import { Pathfinder } from "./Pathfinder";
 
 const pathStats = parseBotConfig(botsJson).path;
@@ -14,6 +14,25 @@ const box = (minX: number, minZ: number, maxX: number, maxZ: number, maxY = 5): 
 // A 200 m square of open ground, with whatever walls the test adds.
 function finder(walls: Box[], meters = 200) {
   const nav = buildNavGrid(walls, meters, 0, 0, { cellMeters: 2, stepHeight: mech.stepHeight, mechHeight: mech.height });
+  return new Pathfinder(nav, pathStats);
+}
+
+// A round hill 12 m high in the middle of the 200 m square, its sides rising 40 cm a metre: well over a step from one
+// nav cell to the next, but walkable, as every generated slope is.
+function hill(): Terrain {
+  const cell = 4, meters = 200, corners = meters / cell + 1;
+  const heights = new Int32Array(corners * corners);
+  for (let j = 0; j < corners; j++) {
+    for (let i = 0; i < corners; i++) {
+      const r = Math.hypot(i * cell - meters / 2, j * cell - meters / 2);
+      heights[j * corners + i] = Math.max(0, Math.round(1200 - 40 * r));
+    }
+  }
+  return new Terrain(meters, cell, heights, 0.5);
+}
+
+function hillFinder(walls: Box[]) {
+  const nav = buildNavGrid(walls, 200, 0, 0, { cellMeters: 2, stepHeight: mech.stepHeight, mechHeight: mech.height }, hill());
   return new Pathfinder(nav, pathStats);
 }
 
@@ -55,6 +74,27 @@ describe("Pathfinder", () => {
     const path: number[] = [];
     expect(finder(walls).findPath(0, 0, 70, 0, path)).toBe(true);
     expect(path.at(-2)).toBeCloseTo(70, 0);
+  });
+
+  it("goes straight over a hill, which is walkable ground, not a wall", () => {
+    const path: number[] = [];
+    expect(hillFinder([]).findPath(-80, 0, 80, 0, path)).toBe(true);
+    expect(path).toEqual([80, 0]);
+  });
+
+  it("still goes round a wall that stands on a hill", () => {
+    const wall: Box = { minX: -2, maxX: 2, minZ: -40, maxZ: 40, minY: 0, maxY: 17 };
+    const path: number[] = [];
+    expect(hillFinder([wall]).findPath(-50, 0, 50, 0, path)).toBe(true);
+    expect(path.length).toBeGreaterThan(2);
+    let x = -50, z = 0;
+    for (let i = 0; i < path.length; i += 2) {
+      for (let t = 0; t <= 1; t += 0.02) {
+        const px = x + (path[i]! - x) * t, pz = z + (path[i + 1]! - z) * t;
+        expect(px > -2 && px < 2 && pz > -40 && pz < 40, `crosses the wall at ${px.toFixed(1)},${pz.toFixed(1)}`).toBe(false);
+      }
+      x = path[i]!; z = path[i + 1]!;
+    }
   });
 
   it("starts from, and aims at, a spot inside a blocked cell by using the nearest open one", () => {

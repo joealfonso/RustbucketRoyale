@@ -143,7 +143,8 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   };
 
   // The hills: noise first, then each built chunk's pad height (terrainGen.ts).
-  const noise = settings ? noiseHeights(seed, tier, def.meters, settings) : new Int32Array(cornersFor(def.meters, chunks.size) ** 2);
+  const flatCorners = cornersFor(def.meters, chunks.size);
+  const noise = settings ? noiseHeights(seed, tier, def.meters, settings) : new Int32Array(flatCorners * flatCorners);
   const built = new Uint8Array(n * n);
   for (let cell = 0; cell < n * n; cell++) built[cell] = templates[grid[cell]!]!.boxes.length > 0 ? 1 : 0;
   const padOf = settings ? padHeights(noise, def.meters, chunks.size, built, settings) : new Int32Array(n * n);

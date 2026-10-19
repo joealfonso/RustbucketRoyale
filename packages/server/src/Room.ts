@@ -23,6 +23,11 @@ const KILL_HEIGHT = -50;
 const CHEST_HEIGHT = 1.7; // where splash damage measures to
 const BLAST_LIFT = 0.2; // keeps a grenade resting on the floor from blasting from inside it
 const SKY_HEIGHT = 500; // above anything a map builds, so a ray down from here finds the ground
+const PICKUP_LIFT = 0.5; // a pickup floats this far above whatever it lies on
+// A drop looks for the surface under it from this far above where it fell, so ground rising towards the spot (a
+// wreck's loot spilling uphill) is found rather than missed. Lower than a mech is tall, so a roof the mech stood
+// under is not mistaken for the floor.
+const DROP_LOOK_UP = 2;
 
 interface LiveGrenade {
   ownerId: number;
@@ -1029,6 +1034,14 @@ export class Room {
     return fallback;
   }
 
+  // The top of whatever is under a spot, looking down from a little above `fromY`: a floor, a roof the mech stood on,
+  // or the hillside. Never under the hillside, even where a slope rises above where the ray starts.
+  private surfaceBelow(x: number, z: number, fromY: number): number {
+    const top = fromY + DROP_LOOK_UP;
+    const surface = this.map.world.raycast(x, top, z, 0, -1, 0, SKY_HEIGHT * 2, this.worldHit) ? top - this.worldHit.distance : fromY;
+    return Math.max(surface, this.map.world.groundAt(x, z));
+  }
+
   // Decoy Drones. Only the owner is told, with the decoys' ids so it can draw its own see-through: a start message to
   // anyone else would let a client read which Arbiters are fake. Everyone else just sees more Arbiters.
   private dropDecoys(player: Player, decoy: DecoyStats): void {
@@ -1164,11 +1177,11 @@ export class Room {
     const { x, z } = player.state;
     if (itemUpgrade(pickup.item) >= 0) {
       const dropped = takeUpgrade(l, pickup.item);
-      if (dropped !== null && dropped >= 0) this.pickups.add(upgradeItem(dropped), x, 0.5, z);
+      if (dropped !== null && dropped >= 0) this.pickups.add(upgradeItem(dropped), x, this.surfaceBelow(x, z, player.state.y) + PICKUP_LIFT, z);
       return true;
     }
     const dropped = takeWeapon(l, pickup.item);
-    if (dropped >= 0) this.pickups.add(weaponItem(dropped), x, 0.5, z);
+    if (dropped >= 0) this.pickups.add(weaponItem(dropped), x, this.surfaceBelow(x, z, player.state.y) + PICKUP_LIFT, z);
     player.gate.holdUntil(player.steps * STEP + this.config.loot.switchSeconds);
     return true;
   }
@@ -1180,7 +1193,8 @@ export class Room {
     const r = this.config.loot.spillRadius;
     items.forEach((item, i) => {
       const angle = start + (i / items.length) * Math.PI * 2;
-      this.pickups.add(item, wreck.state.x + Math.cos(angle) * r, wreck.state.y + 0.5, wreck.state.z + Math.sin(angle) * r);
+      const x = wreck.state.x + Math.cos(angle) * r, z = wreck.state.z + Math.sin(angle) * r;
+      this.pickups.add(item, x, this.surfaceBelow(x, z, wreck.state.y) + PICKUP_LIFT, z);
     });
     wreck.looted = true;
     wreck.loadout = { slots: [-1, -1], active: 0, grenades: 0, armor: [0, 0, 0], upgrades: [-1, -1] };
@@ -1208,11 +1222,15 @@ export class Room {
     for (const p of this.players.values()) if (!p.bot) p.send(message);
     this.makeNoise(by, "smash", prop.x, prop.z);
     const item = rollLoot(this.config.loot, this.config.weapons, this.config.upgrades.upgrades.length, this.config.props.types[prop.type]!.id, this.random);
-    if (item !== null) this.pickups.add(item, prop.x + (this.random() - 0.5), 0.5, prop.z + (this.random() - 0.5));
+    // Its box is already out of the world, so the drop finds the ground the prop stood on.
+    if (item !== null) {
+      const x = prop.x + (this.random() - 0.5), z = prop.z + (this.random() - 0.5);
+      this.pickups.add(item, x, this.surfaceBelow(x, z, prop.y) + PICKUP_LIFT, z);
+    }
     if (this.config.props.types[prop.type]!.explodes) {
       const delay = Math.round(this.config.props.barrelBlast.delaySeconds / STEP);
       const { damage, radius } = this.config.props.barrelBlast;
-      this.pendingBlasts.push({ x: prop.x, y: 0, z: prop.z, tick: this.tickCount + delay, owner: by, damage, radius });
+      this.pendingBlasts.push({ x: prop.x, y: this.surfaceBelow(prop.x, prop.z, prop.y), z: prop.z, tick: this.tickCount + delay, owner: by, damage, radius });
     }
   }
 

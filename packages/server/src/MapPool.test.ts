@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { generatedMaps, tierNames } from "./config";
 import { MapPool } from "./MapPool";
+import { packMap, transferList, unpackMap } from "./mapPack";
 import type { MapForRoom } from "./Room";
 
 const mainThread = generatedMaps();
@@ -13,9 +14,13 @@ const pool = new MapPool(2);
 afterAll(() => pool.close());
 
 // Everything the room uses from a map, as plain data, so two maps compare field by field.
-const plain = (m: MapForRoom) => ({
-  boxes: m.world.boxes, nav: { ...m.nav, top: Array.from(m.nav.top) }, spawns: m.spawns, meters: m.meters, props: m.props, propOfBox: Array.from(m.propOfBox),
-});
+const plain = (m: MapForRoom) => {
+  const t = m.world.terrain;
+  return {
+    boxes: m.world.boxes, nav: { ...m.nav, top: Array.from(m.nav.top), ground: Array.from(m.nav.ground) }, spawns: m.spawns, meters: m.meters, props: m.props, propOfBox: Array.from(m.propOfBox),
+    terrain: t && { heights: Array.from(t.heights), meters: t.meters, cell: t.cell, snapMeters: t.snapMeters },
+  };
+};
 
 describe("MapPool", () => {
   it("builds exactly the map the main thread builds, for a few seeds on every tier", async () => {
@@ -26,6 +31,26 @@ describe("MapPool", () => {
       }
     }
   }, 60_000);
+
+  it("keeps the hills exactly through packing and moving to another thread", () => {
+    const original = mainThread("medium", 9);
+    const packed = packMap(mainThread("medium", 9));
+    // Moved the way postMessage moves it: the arrays listed for transfer leave the sender.
+    const map = unpackMap(structuredClone(packed, { transfer: transferList(packed) }));
+    const hills = map.world.terrain!, made = original.world.terrain!;
+    expect(made.maxHeight - made.minHeight).toBeGreaterThan(1); // a map with real hills, or this proves nothing
+    expect(Array.from(hills.heights)).toEqual(Array.from(made.heights));
+    expect([hills.meters, hills.cell, hills.snapMeters]).toEqual([made.meters, made.cell, made.snapMeters]);
+    expect(Array.from(map.nav.ground)).toEqual(Array.from(original.nav.ground));
+    // The rebuilt World stands on them: the same ground, and the same ray hits on the hillside.
+    const a = { distance: 0, normalX: 0, normalY: 0, normalZ: 0, index: 0 }, b = { ...a };
+    for (let i = 0; i < 50; i++) {
+      const x = -480 + i * 19.3, z = 470 - i * 17.9;
+      expect(map.world.groundAt(x, z)).toBe(original.world.groundAt(x, z));
+      expect(map.world.raycast(x, 40, z, 0.6, -0.8, 0, 200, a)).toBe(original.world.raycast(x, 40, z, 0.6, -0.8, 0, 200, b));
+      expect(a).toEqual(b);
+    }
+  });
 
   it("gives every caller the map for its own seed, and starts jobs in the order they were asked for", async () => {
     const one = new MapPool(1);
