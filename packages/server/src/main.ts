@@ -62,6 +62,18 @@ if (onTick) {
   }, 5000);
 }
 const server = await startServer(manager, port, defaultBots, onTick, { site, origins: production ? (allowedOrigins?.length ? allowedOrigins : "same-host") : null, simLag });
+// Stopping (a deploy, Ctrl+C): tell everyone first. Their pages keep trying to reconnect, and once the server is
+// back they land in a room with the same code.
+let stopping = false;
+const stop = () => {
+  if (stopping) process.exit(0); // a second Ctrl+C means now
+  stopping = true;
+  console.log("stopping");
+  manager.tellEveryone({ t: "notice", text: "The server is restarting for an update. Back in a moment..." });
+  setTimeout(() => { void server.close().then(() => process.exit(0)); }, 500).unref();
+};
+process.on("SIGINT", stop);
+process.on("SIGTERM", stop);
 // A line a minute while the room count changes, for the host's logs. Room codes and counts only, never who is playing.
 if (production) {
   let logged = -1;

@@ -327,6 +327,11 @@ export class Room {
     return id;
   }
 
+  // A message for every person in the room.
+  tellEveryone(message: ServerMessage): void {
+    for (const p of this.players.values()) if (!p.bot) p.send(message);
+  }
+
   // Whether a dropped player's mech is still waiting for them, so the room must not be thrown away yet.
   get holdingForRejoin(): boolean {
     for (const p of this.players.values()) if (p.gone && !p.eliminated) return true;

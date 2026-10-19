@@ -8,6 +8,13 @@ type ResultMessage = Extract<ServerMessage, { t: "result" }>;
 
 const RETRY_MS = 1000; // between tries to reconnect
 
+// Who this player is in a room, enough to get their mech back.
+export interface Session {
+  code: string;
+  id: number;
+  token: string;
+}
+
 // The address to come back on: the same server, this room by its code, and nothing else from the first address
 // (which may say `create`).
 export function rejoinAddress(url: string, roomCode: string): string {
@@ -37,6 +44,7 @@ export class NetClient {
   onResult?: (result: ResultMessage) => void;
   onPropDestroyed?: (id: number) => void;
   onClose?: (reason: string) => void;
+  onNotice?: (text: string) => void;
   // A dropped connection mid game: true while trying to get back to the same mech, false once back.
   onReconnecting?: (trying: boolean) => void;
   // Back too late, the match moved on: the game should join the room afresh.
@@ -67,10 +75,21 @@ export class NetClient {
   };
 
   // `graceSeconds`: how long the server holds a dropped mech (net.json rejoinGraceSeconds), so how long to keep trying.
-  constructor(private url: string, private graceSeconds = 20) {
+  // `resume`: who this tab was in this room before the page reloaded. It tries to get that mech back first, and joins
+  // afresh if the server says it is too late.
+  constructor(private url: string, private graceSeconds = 20, resume: Session | null = null) {
     this.welcome = new Promise((resolve, reject) => { this.welcomed = resolve; this.failed = reject; });
-    this.connect(false);
+    if (resume) {
+      this.id = resume.id;
+      this.rejoinToken = resume.token;
+      this.roomCode = resume.code;
+    }
+    this.connect(resume !== null);
   }
+
+  // Called with every welcome, so the game can keep it for a reload (sessionStorage).
+  onSession?: (session: Session) => void;
+  private hasWelcome = false;
 
   // Opens a socket. On a rejoin it first says who this was, before anything else is sent.
   private connect(rejoin: boolean): void {
@@ -88,7 +107,7 @@ export class NetClient {
       this.open = false;
       if (this.stopped) return;
       // Dropped after joining: try to get back to the same mech while the server still holds it.
-      if (this.rejoinToken) {
+      if (this.hasWelcome && this.rejoinToken) {
         if (this.giveUpAt === 0) { this.giveUpAt = performance.now() + this.graceSeconds * 1000; this.onReconnecting?.(true); }
         if (performance.now() < this.giveUpAt) { setTimeout(() => this.connect(true), RETRY_MS); return; }
         this.stopped = true;
@@ -100,7 +119,7 @@ export class NetClient {
     };
     // A failed try while reconnecting is followed by its close, which tries again.
     socket.onerror = () => {
-      if (this.rejoinToken) return;
+      if (this.hasWelcome) return;
       this.failed(new Error(`Could not reach the server at ${url}.`));
       this.onClose?.(`Could not reach the server at ${url}.`);
     };
@@ -109,14 +128,17 @@ export class NetClient {
       const message = event.data instanceof ArrayBuffer ? decodeServerBinary(new Uint8Array(event.data), this.memory) : (JSON.parse(event.data as string) as ServerMessage);
       if (!message) return;
       if (message.t === "welcome") {
-        const back = this.rejoinToken !== "";
+        const back = this.hasWelcome;
+        this.hasWelcome = true;
         this.id = message.id;
         this.rejoinToken = message.rejoin;
         this.roomCode = message.code;
+        this.onSession?.({ code: message.code, id: message.id, token: message.rejoin });
         if (back) { this.giveUpAt = 0; this.onReconnecting?.(false); }
         else this.welcomed({ seed: message.seed, tier: message.tier, code: message.code, tuning: message.tuning });
       }
       else if (message.t === "tuned") this.onTuned?.(message.file, message.path, message.value);
+      else if (message.t === "notice") this.onNotice?.(message.text);
       else if (message.t === "snapshot") this.onSnapshot?.(message);
       else if (message.t === "shot") this.onShot?.(message);
       else if (message.t === "room") { this.latestRoom = message; this.roomHandler?.(message); }
@@ -129,6 +151,12 @@ export class NetClient {
       else if (message.t === "explode") this.onExplode?.(message);
       else if (message.t === "ability") this.onAbility?.(message);
       else if (message.t === "refused") {
+        if (message.rejoinFailed && !this.hasWelcome) {
+          // A reloaded page that was too late: just join the room.
+          this.rejoinToken = "";
+          this.connect(false);
+          return;
+        }
         this.stopped = true;
         if (message.rejoinFailed) { this.onRejoinFailed?.(); return; }
         this.failed(new Error(message.reason));

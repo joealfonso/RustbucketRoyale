@@ -115,6 +115,11 @@ export class RoomManager {
     }
   }
 
+  // A message for every person in every room.
+  tellEveryone(message: ServerMessage): void {
+    for (const room of this.rooms.values()) room.tellEveryone(message);
+  }
+
   // A dropped player coming back to their mech (Room.rejoin). Null when there is nothing to come back to.
   rejoin(code: string | null, id: number, token: string, send: (message: ServerMessage) => void): Ticket | null {
     const room = code ? this.rooms.get(code.toUpperCase()) : undefined;

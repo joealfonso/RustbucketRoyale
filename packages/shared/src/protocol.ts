@@ -179,6 +179,7 @@ export type ServerMessage =
   | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number; left?: boolean } // left: their connection closed
   | { t: "result"; winnerId: number | null }
   | { t: "refused"; reason: string; rejoinFailed?: boolean } // rejoinFailed: too late, join the room afresh
+  | { t: "notice"; text: string } // a line for the feed from the server itself, such as a restart
   | { t: "prop"; id: number } // a prop was destroyed
   | { t: "props"; destroyed: number[] } // every prop destroyed so far, sent to someone arriving mid way
   | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; looting: number; repairing: number; pickups: PickupState[] | null } // pickups null: unchanged since the last snapshot

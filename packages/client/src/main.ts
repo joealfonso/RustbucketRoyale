@@ -75,7 +75,7 @@ import { Backdrop } from "./backdrop/backdrop";
 import { parseBackdrop } from "./backdrop/layout";
 import chunksJsonForDressing from "../../../data/chunks.json";
 import { createMechModel, legsLimping, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
-import { NetClient } from "./net";
+import { NetClient, type Session } from "./net";
 import { Radar } from "./radar";
 import { parseRadar } from "./radarData";
 import radarJson from "../../../data/radar.json";
@@ -147,7 +147,18 @@ function serverAddress(): string {
   return `${base}/?${serverQuery(params)}`;
 }
 
-const net = online ? new NetClient(serverAddress(), netStats.rejoinGraceSeconds) : null;
+// Who this tab was in a room, so a reload mid match gets the same mech back. sessionStorage is per tab: two tabs of
+// the same room are two players. Kept only while the address still names that room.
+const SESSION_KEY = "rustbucket.session";
+function savedSession(): Session | null {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "null") as Session | null;
+    return s && s.code === params.get("room")?.toUpperCase() ? s : null;
+  } catch { return null; }
+}
+const keepSession = (s: Session | null) => { try { if (s) sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); else sessionStorage.removeItem(SESSION_KEY); } catch { /* private window: no reload rejoin */ } };
+const net = online ? new NetClient(serverAddress(), netStats.rejoinGraceSeconds, savedSession()) : null;
+if (net) net.onSession = keepSession;
 let tier = params.get("tier") ?? "medium";
 let seed = params.has("seed") ? Number(params.get("seed")) : Math.floor(Math.random() * 0x100000000);
 let roomCode = "";
@@ -547,9 +558,11 @@ if (net) {
     hint.textContent = reason;
   };
   // A dropped connection: the mech waits on the server while this tries to get back to it.
+  net.onNotice = (text) => hud.feed(text);
   net.onReconnecting = (trying) => hud.feed(trying ? "Connection lost. Reconnecting..." : "Back in.");
-  // Too late to get back into that match: join the room afresh, as following the invite link would.
-  net.onRejoinFailed = () => { location.search = `?room=${encodeURIComponent(roomCode)}`; };
+  // Too late to get back into that match: join the room afresh. The address already names the room and its settings
+  // (rejoinQuery), so after a server restart the room comes back the way it was.
+  net.onRejoinFailed = () => { keepSession(null); location.reload(); };
 }
 
 const crosshair = document.getElementById("crosshair")!;
