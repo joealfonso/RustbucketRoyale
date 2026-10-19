@@ -1,0 +1,15 @@
+{
+  "maxShown": 3,
+  "blink": true,
+  "blinkSeconds": 0.8,
+  "fuelLowFraction": 0.25,
+  "torsoCriticalFraction": 0.25,
+  "warnings": [
+    { "id": "outside", "text": "OUTSIDE THE ZONE", "level": "danger" },
+    { "id": "torsoCritical", "text": "TORSO CRITICAL", "level": "danger" },
+    { "id": "legsBroken", "text": "LEGS BROKEN · CRAWLING", "level": "caution" },
+    { "id": "armsBroken", "text": "ARMS BROKEN · AIM OFF", "level": "caution" },
+    { "id": "fuelEmpty", "text": "FUEL EMPTY · REFILLING", "level": "caution" },
+    { "id": "fuelLow", "text": "FUEL LOW", "level": "caution" }
+  ]
+}

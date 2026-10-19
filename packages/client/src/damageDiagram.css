@@ -1,0 +1,25 @@
+/* The mech damage diagram. Each state differs in pattern as well as colour, so it reads in greyscale:
+   intact is solid, damaged is hatched, broken is an outline with a cross. Colours come from the HUD tokens.
+   Each zone stacks the same boxes in layers: the "line" layer is stroked twice as thick as shows, and the soot
+   "body" on top hides the inner half, so only the zone's outer edge is left. */
+.damageDiagram { display: block; overflow: visible; pointer-events: none; }
+.damageDiagram .ddZone .line rect { fill: none; stroke: var(--hud-amber, #FFB000); stroke-width: 2; }
+.damageDiagram .ddZone .body rect { fill: var(--hud-soot, #2a2f2e); }
+.damageDiagram .ddZone.intact .body rect { fill: var(--hud-amber, #FFB000); }
+/* An intact zone's edge is soot, so where it overlaps another solid zone the two still read as separate parts. */
+.damageDiagram .ddZone.intact .line rect { stroke: var(--hud-soot, #2a2f2e); }
+.damageDiagram .ddZone .hatch { display: none; }
+.damageDiagram .ddZone.damaged .hatch { display: inline; }
+.damageDiagram .ddZone .hatch rect { fill: url(#damageDiagramHatch); }
+.damageDiagram .ddHatchLine { stroke: var(--hud-amber, #FFB000); stroke-width: 1.5; }
+.damageDiagram .ddZone.broken .line rect { stroke: var(--hud-warn, #FF4D3D); }
+.damageDiagram .ddZone .cross { display: none; }
+.damageDiagram .ddZone.broken .cross { display: inline; }
+.damageDiagram .ddZone .cross path { fill: none; stroke: var(--hud-warn, #FF4D3D); stroke-width: 1; }
+/* Armour plates: a frame standing off the zone, solid with a whole plate left and dashed once it is worn. */
+.damageDiagram .ddZone.plate-none :is(.plateLine, .plateCover) { display: none; }
+.damageDiagram .ddZone .plateLine rect { fill: none; stroke: var(--hud-amber, #FFB000); stroke-width: 2; }
+.damageDiagram .ddZone.plate-partial .plateLine rect { stroke-dasharray: 3 2; }
+.damageDiagram .ddZone .plateCover rect { fill: var(--hud-soot, #2a2f2e); }
+.damageDiagram .ddLabel { font-family: var(--hud-num, "Share Tech Mono", ui-monospace, monospace); font-size: 10px; fill: var(--hud-amber, #FFB000); }
+.damageDiagram .ddLabel.broken { fill: var(--hud-warn, #FF4D3D); }

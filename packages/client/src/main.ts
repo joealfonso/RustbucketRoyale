@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
   type AbilityMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
@@ -43,6 +43,10 @@ import { PropView } from "./propView";
 import { PickupView } from "./pickupView";
 import { setMechGear } from "./mechModel";
 import { Hud } from "./hud";
+import { DamageDiagram, parseDiagram } from "./damageDiagram";
+import damageDiagramJson from "../../../data/damageDiagram.json";
+import { Warnings, createWarningInput, parseWarnings } from "./warnings";
+import warningsJson from "../../../data/warnings.json";
 import { MapMeshes } from "./mapRenderer";
 import { ContactShadows, parseShadowLook } from "./contactShadows";
 import groundJson from "../../../data/ground.json";
@@ -507,7 +511,9 @@ const crosshair = document.getElementById("crosshair")!;
 const hurtOverlay = document.getElementById("hurt")!;
 const statusText = document.getElementById("status")!;
 const armsBroken = () => health.hp[ZONE_ARMS]! <= 0;
-const zoneFills = Array.from(document.querySelectorAll<HTMLElement>("#zones .track > div:not(.plate)"));
+const damageDiagram = new DamageDiagram(document.getElementById("damageDiagram")!, parseDiagram(damageDiagramJson));
+const warnings = new Warnings(document.getElementById("warnings")!, parseWarnings(warningsJson));
+const warningInput = createWarningInput();
 let hitTimer = 0;
 let hurtTimer = 0;
 
@@ -776,7 +782,7 @@ function frame(now: number): void {
   const matchSeconds = progress.state === "active" ? progress.seconds + (performance.now() - progressAt) / 1000 : 0;
   const ring: RingNow | null = ringView.update(matchSeconds);
   const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);
-  if (net) hud.setProgress(progress, ring, outside);
+  if (net) hud.setProgress(progress, ring);
 
   // Sound: the ears go where the camera is, jets hiss while firing, and the countdown beeps each second then says go.
   rig.camera.getWorldDirection(camForward);
@@ -800,12 +806,15 @@ function frame(now: number): void {
 
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;
   staminaFill.style.width = `${mech.stamina.fraction * 100}%`;
-  zoneFills.forEach((fill, zone) => {
-    fill.style.width = `${(health.hp[zone]! / zoneMaxHp[zone]!) * 100}%`;
-    const state = zoneState(health.hp, zoneSet, zone);
-    fill.classList.toggle("damaged", state === ZONE_DAMAGED);
-    fill.parentElement!.classList.toggle("broken", state === ZONE_BROKEN); // the bar is empty, so the track shows it
-  });
+  damageDiagram.update(mech.mech, zonesFor(mech.mech), health.hp, loadout.armor, lootConfig.armorPlates);
+  warningInput.dead = health.dead;
+  warningInput.outside = outside;
+  warningInput.hp = health.hp;
+  warningInput.maxHp = zoneMaxHp;
+  warningInput.fuelFraction = mech.fuel.fraction;
+  warningInput.fuelLocked = mech.fuel.locked;
+  warningInput.jetHeld = mechInput.jet;
+  warnings.update(warningInput);
   if (mech.mech !== shownMech) swapOwnMech(mech.mech);
   const next = picked !== null && picked !== mech.mech ? picked : -1;
   if (next !== shownNext) { shownNext = next; hud.setMech(roster.mechs[mech.mech]!, next >= 0 ? roster.mechs[next]!.name : null); }

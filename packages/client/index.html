@@ -4,123 +4,64 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rustbucket Royale</title>
-    <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d1f; font-family: system-ui, sans-serif; }
-      canvas { display: block; width: 100%; height: 100%; }
-      #crosshair { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
-      #crosshair i { position: absolute; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.7); }
-      #crosshair .h { width: 9px; height: 2px; top: -1px; }
-      #crosshair .v { width: 2px; height: 9px; left: -1px; }
-      #crosshair .l { left: -16px; } #crosshair .r { left: 7px; }
-      #crosshair .t { top: -16px; } #crosshair .b { top: 7px; }
-      #crosshair .dot { width: 2px; height: 2px; left: -1px; top: -1px; }
-      .bar { position: fixed; left: 20px; width: 220px; height: 12px; background: rgba(0,0,0,.6); pointer-events: none; }
-      .bar > div { height: 100%; width: 100%; }
-      #fuel { bottom: 50px; } #fuel > div { background: #ff991a; }
-      #stamina { bottom: 30px; } #stamina > div { background: #4dccff; }
-      .bar.locked > div { background: #e03030; }
-      #crosshair.hit i { background: #ff4040; }
-      #crosshair.kill i { background: #ff4040; transform: scale(1.8); }
-      /* A tick mark at each corner of the crosshair for every hit that lands, popping out and fading. */
-      #hitmarker { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; opacity: 0; }
-      #hitmarker i { position: absolute; width: 10px; height: 3px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.75); }
-      #hitmarker i:nth-child(1) { left: -17px; top: -13px; transform: rotate(45deg); }
-      #hitmarker i:nth-child(2) { left: 7px; top: -13px; transform: rotate(-45deg); }
-      #hitmarker i:nth-child(3) { left: -17px; top: 10px; transform: rotate(-45deg); }
-      #hitmarker i:nth-child(4) { left: 7px; top: 10px; transform: rotate(45deg); }
-      #hitmarker.pop { animation: hitpop 0.22s ease-out; }
-      #hitmarker.kill i { background: #ff4d3d; }
-      #hitmarker.kill.pop { animation: hitpop 0.5s ease-out; }
-      @keyframes hitpop { 0% { opacity: 1; transform: scale(1.5); } 40% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.1); } }
-      /* What the last hit struck and for how much, under the crosshair. */
-      #hitlabel { position: fixed; left: 50%; top: calc(50% + 26px); transform: translateX(-50%); color: #fff; font: 700 12px ui-monospace, monospace; text-shadow: 0 0 3px #000, 0 0 1px #000; pointer-events: none; opacity: 0; white-space: nowrap; }
-      #hitlabel.pop { animation: labelpop 0.9s ease-out; }
-      #hitlabel.kill { color: #ff4d3d; }
-      @keyframes labelpop { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
-      #zones { position: fixed; left: 20px; bottom: 80px; display: grid; grid-template-columns: 14px 120px; gap: 4px 8px; color: #fff; font-size: 11px; pointer-events: none; text-shadow: 0 0 2px #000; }
-      #zones .track { height: 8px; margin-top: 3px; background: rgba(0,0,0,.6); }
-      #zones .track { position: relative; }
-      #zones .track > div { height: 100%; background: #6ddc6d; }
-      #zones .track > div.damaged { background: #f2c14e; }
-      #zones .track.broken { background: rgba(255, 70, 50, .55); }
-      #zones .track > .plate { position: absolute; left: 0; bottom: -3px; height: 3px; background: #9fc6ff; }
-      #loadout { position: fixed; left: 20px; bottom: 150px; color: #fff; font-size: 13px; line-height: 1.6; text-shadow: 0 0 3px #000; pointer-events: none; }
-      #loadout .on { color: #ffd23f; font-weight: 700; }
-      #prompt { position: fixed; left: 50%; top: 62%; transform: translateX(-50%); color: #fff; font-size: 16px; background: rgba(0,0,0,.55); padding: 4px 10px; border-radius: 4px; display: none; pointer-events: none; }
-      #hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 160px 40px rgba(220,30,30,.75); transition: opacity .4s; }
-      #hurt.on { opacity: 1; transition: none; }
-      #status { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); color: #fff; font-size: 26px; text-shadow: 0 0 6px #000; pointer-events: none; }
-      #roomBar { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); display: none; gap: 8px; align-items: center; color: #fff; font-size: 13px; background: rgba(0,0,0,.55); padding: 6px 10px; border-radius: 6px; }
-      #roomBar button, #menu button { font: inherit; cursor: pointer; border: 0; border-radius: 4px; padding: 6px 10px; background: #d9731a; color: #fff; }
-      #roomBar button.hidden { display: none; }
-      #bigText { position: fixed; left: 50%; top: 32%; transform: translate(-50%, -50%); color: #fff; font-size: 72px; font-weight: 700; text-shadow: 0 0 12px #000; pointer-events: none; }
-      #matchHud { position: fixed; top: 12px; right: 16px; color: #fff; font-size: 14px; text-align: right; text-shadow: 0 0 3px #000; pointer-events: none; line-height: 1.5; }
-      #feed { position: fixed; top: 80px; right: 16px; color: #fff; font-size: 13px; text-align: right; text-shadow: 0 0 3px #000; pointer-events: none; }
-      #results { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.5); pointer-events: none; text-align: center; }
-      #results h2 { font-size: 44px; margin: 0 0 8px; } #results p { font-size: 18px; margin: 4px; }
-      #zoneWarning { position: fixed; left: 50%; top: 14%; transform: translateX(-50%); color: #ff6a5a; font-size: 22px; font-weight: 700; text-shadow: 0 0 6px #000; display: none; pointer-events: none; }
-      #menu { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #fff; background: #1b1d1f; z-index: 10; text-align: center; }
-      #menu h1 { margin: 0 0 6px; font-size: 40px; } #menu .row { display: flex; gap: 8px; align-items: center; }
-      #menu input, #menu select { font: inherit; padding: 6px 8px; border-radius: 4px; border: 0; text-transform: uppercase; width: 90px; } #menu select { text-transform: none; width: auto; }
-      #menu small { opacity: .7; }
-      #hint { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.45); font-size: 18px; text-align: center; line-height: 1.6; cursor: pointer; }
-      #hint small { opacity: .75; font-size: 14px; }
-      #hint.hidden { display: none; }
-      /* The four mechs to pick from, on the start menu and on the pause screen. Stat bars are against the best in the roster. */
-      .mechCards { display: flex; gap: 8px; justify-content: center; margin: 14px 0 4px; }
-      /* Under an id so the menu's plain orange button style does not win. */
-      :is(#menu, #hint) .mechCards button { font: inherit; cursor: pointer; width: 150px; padding: 10px; border-radius: 6px; border: 2px solid transparent; background: rgba(255,255,255,.08); color: #fff; text-align: left; line-height: 1.3; }
-      :is(#menu, #hint) .mechCards button:hover { background: rgba(255,255,255,.16); }
-      :is(#menu, #hint) .mechCards button.on { border-color: #d9731a; background: rgba(217,115,26,.22); }
-      .mechCards strong { display: block; font-size: 15px; } .mechCards em { display: block; font-style: normal; font-size: 12px; opacity: .7; margin-bottom: 6px; }
-      .mechCards .stats { display: grid; grid-template-columns: 44px 1fr; gap: 3px 6px; align-items: center; font-size: 11px; }
-      .mechCards .stats i { height: 5px; background: rgba(0,0,0,.45); } .mechCards .stats b { display: block; height: 100%; background: #d9731a; }
-      #mechName { position: fixed; left: 20px; bottom: 240px; color: #fff; font-size: 13px; text-shadow: 0 0 3px #000; pointer-events: none; }
-      #mechName small { opacity: .75; }
-      /* The Q ability under the mech name. Ready is bright and shows no bar; cooling down is dim with a bar and seconds, so it never rests on colour alone. */
-      #ability { display: none; margin-top: 3px; font-weight: 700; opacity: .5; white-space: nowrap; }
-      #ability.ready { opacity: 1; color: #ffd23f; }
-      #ability .key { margin-right: 8px; }
-      #ability i { display: inline-block; width: 44px; height: 5px; margin: 0 6px 0 8px; vertical-align: middle; background: rgba(0,0,0,.6); }
-      #ability i b { display: block; height: 100%; width: 0; background: #fff; }
-      #ability.ready i { display: none; }
-    </style>
+    <link rel="stylesheet" href="/src/hud.css" />
   </head>
   <body>
     <canvas id="game"></canvas>
     <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
     <div id="hitlabel"></div>
     <div id="crosshair"><i class="h l"></i><i class="h r"></i><i class="v t"></i><i class="v b"></i><i class="dot"></i></div>
-    <div id="roomBar"><span id="roomText"></span><button id="copyLink">Copy invite link</button><button id="startButton" class="hidden">Start match (Enter)</button></div>
-    <div id="bigText"></div>
-    <div id="matchHud"><div id="aliveText"></div><div id="timerText"></div><div id="ringText"></div></div>
+    <div id="aimCooldown"><span class="key">Q</span><span id="aimCooldownTime" class="num"></span></div>
+    <div id="matchHud" class="panel">
+      <div class="alive"><span class="label">Alive</span><span id="aliveText" class="num"></span><span id="aliveTotal" class="num"></span></div>
+      <span class="label">Time</span>
+      <span id="timerText" class="num"></span>
+      <div id="ringRow"><span id="ringLabel" class="label"></span><span id="ringText" class="num"></span></div>
+    </div>
+    <div id="roomBar" class="panel"><span class="label">Room</span><span id="roomText" class="num"></span><span id="roomInfo"></span><button id="copyLink" class="ghost">Copy invite link</button><button id="startButton" class="hidden">Start match (Enter)</button></div>
     <div id="feed"></div>
-    <div id="zoneWarning">Outside the zone! Run to the circle</div>
-    <div id="results"><h2 id="resultTitle"></h2><p id="resultSub"></p></div>
-    <div id="menu">
-      <h1>Rustbucket Royale</h1>
-      <div class="row"><select id="tierSelect"><option value="arena" selected>Arena (quick test)</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select><select id="botSelect" title="Bots to fight"><option value="" selected>Fill with bots</option><option value="0">No bots</option><option value="3">3 bots</option><option value="5">5 bots</option><option value="8">8 bots</option></select><button id="createRoom">Create room</button></div>
-      <div class="row"><input id="roomCode" maxlength="4" placeholder="CODE" /><button id="joinRoom">Join room</button></div>
-      <div id="menuMechs" class="mechCards"></div>
-      <div class="row"><button id="playOffline">Practice offline</button></div>
-      <small>Create a room, then share the invite link with friends.</small>
-    </div>
-    <div id="hurt"></div>
+    <div id="warnings"></div>
+    <div id="bigText"></div>
     <div id="status"></div>
-    <div id="mechName"><div id="mechTitle"></div><div id="ability"><span class="key">Q</span><span id="abilityName"></span><i><b id="abilityFill"></b></i><span id="abilityTime"></span></div></div>
-    <div id="loadout"></div>
-    <div id="prompt"></div>
-    <div id="zones">
-      <span>L</span><div class="track"><div></div><div class="plate"></div></div>
-      <span>A</span><div class="track"><div></div><div class="plate"></div></div>
-      <span>T</span><div class="track"><div></div><div class="plate"></div></div>
+    <div id="mechPanel" class="panel">
+      <div id="mechTitle"></div>
+      <div id="ability"><span class="key">Q</span><span id="abilityName"></span><i><b id="abilityFill"></b></i><span id="abilityTime"></span></div>
+      <div id="mechBody">
+        <div id="damageDiagram"></div>
+        <div id="mechGauges">
+          <div class="meter"><span class="label">Armor plates</span><div id="plates"><div><span class="label">Legs</span><span class="num"></span></div><div><span class="label">Arms</span><span class="num"></span></div><div><span class="label">Torso</span><span class="num"></span></div></div></div>
+          <div class="meter"><span class="label">Jet fuel</span><div id="fuel" class="bar"><div></div></div></div>
+          <div class="meter"><span class="label">Stamina</span><div id="stamina" class="bar"><div></div></div></div>
+        </div>
+      </div>
+      <div id="loadout"></div>
     </div>
-    <div id="fuel" class="bar"><div></div></div>
-    <div id="stamina" class="bar"><div></div></div>
+    <div id="radarFrame" class="panel"><span class="label">Radar</span></div>
+    <div id="prompt" class="panel"></div>
+    <div id="results"><h2 id="resultTitle"></h2><p id="resultSub"></p></div>
+    <div id="hurt"></div>
+    <div id="menu">
+      <div class="screen panel">
+        <h1>Rustbucket Royale</h1>
+        <div class="row"><select id="tierSelect"><option value="arena" selected>Arena (quick test)</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select><select id="botSelect" title="Bots to fight"><option value="" selected>Fill with bots</option><option value="0">No bots</option><option value="3">3 bots</option><option value="5">5 bots</option><option value="8">8 bots</option></select><button id="createRoom">Create room</button></div>
+        <div class="row"><input id="roomCode" maxlength="4" placeholder="CODE" /><button id="joinRoom" class="ghost">Join room</button></div>
+        <div id="menuMechs" class="mechCards"></div>
+        <div class="row"><button id="playOffline" class="ghost">Practice offline</button></div>
+        <small>Create a room, then share the invite link with friends.</small>
+      </div>
+    </div>
     <div id="hint">
-      <div>
-        Click to play<br />
-        <small>WASD move · W W sprint · Shift dash · Space jets · Click fire<br />1 / 2 or wheel weapons · E take · F repair · G grenade · Q ability · M sound · F1 tuning panel · Esc free the mouse · R respawn</small>
+      <div class="screen panel">
+        <h2>Click to play</h2>
+        <dl class="keys">
+          <dt>WASD</dt><dd>Move</dd><dt>W W</dt><dd>Sprint</dd>
+          <dt>Shift</dt><dd>Dash</dd><dt>Space</dt><dd>Jets</dd>
+          <dt>Click</dt><dd>Fire</dd><dt>1 / 2 / wheel</dt><dd>Weapons</dd>
+          <dt>E</dt><dd>Take</dd><dt>F</dt><dd>Repair</dd>
+          <dt>G</dt><dd>Grenade</dd><dt>Q</dt><dd>Ability</dd>
+          <dt>M</dt><dd>Sound</dd><dt>F1</dt><dd>Tuning panel</dd>
+          <dt>Esc</dt><dd>Free the mouse</dd><dt>R</dt><dd>Respawn</dd>
+        </dl>
         <div id="hintMechs" class="mechCards"></div>
       </div>
     </div>

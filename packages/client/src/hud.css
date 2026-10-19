@@ -1,0 +1,195 @@
+/* The HUD, menus and pause screen: one panel system, amber on soot (DESIGN.md, HUD). Only the latin subset and the
+   weights in use are loaded, to keep the download small. */
+@import "@fontsource/chakra-petch/latin-500.css";
+@import "@fontsource/chakra-petch/latin-700.css";
+@import "@fontsource/share-tech-mono/latin-400.css";
+@import "@fontsource/barlow/latin-400.css";
+@import "@fontsource/barlow/latin-600.css";
+
+/* Other HUD pieces (the damage diagram, warnings) read these, so every colour and face is set once. */
+:root {
+  --hud-amber: #ffb000;
+  --hud-amber-dim: #b8820f;
+  --hud-soot: #2a2f2e;
+  --hud-panel: rgba(42, 47, 46, 0.9);
+  --hud-warn: #ff4d3d;
+  --hud-text: #f2e3c0;
+  --hud-word: "Chakra Petch", "Arial Narrow", sans-serif;
+  --hud-num: "Share Tech Mono", ui-monospace, monospace;
+  --hud-body: "Barlow", system-ui, sans-serif;
+  --hud-margin: clamp(12px, 1.25vw, 32px);
+  --hud-border: 2px;
+  /* The one cut corner every panel has, echoing the clipped corners of Chakra Petch. */
+  --hud-cut: 0.7rem;
+  /* Everything in the HUD is sized in rem, so this one value scales it from 1366x768 (12 px) to 2560x1440 (18 px). */
+  font-size: clamp(12px, 0.52vw + 5px, 18px);
+}
+
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--hud-soot); font-family: var(--hud-body); color: var(--hud-text); }
+canvas { display: block; width: 100%; height: 100%; }
+
+/* Panels. A solid border and one clipped top-right corner; the diagonal line redraws the border the clip cut away. */
+.panel {
+  position: fixed;
+  box-sizing: border-box;
+  background: var(--hud-panel);
+  border: var(--hud-border) solid var(--hud-amber-dim);
+  color: var(--hud-amber);
+  padding: 0.5rem 0.7rem;
+  clip-path: polygon(0 0, calc(100% - var(--hud-cut)) 0, 100% var(--hud-cut), 100% 100%, 0 100%);
+  pointer-events: none;
+}
+.panel::after {
+  content: "";
+  position: absolute;
+  width: calc(var(--hud-cut) * 1.4142);
+  height: calc(var(--hud-border) * 2);
+  top: calc(var(--hud-cut) / 2 - var(--hud-border) * 2);
+  right: calc(var(--hud-cut) / 2 - var(--hud-border) - var(--hud-cut) * 0.7071);
+  transform: rotate(45deg);
+  background: var(--hud-amber-dim);
+}
+.label { font: 700 0.72rem var(--hud-word); letter-spacing: 0.14em; text-transform: uppercase; color: var(--hud-amber-dim); }
+.num { font-family: var(--hud-num); font-variant-numeric: tabular-nums; }
+/* A key cap: the key to press, in the mono face, boxed so it reads as a key and not a word. */
+.key { display: inline-block; min-width: 1.1em; padding: 0 0.25em; margin-right: 0.45em; border: 1px solid currentColor; font: 400 0.85em/1.3 var(--hud-num); text-align: center; }
+
+/* Top left: the match. */
+#matchHud { display: none; top: var(--hud-margin); left: var(--hud-margin); grid-template-columns: auto auto; gap: 0.1rem 1.1rem; align-items: end; }
+#matchHud .alive { grid-row: span 2; display: flex; flex-direction: column; }
+#aliveText { font-size: 2.6rem; line-height: 0.95; }
+#aliveTotal { font-size: 0.9rem; color: var(--hud-amber-dim); }
+#timerText { font-size: 1.35rem; }
+#ringRow { grid-column: 1 / -1; display: flex; gap: 0.6rem; align-items: baseline; margin-top: 0.3rem; padding-top: 0.3rem; border-top: 1px solid var(--hud-amber-dim); }
+#ringText { font-size: 1rem; }
+
+/* Top centre: the room. */
+#roomBar { display: none; top: var(--hud-margin); left: 50%; transform: translateX(-50%); gap: 0.8rem; align-items: center; pointer-events: auto; padding: 0.35rem 0.5rem 0.35rem 0.8rem; }
+#roomText { font-size: 1.3rem; letter-spacing: 0.1em; }
+#roomInfo { font: 500 0.85rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.08em; }
+#roomBar button.hidden { display: none; }
+/* Scoped, so the F1 tuning panel keeps its own buttons. */
+:is(#roomBar, #menu) button { font: 700 0.85rem var(--hud-word); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; border: var(--hud-border) solid var(--hud-amber); border-radius: 0; padding: 0.4rem 0.8rem; background: var(--hud-amber); color: var(--hud-soot); }
+:is(#roomBar, #menu) button:hover { background: var(--hud-text); border-color: var(--hud-text); }
+#menu button.ghost, #roomBar button.ghost { background: transparent; color: var(--hud-amber); }
+#menu button.ghost:hover, #roomBar button.ghost:hover { background: var(--hud-amber); color: var(--hud-soot); }
+
+/* Right: the kill feed. Lines are added and removed by the HUD; each is its own small strip. */
+#feed { position: fixed; top: var(--hud-margin); right: var(--hud-margin); display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; pointer-events: none; max-width: 30vw; }
+#feed > div { background: var(--hud-panel); border-left: 3px solid var(--hud-amber); color: var(--hud-amber); padding: 0.2rem 0.6rem; font: 500 0.85rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* Centre upper: warnings, filled by the warnings module. */
+#warnings { position: fixed; top: 14%; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 0.3rem; pointer-events: none; }
+
+/* Bottom left: your mech. */
+#mechPanel { left: var(--hud-margin); bottom: var(--hud-margin); width: 22rem; display: flex; flex-direction: column; gap: 0.45rem; }
+#mechTitle { font: 700 1.15rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; padding-right: var(--hud-cut); }
+#mechTitle small { font-weight: 500; font-size: 0.75rem; color: var(--hud-amber-dim); letter-spacing: 0.12em; }
+#mechTitle .next { display: block; margin-top: 0.1rem; }
+/* The Q ability. Ready is bright and says READY; cooling down is dim with a bar and seconds, so it never rests on colour alone. */
+#ability { display: none; align-items: center; font: 700 0.9rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.55; white-space: nowrap; }
+#ability.ready { opacity: 1; }
+#ability i { flex: 1; height: 0.4rem; margin: 0 0.6rem; background: rgba(0, 0, 0, 0.45); border: 1px solid var(--hud-amber-dim); }
+#ability i b { display: block; height: 100%; width: 0; background: var(--hud-amber); }
+#ability.ready i { visibility: hidden; }
+#abilityTime { font: 400 0.9rem var(--hud-num); text-transform: none; min-width: 3.4rem; text-align: right; }
+#mechBody { display: flex; gap: 0.7rem; align-items: stretch; }
+/* The damage diagram draws itself into this box at this size. */
+#damageDiagram { flex: none; width: 90px; height: 120px; }
+#mechGauges { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
+#plates { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.2rem; }
+#plates div { display: flex; flex-direction: column; border: 1px solid var(--hud-amber-dim); padding: 0.1rem 0.3rem; }
+#plates .num { font-size: 1rem; }
+#plates .empty { color: var(--hud-amber-dim); }
+#plates div::after { content: ""; height: 2px; margin-top: 0.1rem; width: calc(var(--fill, 0) * 100%); background: var(--hud-amber); }
+.meter { display: flex; flex-direction: column; gap: 0.15rem; }
+.bar { position: relative; height: 0.6rem; background: rgba(0, 0, 0, 0.45); border: 1px solid var(--hud-amber-dim); }
+.bar > div { height: 100%; width: 100%; background: var(--hud-amber); }
+/* Overheated or out of breath: red and striped, and it says so, so it never rests on colour alone. */
+.bar.locked { border-color: var(--hud-warn); }
+.bar.locked > div { background: repeating-linear-gradient(-45deg, var(--hud-warn) 0 4px, #8c2a20 4px 8px); }
+.bar.locked::after { content: "LOCKED"; position: absolute; right: 0.2rem; top: 50%; transform: translateY(-50%); font: 400 0.6rem var(--hud-num); letter-spacing: 0.1em; color: var(--hud-text); background: var(--hud-soot); padding: 0 0.2rem; }
+#loadout { border-top: 1px solid var(--hud-amber-dim); padding-top: 0.4rem; font: 500 0.9rem/1.55 var(--hud-word); text-transform: uppercase; letter-spacing: 0.04em; }
+#loadout > div { color: var(--hud-amber-dim); }
+#loadout > div.on { color: var(--hud-amber); }
+#loadout > div.on .key { background: var(--hud-amber); color: var(--hud-soot); border-color: var(--hud-amber); }
+#loadout .swatch { display: inline-block; width: 0.55em; height: 0.55em; margin: 0 0.3em 0 0.5em; vertical-align: 0.05em; }
+#loadout .upgrades { color: var(--hud-amber); }
+
+/* Bottom right: a frame round the radar canvas, which radar.ts draws 150 px wide, 16 px in from the corner. */
+#radarFrame { display: none; right: 8px; bottom: 8px; width: 166px; height: 186px; padding: 0.2rem 0.5rem; }
+
+/* Centre: the aim. A solid soot edge keeps the amber readable on sky and sand alike. */
+#crosshair { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+#crosshair i { position: absolute; background: var(--hud-amber); box-shadow: 0 0 0 1px var(--hud-soot); }
+#crosshair .h { width: 9px; height: 2px; top: -1px; }
+#crosshair .v { width: 2px; height: 9px; left: -1px; }
+#crosshair .l { left: -16px; } #crosshair .r { left: 7px; }
+#crosshair .t { top: -16px; } #crosshair .b { top: 7px; }
+#crosshair .dot { width: 2px; height: 2px; left: -1px; top: -1px; }
+/* Hits flash pale, kills also grow: red stays for warnings. */
+#crosshair.hit i { background: var(--hud-text); }
+#crosshair.kill i { background: var(--hud-text); transform: scale(1.8); }
+/* A tick mark at each corner of the crosshair for every hit that lands, popping out and fading. */
+#hitmarker { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; opacity: 0; }
+#hitmarker i { position: absolute; width: 10px; height: 3px; background: var(--hud-text); box-shadow: 0 0 0 1px var(--hud-soot); }
+#hitmarker i:nth-child(1) { left: -17px; top: -13px; transform: rotate(45deg); }
+#hitmarker i:nth-child(2) { left: 7px; top: -13px; transform: rotate(-45deg); }
+#hitmarker i:nth-child(3) { left: -17px; top: 10px; transform: rotate(-45deg); }
+#hitmarker i:nth-child(4) { left: 7px; top: 10px; transform: rotate(45deg); }
+#hitmarker.pop { animation: hitpop 0.22s ease-out; }
+#hitmarker.kill i { background: var(--hud-amber); width: 14px; }
+#hitmarker.kill.pop { animation: hitpop 0.5s ease-out; }
+@keyframes hitpop { 0% { opacity: 1; transform: scale(1.5); } 40% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.1); } }
+/* What the last hit struck and for how much, under the crosshair. */
+#hitlabel { position: fixed; left: 50%; top: calc(50% + 24px); transform: translateX(-50%); color: var(--hud-amber); background: var(--hud-panel); padding: 0 0.35rem; font: 400 0.85rem var(--hud-num); letter-spacing: 0.06em; pointer-events: none; opacity: 0; white-space: nowrap; }
+#hitlabel.pop { animation: labelpop 0.9s ease-out; }
+#hitlabel.kill { color: var(--hud-soot); background: var(--hud-amber); }
+@keyframes labelpop { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+/* The Q cooldown again, small under the aim, so you need not look away to know when it is back. */
+#aimCooldown { display: none; text-transform: none; position: fixed; left: 50%; top: calc(50% + 46px); transform: translateX(-50%); color: var(--hud-amber); font: 400 0.8rem var(--hud-num); opacity: 0.8; pointer-events: none; white-space: nowrap; }
+#aimCooldown .key { margin-right: 0.3em; }
+#prompt { display: none; position: fixed; left: 50%; top: 62%; transform: translateX(-50%); padding: 0.35rem 0.8rem; font: 700 0.95rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+#bigText { position: fixed; left: 50%; top: 32%; transform: translate(-50%, -50%); color: var(--hud-amber); font: 400 6rem/1 var(--hud-num); text-shadow: 4px 4px 0 var(--hud-soot); pointer-events: none; }
+#status { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); color: var(--hud-amber); background: var(--hud-panel); border: var(--hud-border) solid var(--hud-amber-dim); padding: 0.4rem 0.9rem; font: 700 1.25rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.05em; pointer-events: none; white-space: nowrap; }
+#status:empty { display: none; }
+#hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 160px 40px rgba(255, 77, 61, 0.6); transition: opacity 0.4s; }
+#hurt.on { opacity: 1; transition: none; }
+
+/* Match over. */
+#results { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(42, 47, 46, 0.6); pointer-events: none; text-align: center; }
+#results h2 { margin: 0 0 0.5rem; font: 700 3.6rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.05em; color: var(--hud-amber); text-shadow: 4px 4px 0 var(--hud-soot); }
+#results p { margin: 0; padding: 0.4rem 1rem; font: 600 1.25rem var(--hud-body); color: var(--hud-text); background: var(--hud-panel); }
+
+/* Start menu and pause screen: the same panels at full size, with Barlow for anything that reads as a sentence. */
+#menu { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: var(--hud-soot); z-index: 10; }
+.screen { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1rem; text-align: center; }
+.screen.panel { pointer-events: auto; padding: 2rem 2.4rem; }
+#menu h1 { margin: 0; font: 700 3.2rem/1 var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; color: var(--hud-amber); }
+#menu .row { display: flex; gap: 0.5rem; align-items: center; }
+#menu input, #menu select { font: 400 1rem var(--hud-num); padding: 0.4rem 0.6rem; border-radius: 0; border: var(--hud-border) solid var(--hud-amber-dim); background: var(--hud-soot); color: var(--hud-amber); }
+#menu input { text-transform: uppercase; width: 6rem; letter-spacing: 0.2em; }
+#menu input::placeholder { color: var(--hud-amber-dim); }
+#menu select { font-family: var(--hud-word); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+#menu small { font: 400 0.95rem var(--hud-body); color: var(--hud-text); opacity: 0.75; }
+#hint { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(42, 47, 46, 0.82); color: var(--hud-amber); font: 700 1.4rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; text-align: center; cursor: pointer; }
+#hint.hidden { display: none; }
+#hint h2 { margin: 0; font: 700 2.2rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.08em; color: var(--hud-amber); }
+#hint .screen.panel { cursor: pointer; }
+/* The controls as key and action pairs, two pairs a row. */
+.keys { display: grid; grid-template-columns: repeat(2, auto 1fr); gap: 0.3rem 0.7rem; margin: 0; text-align: left; font: 400 1rem var(--hud-body); text-transform: none; letter-spacing: 0; color: var(--hud-text); }
+.keys dt { justify-self: end; font: 400 0.85rem var(--hud-num); color: var(--hud-amber); border: 1px solid var(--hud-amber-dim); padding: 0 0.35rem; }
+.keys dd { margin: 0 1rem 0 0; }
+
+/* The four mechs to pick from, on the start menu and on the pause screen. Stat bars are against the best in the roster. */
+.mechCards { display: flex; gap: 0.6rem; justify-content: center; }
+/* Under an id so the plain button style does not win. */
+:is(#menu, #hint) .mechCards button { cursor: pointer; border-radius: 0; font: inherit; width: 10.5rem; padding: 0.7rem; border: var(--hud-border) solid var(--hud-amber-dim); background: rgba(0, 0, 0, 0.25); color: var(--hud-amber); text-align: left; text-transform: none; letter-spacing: 0; line-height: 1.3; }
+:is(#menu, #hint) .mechCards button:hover { border-color: var(--hud-amber); background: rgba(255, 176, 0, 0.08); }
+/* The picked card is filled, not just recoloured, so it reads without colour. */
+:is(#menu, #hint) .mechCards button.on { border-color: var(--hud-amber); background: var(--hud-amber); color: var(--hud-soot); }
+.mechCards strong { display: block; font: 700 1rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.04em; }
+.mechCards em { display: block; font: 400 0.8rem var(--hud-body); font-style: normal; opacity: 0.8; margin-bottom: 0.45rem; }
+.mechCards .stats { display: grid; grid-template-columns: 3.2rem 1fr; gap: 0.2rem 0.4rem; align-items: center; font: 500 0.7rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.08em; }
+.mechCards .stats i { height: 0.35rem; background: rgba(0, 0, 0, 0.35); }
+.mechCards .stats b { display: block; height: 100%; background: currentColor; }
