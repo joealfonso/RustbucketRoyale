@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M9 mech classes (9a passed; 9b abilities not started)
+Current code milestone: M9 mech classes (gate 9b built, waiting for its playtest)
 Current visual milestone: V3 done, with V2d walk cycles passed after it. V4 (HUD and radar) not started
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -103,3 +103,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Gate V2d built, waiting for its playtest. Check: walk, sprint, dash, jet and land in any match: feet plant and stay put instead of skating, the body bobs and leans into a run and a dash, legs tuck up in the air and every foot thumps down on landing; other mechs and bots walk too. Each mech has its own gait (Ironclad short heavy steps, Stiletto long bird strides, Cataclysm a diagonal trot, Arbiter smooth). Shot-up legs limp; broken legs still crawl. On style.html, 4 then W cycles standing, walking, running, dashing, in the air, limping, and 6 frames one mech up close from the side. Tune in F1 under "Walking (gait.json)", then Copy. Camera bob is walkBob under Look and camera, off. Please read F1 Performance on your laptop on large: legs add 20 to 30 draw calls per mech.
 - 2026-10-18: Gate V2d passed by Joseph's call. Mechs walk with their own gaits. 9a (pick your mech) still waits for its playtest; 9b not started.
 - 2026-10-18: Gate 9a passed by Joseph's call. Pick your mech, each with its own speed, jets and toughness. 9b (abilities on Q) not started.
+- 2026-10-18: Gate 9b built, waiting for its playtest. Check: as Ironclad-IV press Q: a straight 0.7 s charge with the shield up (front shots do a third), shoving and hurting a mech it hits, smashing crates in the way; as Stiletto-B press Q: a leap toward the crosshair (up to 30 m) that slams whatever it lands next to. The HUD line under your mech's name says "Q Shield Ram" or "Q Pounce", dim with seconds left while it cools down (7 s and 6 s). Bots use both. Cataclysm and Arbiter have no Q yet (9c). Numbers in data/abilities.json and data/bots.json "abilities", tunable in F1. Soak passes on all tiers at 44 to 59 kbps, close to the 64 kbps budget on medium.

@@ -1,0 +1,6 @@
+{
+  "mechs": {
+    "ironclad": { "kind": "ram", "name": "Shield Ram", "cooldownSeconds": 7, "activeSeconds": 0.7, "speed": 26, "hitRadius": 2.2, "damage": 30, "knockback": 18, "pop": 5, "shieldFrontCosine": 0.3, "frontDamageMultiplier": 0.3 },
+    "stiletto": { "kind": "pounce", "name": "Pounce", "cooldownSeconds": 6, "speed": 35, "lift": 13, "maxRange": 30, "slamRadius": 4, "damage": 35 }
+  }
+}

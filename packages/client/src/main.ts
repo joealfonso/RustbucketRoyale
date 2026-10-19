@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, createZoneHit, makeZonesFor, mechStatsFor, parseRoster, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, zoneState, partToRepair, createZoneHit, makeZonesFor, mechStatsFor, parseRoster, ZONE_ARMS, ZONE_BROKEN, ZONE_DAMAGED, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
   type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
@@ -22,6 +22,7 @@ import paletteJson from "../../../data/palette.json";
 import lookJson from "../../../data/look.json";
 import mechKitsJson from "../../../data/mechKits.json";
 import rosterJson from "../../../data/roster.json";
+import abilitiesJson from "../../../data/abilities.json";
 import { mechCards, savedMech } from "./mechPicker";
 import gaitJson from "../../../data/gait.json";
 import { parseGait, type GaitInput } from "./gait";
@@ -47,6 +48,8 @@ import { BUILDERS, Dressing, scatter } from "./dressing";
 import { PROP_MODELS } from "./props";
 import { BreakFx } from "./props/breakFx";
 import propFxJson from "../../../data/propFx.json";
+import abilityFxJson from "../../../data/abilityFx.json";
+import { AbilityFx, abilityMoment, parseAbilityFx } from "./abilityFx";
 import dressingJson from "../../../data/dressing.json";
 import chunksJsonForDressing from "../../../data/chunks.json";
 import { createMechModel, legsLimping, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
@@ -76,6 +79,9 @@ const zoneMaxHp = zoneSet.zones.map((z) => z.hp);
 // The four mechs and how each one moves and takes damage, the same numbers the server uses.
 const roster = parseRoster(rosterJson);
 const statsFor = mechStatsFor(mechStats, roster);
+// Each mech's Q ability (or null), the same rules the server steps with, so a ram or leap shows the instant Q goes down.
+const abilitySet = parseAbilities(abilitiesJson);
+const abilityOf = abilityFor(abilitySet, roster);
 const damageFxConfig = parseDamageFx(damageFxJson);
 setCrawlLook(damageFxConfig.crawl, zoneSet.damagedBelowFraction);
 
@@ -200,6 +206,8 @@ projectiles.onImpact = (x, y, z) => sound.play("impact", { x, y, z });
 // Browsers only allow sound after a click, and the click that locks the mouse is the first one.
 for (const el of [canvas, hint]) el.addEventListener("click", () => sound.start());
 const blasts = new Fireballs(scene, 8);
+const abilityFxConfig = parseAbilityFx(abilityFxJson);
+const abilityFx = new AbilityFx(scene, abilityFxConfig, (c) => toon.color(c));
 // Walking (gait.ts): each mech's legs follow how fast it is really going. Footfalls kick up dust (art hook for V5).
 const gaitConfig = parseGait(gaitJson);
 const dust = new TimedEffects(scene, 32, gaitConfig.dustMeters, new THREE.MeshBasicMaterial({ color: "#a39a86", transparent: true, opacity: 0.45 }));
@@ -220,12 +228,13 @@ function footfalls(model: MechModel, feet: number, audible: boolean): void {
     }
   }
 }
-const walkRemote = (model: MechModel, m: number, vx: number, vy: number, vz: number, jetting: boolean, running: boolean) => {
+const walkRemote = (model: MechModel, m: number, vx: number, vy: number, vz: number, jetting: boolean, running: boolean, ability: boolean) => {
   const stats = statsFor(m);
   gaitInput.vx = vx; gaitInput.vz = vz; gaitInput.yaw = model.group.rotation.y;
   // Others carry no grounded flag: jets on, or rising or falling fast, means in the air.
   gaitInput.grounded = !jetting && Math.abs(vy) < 2;
-  gaitInput.dashing = Math.hypot(vx, vz) > stats.runSpeed * 1.15;
+  // A ram leans like a dash. A pounce is in the air, so the feet tuck instead.
+  gaitInput.dashing = (ability && gaitInput.grounded) || Math.hypot(vx, vz) > stats.runSpeed * 1.15;
   gaitInput.limping = legsLimping(model);
   gaitInput.walkSpeed = stats.walkSpeed; gaitInput.runSpeed = stats.runSpeed;
   const feet = walkMech(model, gaitConfig, gaitInput, fxDt);
@@ -261,9 +270,9 @@ const input = new Input(canvas, hint, () => mechStats.sprintDoubleTapSeconds);
 // copied into the live values in place, so everything already holding them sees it.
 const tuningRaws = JSON.parse(JSON.stringify({
   mech: mechJson, weapons: weaponsJson, grenade: grenadeJson, zones: zonesJson, loot: lootJson, upgrades: upgradesJson,
-  bots: botsJson, noise: noiseJson, combat: combatJson, roster: rosterJson, props: propsJsonForLoot,
+  bots: botsJson, noise: noiseJson, combat: combatJson, roster: rosterJson, abilities: abilitiesJson, props: propsJsonForLoot,
 })) as TuningRaws;
-const liveData: Partial<Record<TunableFile, unknown>> = { mech: mechStats, weapons: weaponSet, grenade: grenadeStats, zones: zoneSet, loot: lootConfig, upgrades: upgradeSet, roster };
+const liveData: Partial<Record<TunableFile, unknown>> = { mech: mechStats, weapons: weaponSet, grenade: grenadeStats, zones: zoneSet, loot: lootConfig, upgrades: upgradeSet, roster, abilities: abilitySet };
 const applyLocally = (file: string, path: string, value: number) => {
   const parsed = applyTune(tuningRaws, file, path, value);
   if (parsed !== null) assignDeep(liveData[file as TunableFile], parsed);
@@ -281,7 +290,7 @@ if (net) {
 
 const [spawnX, spawnY, spawnZ] = map.spawn;
 // Yaw PI faces +Z.
-const predictor = new Predictor(statsFor, map.world, spawnX, spawnY, spawnZ, Math.PI);
+const predictor = new Predictor(statsFor, map.world, spawnX, spawnY, spawnZ, Math.PI, abilityOf);
 const mech = predictor.state;
 mech.mech = shownMech; // offline this is the mech you drive; online the first snapshot says
 const aim = { yaw: Math.PI, pitch: 0 };
@@ -400,6 +409,13 @@ if (net) {
     sound.play("grenadeThrow", { x: g.x, y: g.y, z: g.z });
   };
   net.onExplode = (e) => showBlast(e.x, e.y, e.z);
+  // Your own start and landing already showed from prediction; anyone's ram or slam connecting shows here.
+  net.onAbility = (a) => {
+    if (a.id === net.id && a.event !== "hit") return;
+    if (a.event === "start") showAbilityStart(a.kind, a.x, a.y, a.z);
+    else if (a.event === "land") showSlam(a.x, a.y, a.z, slamRadiusOf(remotes.mechOf(a.id)));
+    else showAbilityHit(a.x, a.y, a.z);
+  };
   // A destroyed prop leaves the world here too, so walking where it stood matches the server.
   net.onPropDestroyed = (id) => {
     const prop = map.props[id];
@@ -473,12 +489,40 @@ function flashHurt(): void {
   hurtTimer = window.setTimeout(() => hurtOverlay.classList.remove("on"), 80);
 }
 
+// The camera shakes for something violent nearby, harder the closer it is.
+function shakeNear(x: number, y: number, z: number, radius: number, force: number): void {
+  const distance = Math.hypot(x - mech.x, y - mech.y, z - mech.z);
+  if (distance < radius) rig.addShake((1 - distance / radius) * force);
+}
+
 function showBlast(x: number, y: number, z: number): void {
   grenades.removeNear(x, y, z);
   blasts.spawn(x, y + 0.6, z, 4.5);
   sound.play("explosion", { x, y, z });
-  const distance = Math.hypot(x - mech.x, y - mech.y, z - mech.z);
-  if (distance < grenadeStats.shakeRadius) rig.addShake((1 - distance / grenadeStats.shakeRadius) * grenadeStats.shakeForce);
+  shakeNear(x, y, z, grenadeStats.shakeRadius, grenadeStats.shakeForce);
+}
+
+// The slam ring is as wide as the slam reaches, so what you see is what gets hit. 0 for a mech not seen yet.
+function slamRadiusOf(m: number): number {
+  const a = m >= 0 ? abilityOf(m) : null;
+  return a?.kind === "pounce" ? a.slamRadius : 0;
+}
+
+function showAbilityStart(kind: "ram" | "pounce", x: number, y: number, z: number): void {
+  abilityFx.start(x, y, z);
+  sound.play(kind, { x, y: y + 1, z });
+}
+
+function showSlam(x: number, y: number, z: number, radius: number): void {
+  abilityFx.slam(x, y, z, radius);
+  sound.play("slam", { x, y, z });
+  shakeNear(x, y, z, abilityFxConfig.slam.shakeRadius, abilityFxConfig.slam.shakeForce);
+}
+
+function showAbilityHit(x: number, y: number, z: number): void {
+  abilityFx.hit(x, y, z);
+  sound.play("slam", { x, y, z });
+  shakeNear(x, y, z, abilityFxConfig.hit.shakeRadius, abilityFxConfig.hit.shakeForce);
 }
 
 const fuelBar = document.getElementById("fuel")!;
@@ -553,12 +597,18 @@ function frame(now: number): void {
     // so prediction does not run ahead and get pulled back.
     if (health.dead || progress.state === "countdown") {
       mechInput.moveX = 0; mechInput.moveY = 0; mechInput.run = false; mechInput.jet = false;
-      mechInput.fire = false; mechInput.grenade = false;
+      mechInput.fire = false; mechInput.grenade = false; mechInput.ability = false;
     }
 
     const dashBefore = mech.dashTime;
+    const abilityBefore = mech.abilityTime;
     const seq = predictor.step(mechInput, STEP);
     if (dashBefore <= 0 && mech.dashTime > 0) sound.play("dash", { x: mech.x, y: mech.y + 1, z: mech.z });
+    // Your own ram or leap shows from prediction, the instant Q goes down; the dust is where it pushed off from.
+    const ownAbility = abilityOf(mech.mech);
+    const moment = ownAbility ? abilityMoment(abilityBefore, mech.abilityTime, ownAbility.kind) : null;
+    if (moment === "start") showAbilityStart(ownAbility!.kind, prevX, prevY, prevZ);
+    else if (moment === "land") showSlam(mech.x, mech.y, mech.z, slamRadiusOf(mech.mech));
     net?.sendInput(seq, mechInput);
     if (net === null && mech.y < KILL_HEIGHT) respawnOffline();
 
@@ -603,13 +653,16 @@ function frame(now: number): void {
   // Walking: your legs from your predicted speed, everyone else's from how they move on screen. Looks only.
   fxDt = frameTime;
   const ownStats = statsFor(mech.mech);
+  const ownAbilityStats = abilityOf(mech.mech);
   gaitInput.vx = mech.vx; gaitInput.vz = mech.vz; gaitInput.yaw = mechGroup.rotation.y;
-  gaitInput.grounded = mech.grounded; gaitInput.dashing = mech.dashTime > 0; gaitInput.limping = legsLimping(ownModel);
+  gaitInput.grounded = mech.grounded; gaitInput.limping = legsLimping(ownModel);
+  gaitInput.dashing = mech.dashTime > 0 || (mech.abilityTime > 0 && ownAbilityStats?.kind === "ram");
   gaitInput.walkSpeed = ownStats.walkSpeed; gaitInput.runSpeed = ownStats.runSpeed;
   const ownFeet = walkMech(ownModel, gaitConfig, gaitInput, frameTime);
   if (ownFeet && !health.dead) footfalls(ownModel, ownFeet, true);
   remotes.forEachNear(mechGroup.position.x, mechGroup.position.z, gaitConfig.farMeters, walkRemote);
   dust.update(frameTime);
+  abilityFx.update(frameTime);
 
   // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.
   rig.setFovKick(mech.dashTime > 0 ? mech.dashTime / mechStats.dashSeconds : 0, frameTime);
@@ -667,6 +720,7 @@ function frame(now: number): void {
   if (mech.mech !== shownMech) swapOwnMech(mech.mech);
   const next = picked !== null && picked !== mech.mech ? picked : -1;
   if (next !== shownNext) { shownNext = next; hud.setMech(roster.mechs[mech.mech]!, next >= 0 ? roster.mechs[next]!.name : null); }
+  hud.setAbility(ownAbilityStats?.name ?? null, mech.abilityCooldown, ownAbilityStats?.cooldownSeconds ?? 0);
   damageFx.emitFrom(ownModel, frameTime);
   remotes.forEachModel(emitDamage);
   damageFx.update(frameTime);

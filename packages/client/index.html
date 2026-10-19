@@ -77,6 +77,13 @@
       .mechCards .stats i { height: 5px; background: rgba(0,0,0,.45); } .mechCards .stats b { display: block; height: 100%; background: #d9731a; }
       #mechName { position: fixed; left: 20px; bottom: 240px; color: #fff; font-size: 13px; text-shadow: 0 0 3px #000; pointer-events: none; }
       #mechName small { opacity: .75; }
+      /* The Q ability under the mech name. Ready is bright and shows no bar; cooling down is dim with a bar and seconds, so it never rests on colour alone. */
+      #ability { display: none; margin-top: 3px; font-weight: 700; opacity: .5; white-space: nowrap; }
+      #ability.ready { opacity: 1; color: #ffd23f; }
+      #ability .key { margin-right: 8px; }
+      #ability i { display: inline-block; width: 44px; height: 5px; margin: 0 6px 0 8px; vertical-align: middle; background: rgba(0,0,0,.6); }
+      #ability i b { display: block; height: 100%; width: 0; background: #fff; }
+      #ability.ready i { display: none; }
     </style>
   </head>
   <body>
@@ -100,7 +107,7 @@
     </div>
     <div id="hurt"></div>
     <div id="status"></div>
-    <div id="mechName"></div>
+    <div id="mechName"><div id="mechTitle"></div><div id="ability"><span class="key">Q</span><span id="abilityName"></span><i><b id="abilityFill"></b></i><span id="abilityTime"></span></div></div>
     <div id="loadout"></div>
     <div id="prompt"></div>
     <div id="zones">
@@ -113,7 +120,7 @@
     <div id="hint">
       <div>
         Click to play<br />
-        <small>WASD move · W W sprint · Shift dash · Space jets · Click fire<br />1 / 2 or wheel weapons · E take · F repair · G grenade · M sound · F1 tuning panel · Esc free the mouse · R respawn</small>
+        <small>WASD move · W W sprint · Shift dash · Space jets · Click fire<br />1 / 2 or wheel weapons · E take · F repair · G grenade · Q ability · M sound · F1 tuning panel · Esc free the mouse · R respawn</small>
         <div id="hintMechs" class="mechCards"></div>
       </div>
     </div>

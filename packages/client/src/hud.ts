@@ -10,6 +10,15 @@ export interface RoomView {
 
 const byId = (id: string) => document.getElementById(id)!;
 
+// The cooldown bar moves in this many steps, so the page changes a few times a second instead of every frame.
+export const COOLDOWN_STEPS = 20;
+
+// How far the ability's cooldown bar is filled, in whole steps: COOLDOWN_STEPS means ready.
+export function cooldownStep(left: number, total: number): number {
+  if (left <= 0 || total <= 0) return COOLDOWN_STEPS;
+  return Math.max(0, Math.min(COOLDOWN_STEPS - 1, Math.floor((1 - left / total) * COOLDOWN_STEPS)));
+}
+
 // All the plain text and buttons for rooms and matches. Only touches the page when a value actually changes.
 export class Hud {
   private roomBar = byId("roomBar");
@@ -24,7 +33,13 @@ export class Hud {
   private zoneWarning = byId("zoneWarning");
   private lastText = new Map<HTMLElement, string>();
   private loadoutBox = byId("loadout");
-  private mechBox = byId("mechName");
+  private mechBox = byId("mechTitle");
+  private abilityBox = byId("ability");
+  private abilityName = byId("abilityName");
+  private abilityFill = byId("abilityFill");
+  private abilityTime = byId("abilityTime");
+  private abilityShown: string | null = null;
+  private abilityKey = -1;
   private promptBox = byId("prompt");
   private plateFills = Array.from(document.querySelectorAll<HTMLElement>("#zones .plate"));
 
@@ -92,6 +107,24 @@ export class Hud {
     if (this.lastText.get(this.mechBox) === html) return;
     this.lastText.set(this.mechBox, html);
     this.mechBox.innerHTML = html;
+  }
+
+  // Your mech's Q ability under its name: bright when ready, dim with a filling bar and the seconds left while it
+  // cools down. Hidden for a mech without one.
+  setAbility(name: string | null, cooldownLeft: number, cooldownSeconds: number): void {
+    const step = name ? cooldownStep(cooldownLeft, cooldownSeconds) : -1;
+    const ready = step === COOLDOWN_STEPS;
+    const seconds = ready || !name ? 0 : Math.ceil(cooldownLeft);
+    const key = step * 1000 + seconds;
+    if (name === this.abilityShown && key === this.abilityKey) return;
+    this.abilityShown = name;
+    this.abilityKey = key;
+    this.abilityBox.style.display = name ? "block" : "none";
+    if (!name) return;
+    this.text(this.abilityName, name);
+    this.abilityBox.classList.toggle("ready", ready);
+    this.abilityFill.style.width = `${(step / COOLDOWN_STEPS) * 100}%`;
+    this.text(this.abilityTime, ready ? "" : `${seconds} s`);
   }
 
   // A hint shown near something to interact with, or hidden with an empty string.

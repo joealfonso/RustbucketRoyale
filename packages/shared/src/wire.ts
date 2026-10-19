@@ -20,8 +20,8 @@ export const isBinaryType = (first: number) => first === TYPE_SNAPSHOT || first 
 
 // ---- sizes
 
-const SELF_BYTES = 16 * 4 + 1;
-const OTHER_BYTES = 20;
+const SELF_BYTES = 20 * 4 + 1;
+const OTHER_BYTES = 21;
 const LOADOUT_BYTES = 9;
 const LOOTING_BYTES = 2; // how far through looting a wreck, then through a repair, 0 to 255 each
 const PICKUP_BYTES = 9;
@@ -61,7 +61,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
   v.setUint8(o, u8(Math.ceil(m.health.respawnIn))); o += 1;
 
   const s = m.you;
-  for (const n of [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale]) {
+  for (const n of [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale]) {
     v.setFloat32(o, n, true); o += 4;
   }
   v.setUint8(o, (s.grounded ? 1 : 0) | (s.running ? 2 : 0) | (s.jetting ? 4 : 0) | (s.fuelLocked ? 8 : 0) | (s.staminaLocked ? 16 : 0) | (s.crawling ? 32 : 0) | ((s.mech & 3) << 6)); o += 1;
@@ -79,6 +79,8 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
     v.setUint8(o, u8(other.weapon)); o += 1;
     for (let i = 0; i < 3; i++) { v.setUint8(o, u8(other.armor[i] ?? 0)); o += 1; }
     for (let i = 0; i < 2; i++) { const u = other.upgrades[i] ?? -1; v.setUint8(o, u < 0 ? EMPTY_SLOT : u); o += 1; }
+    // A byte of its own because the first flags byte is full. The other seven bits are free for later.
+    v.setUint8(o, other.ability ? 1 : 0); o += 1;
   }
   v.setUint8(o, noises.length); o += 1;
   for (const n of noises) {
@@ -126,6 +128,7 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
   const f = () => { const n = v.getFloat32(o, true); o += 4; return n; };
   const you: SelfState = {
     x: f(), y: f(), z: f(), vx: f(), vz: f(), vy: f(), bodyYaw: f(), dashTime: f(), dashCooldown: f(), dashX: f(), dashZ: f(),
+    abilityTime: f(), abilityCooldown: f(), abilityX: f(), abilityZ: f(),
     fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(), mech: 0,
     grounded: false, running: false, jetting: false, crawling: false, fuelLocked: false, staminaLocked: false,
   };
@@ -149,7 +152,8 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
     const weapon = v.getUint8(o); o += 1;
     const armor = [v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2)]; o += 3;
     const upgrades = [slot(v.getUint8(o)), slot(v.getUint8(o + 1))]; o += 2;
-    others.push({ id, x, y, z, yaw, running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, repairing: (bits & 32) !== 0, bot: (bits & 8) !== 0, hp: ohp, weapon, armor, upgrades, mech: bits >> 6 });
+    const bits2 = v.getUint8(o); o += 1;
+    others.push({ id, x, y, z, yaw, running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, repairing: (bits & 32) !== 0, bot: (bits & 8) !== 0, hp: ohp, weapon, armor, upgrades, mech: bits >> 6, ability: (bits2 & 1) !== 0 });
   }
   const noiseCount = v.getUint8(o); o += 1;
   if (bytes.length < o + noiseCount * NOISE_BYTES + LOADOUT_BYTES + LOOTING_BYTES + 1) return null;
@@ -213,7 +217,9 @@ export function decodeShot(bytes: Uint8Array): ShotMessage | null {
 
 // ---- input
 
-export function encodeInput(m: InputMessage, hasTarget: boolean): Uint8Array {
+// A pounce lands on the aim point, so the target goes along whenever the ability key is down, whatever the caller says.
+export function encodeInput(m: InputMessage, shooting: boolean): Uint8Array {
+  const hasTarget = shooting || m.ability;
   const hasLag = m.lagMs !== undefined;
   const hasWatch = m.watchId !== undefined;
   const buffer = new ArrayBuffer(INPUT_BASE_BYTES + (hasTarget ? 12 : 0) + (hasLag ? 2 : 0) + (hasWatch ? 2 : 0));
@@ -224,7 +230,7 @@ export function encodeInput(m: InputMessage, hasTarget: boolean): Uint8Array {
   v.setInt8(o, Math.round(m.moveX * 127)); o += 1;
   v.setInt8(o, Math.round(m.moveY * 127)); o += 1;
   v.setUint8(o, (m.run ? 1 : 0) | (m.jet ? 2 : 0) | (m.dash ? 4 : 0) | (m.fire ? 8 : 0) | (m.grenade ? 16 : 0) | (hasTarget ? 32 : 0) | (hasLag ? 64 : 0) | (hasWatch ? 128 : 0)); o += 1;
-  v.setUint8(o, (m.interact ? 1 : 0) | (m.slot === 1 ? 2 : 0) | (m.repair ? 4 : 0)); o += 1;
+  v.setUint8(o, (m.interact ? 1 : 0) | (m.slot === 1 ? 2 : 0) | (m.repair ? 4 : 0) | (m.ability ? 8 : 0)); o += 1;
   v.setFloat32(o, m.aimYaw, true); o += 4;
   v.setFloat32(o, m.aimPitch, true); o += 4;
   if (hasTarget) for (const n of [m.targetX, m.targetY, m.targetZ]) { v.setFloat32(o, n, true); o += 4; }
@@ -247,7 +253,7 @@ export function decodeInput(bytes: Uint8Array): InputMessage | null {
   const record: Record<string, unknown> = {
     seq: v.getUint32(1, true), moveX: v.getInt8(5) / 127, moveY: v.getInt8(6) / 127,
     run: (flags & 1) !== 0, jet: (flags & 2) !== 0, dash: (flags & 4) !== 0, fire: (flags & 8) !== 0, grenade: (flags & 16) !== 0,
-    interact: (flags2 & 1) !== 0, slot: (flags2 & 2) !== 0 ? 1 : 0, repair: (flags2 & 4) !== 0,
+    interact: (flags2 & 1) !== 0, slot: (flags2 & 2) !== 0 ? 1 : 0, repair: (flags2 & 4) !== 0, ability: (flags2 & 8) !== 0,
     aimYaw: v.getFloat32(9, true), aimPitch: v.getFloat32(13, true),
     targetX: 0, targetY: 0, targetZ: 0,
   };

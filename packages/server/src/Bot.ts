@@ -1,4 +1,5 @@
 import { createRayHit, type BotPathStats, type BotStats, type MechInput, type MechState, type RingNow, type World } from "@rustbucket/shared";
+import type { BotAbilityStats } from "./botAbilities";
 import type { Pathfinder } from "./Pathfinder";
 
 const DEG = Math.PI / 180;
@@ -50,6 +51,7 @@ export class Bot {
   private heardZ = 0;
   private heardFor = 0;
   needsRepair = false; // set by the room: a part is bad enough that the bot stops to fix it when nobody is in sight
+  abilityKind: "ram" | "pounce" | null = null; // set by the room: the Q ability of the mech this bot drives
   private hasLoot = false;
   private lootX = 0;
   private lootZ = 0;
@@ -60,6 +62,7 @@ export class Bot {
     private pathStats: BotPathStats,
     private finder: Pathfinder | null,
     readonly rating = 2, // easy 1, normal 2, hard 3, used to settle fights that are worked out on paper
+    private abilities: BotAbilityStats | null = null, // null: never presses Q, whatever its mech
   ) {
     this.replanIn = random() * pathStats.replanSeconds; // so a room full of bots does not all search on the same tick
   }
@@ -90,7 +93,7 @@ export class Bot {
   }
 
   think(self: MechState, targets: readonly BotTarget[], ring: RingNow | null, world: World, dt: number, out: MechInput): void {
-    out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.grenade = false; out.interact = false; out.repair = false;
+    out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.grenade = false; out.interact = false; out.repair = false; out.ability = false;
     const s = this.stats;
     this.retargetIn -= dt;
     this.strafeIn -= dt;
@@ -131,6 +134,7 @@ export class Bot {
         out.grenade = true;
         out.targetX = target.x; out.targetY = target.y; out.targetZ = target.z;
       }
+      if (this.abilityKind && this.abilities) this.useAbility(self, target, distance, dt, out);
     } else {
       this.lastTargetId = 0;
       // Out of sight is as safe as it gets: stop and repair, unless the ring is coming.
@@ -185,6 +189,25 @@ export class Bot {
     }
     out.aimYaw = this.aimYaw;
     out.aimPitch = this.aimPitch;
+  }
+
+  // Q in a fight: a ram once the target is close and lined up dead ahead, since it charges the way the bot looks, or
+  // a pounce onto the target from a middling range. The mech step ignores the key while the ability is cooling down.
+  private useAbility(self: MechState, target: BotTarget, distance: number, dt: number, out: MechInput): void {
+    const a = this.abilities!;
+    if (this.abilityKind === "ram") {
+      if (distance < a.ramMinRange || distance > a.ramMaxRange) return;
+      const toward = Math.atan2(-(target.x - self.x), -(target.z - self.z));
+      const off = Math.abs(Math.atan2(Math.sin(toward - this.aimYaw), Math.cos(toward - this.aimYaw)));
+      if (off > a.ramMaxAngleDegrees * DEG || this.random() >= a.ramChancePerSecond * dt) return;
+      out.ability = true;
+      return;
+    }
+    if (distance < a.pounceMinRange || distance > a.pounceMaxRange || this.random() >= a.pounceChancePerSecond * dt) return;
+    out.ability = true;
+    // The aim point is the landing spot now. Holding fire this step keeps a shot from going there with perfect aim.
+    out.fire = false;
+    out.targetX = target.x; out.targetY = target.y; out.targetZ = target.z;
   }
 
   // The direction to walk to reach a spot. Far spots are walked to along a planned route round obstacles,

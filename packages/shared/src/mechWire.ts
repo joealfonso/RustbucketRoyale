@@ -6,6 +6,7 @@ export function writeSelf(s: MechState): SelfState {
     x: s.x, y: s.y, z: s.z, vx: s.vx, vz: s.vz, vy: s.vy, bodyYaw: s.bodyYaw,
     grounded: s.grounded, running: s.running, jetting: s.jetting, crawling: s.crawling,
     dashTime: s.dashTime, dashCooldown: s.dashCooldown, dashX: s.dashX, dashZ: s.dashZ,
+    abilityTime: s.abilityTime, abilityCooldown: s.abilityCooldown, abilityX: s.abilityX, abilityZ: s.abilityZ,
     fuel: s.fuel.value, fuelLocked: s.fuel.locked, fuelTimer: s.fuel.regenTimer,
     stamina: s.stamina.value, staminaLocked: s.stamina.locked, staminaTimer: s.stamina.regenTimer,
     fuelScale: s.fuelScale, mech: s.mech,
@@ -18,6 +19,7 @@ export function readSelf(s: MechState, from: SelfState): void {
   s.bodyYaw = from.bodyYaw;
   s.grounded = from.grounded; s.running = from.running; s.jetting = from.jetting; s.crawling = from.crawling;
   s.dashTime = from.dashTime; s.dashCooldown = from.dashCooldown; s.dashX = from.dashX; s.dashZ = from.dashZ;
+  s.abilityTime = from.abilityTime; s.abilityCooldown = from.abilityCooldown; s.abilityX = from.abilityX; s.abilityZ = from.abilityZ;
   s.fuel.value = from.fuel; s.fuel.locked = from.fuelLocked; s.fuel.regenTimer = from.fuelTimer;
   s.fuelScale = from.fuelScale;
   s.mech = from.mech;

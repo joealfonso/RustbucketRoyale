@@ -5,7 +5,8 @@
 
 export type SoundName =
   | "shot" | "impact" | "explosion" | "smash" | "hitMarker" | "hurt"
-  | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap" | "loot" | "repair";
+  | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap" | "loot" | "repair"
+  | "ram" | "pounce" | "slam";
 
 export interface AudioConfig {
   master: number;
@@ -130,6 +131,12 @@ export class Sound {
       case "repair": this.tone(into, 520, 0.05, "square", 0.3); return this.burst(into, 0.09, "bandpass", 3400, 3);
       case "loot": return this.burst(into, 0.07, "bandpass", 2200, 2.5);
       case "swap": this.thump(into, 300, 120, 0.08, 0.6); return this.burst(into, 0.12, "bandpass", 3000, 0.7);
+      // A heavy engine roar winding up under a clank of plates locking forward.
+      case "ram": this.tone(into, 190, 0.1, "square", 0.35); this.thump(into, 45, 110, 0.6, 0.9); return this.sweep(into, 180, 900, 0.6);
+      // A spring letting go: a quick rising boing under a whoosh.
+      case "pounce": this.thump(into, 220, 560, 0.18, 0.5); return this.sweep(into, 700, 3200, 0.35);
+      // A crack on top of a deep thud.
+      case "slam": this.burst(into, 0.05, "highpass", 2200, 1.2); this.burst(into, 0.3, "lowpass", 1100, 1.4); return this.thump(into, 120, 32, 0.45, 1.1);
       case "jets": return 0;
     }
   }

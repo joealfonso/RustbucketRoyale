@@ -5,12 +5,12 @@ import type { InputMessage, OtherState, ServerMessage, ShotMessage } from "./pro
 
 type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
 
-const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12], upgrades: [3, -1], mech: id % 4 });
+const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12], upgrades: [3, -1], mech: id % 4, ability: id % 2 === 1 });
 const snapshot = (others: OtherState[]): Snapshot => ({
   t: "snapshot", tick: 123456, ack: 99, ackAgeMs: 12.4,
   you: {
     x: -321.123456, y: 4.5, z: 888.25, vx: 3.5, vz: -2.25, vy: 0.5, bodyYaw: 2.75, grounded: true, running: false, jetting: true, crawling: true,
-    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0, fuelScale: 1.6, mech: 3,
+    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, abilityTime: 0.35, abilityCooldown: 5.5, abilityX: -0.8, abilityZ: 0.6, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0, fuelScale: 1.6, mech: 3,
   },
   health: { hp: [60, 12, 88], dead: false, respawnIn: 0 },
   match: { state: "active", seconds: 91.5, alive: 7, total: 24 },
@@ -30,7 +30,7 @@ describe("snapshot wire format", () => {
     expect(back.ack).toBe(99);
     expect(back.match).toEqual({ state: "active", seconds: 91.5, alive: 7, total: 24 });
     expect(back.health).toEqual({ hp: [60, 12, 88], dead: false, respawnIn: 0 });
-    for (const key of ["x", "y", "z", "vx", "vz", "vy", "bodyYaw", "fuel", "stamina", "dashX", "dashZ"] as const) {
+    for (const key of ["x", "y", "z", "vx", "vz", "vy", "bodyYaw", "fuel", "stamina", "dashX", "dashZ", "abilityTime", "abilityCooldown", "abilityX", "abilityZ"] as const) {
       expect(back.you[key]).toBeCloseTo(original.you[key], 3);
     }
     expect([back.you.grounded, back.you.running, back.you.jetting, back.you.fuelLocked, back.you.staminaLocked, back.you.crawling]).toEqual([true, false, true, false, true, true]);
@@ -44,6 +44,12 @@ describe("snapshot wire format", () => {
     expect(back.you.mech).toBe(3);
     expect([back.others[0]!.mech, back.others[1]!.mech]).toEqual([7 % 4, 300 % 4]);
     expect(back.others[0]!.yaw).toBeCloseTo(5.5, 3);
+  });
+
+  it("carries who is using an ability right now, in a byte of its own", () => {
+    const back = decodeSnapshot(encodeSnapshot(snapshot([other(3, 0), other(4, 0), { ...other(6, 0), dead: true, looted: true, repairing: true, ability: true }])))!;
+    expect(back.others.map((o) => o.ability)).toEqual([true, false, true]);
+    expect(back.others[2]).toMatchObject({ dead: true, looted: true, repairing: true, bot: true, mech: 2 });
   });
 
   it("carries an emptied wreck and how far through looting you are", () => {
@@ -68,10 +74,11 @@ describe("snapshot wire format", () => {
     expect(encodeSnapshot(s).length - encodeSnapshot(snapshot([other(1, 2)])).length).toBe(10);
   });
 
-  it("is small: under 110 bytes with nobody else near, 20 bytes per extra mech, 9 per pickup", () => {
+  // Your own ability timers added 16 bytes (four float32s) and the ability byte one per other mech.
+  it("is small: under 130 bytes with nobody else near, 21 bytes per extra mech, 9 per pickup", () => {
     expect(encodeSnapshot(snapshot([])).length).toBe(snapshotSize(0));
-    expect(snapshotSize(0)).toBeLessThan(110);
-    expect(snapshotSize(10) - snapshotSize(0)).toBe(200);
+    expect(snapshotSize(0)).toBeLessThan(130);
+    expect(snapshotSize(10) - snapshotSize(0)).toBe(210);
     expect(snapshotSize(0, 0, 10) - snapshotSize(0)).toBe(90);
   });
 
@@ -155,6 +162,13 @@ describe("input wire format", () => {
     expect(decodeInput(encodeInput(base(), false))).toMatchObject({ slot: 0, interact: false, repair: false });
   });
 
+  it("carries the ability key, and the aim point with it so a pounce lands where the client predicted", () => {
+    const original = base({ ability: true, slot: 1, repair: true, targetX: Math.fround(4.25), targetY: Math.fround(1), targetZ: Math.fround(-30.5) });
+    const back = decodeInput(encodeInput(original, false))!;
+    expect(back).toMatchObject({ ability: true, slot: 1, repair: true, interact: false, targetX: 4.25, targetZ: -30.5 });
+    expect(decodeInput(encodeInput(base(), false))!.ability).toBe(false);
+  });
+
   it("carries who a knocked out player is watching", () => {
     const back = decodeInput(encodeInput(base({ watchId: 42, lagMs: 30 }), false))!;
     expect(back.watchId).toBe(42);
@@ -196,5 +210,11 @@ describe("server binary dispatch", () => {
     expect(encodeServerBinary({ t: "result", winnerId: 1 })).toBeNull();
     expect(decodeServerBinary(encodeServerBinary(snapshot([]))!)!.t).toBe("snapshot");
     expect(decodeServerBinary(new Uint8Array([9, 9, 9]))).toBeNull();
+  });
+
+  it("sends an ability moment as text, which survives a JSON round trip", () => {
+    const m: ServerMessage = { t: "ability", id: 5, kind: "pounce", event: "land", x: 1.5, y: 0, z: -20 };
+    expect(encodeServerBinary(m)).toBeNull();
+    expect(JSON.parse(JSON.stringify(m))).toEqual(m);
   });
 });

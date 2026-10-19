@@ -28,6 +28,7 @@ export interface Player {
   repairZone: number; // the part being repaired, -1 for none
   repairSeconds: number; // how long F has been held on it
   healthMark: number; // hit points plus armor last step, so any damage at all can cancel a repair
+  rammed: number[]; // ids of the mechs the current ram has already hit, so it hits each one once
   interested: Set<number>;
   watchId: number;
   heard: NoiseEvent[];

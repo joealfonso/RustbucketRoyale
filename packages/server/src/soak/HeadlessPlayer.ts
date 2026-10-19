@@ -1,12 +1,14 @@
 import {
-  Predictor, STEP, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
-  mechStatsFor, ringAt, type Roster, type BotConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type RingSchedule, type ServerMessage, type TierSet, type World,
+  Predictor, STEP, abilityFor, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
+  mechStatsFor, ringAt, type Roster, type BotConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type AbilitySet, type AbilityStats, type RingSchedule, type ServerMessage, type TierSet, type World,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "../Bot";
+import type { BotAbilityStats } from "../botAbilities";
 import { Pathfinder } from "../Pathfinder";
 import type { Room } from "../Room";
 
 type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
+const RAMMED_NEAR = 3; // metres: a ram hit this close to where it thinks it is was a hit on this player
 
 // A pretend person for the soak test. A bot brain does the deciding, but everything else is what a real browser
 // does: it builds the map from the seed it is sent, predicts its own mech, sends packed inputs, reads packed snapshots,
@@ -32,6 +34,7 @@ export class HeadlessPlayer {
   private settleSnapshots = 0; // a big jump right after a respawn or a new map is expected, so the next few are not judged
   private wasDead = false;
   private wasCrawling = false;
+  private abilityOf: (mech: number) => AbilityStats | null;
 
   constructor(
     private room: Room,
@@ -43,7 +46,10 @@ export class HeadlessPlayer {
     private random: () => number,
     private roster: Roster | null = null,
     pick = 0, // the roster mech this player picks, so the soak drives every kind
+    abilities: AbilitySet | null = null,
+    private botAbilities: BotAbilityStats | null = null,
   ) {
+    this.abilityOf = abilities ? abilityFor(abilities, roster) : () => null;
     this.id = room.join((m) => this.receive(m)) ?? 0;
     room.receive(this.id, JSON.stringify({ t: "mech", mech: pick }));
   }
@@ -62,6 +68,8 @@ export class HeadlessPlayer {
     if (message.t === "props") for (const id of message.destroyed) this.breakProp(id);
     if (message.t === "eliminated") this.places.push(message.place);
     if (message.t === "result") this.winnerSeen = true;
+    // Being rammed is a shove only the server knows about, so the snapshots right after it are not judged.
+    if (message.t === "ability" && message.event === "hit" && this.predictor && Math.hypot(message.x - this.predictor.state.x, message.z - this.predictor.state.z) < RAMMED_NEAR) this.settleSnapshots = 3;
   }
 
   private useMap(seed: number, tier: string): void {
@@ -73,8 +81,8 @@ export class HeadlessPlayer {
     this.props = map.props;
     const finder = new Pathfinder(map.nav, this.bots.path);
     if (!this.predictor) {
-      this.predictor = new Predictor(mechStatsFor(this.mech, this.roster), map.world, ...map.spawns[0]!, Math.PI);
-      this.brain = new Bot(this.bots.difficulties.normal!, this.random, this.bots.path, finder);
+      this.predictor = new Predictor(mechStatsFor(this.mech, this.roster), map.world, ...map.spawns[0]!, Math.PI, this.abilityOf);
+      this.brain = new Bot(this.bots.difficulties.normal!, this.random, this.bots.path, finder, 2, this.botAbilities);
     } else {
       this.predictor.setWorld(map.world);
       this.brain!.setFinder(finder);
@@ -111,10 +119,11 @@ export class HeadlessPlayer {
 
     const targets: BotTarget[] = snap.others.filter((o) => !o.dead).map((o) => ({ id: o.id, x: o.x, y: o.y, z: o.z }));
     const ring = this.ring && snap.match.state === "active" ? ringAt(this.ring, snap.match.seconds, this.ringNow) : null;
+    this.brain.abilityKind = this.abilityOf(this.predictor.state.mech)?.kind ?? null;
     this.brain.think(this.predictor.state, targets, ring, this.world, STEP, input);
     // The same rules the browser applies before sending.
     if (snap.health.dead || snap.match.state === "countdown") {
-      input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.grenade = false;
+      input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.grenade = false; input.ability = false;
     }
     input.aimYaw = Math.fround(input.aimYaw);
     input.aimPitch = Math.fround(input.aimPitch);

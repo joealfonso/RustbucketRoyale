@@ -1,3 +1,4 @@
+import type { AbilityStats } from "./abilities";
 import type { MechInput } from "./MechInput";
 import { createMechInput } from "./MechInput";
 import { createMechState, stepMech, type MechState } from "./mechStep";
@@ -23,8 +24,11 @@ export class Predictor {
   private ring: MechInput[] = [];
 
   // `statsFor` gives the stats of a roster mech: the mech number comes with every snapshot, so a replay always
-  // steps with the stats of the mech the server was stepping.
-  constructor(private statsFor: (mech: number) => MechStats, private world: World, x: number, y: number, z: number, yaw: number) {
+  // steps with the stats of the mech the server was stepping. `abilityFor` does the same for its Q ability.
+  constructor(
+    private statsFor: (mech: number) => MechStats, private world: World, x: number, y: number, z: number, yaw: number,
+    private abilityFor: (mech: number) => AbilityStats | null = () => null,
+  ) {
     this.state = createMechState(statsFor(0), x, y, z, yaw);
     for (let i = 0; i < HISTORY; i++) this.ring.push(createMechInput());
   }
@@ -38,7 +42,7 @@ export class Predictor {
   step(input: MechInput, dt: number): number {
     this.seq++;
     Object.assign(this.ring[this.seq % HISTORY]!, input);
-    stepMech(this.state, input, this.statsFor(this.state.mech), dt, this.world);
+    stepMech(this.state, input, this.statsFor(this.state.mech), dt, this.world, this.abilityFor(this.state.mech));
     return this.seq;
   }
 
@@ -50,7 +54,7 @@ export class Predictor {
     // If the history was overwritten the replay would be wrong, so trust the server and move on.
     if (this.seq - ack < HISTORY) {
       for (let s = ack + 1; s <= this.seq; s++) {
-        stepMech(this.state, this.ring[s % HISTORY]!, this.statsFor(this.state.mech), dt, this.world);
+        stepMech(this.state, this.ring[s % HISTORY]!, this.statsFor(this.state.mech), dt, this.world, this.abilityFor(this.state.mech));
       }
     }
 

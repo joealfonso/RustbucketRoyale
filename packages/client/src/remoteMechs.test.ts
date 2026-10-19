@@ -5,7 +5,7 @@ import { STEP, ZONE_ARMS, createZoneHit, parseZones, type OtherState } from "@ru
 import { RemoteMechs } from "./remoteMechs";
 
 const INTERVAL = 3 * STEP * 1000; // snapshots every 3 ticks
-const other = (id: number, x: number): OtherState => ({ id, x, y: 0, z: 0, yaw: 0, running: false, jetting: false, dead: false, looted: false, repairing: false, bot: false, hp: [60, 60, 100], weapon: 0, armor: [0, 0, 0], upgrades: [-1, -1], mech: 0 });
+const other = (id: number, x: number): OtherState => ({ id, x, y: 0, z: 0, yaw: 0, running: false, jetting: false, dead: false, looted: false, repairing: false, bot: false, hp: [60, 60, 100], weapon: 0, armor: [0, 0, 0], upgrades: [-1, -1], mech: 0, ability: false });
 const tickMs = (tick: number) => tick * STEP * 1000;
 
 function make() {
@@ -53,6 +53,16 @@ describe("RemoteMechs", () => {
     remotes.update(last + 1000); // long past the newest snapshot: it holds still, so its legs must too
     remotes.forEachNear(0, 0, 1e6, (_model, _mech, vx) => { speed = vx; });
     expect(speed).toBe(0);
+  });
+
+  it("says which mech someone is and whether they are using their ability, for the walk and the slam ring", () => {
+    const { remotes } = make();
+    expect(remotes.mechOf(1)).toBe(-1);
+    remotes.push([{ ...other(1, 0), mech: 1, ability: true }], 0, 0);
+    expect(remotes.mechOf(1)).toBe(1);
+    let using = false;
+    remotes.forEachNear(0, 0, 1e6, (_model, _mech, _vx, _vy, _vz, _jetting, _running, ability) => { using = ability; });
+    expect(using).toBe(true);
   });
 
   it("moves smoothly through steady jitter instead of stuttering", () => {

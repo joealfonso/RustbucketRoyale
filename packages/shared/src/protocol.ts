@@ -20,6 +20,7 @@ export interface InputMessage {
   slot: number;
   interact: boolean;
   repair: boolean;
+  ability: boolean;
   targetX: number;
   targetY: number;
   targetZ: number;
@@ -59,6 +60,7 @@ export interface SelfState {
   bodyYaw: number;
   grounded: boolean; running: boolean; jetting: boolean; crawling: boolean;
   dashTime: number; dashCooldown: number; dashX: number; dashZ: number;
+  abilityTime: number; abilityCooldown: number; abilityX: number; abilityZ: number;
   fuel: number; fuelLocked: boolean; fuelTimer: number;
   stamina: number; staminaLocked: boolean; staminaTimer: number;
   fuelScale: number;
@@ -81,6 +83,7 @@ export interface OtherState {
   armor: number[]; // plate points left on legs, arms, torso, for drawing plates
   upgrades: number[]; // the two upgrades fitted, -1 for none, for drawing the parts bolted on
   mech: number; // which roster mech to draw, and whose hit boxes the crosshair checks
+  ability: boolean; // using its ability right now (ramming, or in the air on a pounce)
 }
 
 // What you are carrying. Slots hold a weapon index, or -1 when empty.
@@ -144,6 +147,15 @@ export interface ExplodeMessage {
   x: number; y: number; z: number;
 }
 
+// A moment of somebody's ability worth showing: a ram or leap starting, a ram connecting, a pounce landing.
+export interface AbilityMessage {
+  t: "ability";
+  id: number;
+  kind: "ram" | "pounce";
+  event: "start" | "hit" | "land";
+  x: number; y: number; z: number;
+}
+
 // Where the match is. `seconds` means: time left in the countdown or results, or time elapsed once active.
 export interface MatchProgress {
   state: MatchState;
@@ -168,7 +180,8 @@ export type ServerMessage =
   | ShotMessage
   | HitMessage
   | GrenadeMessage
-  | ExplodeMessage;
+  | ExplodeMessage
+  | AbilityMessage;
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -222,6 +235,7 @@ export function sanitizeInput(m: Record<string, unknown>): InputMessage | null {
     slot: m.slot === 1 ? 1 : 0,
     interact: m.interact,
     repair: m.repair === true,
+    ability: m.ability === true,
     targetX: m.targetX as number,
     targetY: m.targetY as number,
     targetZ: m.targetZ as number,
@@ -241,6 +255,7 @@ export function toMechInput(message: InputMessage, out: MechInput): void {
   out.slot = message.slot;
   out.interact = message.interact;
   out.repair = message.repair;
+  out.ability = message.ability;
   out.targetX = message.targetX;
   out.targetY = message.targetY;
   out.targetZ = message.targetZ;

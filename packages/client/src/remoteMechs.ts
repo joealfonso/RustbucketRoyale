@@ -15,6 +15,7 @@ interface Remote {
   vx: number; vy: number; vz: number; // how fast it is moving where it is drawn, for its walk
   jetting: boolean;
   running: boolean;
+  ability: boolean; // using its ability right now: ramming, or in the air on a pounce
   mech: number; // the roster mech it is drawn as. A new one swaps the model.
   dead: boolean;
   looted: boolean;
@@ -98,11 +99,11 @@ export class RemoteMechs {
 
   // Calls `fn` for every mech within `range` of a point, with how it is moving where it is drawn, for its walk.
   // Allocates nothing.
-  forEachNear(x: number, z: number, range: number, fn: (model: MechModel, mech: number, vx: number, vy: number, vz: number, jetting: boolean, running: boolean) => void): void {
+  forEachNear(x: number, z: number, range: number, fn: (model: MechModel, mech: number, vx: number, vy: number, vz: number, jetting: boolean, running: boolean, ability: boolean) => void): void {
     for (const r of this.remotes.values()) {
       const p = r.model.group.position;
       if (Math.abs(p.x - x) > range || Math.abs(p.z - z) > range) continue;
-      fn(r.model, r.mech, r.vx, r.vy, r.vz, r.jetting, r.running);
+      fn(r.model, r.mech, r.vx, r.vy, r.vz, r.jetting, r.running, r.ability);
     }
   }
 
@@ -114,6 +115,11 @@ export class RemoteMechs {
       if (Math.hypot(p.x - x, p.z - z) <= range) return true;
     }
     return false;
+  }
+
+  // Which roster mech someone is, or -1 if we have not seen them.
+  mechOf(id: number): number {
+    return this.remotes.get(id)?.mech ?? -1;
   }
 
   // Where a mech is drawn right now, or false if we have not seen it.
@@ -152,7 +158,7 @@ export class RemoteMechs {
         remote.mech = o.mech;
       }
       if (!remote) {
-        remote = { model: this.makeModel(o), mech: o.mech, vx: 0, vy: 0, vz: 0, jetting: false, running: false, dead: false, looted: false, bot: o.bot, samples: [], seen: true };
+        remote = { model: this.makeModel(o), mech: o.mech, vx: 0, vy: 0, vz: 0, jetting: false, running: false, ability: false, dead: false, looted: false, bot: o.bot, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;
@@ -160,6 +166,7 @@ export class RemoteMechs {
       remote.looted = o.looted;
       remote.jetting = o.jetting;
       remote.running = o.running;
+      remote.ability = o.ability;
       remote.model.repairing = o.repairing;
       setMechDamage(remote.model, o.hp, o.dead);
       setMechGear(remote.model, this.weaponColors[o.weapon] ?? "#d9731a", o.armor);

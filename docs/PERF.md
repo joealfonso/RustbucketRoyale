@@ -145,3 +145,6 @@ Timed outside the browser on the real map with the real builders. The first buil
 
 ### Walking mechs (2026-10-18, browser pane on the MacBook, large tier, 9 mechs in view)
 Cutting the legs into thigh, shin and foot pieces adds draw calls: per mech at the nearest level of detail, Ironclad 40 to 60, Stiletto 46 to 76, Cataclysm 58 to 78, Arbiter 50 to 70 (counted in a test, every mesh plus its outline). The walk itself (gait, leg solve, footfalls for every mech within 120 m) is lost in the noise: work per frame read 2.5 to 2.8 ms with others walking and with them standing (`farMeters` 0), steady 60 fps, 150 to 320 draw calls depending on the view. The pane runs slower than the earlier 1.0 ms reading, so the number to trust is Joseph's laptop (F1, Performance). If draw calls bite, merge each joint's pieces that share a paint.
+
+### Abilities and bandwidth (2026-10-18, soak, all tiers)
+Snapshots grew for 9b: your own state carries the ability's time, cooldown and direction (self block 65 to 81 bytes) and each other mech one more byte (20 to 21). Soak: 44 kbps arena, 57 small, 59 medium, 47 large, against the 64 kbps budget. Medium and small are now within about 10% of it, so the next thing added to snapshots should pay for itself, for example by sending the ability fields only while they change.

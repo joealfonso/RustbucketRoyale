@@ -121,6 +121,8 @@ export class Input {
     // Held E loots a wreck. A press too quick to span a sim step still counts for one step, so taking a weapon never misses.
     out.interact = active && (this.interactQueued || this.keys.has("KeyE"));
     out.repair = active && this.keys.has("KeyF");
+    // Held Q uses the ability the moment it is ready, so holding it through a cooldown fires it again straight away.
+    out.ability = active && this.keys.has("KeyQ");
     this.interactQueued = false;
   }
 

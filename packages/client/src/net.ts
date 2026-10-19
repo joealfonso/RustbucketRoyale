@@ -1,4 +1,4 @@
-import { decodeServerBinary, encodeInput, type ExplodeMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
+import { decodeServerBinary, encodeInput, type AbilityMessage, type ExplodeMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
 
 type SnapshotMessage = Extract<ServerMessage, { t: "snapshot" }>;
 type ShotMessage = Extract<ServerMessage, { t: "shot" }>;
@@ -15,6 +15,7 @@ export class NetClient {
   onHit?: (hit: HitMessage) => void;
   onGrenade?: (grenade: GrenadeMessage) => void;
   onExplode?: (explosion: ExplodeMessage) => void;
+  onAbility?: (moment: AbilityMessage) => void;
   // The newest room message is kept, so a handler attached late (while the map is still being built) still gets it.
   private latestRoom: RoomMessage | null = null;
   private roomHandler?: (room: RoomMessage) => void;
@@ -41,7 +42,7 @@ export class NetClient {
   // Reused every send so the frame loop does not build a new object each time.
   private message: InputMessage = {
     t: "input", seq: 0, moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0,
-    run: false, jet: false, dash: false, fire: false, grenade: false, slot: 0, interact: false, repair: false, targetX: 0, targetY: 0, targetZ: 0,
+    run: false, jet: false, dash: false, fire: false, grenade: false, slot: 0, interact: false, repair: false, ability: false, targetX: 0, targetY: 0, targetZ: 0,
   };
 
   constructor(url: string) {
@@ -69,6 +70,7 @@ export class NetClient {
       else if (message.t === "hit") this.onHit?.(message);
       else if (message.t === "grenade") this.onGrenade?.(message);
       else if (message.t === "explode") this.onExplode?.(message);
+      else if (message.t === "ability") this.onAbility?.(message);
       else if (message.t === "refused") { failed(new Error(message.reason)); this.onClose?.(message.reason); }
     };
   }
@@ -104,9 +106,9 @@ export class NetClient {
     m.watchId = watching > 0 ? watching : undefined;
     m.moveX = input.moveX; m.moveY = input.moveY;
     m.aimYaw = input.aimYaw; m.aimPitch = input.aimPitch;
-    m.run = input.run; m.jet = input.jet; m.dash = input.dash; m.fire = input.fire; m.grenade = input.grenade; m.slot = input.slot; m.interact = input.interact; m.repair = input.repair;
+    m.run = input.run; m.jet = input.jet; m.dash = input.dash; m.fire = input.fire; m.grenade = input.grenade; m.slot = input.slot; m.interact = input.interact; m.repair = input.repair; m.ability = input.ability;
     m.targetX = input.targetX; m.targetY = input.targetY; m.targetZ = input.targetZ;
-    // The aim point only matters on a step that shoots or throws, so it is left out of the rest.
+    // The aim point only matters on a step that shoots, throws or pounces, so it is left out of the rest.
     this.socket.send(encodeInput(m, input.fire || input.grenade).buffer as ArrayBuffer);
   }
 }

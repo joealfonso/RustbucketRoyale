@@ -66,6 +66,18 @@
     "repair": {
       "volume": 0.45,
       "file": null
+    },
+    "ram": {
+      "volume": 0.7,
+      "file": null
+    },
+    "pounce": {
+      "volume": 0.55,
+      "file": null
+    },
+    "slam": {
+      "volume": 0.9,
+      "file": null
     }
   }
 }

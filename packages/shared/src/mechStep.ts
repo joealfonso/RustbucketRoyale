@@ -1,3 +1,4 @@
+import type { AbilityStats, PounceStats } from "./abilities";
 import type { MechInput } from "./MechInput";
 import { Meter } from "./Meter";
 import type { MechStats } from "./stats";
@@ -6,6 +7,13 @@ import type { Box, World } from "./world";
 const DEG = Math.PI / 180;
 // A small constant push into the floor keeps the mech reporting grounded while it stands still.
 const STICK_TO_GROUND = -2;
+// A ram that has lost more than half its speed to a wall has hit it, and stops instead of grinding along it.
+const RAM_BLOCKED_FRACTION = 0.5;
+// An aim point this close (or straight down at your own feet) gives no useful direction, so the leap goes ahead instead.
+const POUNCE_MIN_TARGET = 3;
+const POUNCE_FALLBACK_RANGE = 0.5; // share of maxRange leapt when there is no usable aim point
+// Extra seconds a pounce may stay in the air past its planned flight, for landing lower down, before it gives up.
+const POUNCE_GRACE_SECONDS = 1;
 
 // Everything the sim needs to know about one mech. Plain numbers so it can be copied or sent.
 export interface MechState {
@@ -21,6 +29,9 @@ export interface MechState {
   dashTime: number; // seconds of dash left, above 0 while dashing
   dashCooldown: number;
   dashX: number; dashZ: number; // dash direction, unit length
+  abilityTime: number; // seconds of ram charge left, or above 0 while a pounce is in the air
+  abilityCooldown: number; // seconds until the ability can be used again
+  abilityX: number; abilityZ: number; // direction of the ram or leap, unit length
   fuel: Meter;
   stamina: Meter;
 }
@@ -29,6 +40,7 @@ export function createMechState(stats: MechStats, x: number, y: number, z: numbe
   return {
     x, y, z, vx: 0, vz: 0, vy: 0, bodyYaw: yaw, mech,
     grounded: false, running: false, jetting: false, fuelScale: 1, crawling: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
+    abilityTime: 0, abilityCooldown: 0, abilityX: 0, abilityZ: 0,
     fuel: new Meter(stats.fuelMax), stamina: new Meter(stats.staminaMax),
   };
 }
@@ -42,7 +54,8 @@ export function moveTowardsAngle(current: number, target: number, maxDelta: numb
 
 // One fixed step of the mech. Weight comes from acceleration and the slow body turn, not slow top speed.
 // Same code runs on the client now and the server at M2, so prediction matches.
-export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: number, world: World): void {
+// `ability` is this mech's Q ability, or null for a mech without one.
+export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: number, world: World, ability: AbilityStats | null = null): void {
   s.fuel.setMax(stats.fuelMax * s.fuelScale);
   s.stamina.setMax(stats.staminaMax);
 
@@ -67,9 +80,26 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   if (s.running) s.stamina.drain(stats.runDrainPerSecond * dt, stats.staminaRegenDelay);
   else s.stamina.regen(stats.staminaRegenPerSecond, dt, stats.staminaUnlockFraction);
 
+  // Only a mech on solid footing can start one: no rams in mid air, no leaps off broken legs.
+  if (!ability) s.abilityTime = 0;
+  s.abilityCooldown = Math.max(0, s.abilityCooldown - dt);
+  if (ability && input.ability && s.abilityCooldown <= 0 && s.abilityTime <= 0 && s.grounded && !s.crawling) {
+    s.abilityCooldown = ability.cooldownSeconds;
+    s.dashTime = 0;
+    if (ability.kind === "ram") {
+      s.abilityX = forwardX;
+      s.abilityZ = forwardZ;
+      s.abilityTime = ability.activeSeconds;
+    } else {
+      launchPounce(s, input, ability, stats, forwardX, forwardZ);
+    }
+  }
+  const ramming = s.abilityTime > 0 && ability?.kind === "ram";
+  const pouncing = s.abilityTime > 0 && ability?.kind === "pounce";
+
   // A dash goes the way you are steering, in any of the eight directions, or straight ahead if you are standing still.
   s.dashCooldown = Math.max(0, s.dashCooldown - dt);
-  if (input.dash && !s.crawling && s.dashCooldown <= 0 && s.dashTime <= 0 && s.stamina.canUse && s.stamina.value >= stats.dashStaminaCost) {
+  if (input.dash && !s.crawling && s.abilityTime <= 0 && s.dashCooldown <= 0 && s.dashTime <= 0 && s.stamina.canUse && s.stamina.value >= stats.dashStaminaCost) {
     let dirX = forwardX, dirZ = forwardZ;
     const length = Math.hypot(wishX, wishZ);
     if (length > 1e-4) {
@@ -83,18 +113,25 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
     s.stamina.drain(stats.dashStaminaCost, stats.staminaRegenDelay);
   }
 
-  if (s.dashTime > 0) {
+  if (ramming) {
+    s.vx = s.abilityX * ability.speed;
+    s.vz = s.abilityZ * ability.speed;
+    s.abilityTime -= dt;
+    // Ends with under half a step left rather than at exactly zero: a charge that is a whole number of steps long
+    // otherwise ends a step early or late depending on how the snapshot rounded the time left, and the client and
+    // server part by a step of charge (about 40 cm).
+    if (s.abilityTime < dt * 0.5) {
+      s.abilityTime = 0;
+      capToRunSpeed(s, stats);
+    }
+  } else if (pouncing) {
+    // The leap keeps the speed it was launched with: no steering off it in the air.
+  } else if (s.dashTime > 0) {
     s.vx = s.dashX * stats.dashSpeed;
     s.vz = s.dashZ * stats.dashSpeed;
     s.dashTime -= dt;
-    if (s.dashTime <= 0) {
-      // Dash over: bleed the extra speed off so the mech slides out of it instead of keeping a 38 m/s run.
-      const speed = Math.hypot(s.vx, s.vz);
-      if (speed > stats.runSpeed) {
-        s.vx *= stats.runSpeed / speed;
-        s.vz *= stats.runSpeed / speed;
-      }
-    }
+    // Dash over: bleed the extra speed off so the mech slides out of it instead of keeping a 38 m/s run.
+    if (s.dashTime <= 0) capToRunSpeed(s, stats);
   } else {
     const topSpeed = s.crawling ? stats.walkSpeed * stats.crawlSpeedMultiplier : s.running ? stats.runSpeed : stats.walkSpeed;
     const rate = (moving ? stats.acceleration : stats.deceleration) * (s.grounded ? 1 : stats.airControl);
@@ -111,7 +148,7 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
     }
   }
 
-  s.jetting = input.jet && s.fuel.canUse;
+  s.jetting = input.jet && s.fuel.canUse && !pouncing;
   if (s.jetting) {
     s.fuel.drain(stats.fuelDrainPerSecond * dt, stats.fuelRegenDelay);
     s.vy = Math.min(s.vy + stats.jetLift * dt, stats.jetMaxRiseSpeed);
@@ -124,6 +161,46 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   moveHorizontal(s, stats, s.vx * dt, 0, world);
   moveHorizontal(s, stats, 0, s.vz * dt, world);
   moveVertical(s, stats, s.vy * dt, world);
+
+  if (ramming && s.abilityTime > 0 && Math.hypot(s.vx, s.vz) < ability.speed * RAM_BLOCKED_FRACTION) {
+    s.abilityTime = 0;
+    capToRunSpeed(s, stats);
+  }
+  // The launch step always ends in the air (it moved up), so being grounded here means the leap has landed.
+  if (pouncing) {
+    s.abilityTime -= dt;
+    if (s.grounded || s.abilityTime < dt * 0.5) s.abilityTime = 0;
+  }
+}
+
+function capToRunSpeed(s: MechState, stats: MechStats): void {
+  const speed = Math.hypot(s.vx, s.vz);
+  if (speed > stats.runSpeed) {
+    s.vx *= stats.runSpeed / speed;
+    s.vz *= stats.runSpeed / speed;
+  }
+}
+
+// A ballistic leap that comes down on the aim point: the launch speed up is fixed, so the flight time is too, and
+// the sideways speed is whatever covers the distance in that time, up to the pounce's top speed.
+function launchPounce(s: MechState, input: MechInput, p: PounceStats, stats: MechStats, forwardX: number, forwardZ: number): void {
+  const toX = input.targetX - s.x, toZ = input.targetZ - s.z;
+  let distance = Math.hypot(toX, toZ);
+  if (Number.isFinite(distance) && distance >= POUNCE_MIN_TARGET) {
+    s.abilityX = toX / distance;
+    s.abilityZ = toZ / distance;
+    distance = Math.min(distance, p.maxRange);
+  } else {
+    s.abilityX = forwardX;
+    s.abilityZ = forwardZ;
+    distance = p.maxRange * POUNCE_FALLBACK_RANGE;
+  }
+  const flightTime = (2 * p.lift) / stats.gravity;
+  const speed = Math.min(distance / flightTime, p.speed);
+  s.vx = s.abilityX * speed;
+  s.vz = s.abilityZ * speed;
+  s.vy = p.lift;
+  s.abilityTime = flightTime + POUNCE_GRACE_SECONDS;
 }
 
 // Touching is not overlapping. Without a little room for rounding, a mech pushed flush against a wall can read

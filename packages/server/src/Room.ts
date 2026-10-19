@@ -1,14 +1,15 @@
 import {
-  FireGate, STEP, ZONE_ARMS, ZONE_COUNT, ZONE_LEGS, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
+  FireGate, STEP, ZONE_ARMS, ZONE_COUNT, ZONE_LEGS, ZONE_TORSO, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule, partToRepair,
   decodeInput, parseClientMessage, ringAt, rollLoot, itemWeapon, weaponItem, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
   NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
-  takenWithE, itemUpgrade, upgradeItem, upgradeScale, applyTune, assignDeep, parseTunable, TUNABLE_FILES, type TuningRaws, type UpgradeSet,
-  makeZonesFor, mechStatsFor, rosterIndex, type Roster,
+  takenWithE, itemUpgrade, upgradeItem, upgradeScale, applyTune, assignDeep, parseTunable, setNumberAt, TUNABLE_FILES, type TuningRaws, type UpgradeSet,
+  makeZonesFor, mechStatsFor, rosterIndex, abilityFor, type Roster, type AbilitySet, type AbilityStats, type PounceStats, type RamStats,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
+import { parseBotAbilities, type BotAbilityStats } from "./botAbilities";
 import { AbstractFights, RATINGS, botsNeeded, pickDifficulty, type FarBot } from "./botLod";
 import { Pathfinder } from "./Pathfinder";
 import { activeWeapon, collectSmall, freshLoadout, selectSlot, spillItems, takeUpgrade, takeWeapon, wantsItem } from "./loadout";
@@ -36,6 +37,7 @@ export interface MapForRoom {
 export interface RoomConfig {
   mech: MechStats;
   bots: BotConfig;
+  botAbilities: BotAbilityStats;
   noise: NoiseStats;
   props: PropConfig;
   weapons: WeaponSet;
@@ -47,6 +49,7 @@ export interface RoomConfig {
   match: MatchConfig;
   ring: RingConfig;
   zones: ZoneSet;
+  abilities: AbilitySet;
   // Builds the map for a tier and seed. The room asks for a fresh one at the start of every match.
   mapFor: (tier: string, seed: number) => MapForRoom;
   random?: () => number;
@@ -101,6 +104,7 @@ export class Room {
 
   private statsFor: (mech: number) => MechStats;
   private zonesFor: (mech: number) => ZoneSet;
+  private abilityFor: (mech: number) => AbilityStats | null;
 
   private tuningRaws: TuningRaws | null = null;
   private tunes: Extract<ServerMessage, { t: "tuned" }>[] = []; // every change so far, replayed to people who join later
@@ -112,11 +116,13 @@ export class Room {
       this.tuningRaws = JSON.parse(JSON.stringify(config.tuningRaws)) as TuningRaws;
       const own: Record<string, unknown> = { ...config };
       for (const file of TUNABLE_FILES) if (file !== "roster" || config.roster) own[file] = parseTunable(file, this.tuningRaws);
+      own.botAbilities = parseBotAbilities(this.tuningRaws.bots);
       this.config = config = own as unknown as RoomConfig;
     }
     // Made from this room's own copies, so tuning in the room reaches each mech's numbers.
     this.statsFor = mechStatsFor(config.mech, config.roster ?? null);
     this.zonesFor = makeZonesFor(config.zones, config.roster ?? null, config.kitHitboxes);
+    this.abilityFor = abilityFor(config.abilities, config.roster ?? null);
     this.random = config.random ?? Math.random;
     this.pickups = new Pickups(config.loot.maxPickups);
     this.historyLength = Math.ceil(config.combat.historyMs / (STEP * 1000));
@@ -162,7 +168,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: this.newBot(), send: () => {}, mech, state: this.freshState(slot, mech),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -180,7 +186,7 @@ export class Room {
   private newBot(): Bot {
     const difficulty = pickDifficulty(this.config.bots, this.random());
     const stats = this.config.bots.difficulties[difficulty] ?? this.config.bots.difficulties.normal!;
-    return new Bot(stats, this.random, this.config.bots.path, this.finder, RATINGS[difficulty] ?? 2);
+    return new Bot(stats, this.random, this.config.bots.path, this.finder, RATINGS[difficulty] ?? 2, this.config.botAbilities);
   }
 
   // A read-only look at every mech, for the soak test's checks. Not used by the game itself.
@@ -217,7 +223,7 @@ export class Room {
     const mech = this.dealtMech(id);
     const player: Player = {
       id, slot, bot: null, send, mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(),
-      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length),
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -294,9 +300,17 @@ export class Room {
   // Refused without DEV_TUNING, or when the value fails the file's checks.
   private tune(file: string, path: string, value: number): void {
     if (!this.tuningRaws) return;
+    // The bots' ability block is checked here as well, because the shared check of bots.json does not know it.
+    let botAbilities: BotAbilityStats | null = null;
+    if (file === "bots") {
+      const trial: unknown = JSON.parse(JSON.stringify(this.tuningRaws.bots));
+      if (setNumberAt(trial, path, value) === null) return;
+      try { botAbilities = parseBotAbilities(trial); } catch { return; }
+    }
     const parsed = applyTune(this.tuningRaws, file, path, value);
     if (parsed === null) return;
     assignDeep((this.config as unknown as Record<string, unknown>)[file], parsed);
+    if (botAbilities) assignDeep(this.config.botAbilities, botAbilities);
     const message: Extract<ServerMessage, { t: "tuned" }> = { t: "tuned", file, path, value };
     this.tunes.push(message);
     for (const p of this.players.values()) p.send(message);
@@ -346,6 +360,7 @@ export class Room {
     const input = this.botInput;
     const { lod } = this.config.bots;
     const bot = player.bot!;
+    bot.abilityKind = this.abilityFor(player.state.mech)?.kind ?? null;
 
     if (this.state === "countdown" || player.dead) {
       Object.assign(input, createMechInput(), { aimYaw: player.state.bodyYaw });
@@ -366,7 +381,7 @@ export class Room {
       this.botTargets.length = 0;
       const dt = lod.cheapEveryTicks * STEP;
       bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, dt, input);
-      input.fire = false; input.grenade = false; input.dash = false;
+      input.fire = false; input.grenade = false; input.dash = false; input.ability = false;
       this.processInput(player, input, dt);
       return;
     }
@@ -578,12 +593,15 @@ export class Room {
     // A destroyed or frozen mech can look around but not move, jet, or fire.
     // Players watch from the lobby phases too, and everyone stands still during the countdown.
     if (player.dead || this.state === "countdown") {
-      input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.grenade = false;
+      input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.grenade = false; input.ability = false;
     }
     const dashBefore = player.state.dashTime;
+    const ability = this.abilityFor(player.state.mech);
+    const abilityBefore = player.state.abilityTime, cooldownBefore = player.state.abilityCooldown;
     player.state.crawling = player.hp[ZONE_LEGS]! <= 0;
     player.state.fuelScale = upgradeScale(player.loadout, this.config.upgrades, "fuel");
-    stepMech(player.state, input, this.statsFor(player.state.mech), dt, this.map.world);
+    stepMech(player.state, input, this.statsFor(player.state.mech), dt, this.map.world, ability);
+    if (ability) this.afterAbilityStep(player, ability, abilityBefore, cooldownBefore);
     player.steps += Math.round(dt / STEP);
     if (player.state.running) this.makeNoise(player, "run", player.state.x, player.state.z);
     if (player.state.jetting) this.makeNoise(player, "jets", player.state.x, player.state.z);
@@ -641,7 +659,8 @@ export class Room {
     const target = this.state !== "countdown" ? this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach) : null;
     if (target) {
       reach = this.zoneHit.distance;
-      const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, weapon.damage, target.loadout.armor);
+      const damage = weapon.damage * this.shieldFactor(target, s.dx, s.dz);
+      const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, damage, target.loadout.armor);
       const killed = !target.dead && isDestroyed(target.hp);
       player.send({
         t: "hit", targetId: target.id, zone: this.zoneHit.zone, damage: taken, killed,
@@ -657,6 +676,18 @@ export class Room {
       t: "shot", id: player.id, ox: s.ox, oy: s.oy, oz: s.oz, dx: s.dx, dy: s.dy, dz: s.dz, length: reach, hitMech: target !== null,
     };
     this.sendNear(s.ox, s.oz, message, player);
+  }
+
+  // A ramming mech has its shield out in front: a shot coming at it head on, against the charge, does only part of
+  // its damage. Grenade splash goes round the shield and is left alone.
+  private shieldFactor(target: Player, dx: number, dz: number): number {
+    const ability = this.abilityFor(target.state.mech);
+    if (ability?.kind !== "ram" || target.state.abilityTime <= 0) return 1;
+    const length = Math.hypot(dx, dz);
+    if (length < 1e-6) return 1;
+    const along = (dx * target.state.abilityX + dz * target.state.abilityZ) / length;
+    // A shot travelling against the charge (cosine below -shieldFrontCosine) hits the shield.
+    return along < -ability.shieldFrontCosine ? ability.frontDamageMultiplier : 1;
   }
 
   // Finds the nearest living mech along the shot, checked at where it stood a moment ago, because
@@ -750,6 +781,85 @@ export class Room {
       const distance = Math.hypot(prop.x - bx, prop.y - by, prop.z - bz);
       if (distance < radius) this.damageProp(prop.id, damage * (1 - distance / radius), owner);
     }
+  }
+
+  // ---- abilities
+
+  // What a ram or a leap does to everyone else. The movement itself is in the shared mech step, so the client
+  // predicts it; hits, damage and shoves are the server's alone.
+  private afterAbilityStep(player: Player, ability: AbilityStats, timeBefore: number, cooldownBefore: number): void {
+    const s = player.state;
+    // The cooldown only jumps up on the step the ability starts. Watching it rather than the active time also catches
+    // a ram that a wall stops on its very first step.
+    const started = s.abilityCooldown > cooldownBefore;
+    if (started) {
+      player.rammed.length = 0;
+      this.sendNear(s.x, s.z, { t: "ability", id: player.id, kind: ability.kind, event: "start", x: s.x, y: s.y, z: s.z }, player);
+      this.makeNoise(player, "dash", s.x, s.z);
+    }
+    if (ability.kind === "ram") {
+      // Includes the step the charge ends on, which is often the one that reached the wall or the target.
+      if (started || timeBefore > 0) this.ramContact(player, ability);
+    } else if (timeBefore > 0 && s.abilityTime <= 0 && s.grounded) {
+      this.slam(player, ability);
+    }
+  }
+
+  // A ram hits each mech it passes through once, shoving it along the charge, and smashes any prop it drives into.
+  private ramContact(player: Player, ram: RamStats): void {
+    const s = player.state;
+    const height = this.statsFor(s.mech).height;
+    for (const target of this.players.values()) {
+      if (target === player || target.dead || !target.participant || player.rammed.includes(target.id)) continue;
+      const t = target.state;
+      if (Math.hypot(t.x - s.x, t.z - s.z) > ram.hitRadius || Math.abs(t.y - s.y) > height) continue;
+      player.rammed.push(target.id);
+      // Topped up to the knockback along the charge rather than added, so a mech running into the ram is still sent
+      // flying the same distance and one already moving away does not get double.
+      const along = t.vx * s.abilityX + t.vz * s.abilityZ;
+      if (along < ram.knockback) {
+        t.vx += s.abilityX * (ram.knockback - along);
+        t.vz += s.abilityZ * (ram.knockback - along);
+      }
+      t.vy = Math.max(t.vy, ram.pop); // a little air, so it slides instead of grinding to a halt on its feet
+      this.sendNear(t.x, t.z, { t: "ability", id: player.id, kind: "ram", event: "hit", x: t.x, y: t.y, z: t.z }, player);
+      this.abilityDamage(player, target, ram.damage);
+    }
+
+    for (const prop of this.map.props) {
+      if (this.propHp[prop.id]! <= 0) continue;
+      const box = this.map.world.boxes[prop.boxIndex]!;
+      if (box.maxY < s.y || box.minY > s.y + height) continue;
+      const nearX = Math.max(box.minX, Math.min(s.x, box.maxX)), nearZ = Math.max(box.minZ, Math.min(s.z, box.maxZ));
+      // All its remaining hit points: a ram goes through cover, it does not chip at it.
+      if (Math.hypot(nearX - s.x, nearZ - s.z) <= ram.hitRadius) this.damageProp(prop.id, this.propHp[prop.id]!, player);
+    }
+  }
+
+  // A pounce comes down blade first: everyone near the landing spot takes the slam.
+  private slam(player: Player, pounce: PounceStats): void {
+    const s = player.state;
+    const height = this.statsFor(s.mech).height;
+    this.sendNear(s.x, s.z, { t: "ability", id: player.id, kind: "pounce", event: "land", x: s.x, y: s.y, z: s.z }, player);
+    this.makeNoise(player, "smash", s.x, s.z);
+    for (const target of this.players.values()) {
+      if (target === player || target.dead || !target.participant) continue;
+      const t = target.state;
+      if (Math.hypot(t.x - s.x, t.z - s.z) > pounce.slamRadius || Math.abs(t.y - s.y) > height) continue;
+      this.abilityDamage(player, target, pounce.damage);
+    }
+  }
+
+  // Rams and slams land on the upper body, half on the arms and half on the torso: a shield bash and a blade cut
+  // both strike high. Legs are left out so crippling a mech stays the job of aimed shots. Armor and each mech's own
+  // toughness count as they do for a shot.
+  private abilityDamage(attacker: Player, target: Player, damage: number): void {
+    const zones = this.zonesFor(target.state.mech);
+    const t = target.state;
+    const total = applyDamage(target.hp, zones, ZONE_ARMS, damage / 2, target.loadout.armor) + applyDamage(target.hp, zones, ZONE_TORSO, damage / 2, target.loadout.armor);
+    const killed = isDestroyed(target.hp);
+    attacker.send({ t: "hit", targetId: target.id, zone: -1, damage: total, killed, x: t.x, y: t.y + CHEST_HEIGHT, z: t.z });
+    if (killed) this.eliminate(target, attacker);
   }
 
   // ---- pickups
@@ -990,7 +1100,7 @@ export class Room {
       everyone.push({
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
         running: p.state.running, jetting: p.state.jetting, dead: p.dead, looted: p.looted, repairing: p.repairZone >= 0, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
-        weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil), upgrades: p.loadout.upgrades, mech: p.state.mech,
+        weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil), upgrades: p.loadout.upgrades, mech: p.state.mech, ability: p.state.abilityTime > 0,
       });
     }
     const match = this.progress();
