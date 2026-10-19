@@ -376,4 +376,4 @@ Snapshots were 99% of what a player is sent, and other mechs about 73% of a snap
 | small | 51 | 24 | 78 | 46 to 52 | 143 to 147 |
 | medium | 43 | 21 to 22 | 56 | 26 to 35 | 101 to 135 |
 
-The busiest second on small is the opening brawl just after the countdown: snapshots about 3.9 kB, shots about 1.2 kB and hit, ability and grenade messages about 1 kB that second. Next if it is ever needed: shot origins as 16-bit numbers (24 to 18 bytes a shot) and the readable hit and ability messages packed.
+The busiest second on small is the opening brawl just after the countdown: snapshots about 3.9 kB, shots about 1.2 kB and hit, ability and grenade messages about 1 kB that second. Shot origins then went to 16-bit numbers at 5 cm (24 to 18 bytes a shot, about a quarter off the shots in that second); small soak 23 kbps. Next if it is ever needed: the readable hit and ability messages packed.

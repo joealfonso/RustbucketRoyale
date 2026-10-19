@@ -220,8 +220,11 @@ describe("shot wire format", () => {
     expect(Math.hypot(back.dx, back.dy, back.dz)).toBeCloseTo(1, 6);
   });
 
-  it("is 24 bytes", () => {
-    expect(encodeShot(shot).length).toBe(24);
+  it("is 18 bytes, its origin to 5 cm anywhere on the largest map", () => {
+    expect(encodeShot(shot).length).toBe(18);
+    const far = decodeShot(encodeShot({ ...shot, ox: -1012.33, oy: 61.07, oz: 999.98 }))!;
+    expect(Math.abs(far.ox - -1012.33)).toBeLessThanOrEqual(0.025 + 1e-9);
+    expect(Math.abs(far.oz - 999.98)).toBeLessThanOrEqual(0.025 + 1e-9);
   });
 });
 

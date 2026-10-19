@@ -44,7 +44,10 @@ const PICKUP_BYTES = 9;
 const NOISE_BYTES = 5;
 const NOISE_STEP = 0.5; // metres: noises are shown fuzzy anyway
 const SNAPSHOT_HEADER_BYTES = 23;
-const SHOT_BYTES = 24;
+const SHOT_BYTES = 18;
+// A shot's origin, rounded to 5 cm: it only places a tracer and a muzzle flash, and 16 bits reach 1638 m, past the
+// largest map's edge.
+const SHOT_ORIGIN_STEP = 0.05;
 const INPUT_BASE_BYTES = 1 + 4 + 1 + 1 + 1 + 1 + 4 + 4;
 const EMPTY_SLOT = 255;
 const PICKUPS_UNCHANGED = 255; // in place of the pickup count: keep the list from the last snapshot
@@ -272,7 +275,7 @@ export function encodeShot(m: ShotMessage): Uint8Array {
   let o = 0;
   v.setUint8(o, TYPE_SHOT); o += 1;
   v.setUint16(o, m.id, true); o += 2;
-  for (const n of [m.ox, m.oy, m.oz]) { v.setFloat32(o, n, true); o += 4; }
+  for (const n of [m.ox, m.oy, m.oz]) { v.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(n / SHOT_ORIGIN_STEP))), true); o += 2; }
   for (const n of [m.dx, m.dy, m.dz]) { v.setInt16(o, Math.round(Math.max(-1, Math.min(1, n)) * 32767), true); o += 2; }
   v.setUint16(o, Math.max(0, Math.min(65535, Math.round(m.length * 100))), true); o += 2;
   v.setUint8(o, m.hitMech ? 1 : 0);
@@ -284,7 +287,7 @@ export function decodeShot(bytes: Uint8Array): ShotMessage | null {
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let o = 1;
   const id = v.getUint16(o, true); o += 2;
-  const ox = v.getFloat32(o, true), oy = v.getFloat32(o + 4, true), oz = v.getFloat32(o + 8, true); o += 12;
+  const ox = v.getInt16(o, true) * SHOT_ORIGIN_STEP, oy = v.getInt16(o + 2, true) * SHOT_ORIGIN_STEP, oz = v.getInt16(o + 4, true) * SHOT_ORIGIN_STEP; o += 6;
   let dx = v.getInt16(o, true) / 32767, dy = v.getInt16(o + 2, true) / 32767, dz = v.getInt16(o + 4, true) / 32767; o += 6;
   const n = Math.hypot(dx, dy, dz) || 1; // put back to exactly unit length after the rounding
   dx /= n; dy /= n; dz /= n;
