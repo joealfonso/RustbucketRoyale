@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none (M1 to M9 done)
-Current visual milestone: V6a, V6b, V4a, V4b and V5a built, waiting for their playtest. Title screen built
+Current visual milestone: V4, V5a and V6 passed. Nothing in progress
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -116,3 +116,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-19: Gate V5a built, waiting for its playtest. Check: each weapon's muzzle flash (autocannon stutter star, scattergun fan, spike driver spike), tracers, sparks and grit on walls, white metal sparks on mechs; explosions as a toon fireball with a shockwave ring, rising smoke, bouncing chunks and a scorch mark, sized for grenade, shell or barrel; grey wisps from damaged parts and black smoke from broken ones; jet flames under each mech, a burst on dash and ram, dust on hard landings. F1 "Effects" sets low or normal. style.html: key 7 firing range (F fire, G weapon), key 8 effects (B blast, J jets, K dash, V quality). Screenshots: docs/style/v5a-weapons.png, v5a-blast.png.
 - 2026-10-19: Title screen built on Joseph's call, waiting for his look: the Aegis Dynamics hangar from docs/MECH_ROSTER.md (hex grid of light strips and blue holograms, allowed in the hangar only), your picked mech walking out to the loading bay, and a bot difficulty choice (Easy, Normal, Hard, Mixed) that reaches the room's bots (?difficulty=hard). Screenshot: docs/style/title-hangar-1920.png.
 - 2026-10-19: Performance and size pass on Joseph's call: props culled to the camera (large tier 4.4-8.2 ms to 2.3-5.0 ms a frame, uncapped, M4), garbage per frame 154 to 35 kB, spectator camera cuts no longer freeze for 60-90 ms, your own state sends only non-zero numbers (about 5-7 kbps less per player), route searches about 19% faster, three.js in its own chunk, unused font files gone. Ranked next steps in docs/PERF.md (compressed .glb serving first).
+- 2026-10-19: Joseph's playtest passed gates V6a, V6b, V4a, V4b and V5a, the title screen with bot difficulty, the dash slide and the performance pass. No milestone in progress.

@@ -208,6 +208,34 @@ Two mechs got a button that changes how a fight goes. Ironclad-IV's Q is a Shiel
 
 The last two mechs got their button, and every mech now plays its own way. Cataclysm's Mortar Strike plants its claws and lobs three shells at the crosshair. Everyone sees a red ring on the ground first, so the target can run, and the planted Cataclysm becomes a target itself. Arbiter's Decoy Drones send two copies of it running off. To everyone else they look real, damage and all; only their owner sees them as ghosts. Bots fall for them, and one hit pops them in a teal fizz. Three helpers built it again, side by side: rules, server, client. That finishes M9: pick a mech, and each moves, takes hits and fights differently.
 
+## 28. Gates V6a and V6b: a world with a sky
+*Passed 10:50. Commit `b335161`.*
+
+![Golden afternoon over the junkyard: a soft blue sky, scrap mountains and a crane in the haze, worn ground of dirt and gravel](28-v6-a-world-with-a-sky.jpg)
+
+A study of other mech games and our own screenshots showed why the junkyard read as toys on a green sheet: a grey sky, no sun, one flat floor and a black wall filling the view. Now there is a sky with a sun and flat toon clouds, a warm haze that melts the distance, and three light looks picked by the map seed. The floor is worn with dirt, gravel, oil and tyre tracks, and things cast soft shadows. The edge of the map is a junkyard wall of corrugated steel, containers and a fence, with scrap mountains, cranes and smokestacks beyond. This was moved ahead of the HUD so the HUD could be judged against a real world. Along the way, a dash stopped sounding like a sprint of footsteps and became a slide.
+
+## 29. Gates V4a and V4b: an amber terminal
+*Passed 10:50. Commits `2ce6179` and `091b15e`.*
+
+![The HUD in amber on soot: mech panel with its damage diagram, room bar, and the radar as a scope with a sweep](29-v4-an-amber-terminal.png)
+
+The HUD became one system: squared Chakra Petch letters with clipped corners (Joseph's pick from five pairings), monospace numbers, amber on soot. Your mech's damage diagram is drawn from its own hit boxes and reads by pattern as well as colour. Warnings carry a shape and words. The radar is a scope with a sweep, and every kind of sound has its own mark. A CRT layer of scanlines sits on the HUD only and can be switched off.
+
+## 30. Gate V5a: things that go bang
+*Passed 10:50. Commit `11a4079`.*
+
+![A toon explosion on the style page: a banded fireball, a shockwave ring and smoke rising](30-v5a-things-that-go-bang.png)
+
+The glowing orange balls that stood in for every effect are gone. Each weapon has its own muzzle flash and tracer. Hits throw sparks and grit. Explosions are flipbook fireballs with a shockwave, rising smoke, bouncing chunks and a scorch mark. Hurt mechs smoke, and jets burn. All of it is pooled, and a low setting halves it.
+
+## 31. The hangar
+*Passed 10:50. Commit `11a4079`.*
+
+![The title screen: the Aegis Dynamics hangar, the picked mech in the loading bay, holograms of the roster, and the menu with bot difficulty](31-the-hangar.png)
+
+The game starts in the Aegis Dynamics hangar where pilots load up, built from Joseph's brief: a hex grid of light strips, blue holograms of each mech, gantries and engineers. The rules that ban those looks in the junkyard make an exception here, because this is the clean factory the mechs leave from. Pick a mech and it walks out to the loading bay. A new setting picks how hard the bots are. A performance pass came with it, so the large map runs about twice as fast and the bandwidth dropped.
+
 ---
 
-*Next: the visual track's V4 (HUD and radar), or whatever the playtests ask for.*
+*Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
