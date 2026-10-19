@@ -527,7 +527,7 @@ if (net) {
     progress = { ...progress, state: r.state };
   };
   net.onEliminated = (e) => {
-    hud.feed(e.killerId === null && e.id !== net.id ? `${name(e.id)} fell to the zone` : `${name(e.killerId)} knocked out ${name(e.id)}`);
+    hud.feed(e.left ? `${name(e.id)} dropped out` : e.killerId === null && e.id !== net.id ? `${name(e.id)} fell to the zone` : `${name(e.killerId)} knocked out ${name(e.id)}`);
     if (e.id === net.id) myPlace = e.place;
   };
   net.onResult = (r) => {

@@ -62,6 +62,7 @@ Open these on demand. Do not import them.
 - Rooms top themselves up with bots to the tier size. `?create&tier=small&bots=5` fixes the count instead, `&bots=0` means none.
 - `npm run server`: the game server on ws://localhost:8080. Set `PORT`, `TIER` (default tier for new rooms), `DEFAULT_BOTS` (a number for every new room instead of filling to the tier size) and `MAX_ROOMS`. Rooms are made on demand from `?create` or `?room=CODE` links.
 - `npm run build` then `npm start`: production mode, as on the public host: one address serves the page and the game (PORT, default 8080), compressed, game connections only from its own pages (or `ALLOWED_ORIGINS`), `/health` for the host. `Dockerfile` builds the same as an image.
+- `SIM_LAG_MS=120 SIM_JITTER_MS=20 npm run server`: pretend every player is that far away, to try internet lag on one machine. Development only.
 - `DEV_TUNING=1 npm run server`: the same, with live tuning: the F1 panel changes gameplay numbers for everyone in the room. Never on a public host.
 - Offline practice: `?offline&tier=small|medium|large|range&seed=123`. Add `&overview` to look down on the whole map.
 - `npm test`: Vitest. `npm run typecheck`: TypeScript. `npm run build`: production client build.

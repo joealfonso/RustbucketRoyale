@@ -21,6 +21,14 @@ if (production && devTuning) {
   console.error("DEV_TUNING is refused with NODE_ENV=production: it lets any player change the game for everyone in their room.");
   process.exit(1);
 }
+// SIM_LAG_MS=120 (and SIM_JITTER_MS=20) delays every message as if each player were that far away, for trying
+// internet lag on one machine. Development only.
+const simLagMs = Number(process.env.SIM_LAG_MS ?? 0);
+const simLag = simLagMs > 0 ? { ms: simLagMs, jitterMs: Number(process.env.SIM_JITTER_MS ?? 0) } : null;
+if (production && simLag) {
+  console.error("SIM_LAG_MS is refused with NODE_ENV=production: it would slow every real player down.");
+  process.exit(1);
+}
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean);
 const site = production ? loadStaticSite(new URL("../../client/dist", import.meta.url).pathname) : null;
 if (site && site.fileCount === 0) {
@@ -53,7 +61,7 @@ if (onTick) {
     lateTimes.length = 0;
   }, 5000);
 }
-const server = await startServer(manager, port, defaultBots, onTick, { site, origins: production ? (allowedOrigins?.length ? allowedOrigins : "same-host") : null });
+const server = await startServer(manager, port, defaultBots, onTick, { site, origins: production ? (allowedOrigins?.length ? allowedOrigins : "same-host") : null, simLag });
 // A line a minute while the room count changes, for the host's logs. Room codes and counts only, never who is playing.
 if (production) {
   let logged = -1;
@@ -62,4 +70,4 @@ if (production) {
     logged = manager.roomCount;
   }, 60_000).unref();
 }
-console.log(`Rustbucket Royale server listening on ${production ? `http://localhost:${server.port} (the game and its page)` : `ws://localhost:${server.port}`} (default ${defaultTier}, up to ${maxRooms} rooms, ${defaultBots === null ? "bots fill to the tier size" : `${defaultBots} bots by default`}${devTuning ? ", live tuning ON" : ""}, ${mapWorkers} map workers)`);
+console.log(`Rustbucket Royale server listening on ${production ? `http://localhost:${server.port} (the game and its page)` : `ws://localhost:${server.port}`} (default ${defaultTier}, up to ${maxRooms} rooms, ${defaultBots === null ? "bots fill to the tier size" : `${defaultBots} bots by default`}${devTuning ? ", live tuning ON" : ""}${simLag ? `, pretending ${simLag.ms} ms of lag` : ""}, ${mapWorkers} map workers)`);

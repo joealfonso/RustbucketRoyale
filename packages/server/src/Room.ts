@@ -177,7 +177,7 @@ export class Room {
   }
 
   private humans(): Player[] {
-    return [...this.players.values()].filter((p) => !p.bot);
+    return [...this.players.values()].filter((p) => !p.bot && !p.gone);
   }
 
   private freeSlot(): number {
@@ -193,7 +193,7 @@ export class Room {
     const id = this.nextId++;
     const mech = this.dealtMech(id);
     this.players.set(id, {
-      id, slot, bot: this.newBot(), send: () => {}, mech, state: this.freshState(slot, mech),
+      id, slot, bot: this.newBot(), send: () => {}, gone: false, mech, state: this.freshState(slot, mech),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
       hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
@@ -289,7 +289,7 @@ export class Room {
     const id = this.nextId++;
     const mech = this.dealtMech(id);
     const player: Player = {
-      id, slot, bot: null, send, mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(),
+      id, slot, bot: null, send, gone: false, mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(),
       queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
@@ -309,12 +309,22 @@ export class Room {
   leave(id: number): void {
     const player = this.players.get(id);
     if (!player) return;
-    this.players.delete(id);
     for (const d of [...this.decoys]) if (d.ownerId === id) this.popDecoy(d, null);
+    // Dropping out of a running match leaves your mech behind as a wreck, loot and all, like any knockout, so the
+    // fight you were in still has an ending. It is cleared at the next countdown.
+    if (this.state === "active" && player.participant && !player.eliminated) {
+      player.gone = true;
+      player.send = () => {};
+      this.stopLooting(player);
+      player.repairZone = -1;
+      if (this.hostId === id) this.hostId = this.humans()[0]?.id ?? 0;
+      this.eliminate(player, null, true);
+      this.broadcastRoom();
+      return;
+    }
+    this.players.delete(id);
     if (this.hostId === id) this.hostId = this.humans()[0]?.id ?? 0;
     if (this.state === "lobby") this.fillBots();
-    // Walking out of a running match counts as being knocked out.
-    if (this.state === "active" && player.participant && !player.eliminated) this.checkMatchOver();
     this.broadcastRoom();
   }
 
@@ -555,6 +565,7 @@ export class Room {
     this.ring = makeRingSchedule(this.config.ring, this.tier, this.map.meters, this.random);
     this.grenades = [];
     this.pickups.clear();
+    for (const player of [...this.players.values()]) if (player.gone) this.players.delete(player.id);
     for (const player of this.players.values()) {
       player.participant = true;
       player.eliminated = false;
@@ -589,7 +600,7 @@ export class Room {
   }
 
   // Someone is out. Records their place, tells the room, and checks whether the match is over.
-  private eliminate(player: Player, killer: Player | null): void {
+  private eliminate(player: Player, killer: Player | null, left = false): void {
     // Outside a running match nothing is lost: a destroyed mech just comes back in a few seconds.
     if (this.state !== "active") {
       this.knockOutForPractice(player);
@@ -601,7 +612,7 @@ export class Room {
     player.hp[ZONE_COUNT - 1] = 0;
     const place = this.placeCounter--;
     const alive = this.alivePlayers().length;
-    const message: ServerMessage = { t: "eliminated", id: player.id, killerId: killer?.id ?? null, place, alive };
+    const message: ServerMessage = { t: "eliminated", id: player.id, killerId: killer?.id ?? null, place, alive, ...(left ? { left: true } : {}) };
     for (const p of this.players.values()) p.send(message);
     this.checkMatchOver();
   }

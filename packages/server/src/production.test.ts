@@ -89,6 +89,20 @@ describe("production server", () => {
     expect(await opens(port)).toBe(false); // no page at all
   });
 
+  it("closes a connection that stops answering pings, and keeps one that answers", async () => {
+    const port = await start({ heartbeatMs: 40 });
+    const join = (autoPong: boolean) => new Promise<WebSocket>((resolve) => {
+      const socket = new WebSocket(`ws://localhost:${port}/?create&tier=small&bots=0`, { autoPong });
+      socket.on("open", () => resolve(socket));
+    });
+    const silent = await join(false);
+    const healthy = await join(true);
+    const closed = new Promise<boolean>((resolve) => { silent.on("close", () => resolve(true)); setTimeout(() => resolve(false), 1000); });
+    expect(await closed).toBe(true);
+    expect(healthy.readyState).toBe(WebSocket.OPEN);
+    healthy.close();
+  });
+
   it("checks origins against a list, or not at all in development", () => {
     expect(originAllowed("https://rust.example", "x", ["https://rust.example"])).toBe(true);
     expect(originAllowed("https://evil.example", "x", ["https://rust.example"])).toBe(false);

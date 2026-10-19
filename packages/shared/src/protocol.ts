@@ -175,7 +175,7 @@ export type ServerMessage =
       players: number; ring: RingSchedule | null; matchSeconds: number;
       difficulty: BotDifficulty; // so someone who joined by code also sees how hard the bots are
     }
-  | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number }
+  | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number; left?: boolean } // left: their connection closed
   | { t: "result"; winnerId: number | null }
   | { t: "refused"; reason: string }
   | { t: "prop"; id: number } // a prop was destroyed

@@ -7,6 +7,7 @@ export interface Player {
   slot: number;
   bot: Bot | null; // set for computer players, which have no connection
   send: (message: ServerMessage) => void;
+  gone: boolean; // a person whose connection closed mid match: left in it as a wreck until the next countdown
   mech: number; // the roster mech this player drives from their next spawn (state.mech is the one they drive now)
   state: MechState;
   gate: FireGate;

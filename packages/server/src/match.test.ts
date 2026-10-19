@@ -160,4 +160,21 @@ describe("the ring", () => {
     expect(room.matchState).toBe("results");
     expect(a.messages.find((m) => m.t === "result")).toMatchObject({ winnerId: a.id });
   });
+
+  it("leaves a dropped player's mech as a wreck until the next countdown, and says they dropped out", () => {
+    const { room, config } = makeRoom();
+    const a = new Client(room, config);
+    const b = new Client(room, config);
+    const c = new Client(room, config);
+    startMatch(room, a);
+    room.leave(b.id);
+    expect(a.messages.find((m) => m.t === "eliminated")).toMatchObject({ id: b.id, killerId: null, left: true });
+    expect(room.inspect().find((m) => m.id === b.id)).toMatchObject({ dead: true, eliminated: true });
+    expect(lastRoom(a).players).toBe(2); // people still connected
+    expect(room.matchState).toBe("active"); // two still in it
+    room.leave(c.id);
+    expect(room.matchState).toBe("results");
+    driveUntil(room, [a], () => room.matchState === "countdown", seconds(60));
+    expect(room.inspect().some((m) => m.id === b.id || m.id === c.id)).toBe(false);
+  });
 });
