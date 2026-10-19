@@ -180,6 +180,13 @@ The world stopped being boxes. Near you, every wall, rock and pile is now drawn 
 
 The things you shoot for loot got faces. Crates are strapped wooden boxes with a painted cross, so you learn that's where the goodies are. Junk piles are heaps of cabinets, drums and tyres. Barrels are hazard yellow with black bands and a warning diamond, so you learn to keep away. Breaking one throws chunks in its colours and leaves low debris on the spot, so the cover really goes. That finishes V3.
 
+## 24. Gate V2d: mechs that walk
+*Passed 20:49. Commit `cfd12d6`.*
+
+![The four roster mechs mid-run on the style page: Ironclad and Stiletto striding, Cataclysm trotting on diagonal legs, Arbiter in the front with one foot lifted](24-v2d-mechs-that-walk.jpg)
+
+Before this, the mechs slid across the ground like chess pieces. Now they walk. Each model marks its hips, knees and ankles. The game cuts every leg into thigh, shin and foot, and bends them so each foot lands where the step puts it and stays planted while the body moves over it. Steps come from how fast the mech is really going, so legs keep time with what you see, yours and everyone else's. Each mech moves its own way: Ironclad in short heavy steps, Stiletto in long bird strides, Cataclysm in a diagonal four-legged trot, Arbiter smoothly. Bodies bob and lean into a sprint or a dash, legs tuck up on jets, every foot thumps down on landing, and a shot-up leg limps. Footfalls kick up dust. These mechs are fast for their legs, so a walk is really a jog with a little hop between steps. The hit boxes never moved. You asked for it while the mech-picking gate (9a) waited for its playtest.
+
 ---
 
-*Next: per-mech looks from the roster brief, or V4, the HUD and radar.*
+*Next: the 9a playtest (pick your mech), then 9b, the first abilities on Q.*

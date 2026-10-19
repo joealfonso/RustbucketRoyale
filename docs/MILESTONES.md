@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: M9 mech classes (gate 9a built, waiting for its playtest)
-Current visual milestone: V2d walk cycles built, waiting for its playtest (V3 done; V4 HUD and radar not started)
+Current visual milestone: V3 done, with V2d walk cycles passed after it. V4 (HUD and radar) not started
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -101,3 +101,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-18: Gate 9a built, waiting for its playtest. Check: pick a mech on the start menu (it is remembered) or on the pause screen (Esc); in the lobby it swaps where you stand, mid match the HUD says "Next match: ..." and it swaps at the next one. Stiletto-B is fast with long, quick jets and is fragile; Ironclad-IV and Cataclysm are slow, short on jets and tough; Arbiter is the all-rounder until its ability in 9c. Bots are dealt all four. The numbers are first guesses in data/roster.json, tunable in F1 (Data files, roster.json). Soak passes on all tiers at 42 to 51 kbps.
 - 2026-10-18: Walk cycles started on Joseph's call ("the mech need walk cycles") as gate V2d, before 9b, while 9a waits for its playtest.
 - 2026-10-18: Gate V2d built, waiting for its playtest. Check: walk, sprint, dash, jet and land in any match: feet plant and stay put instead of skating, the body bobs and leans into a run and a dash, legs tuck up in the air and every foot thumps down on landing; other mechs and bots walk too. Each mech has its own gait (Ironclad short heavy steps, Stiletto long bird strides, Cataclysm a diagonal trot, Arbiter smooth). Shot-up legs limp; broken legs still crawl. On style.html, 4 then W cycles standing, walking, running, dashing, in the air, limping, and 6 frames one mech up close from the side. Tune in F1 under "Walking (gait.json)", then Copy. Camera bob is walkBob under Look and camera, off. Please read F1 Performance on your laptop on large: legs add 20 to 30 draw calls per mech.
+- 2026-10-18: Gate V2d passed by Joseph's call. Mechs walk with their own gaits. 9a (pick your mech) still waits for its playtest; 9b not started.
