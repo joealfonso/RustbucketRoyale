@@ -6,7 +6,7 @@ import {
   type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
   takenWithE, itemUpgrade, upgradeItem, upgradeScale, applyTune, assignDeep, parseTunable, setNumberAt, TUNABLE_FILES, type TuningRaws, type UpgradeSet,
   makeZonesFor, makeMuzzlesFor, mechStatsFor, rosterIndex, abilityFor, barrageTarget, type Roster, type AbilitySet, type AbilityStats, type BarrageStats,
-  type DecoyStats, type PounceStats, type RamStats,
+  type BotDifficulty, type DecoyStats, type PounceStats, type RamStats,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
@@ -118,7 +118,11 @@ export class Room {
 
   // `botCount` is how many computer players to keep, up to the spawns the people present leave free. `null` means keep
   // the room topped up to its tier's target size. Either way a bot gives up its spawn to a person arriving in the lobby.
-  constructor(readonly code: string, readonly tier: string, private config: RoomConfig, botCount: number | null = 0) {
+  // `difficulty` makes every bot that one, or "mixed" deals each its own by the mix in data/bots.json.
+  constructor(
+    readonly code: string, readonly tier: string, private config: RoomConfig, botCount: number | null = 0,
+    readonly difficulty: BotDifficulty = "mixed",
+  ) {
     if (config.tuningRaws) {
       this.tuningRaws = JSON.parse(JSON.stringify(config.tuningRaws)) as TuningRaws;
       const own: Record<string, unknown> = { ...config };
@@ -192,15 +196,15 @@ export class Room {
   }
 
   private newBot(): Bot {
-    const difficulty = pickDifficulty(this.config.bots, this.random());
+    const difficulty = this.difficulty === "mixed" ? pickDifficulty(this.config.bots, this.random()) : this.difficulty;
     const stats = this.config.bots.difficulties[difficulty] ?? this.config.bots.difficulties.normal!;
     return new Bot(stats, this.random, this.config.bots.path, this.finder, RATINGS[difficulty] ?? 2, this.config.botAbilities);
   }
 
   // A read-only look at every mech, for the soak test's checks. Not used by the game itself.
-  inspect(): { id: number; bot: boolean; x: number; y: number; z: number; hp: number[]; dead: boolean; eliminated: boolean; participant: boolean }[] {
+  inspect(): { id: number; bot: boolean; rating: number | null; x: number; y: number; z: number; hp: number[]; dead: boolean; eliminated: boolean; participant: boolean }[] {
     return [...this.players.values()].map((p) => ({
-      id: p.id, bot: p.bot !== null, x: p.state.x, y: p.state.y, z: p.state.z, hp: [...p.hp], dead: p.dead, eliminated: p.eliminated, participant: p.participant,
+      id: p.id, bot: p.bot !== null, rating: p.bot?.rating ?? null, x: p.state.x, y: p.state.y, z: p.state.z, hp: [...p.hp], dead: p.dead, eliminated: p.eliminated, participant: p.participant,
     }));
   }
 
@@ -1135,6 +1139,7 @@ export class Room {
     const message: ServerMessage = {
       t: "room", code: this.code, tier: this.tier, state: this.state, seed: this.seed, hostId: this.hostId,
       players: this.humans().length, ring: this.state === "lobby" ? null : this.ring, matchSeconds: this.config.match.matchSeconds,
+      difficulty: this.difficulty,
     };
     for (const p of this.players.values()) p.send(message);
   }

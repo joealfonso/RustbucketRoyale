@@ -1,3 +1,4 @@
+import type { BotDifficulty } from "./botDifficulty";
 import type { MatchState } from "./match";
 import type { MechInput } from "./MechInput";
 import type { RingSchedule } from "./ring";
@@ -172,6 +173,7 @@ export type ServerMessage =
   | {
       t: "room"; code: string; tier: string; state: MatchState; seed: number; hostId: number;
       players: number; ring: RingSchedule | null; matchSeconds: number;
+      difficulty: BotDifficulty; // so someone who joined by code also sees how hard the bots are
     }
   | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number }
   | { t: "result"; winnerId: number | null }

@@ -13,45 +13,100 @@ const at = new THREE.Vector3();
 const turned = new THREE.Quaternion();
 const up = new THREE.Vector3(0, 1, 0);
 const one = new THREE.Vector3(1, 1, 1);
-const gone = new THREE.Matrix4().makeScale(0, 0, 0);
-const keep = new THREE.Matrix4();
+const seen = new THREE.Frustum();
+const viewProjection = new THREE.Matrix4();
+const ball = new THREE.Sphere();
+
+// The instanced meshes of one state (standing or broken) of one prop type, sharing one instance buffer.
+interface Packed {
+  meshes: THREE.InstancedMesh[];
+  buffer: THREE.InstancedBufferAttribute;
+  shown: Int32Array; // which prop sits in each slot of the buffer, so an unchanged view uploads nothing
+  changed: boolean;
+}
 
 // One prop type's model drawn many times: one instanced mesh (and outline) per paint, for the standing props and
-// again for their debris, which stays hidden until that prop breaks.
+// again for their debris. Each frame only the props inside the camera's view are packed into the instance buffers:
+// on a large map that is about a quarter of the five thousand or so, and drawing all of them every frame was half the
+// GPU's work (docs/PERF.md). The pieces of one model share one buffer, so a frame uploads it once.
 class PropInstances {
   readonly meshes: THREE.InstancedMesh[] = [];
-  private standing: THREE.InstancedMesh[] = [];
-  private broken: THREE.InstancedMesh[] = [];
+  private standing: Packed;
+  private broken: Packed;
+  private matrices: Float32Array; // every prop's placement, 16 numbers each
+  private isBroken: Uint8Array;
+  private reach = 0; // how far any piece, standing or broken, goes from its prop's origin
 
-  constructor(toon: Toon, intact: DressPiece[], destroyed: DressPiece[], count: number) {
-    const make = (pieces: DressPiece[], into: THREE.InstancedMesh[]) => {
+  constructor(toon: Toon, intact: DressPiece[], destroyed: DressPiece[], private count: number) {
+    this.matrices = new Float32Array(count * 16);
+    this.isBroken = new Uint8Array(count);
+    const make = (pieces: DressPiece[]): Packed => {
+      const buffer = new THREE.InstancedBufferAttribute(new Float32Array(count * 16), 16);
+      const meshes: THREE.InstancedMesh[] = [];
       for (const p of pieces) {
         const geometry = toGeometry([p.mesh]);
-        const mesh = new THREE.InstancedMesh(geometry, toon.world(p.paint), count);
-        const hull = new THREE.InstancedMesh(geometry, toon.shellOutline(p.paint), count);
-        into.push(mesh, hull);
-        this.meshes.push(mesh, hull);
+        const sphere = geometry.boundingSphere!;
+        this.reach = Math.max(this.reach, sphere.center.length() + sphere.radius);
+        for (const material of [toon.instanced(toon.world(p.paint)), toon.instanced(toon.shellOutline(p.paint))]) {
+          const mesh = new THREE.InstancedMesh(geometry, material, count);
+          mesh.instanceMatrix = buffer;
+          mesh.frustumCulled = false; // culled per prop below; three's one sphere round all of them never culls
+          mesh.count = 0;
+          meshes.push(mesh);
+          this.meshes.push(mesh);
+        }
       }
+      return { meshes, buffer, shown: new Int32Array(count).fill(-1), changed: false };
     };
-    make(intact, this.standing);
-    make(destroyed, this.broken);
+    this.standing = make(intact);
+    this.broken = make(destroyed);
+    // Room for the outlines, pushed out along their normals by the outline width (a few centimetres).
+    this.reach += 0.5;
   }
 
   place(i: number, matrix: THREE.Matrix4): void {
-    for (const m of this.standing) m.setMatrixAt(i, matrix);
-    for (const m of this.broken) m.setMatrixAt(i, gone);
+    matrix.toArray(this.matrices, i * 16);
   }
 
-  // Swaps one prop for its debris, in the same spot.
+  // Swaps one prop for its debris, in the same spot, from the next `show` on.
   breakAt(i: number): void {
-    this.standing[0]?.getMatrixAt(i, keep);
-    for (const m of this.standing) m.setMatrixAt(i, gone);
-    for (const m of this.broken) m.setMatrixAt(i, keep);
-    this.commit();
+    this.isBroken[i] = 1;
   }
 
-  commit(): void {
-    for (const m of this.meshes) m.instanceMatrix.needsUpdate = true;
+  // Packs the props inside `view` into the buffers, standing or broken.
+  show(view: THREE.Frustum): void {
+    let standing = 0, broken = 0;
+    for (let i = 0; i < this.count; i++) {
+      const m = i * 16;
+      ball.center.set(this.matrices[m + 12]!, this.matrices[m + 13]!, this.matrices[m + 14]!);
+      ball.radius = this.reach;
+      if (!view.intersectsSphere(ball)) continue;
+      if (this.isBroken[i]) broken = this.put(this.broken, broken, i);
+      else standing = this.put(this.standing, standing, i);
+    }
+    this.upload(this.standing, standing);
+    this.upload(this.broken, broken);
+  }
+
+  // Puts prop `i` in `slot`, copying its matrix only if another prop sat there last time.
+  private put(packed: Packed, slot: number, i: number): number {
+    if (packed.shown[slot] !== i) {
+      packed.shown[slot] = i;
+      const to = packed.buffer.array as Float32Array;
+      for (let k = 0; k < 16; k++) to[slot * 16 + k] = this.matrices[i * 16 + k]!;
+      packed.changed = true;
+    }
+    return slot + 1;
+  }
+
+  // Sends only the slots in use, and only when one of them changed.
+  private upload(packed: Packed, used: number): void {
+    for (const mesh of packed.meshes) mesh.count = used;
+    if (!packed.changed) return;
+    packed.changed = false;
+    packed.buffer.clearUpdateRanges();
+    packed.buffer.addUpdateRange(0, used * 16);
+    packed.buffer.needsUpdate = true;
   }
 
   dispose(): void {
@@ -89,7 +144,6 @@ export class PropView {
           view.place(instance, placed.compose(at.set(p.x, p.y - t.size[1] / 2, p.z), turned, one));
           this.slot[id] = { kind: "model", view, instance };
         });
-        view.commit();
         for (const m of view.meshes) this.group.add(m);
         this.models.push(view);
         return;
@@ -104,6 +158,13 @@ export class PropView {
       boxes.addTo(this.group);
       this.boxes.push(boxes);
     });
+  }
+
+  // Call each frame before drawing, once the camera has moved.
+  cull(camera: THREE.Camera): void {
+    camera.updateMatrixWorld();
+    seen.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    for (const m of this.models) m.show(seen);
   }
 
   destroy(id: number): void {

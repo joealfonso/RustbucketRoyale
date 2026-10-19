@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { WebSocketServer } from "ws";
-import { STEP, encodeServerBinary } from "@rustbucket/shared";
+import { STEP, encodeServerBinary, parseBotDifficulty } from "@rustbucket/shared";
 import type { Joined, RoomManager } from "./RoomManager";
 
 const MAX_MESSAGE_BYTES = 4096;
@@ -12,8 +12,8 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
-// WebSocket front door. A connection to ws://host:port/?room=ABCD&tier=medium&bots=5 joins that room, making it
-// if it is new. With no room in the address it makes a fresh room. Every room ticks at 60 Hz.
+// WebSocket front door. A connection to ws://host:port/?room=ABCD&tier=medium&bots=5&difficulty=hard joins that room,
+// making it if it is new. With no room in the address it makes a fresh room. Every room ticks at 60 Hz.
 // Not done yet: check the Origin header against an allow list before this goes on a public host.
 // `defaultBots` is how many bots a new room gets when its link does not say (`&bots=0` asks for none). null keeps
 // the room topped up to its tier's target size.
@@ -28,13 +28,14 @@ export function startServer(
     const query = new URL(request.url ?? "/", "http://localhost").searchParams;
     const asked = query.get("bots");
     const bots = asked === null ? defaultBots : Math.min(MAX_BOTS_REQUESTED, Math.max(0, Math.floor(Number(asked) || 0)));
+    const difficulty = parseBotDifficulty(query.get("difficulty"));
     const joined: Joined | null = manager.join(query.get("room"), query.get("tier"), (message) => {
       if (socket.readyState !== socket.OPEN) return;
       // Snapshots and shots are packed binary, the rare messages are readable text.
       const packed = encodeServerBinary(message);
       if (packed) socket.send(packed);
       else socket.send(JSON.stringify(message));
-    }, bots);
+    }, bots, difficulty);
     if (!joined) {
       socket.close();
       return;

@@ -51,7 +51,7 @@ Slender and asymmetrical, built for battlefield control and electronic warfare.
 ---
 
 ## The hangar (environment)
-Where the mechs are shown off, such as a menu or loadout screen backdrop. Not built yet: the game has no hangar scene.
+Where the mechs are shown off, such as a menu or loadout screen backdrop. Built as the title screen's background (`packages/client/src/hangar/`, numbers in `data/hangar.json`).
 
 - **Place:** the AEGIS DYNAMICS PROTOCOLS advanced development hangar.
 - **Floor:** grated metal plating with glowing yellow-orange safety light strips outlining a hexagonal development grid.

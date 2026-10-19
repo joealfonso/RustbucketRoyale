@@ -2,24 +2,22 @@
   "dust": {
     "puffs": 8,
     "spreadMeters": 1.4,
-    "meters": 0.9,
-    "seconds": 0.45,
-    "color": "warmLight",
-    "opacity": 0.5
+    "meters": 1.2,
+    "seconds": 0.5
   },
   "slam": {
     "ringSeconds": 0.35,
-    "ringColor": "sparkYellow",
-    "ringOpacity": 0.85,
     "puffs": 12,
     "puffSpread": 0.6,
+    "debris": 5,
+    "debrisSpeed": 6,
     "shakeForce": 0.6,
     "shakeRadius": 30
   },
   "hit": {
     "flashMeters": 0.9,
     "flashSeconds": 0.18,
-    "color": "sparkYellow",
+    "sparks": 8,
     "shakeForce": 0.5,
     "shakeRadius": 15
   },
@@ -38,8 +36,7 @@
     "sparkSeconds": 0.3,
     "flashMeters": 1.1,
     "flashSeconds": 0.12,
-    "heightMeters": 2,
-    "color": "#3FF0E0"
+    "heightMeters": 2
   },
   "ghost": {
     "opacity": 0.4,

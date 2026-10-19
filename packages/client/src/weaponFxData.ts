@@ -1,0 +1,118 @@
+// The look of every shot (data/weaponFx.json): muzzle flash, tracer and impact, per weapon, plus the shared pools.
+// Plain data and small pure helpers only, so the rules can be tested without a renderer.
+
+export type Bands = [string, string, string]; // light, mid, dark: palette names or hex
+
+export interface FlashFrame {
+  size: number; // star width in metres
+  spin: number; // degrees the star is turned on this frame, so a stutter reads as flicker
+  plume: number; // metres the flame reaches out along the barrel
+  width: number; // plume width in metres
+}
+
+export interface WeaponFx {
+  flash: {
+    pool: number; points: number; inner: number; aspect: number; coreScale: number; core: string;
+    frameSeconds: number; frames: FlashFrame[];
+  };
+  tracer: { pool: number; length: number; width: number; core: string; coreShare: number };
+  impact: {
+    sparks: [number, number]; sparkSpeed: number; spread: number;
+    grit: number; gritScale: number; mechSparks: number; mechFlashScale: number;
+  };
+}
+
+export interface WeaponFxConfig {
+  lowShare: number; // share of every pool kept on the low effects setting
+  sparks: { pool: number; world: Bands; mech: Bands; lifeSeconds: number; size: number; aspect: number; streakSeconds: number; gravity: number; drag: number; lift: number };
+  grit: { pool: number; lifeSeconds: number; startSize: number; endSize: number; rise: number; families: { like: string; colors: Bands }[] };
+  mechFlash: { pool: number; points: number; inner: number; coreScale: number; colors: [string, string]; frameSeconds: number; sizes: number[] };
+  weapons: Record<string, WeaponFx>;
+}
+
+const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
+
+function numbers(obj: unknown, keys: string[], where: string): void {
+  const o = obj as Record<string, unknown> | undefined;
+  for (const k of keys) if (!isNumber(o?.[k])) throw new Error(`weaponFx.json: ${where}.${k} must be a number, 0 or more`);
+}
+
+function bands(v: unknown, count: number, where: string): void {
+  if (!Array.isArray(v) || v.length !== count || v.some((c) => typeof c !== "string")) throw new Error(`weaponFx.json: ${where} needs ${count} colours`);
+}
+
+// Fails loudly on a bad data file, same as the other tuning files.
+export function parseWeaponFx(raw: unknown): WeaponFxConfig {
+  const d = raw as WeaponFxConfig;
+  if (!isNumber(d?.lowShare) || d.lowShare > 1) throw new Error("weaponFx.json: lowShare must be between 0 and 1");
+  numbers(d.sparks, ["pool", "lifeSeconds", "size", "aspect", "streakSeconds", "gravity", "drag", "lift"], "sparks");
+  bands(d.sparks.world, 3, "sparks.world");
+  bands(d.sparks.mech, 3, "sparks.mech");
+  numbers(d.grit, ["pool", "lifeSeconds", "startSize", "endSize", "rise"], "grit");
+  if (!Array.isArray(d.grit.families) || d.grit.families.length === 0) throw new Error("weaponFx.json: grit.families needs at least one family");
+  d.grit.families.forEach((f, i) => { bands(f.colors, 3, `grit.families[${i}].colors`); if (typeof f.like !== "string") throw new Error(`weaponFx.json: grit.families[${i}].like must be a colour`); });
+  numbers(d.mechFlash, ["pool", "points", "inner", "coreScale", "frameSeconds"], "mechFlash");
+  bands(d.mechFlash.colors, 2, "mechFlash.colors");
+  if (!Array.isArray(d.mechFlash.sizes) || d.mechFlash.sizes.length === 0 || !d.mechFlash.sizes.every(isNumber)) throw new Error("weaponFx.json: mechFlash.sizes needs at least one size");
+  for (const [id, w] of Object.entries(d.weapons ?? {})) {
+    numbers(w.flash, ["pool", "points", "inner", "aspect", "coreScale", "frameSeconds"], `weapons.${id}.flash`);
+    if (w.flash.points < 2) throw new Error(`weaponFx.json: weapons.${id}.flash.points must be 2 or more`);
+    if (!Array.isArray(w.flash.frames) || w.flash.frames.length === 0) throw new Error(`weaponFx.json: weapons.${id}.flash.frames needs at least one frame`);
+    w.flash.frames.forEach((f, i) => numbers(f, ["size", "spin", "plume", "width"], `weapons.${id}.flash.frames[${i}]`));
+    numbers(w.tracer, ["pool", "length", "width", "coreShare"], `weapons.${id}.tracer`);
+    numbers(w.impact, ["sparkSpeed", "spread", "grit", "gritScale", "mechSparks", "mechFlashScale"], `weapons.${id}.impact`);
+    const [lo, hi] = w.impact.sparks ?? [];
+    if (!isNumber(lo) || !isNumber(hi) || hi < lo) throw new Error(`weaponFx.json: weapons.${id}.impact.sparks must be [fewest, most]`);
+  }
+  return d;
+}
+
+// The look of each weapon, in the order of weapons.json. Every weapon must have one, so a new gun cannot ship
+// without its effects.
+export function weaponFxFor(config: WeaponFxConfig, weapons: readonly { id: string }[]): WeaponFx[] {
+  return weapons.map((w) => {
+    const fx = config.weapons[w.id];
+    if (!fx) throw new Error(`weaponFx.json: no effects for weapon ${w.id}`);
+    return fx;
+  });
+}
+
+// How many of a pool are in use on an effects setting. Pools are made at the full size, so switching never allocates.
+export function capFor(pool: number, quality: string, lowShare: number): number {
+  return quality === "low" ? Math.max(1, Math.round(pool * lowShare)) : pool;
+}
+
+// The frame a flash shows `age` seconds in, or -1 once it has played. Frames swap whole, never fade, like a drawn flipbook.
+export function flashFrame(age: number, frameSeconds: number, frames: number): number {
+  if (age < 0) return 0;
+  const frame = frameSeconds > 0 ? Math.floor(age / frameSeconds) : frames;
+  return frame < frames ? frame : -1;
+}
+
+// A spark's velocity off a surface: the surface normal pushed round by `spread` in a random direction, kicked up
+// by `lift` so sparks arc before gravity takes them. r1..r3 are random numbers in [0, 1).
+export function sparkVelocity(
+  nx: number, ny: number, nz: number, speed: number, spread: number, lift: number,
+  r1: number, r2: number, r3: number, out: { x: number; y: number; z: number },
+): void {
+  // An even random direction on the sphere.
+  const y = r1 * 2 - 1, a = r2 * Math.PI * 2, s = Math.sqrt(1 - y * y);
+  let x = nx + Math.cos(a) * s * spread, yy = ny + y * spread + lift, z = nz + Math.sin(a) * s * spread;
+  const length = Math.hypot(x, yy, z) || 1;
+  const fast = speed * (0.6 + 0.4 * r3); // some sparks lag, so the burst has a ragged edge
+  x /= length; yy /= length; z /= length;
+  out.x = x * fast; out.y = yy * fast; out.z = z * fast;
+}
+
+// Which family of grit colours a surface kicks up: the one whose colour is nearest the surface's own.
+export function nearestFamily(hex: string, likes: readonly string[]): number {
+  const rgb = (h: string) => { const n = parseInt(h.replace("#", ""), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] as const; };
+  const [r, g, b] = rgb(hex);
+  let best = 0, bestDistance = Infinity;
+  likes.forEach((like, i) => {
+    const [lr, lg, lb] = rgb(like);
+    const distance = (r - lr) ** 2 + (g - lg) ** 2 + (b - lb) ** 2;
+    if (distance < bestDistance) { best = i; bestDistance = distance; }
+  });
+  return best;
+}

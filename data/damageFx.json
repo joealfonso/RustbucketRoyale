@@ -7,23 +7,26 @@
   "sparks": {
     "damagedEverySeconds": 1.1,
     "brokenEverySeconds": 0.5,
+    "repairEverySeconds": 0.25,
     "count": 5,
     "speed": 7,
     "lifeSeconds": 0.35,
-    "size": 0.12,
-    "color": "#ffd166",
-    "model": null,
-    "repairEverySeconds": 0.25
+    "size": 0.1,
+    "gravity": 20,
+    "streakSeconds": 0.035,
+    "model": null
   },
   "smoke": {
     "damagedEverySeconds": 0.7,
-    "brokenEverySeconds": 0.12,
+    "brokenEverySeconds": 0.16,
     "riseSpeed": 2.5,
     "lifeSeconds": 1.6,
-    "startSize": 0.35,
-    "endSize": 1.8,
-    "damagedColor": "#8a8a8a",
-    "brokenColor": "#2e2e2e",
+    "startSize": 0.45,
+    "endSize": 2.0,
+    "thinShare": 0.55,
+    "thinLifeShare": 0.6,
+    "thinDissolve": 0.25,
+    "brokenShade": 1,
     "model": null
   }
 }

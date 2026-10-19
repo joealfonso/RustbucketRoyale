@@ -1,13 +1,21 @@
 import * as THREE from "three";
 import { ZONE_BROKEN, ZONE_COUNT, ZONE_INTACT, partToRepair, zoneState, type ZoneSet } from "@rustbucket/shared";
+import type { FxSprites } from "./fx/fxSprites";
+import { AXIS } from "./fx/sprites";
+import { FRAMES } from "./fx/spriteArt";
 import type { CrawlLook, MechModel } from "./mechModel";
 
 export interface DamageFxConfig {
   crawl: CrawlLook;
-  sparks: { damagedEverySeconds: number; brokenEverySeconds: number; repairEverySeconds: number; count: number; speed: number; lifeSeconds: number; size: number; color: string; model: string | null };
+  sparks: {
+    damagedEverySeconds: number; brokenEverySeconds: number; repairEverySeconds: number; count: number; speed: number; lifeSeconds: number; size: number;
+    gravity: number; streakSeconds: number; model: string | null;
+  };
+  // Broken parts give thick black puffs; damaged ones thin grey wisps, `thinShare` the size, `thinLifeShare` the
+  // life, and starting `thinDissolve` eaten away so they look thin rather than small.
   smoke: {
     damagedEverySeconds: number; brokenEverySeconds: number; riseSpeed: number; lifeSeconds: number; startSize: number; endSize: number;
-    damagedColor: string; brokenColor: string; model: string | null;
+    thinShare: number; thinLifeShare: number; thinDissolve: number; brokenShade: number; model: string | null;
   };
 }
 
@@ -17,51 +25,23 @@ export function parseDamageFx(raw: unknown): DamageFxConfig {
     for (const k of keys) if (typeof obj?.[k] !== "number" || !Number.isFinite(obj[k])) throw new Error(`damageFx.json: ${what}.${k} must be a number`);
   };
   numbers(d?.crawl as unknown as Record<string, unknown>, ["dropMeters", "tiltDegrees", "legStubScale"], "crawl");
-  numbers(d?.sparks as unknown as Record<string, unknown>, ["damagedEverySeconds", "brokenEverySeconds", "repairEverySeconds", "count", "speed", "lifeSeconds", "size"], "sparks");
-  numbers(d?.smoke as unknown as Record<string, unknown>, ["damagedEverySeconds", "brokenEverySeconds", "riseSpeed", "lifeSeconds", "startSize", "endSize"], "smoke");
+  numbers(d?.sparks as unknown as Record<string, unknown>, ["damagedEverySeconds", "brokenEverySeconds", "repairEverySeconds", "count", "speed", "lifeSeconds", "size", "gravity", "streakSeconds"], "sparks");
+  numbers(d?.smoke as unknown as Record<string, unknown>, ["damagedEverySeconds", "brokenEverySeconds", "riseSpeed", "lifeSeconds", "startSize", "endSize", "thinShare", "thinLifeShare", "thinDissolve", "brokenShade"], "smoke");
   return d;
 }
 
 // Where each zone's sparks and smoke come from, in the mech's body frame: hips, gun arm, top of the torso.
 const ANCHORS = [[0, 1.4, 0], [1.2, 2.4, -0.6], [0, 3.1, 0]] as const;
-const SPARK_POOL = 120;
-const SMOKE_POOL = 200;
-const GRAVITY = 20;
 
-interface Particle {
-  mesh: THREE.Mesh;
-  vx: number; vy: number; vz: number;
-  age: number;
-  life: number;
-}
-
-// Sparks from damaged and broken parts, a little light smoke from damaged ones and heavy black smoke from broken
-// ones, so a mech's state reads from across the map. Fixed pools: nothing is created after startup, and when every
-// particle is busy the oldest is reused. Art hook: `model` in data/damageFx.json for real spark and smoke effects.
+// Damage told by sparks and smoke, so a mech's state reads from across the map (DESIGN.md, "Mech anatomy and damage"):
+// a damaged part spits a few spark streaks now and then and trails thin grey smoke; a broken one sparks more and
+// pours thick black toon puffs that darken as they rise. Welding sparks shower off a part being repaired.
+// Everything comes from the shared sprite pools (fx/fxSprites.ts), capped by the quality level.
+// Art hook: `model` in data/damageFx.json for real spark and smoke effects.
 export class DamageFx {
-  private sparks: Particle[] = [];
-  private smoke: Particle[] = [];
-  private nextSpark = 0;
-  private nextSmoke = 0;
   private at = new THREE.Vector3();
-  private lightSmoke: THREE.Material;
-  private heavySmoke: THREE.Material;
 
-  constructor(scene: THREE.Scene, private config: DamageFxConfig, private zones: ZoneSet) {
-    const sparkMaterial = new THREE.MeshBasicMaterial({ color: config.sparks.color });
-    const sparkGeometry = new THREE.BoxGeometry(config.sparks.size, config.sparks.size, config.sparks.size);
-    this.lightSmoke = new THREE.MeshBasicMaterial({ color: config.smoke.damagedColor, transparent: true, opacity: 0.45, depthWrite: false });
-    this.heavySmoke = new THREE.MeshBasicMaterial({ color: config.smoke.brokenColor, transparent: true, opacity: 0.6, depthWrite: false });
-    const smokeGeometry = new THREE.SphereGeometry(0.5, 7, 5);
-    const make = (geometry: THREE.BufferGeometry, material: THREE.Material): Particle => {
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.visible = false;
-      scene.add(mesh);
-      return { mesh, vx: 0, vy: 0, vz: 0, age: 0, life: 0 };
-    };
-    for (let i = 0; i < SPARK_POOL; i++) this.sparks.push(make(sparkGeometry, sparkMaterial));
-    for (let i = 0; i < SMOKE_POOL; i++) this.smoke.push(make(smokeGeometry, this.lightSmoke));
-  }
+  constructor(private sprites: FxSprites, private config: DamageFxConfig, private zones: ZoneSet) {}
 
   // Counts down this mech's timers and lets off sparks and smoke for each part that is not intact.
   emitFrom(model: MechModel, dt: number): void {
@@ -100,48 +80,33 @@ export class DamageFx {
     model.body.localToWorld(this.at);
   }
 
-  update(dt: number): void {
-    const { smoke } = this.config;
-    for (const p of this.sparks) {
-      if (!p.mesh.visible) continue;
-      p.age += dt;
-      if (p.age >= p.life) { p.mesh.visible = false; continue; }
-      p.vy -= GRAVITY * dt;
-      p.mesh.position.x += p.vx * dt; p.mesh.position.y += p.vy * dt; p.mesh.position.z += p.vz * dt;
-    }
-    for (const p of this.smoke) {
-      if (!p.mesh.visible) continue;
-      p.age += dt;
-      if (p.age >= p.life) { p.mesh.visible = false; continue; }
-      const t = p.age / p.life;
-      p.mesh.position.x += p.vx * dt; p.mesh.position.y += p.vy * dt; p.mesh.position.z += p.vz * dt;
-      // Grows as it rises, then thins away in the last fifth of its life.
-      const size = smoke.startSize + (smoke.endSize - smoke.startSize) * t;
-      p.mesh.scale.setScalar(t > 0.8 ? size * (1 - t) * 5 : size);
-    }
-  }
-
   private spark(): void {
-    const p = this.sparks[this.nextSpark]!;
-    this.nextSpark = (this.nextSpark + 1) % this.sparks.length;
-    const s = this.config.sparks.speed;
-    p.mesh.position.copy(this.at);
-    p.vx = (Math.random() - 0.5) * s; p.vy = Math.random() * s * 0.8; p.vz = (Math.random() - 0.5) * s;
-    p.age = 0;
-    p.life = this.config.sparks.lifeSeconds * (0.6 + Math.random() * 0.8);
-    p.mesh.visible = true;
+    const p = this.sprites.sparks.spawn();
+    if (!p) return;
+    const { speed, lifeSeconds, size, gravity, streakSeconds } = this.config.sparks;
+    p.mode = AXIS; p.streak = streakSeconds;
+    p.x = this.at.x; p.y = this.at.y; p.z = this.at.z;
+    p.vx = (Math.random() - 0.5) * speed; p.vy = Math.random() * speed * 0.8; p.vz = (Math.random() - 0.5) * speed;
+    p.gravity = gravity;
+    p.life = lifeSeconds * (0.6 + Math.random() * 0.8);
+    p.size0 = p.size1 = size; p.aspect = 2;
+    p.frame0 = FRAMES.spark.first;
+    p.fadeShare = 0.3;
   }
 
   private puff(heavy: boolean): void {
-    const p = this.smoke[this.nextSmoke]!;
-    this.nextSmoke = (this.nextSmoke + 1) % this.smoke.length;
+    const p = (heavy ? this.sprites.smoke : this.sprites.thinSmoke).spawn();
+    if (!p) return;
     const { smoke } = this.config;
-    p.mesh.material = heavy ? this.heavySmoke : this.lightSmoke;
-    p.mesh.position.copy(this.at);
+    const share = heavy ? 1 : smoke.thinShare;
+    p.x = this.at.x; p.y = this.at.y; p.z = this.at.z;
     p.vx = (Math.random() - 0.5) * 0.8; p.vy = smoke.riseSpeed * (0.8 + Math.random() * 0.4); p.vz = (Math.random() - 0.5) * 0.8;
-    p.age = 0;
-    p.life = smoke.lifeSeconds * (heavy ? 1 : 0.6);
-    p.mesh.scale.setScalar(smoke.startSize);
-    p.mesh.visible = true;
+    p.life = smoke.lifeSeconds * (heavy ? 1 : smoke.thinLifeShare);
+    p.size0 = smoke.startSize * share; p.size1 = smoke.endSize * share;
+    p.frame0 = FRAMES.smoke.first + Math.floor(Math.random() * FRAMES.smoke.count);
+    p.spin = Math.random() * Math.PI * 2; p.spinRate = (Math.random() - 0.5) * 0.8;
+    p.shade1 = heavy ? smoke.brokenShade : 0;
+    p.dissolve0 = heavy ? 0 : smoke.thinDissolve;
+    p.fadeShare = heavy ? 0.4 : 0.5;
   }
 }

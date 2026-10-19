@@ -1,0 +1,318 @@
+{
+  "hall": {
+    "halfWidth": 20,
+    "backZ": -16,
+    "frontZ": 18,
+    "height": 13,
+    "wallPanel": 4,
+    "trussSpacing": 6
+  },
+  "floor": {
+    "panel": 2,
+    "seam": 0.08,
+    "plate": 0.06
+  },
+  "loadingBay": {
+    "x": 0,
+    "z": 0,
+    "halfWidth": 4,
+    "halfDepth": 4,
+    "slat": 0.12,
+    "slatGap": 0.18,
+    "pitDepth": 0.4
+  },
+  "bays": {
+    "order": [
+      "stiletto",
+      "ironclad",
+      "cataclysm",
+      "arbiter"
+    ],
+    "spacing": 8,
+    "z": -9.5,
+    "halfWidth": 3.4,
+    "halfDepth": 2.6
+  },
+  "hazard": {
+    "width": 0.4,
+    "stripe": 0.45,
+    "lift": 0.02
+  },
+  "gantry": {
+    "column": 0.5,
+    "height": 6.5,
+    "beam": 0.6,
+    "armHeight": 2.9,
+    "armLength": 2.4,
+    "armThickness": 0.35,
+    "clampSize": 0.6,
+    "openDegrees": 80,
+    "swingSeconds": 0.9,
+    "cableSag": 1.4,
+    "cableRadius": 0.07
+  },
+  "walk": {
+    "metersPerSecond": 3.4,
+    "clearMeters": 4,
+    "arriveMeters": 0.05
+  },
+  "camera": {
+    "fov": 38,
+    "position": [
+      0.6,
+      2.6,
+      13.5
+    ],
+    "target": [
+      0,
+      2.6,
+      -2
+    ],
+    "driftMeters": [
+      0.9,
+      0.25,
+      0.5
+    ],
+    "driftSeconds": [
+      31,
+      23,
+      41
+    ],
+    "near": 0.3,
+    "far": 120
+  },
+  "light": {
+    "fillSky": "#6E7B80",
+    "fillGround": "soot",
+    "fillIntensity": 0.85,
+    "key": {
+      "color": "warmLight",
+      "intensity": 1.4,
+      "direction": [
+        -0.4,
+        1,
+        0.6
+      ]
+    },
+    "work": {
+      "color": "warmLight",
+      "intensity": 90,
+      "height": 9.5,
+      "angleDegrees": 34,
+      "penumbra": 0.35,
+      "distance": 22
+    },
+    "fog": {
+      "color": "#1F2423",
+      "near": 18,
+      "far": 62
+    }
+  },
+  "lamps": {
+    "housing": [
+      1.4,
+      0.35,
+      0.7
+    ],
+    "drop": 2.2
+  },
+  "screens": [
+    {
+      "show": "bay",
+      "bay": 0,
+      "center": [
+        -12,
+        9.6,
+        -15.85
+      ],
+      "size": [
+        3.2,
+        2.2
+      ],
+      "turnDegrees": 0
+    },
+    {
+      "show": "bay",
+      "bay": 1,
+      "center": [
+        -4,
+        9.6,
+        -15.85
+      ],
+      "size": [
+        3.2,
+        2.2
+      ],
+      "turnDegrees": 0
+    },
+    {
+      "show": "bay",
+      "bay": 2,
+      "center": [
+        4,
+        9.6,
+        -15.85
+      ],
+      "size": [
+        3.2,
+        2.2
+      ],
+      "turnDegrees": 0
+    },
+    {
+      "show": "bay",
+      "bay": 3,
+      "center": [
+        12,
+        9.6,
+        -15.85
+      ],
+      "size": [
+        3.2,
+        2.2
+      ],
+      "turnDegrees": 0
+    },
+    {
+      "show": "selected",
+      "center": [
+        -6.4,
+        1.9,
+        2.6
+      ],
+      "size": [
+        1.6,
+        1.15
+      ],
+      "turnDegrees": 35,
+      "stand": true
+    }
+  ],
+  "screen": {
+    "line": "#7FD8FF",
+    "dim": "#2C6C9C",
+    "glass": "#0F3554",
+    "glassOpacity": 0.6,
+    "frame": 0.12,
+    "gridLines": 6,
+    "spinSeconds": 14,
+    "fill": 0.8
+  },
+  "welder": {
+    "bench": [
+      6.2,
+      0,
+      4.2
+    ],
+    "torch": [
+      6.5,
+      1.35,
+      4.22
+    ],
+    "pool": 48,
+    "burstEverySeconds": [
+      0.15,
+      0.9
+    ],
+    "sparksPerBurst": [
+      3,
+      8
+    ],
+    "speed": [
+      2.5,
+      5.5
+    ],
+    "lifeSeconds": [
+      0.35,
+      0.8
+    ],
+    "gravity": 9.8,
+    "length": 0.14,
+    "width": 0.025,
+    "color": "sparkYellow",
+    "tip": "warmLight",
+    "seed": 7
+  },
+  "decals": {
+    "font": "700 160px \"Big Shoulders Stencil\"",
+    "brand": {
+      "text": "AEGIS DYNAMICS",
+      "center": [
+        5.5,
+        11.5,
+        -15.9
+      ],
+      "height": 0.9,
+      "color": "#7FD8FF",
+      "panel": "#0F3554",
+      "panelOpacity": 0.55
+    },
+    "markSize": 1.2,
+    "bayNumber": {
+      "height": 1.1,
+      "color": "sparkYellow",
+      "inFront": 0.9
+    },
+    "loadingBay": {
+      "text": "LOADING BAY",
+      "height": 0.7,
+      "color": "paintWhite",
+      "inFront": 0.8
+    },
+    "floorMark": {
+      "size": 1.6,
+      "color": "paintWhite"
+    }
+  },
+  "paints": {
+    "floor": "#4E5759",
+    "pit": "#141817",
+    "slat": "scrapSteel",
+    "wall": "#3A4242",
+    "wallTrim": "soot",
+    "frame": "frameNavy",
+    "gantry": "#4A5056",
+    "arm": "sparkYellow",
+    "cable": "#1B1E1E",
+    "hazard": "sparkYellow",
+    "hazardDark": "#1E2224",
+    "lamp": "warmLight",
+    "bench": "deepRust",
+    "plate": "scrapSteel"
+  },
+  "hexGrid": {
+    "radius": 2.4,
+    "strip": 0.09,
+    "lift": 0.03,
+    "color": "#FFA51F",
+    "from": [
+      -18,
+      -14
+    ],
+    "to": [
+      18,
+      12
+    ]
+  },
+  "engineers": {
+    "paint": "#262B2B",
+    "height": 1.8,
+    "spots": [
+      [
+        -5.7,
+        3.4,
+        -145
+      ],
+      [
+        7.6,
+        4.6,
+        -120
+      ],
+      [
+        -8.2,
+        -6.2,
+        160
+      ]
+    ]
+  }
+}

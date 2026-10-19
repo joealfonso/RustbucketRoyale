@@ -6,6 +6,7 @@ export interface RoomView {
   state: "lobby" | "countdown" | "active" | "results";
   hostId: number;
   players: number;
+  difficulty: string; // the room's bots: easy, normal, hard or mixed
 }
 
 const byId = (id: string) => document.getElementById(id)!;
@@ -92,7 +93,7 @@ export class Hud {
     // Only online play has a radar, and only online play has a room, so the frame shows with the room bar.
     this.display(this.radarFrame, "block");
     this.text(this.roomText, room.code);
-    this.text(this.roomInfo, `${room.tier} · ${room.players} ${room.players === 1 ? "player" : "players"}`);
+    this.text(this.roomInfo, `${room.tier} · ${room.difficulty} bots · ${room.players} ${room.players === 1 ? "player" : "players"}`);
     this.startButton.classList.toggle("hidden", !(room.state === "lobby" && room.hostId === youId));
     if (room.state !== "results") this.results.style.display = "none";
   }

@@ -19,6 +19,7 @@ interface Remote {
   running: boolean;
   ability: boolean; // using its ability right now: ramming, or in the air on a pounce
   mech: number; // the roster mech it is drawn as. A new one swaps the model.
+  weapon: number; // the weapon in hand, by index in weapons.json, so its shots are drawn in that weapon's look
   dead: boolean;
   looted: boolean;
   bot: boolean;
@@ -128,6 +129,11 @@ export class RemoteMechs {
     return this.remotes.get(id)?.mech ?? -1;
   }
 
+  // The weapon someone has in hand (index in weapons.json), or -1 if we have not seen them.
+  weaponOf(id: number): number {
+    return this.remotes.get(id)?.weapon ?? -1;
+  }
+
   // Where a mech is drawn right now, or false if we have not seen it.
   positionOf(id: number, out: { x: number; y: number; z: number }): boolean {
     const remote = this.remotes.get(id);
@@ -193,10 +199,11 @@ export class RemoteMechs {
         remote.mech = o.mech;
       }
       if (!remote) {
-        remote = { model: this.makeModel(o), mech: o.mech, vx: 0, vy: 0, vz: 0, jetting: false, running: false, ability: false, dead: false, looted: false, bot: o.bot, ghost: null, samples: [], seen: true };
+        remote = { model: this.makeModel(o), mech: o.mech, weapon: o.weapon, vx: 0, vy: 0, vz: 0, jetting: false, running: false, ability: false, dead: false, looted: false, bot: o.bot, ghost: null, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;
+      remote.weapon = o.weapon;
       remote.dead = o.dead;
       remote.looted = o.looted;
       remote.jetting = o.jetting;

@@ -13,7 +13,7 @@ const defaultBots = process.env.DEFAULT_BOTS === undefined ? null : Number(proce
 // DEV_TUNING=1 lets anyone in a room change gameplay numbers live from the tuning panel. Never set it on a public host.
 const devTuning = process.env.DEV_TUNING === "1";
 const config = { ...loadRoomConfig({ maps: "generated", roster: true }), ...(devTuning ? { tuningRaws: loadTuningRaws() } : {}) };
-const manager = new RoomManager((code, tier, bots) => new Room(code, tier, config, bots), tierNames(), defaultTier, maxRooms);
+const manager = new RoomManager((code, tier, bots, difficulty) => new Room(code, tier, config, bots, difficulty), tierNames(), defaultTier, maxRooms);
 // LOAD_STATS=1 prints a line of tick timings every 5 s, for scripts/load-test.ts.
 const tickTimes: number[] = [], lateTimes: number[] = [];
 const onTick = process.env.LOAD_STATS === "1" ? (ms: number, late: number) => { tickTimes.push(ms); lateTimes.push(late); } : undefined;

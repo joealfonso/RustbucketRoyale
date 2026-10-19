@@ -41,14 +41,33 @@
     <div id="results"><h2 id="resultTitle"></h2><p id="resultSub"></p></div>
     <div id="hurt"></div>
     <div id="menu">
-      <div class="screen panel">
+      <header id="titleBlock">
+        <p id="maker"><svg viewBox="0 0 24 21" aria-hidden="true"><path d="M12 1 23 20H1Z M12 6.5 18.6 18H5.4Z M8.2 13.2h7.6v1.9H8.2Z" fill-rule="evenodd"/></svg><span>Aegis Dynamics</span><span class="where">Pilot loading bay</span></p>
         <h1>Rustbucket Royale</h1>
-        <div class="row"><select id="tierSelect"><option value="arena" selected>Arena (quick test)</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select><select id="botSelect" title="Bots to fight"><option value="" selected>Fill with bots</option><option value="0">No bots</option><option value="3">3 bots</option><option value="5">5 bots</option><option value="8">8 bots</option></select><button id="createRoom">Create room</button></div>
-        <div class="row"><input id="roomCode" maxlength="4" placeholder="CODE" /><button id="joinRoom" class="ghost">Join room</button></div>
-        <div id="menuMechs" class="mechCards"></div>
-        <div class="row"><button id="playOffline" class="ghost">Practice offline</button></div>
+      </header>
+      <section id="deploy" class="panel" aria-labelledby="newRoomTitle">
+        <h2 id="newRoomTitle">New room</h2>
+        <label class="field"><span class="label">Map</span><select id="tierSelect"><option value="arena" selected>Arena (quick test)</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+        <label class="field"><span class="label">Bots</span><select id="botSelect"><option value="" selected>Fill with bots</option><option value="0">No bots</option><option value="3">3 bots</option><option value="5">5 bots</option><option value="8">8 bots</option></select></label>
+        <fieldset id="difficulty" class="field">
+          <legend class="label">Bot difficulty</legend>
+          <div class="segments">
+            <label><input type="radio" name="difficulty" value="easy" /><span>Easy</span></label>
+            <label><input type="radio" name="difficulty" value="normal" /><span>Normal</span></label>
+            <label><input type="radio" name="difficulty" value="hard" /><span>Hard</span></label>
+            <label><input type="radio" name="difficulty" value="mixed" checked /><span>Mixed</span></label>
+          </div>
+        </fieldset>
+        <button id="createRoom">Create room</button>
+        <h2 id="joinTitle">Join a friend</h2>
+        <div class="row"><input id="roomCode" maxlength="4" placeholder="CODE" aria-labelledby="joinTitle" autocomplete="off" spellcheck="false" /><button id="joinRoom" class="ghost">Join room</button></div>
+        <button id="playOffline" class="ghost">Practice offline</button>
         <small>Create a room, then share the invite link with friends.</small>
-      </div>
+      </section>
+      <section id="pick" aria-labelledby="pickTitle">
+        <h2 id="pickTitle" class="label">Choose your mech</h2>
+        <div id="menuMechs" class="mechCards"></div>
+      </section>
     </div>
     <div id="hint">
       <div class="screen panel">

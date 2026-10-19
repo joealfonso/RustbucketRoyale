@@ -22,7 +22,8 @@ export class Pathfinder {
   private seenStamp: Int32Array;
   private closedStamp: Int32Array;
   private stamp = 0;
-  private heap: number[] = [];
+  private heap = new Int32Array(1024); // grows when a search needs more; `heapSize` entries are in use
+  private heapSize = 0;
   private searchesLeft: number;
 
   constructor(nav: NavGrid, private stats: BotPathStats) {
@@ -163,7 +164,7 @@ export class Pathfinder {
 
     this.stamp++;
     const stamp = this.stamp;
-    this.heap.length = 0;
+    this.heapSize = 0;
     this.g[start] = 0;
     this.f[start] = this.heuristic(start, goal);
     this.parent[start] = -1;
@@ -174,33 +175,38 @@ export class Pathfinder {
     let bestH = this.f[start]!;
     let expanded = 0;
     let reached = false;
+    // Locals rather than fields in the loop below: it runs thousands of times per search.
+    const { cols, rows, blocked, closedStamp, seenStamp, g, f, parent } = this;
+    const goalCol = goal % cols, goalRow = Math.floor(goal / cols);
 
-    while (this.heap.length > 0 && expanded < this.stats.maxNodes) {
+    while (this.heapSize > 0 && expanded < this.stats.maxNodes) {
       const current = this.pop();
-      if (this.closedStamp[current] === stamp) continue;
-      this.closedStamp[current] = stamp;
+      if (closedStamp[current] === stamp) continue;
+      closedStamp[current] = stamp;
       expanded++;
       if (current === goal) { reached = true; break; }
 
-      const h = this.heuristic(current, goal);
+      const cx = current % cols, cz = Math.floor(current / cols);
+      const hx = Math.abs(cx - goalCol), hz = Math.abs(cz - goalRow);
+      const h = Math.max(hx, hz) + (DIAGONAL - 1) * Math.min(hx, hz);
       if (h < bestH) { bestH = h; best = current; }
 
-      const cx = current % this.cols, cz = Math.floor(current / this.cols);
       for (let dz = -1; dz <= 1; dz++) {
         for (let dx = -1; dx <= 1; dx++) {
           if (dx === 0 && dz === 0) continue;
           const nx = cx + dx, nz = cz + dz;
-          if (nx < 0 || nz < 0 || nx >= this.cols || nz >= this.rows) continue;
-          const next = nz * this.cols + nx;
-          if (this.blocked[next] || this.closedStamp[next] === stamp) continue;
+          if (nx < 0 || nz < 0 || nx >= cols || nz >= rows) continue;
+          const next = nz * cols + nx;
+          if (blocked[next] || closedStamp[next] === stamp) continue;
           // No cutting across the corner of a blocked cell.
-          if (dx !== 0 && dz !== 0 && (this.blocked[cz * this.cols + nx] || this.blocked[nz * this.cols + cx])) continue;
-          const cost = this.g[current]! + (dx !== 0 && dz !== 0 ? DIAGONAL : 1);
-          if (this.seenStamp[next] === stamp && cost >= this.g[next]!) continue;
-          this.seenStamp[next] = stamp;
-          this.g[next] = cost;
-          this.parent[next] = current;
-          this.f[next] = cost + this.heuristic(next, goal);
+          if (dx !== 0 && dz !== 0 && (blocked[cz * cols + nx] || blocked[nz * cols + cx])) continue;
+          const cost = g[current]! + (dx !== 0 && dz !== 0 ? DIAGONAL : 1);
+          if (seenStamp[next] === stamp && cost >= g[next]!) continue;
+          seenStamp[next] = stamp;
+          g[next] = cost;
+          parent[next] = current;
+          const ax = Math.abs(nx - goalCol), az = Math.abs(nz - goalRow);
+          f[next] = cost + (Math.max(ax, az) + (DIAGONAL - 1) * Math.min(ax, az));
           this.push(next);
         }
       }
@@ -249,35 +255,45 @@ export class Pathfinder {
     return Math.max(dx, dz) + (DIAGONAL - 1) * Math.min(dx, dz);
   }
 
-  // A plain binary heap ordered by f.
+  // A plain binary heap ordered by f, in a typed array, moving a hole rather than swapping: route searches are most
+  // of a large room's tick, and the swaps' throwaway arrays were a good part of that (docs/PERF.md). It makes the
+  // same comparisons in the same order as the swapping version, so the routes are exactly the same.
   private push(node: number): void {
-    const heap = this.heap;
-    heap.push(node);
-    let i = heap.length - 1;
+    if (this.heapSize === this.heap.length) {
+      const bigger = new Int32Array(this.heap.length * 2);
+      bigger.set(this.heap);
+      this.heap = bigger;
+    }
+    const heap = this.heap, f = this.f;
+    const value = f[node]!;
+    let i = this.heapSize++;
     while (i > 0) {
       const parent = (i - 1) >> 1;
-      if (this.f[heap[parent]!]! <= this.f[heap[i]!]!) break;
-      [heap[parent], heap[i]] = [heap[i]!, heap[parent]!];
+      if (f[heap[parent]!]! <= value) break;
+      heap[i] = heap[parent]!;
       i = parent;
     }
+    heap[i] = node;
   }
 
   private pop(): number {
-    const heap = this.heap;
+    const heap = this.heap, f = this.f;
     const top = heap[0]!;
-    const last = heap.pop()!;
-    if (heap.length > 0) {
-      heap[0] = last;
+    const size = --this.heapSize;
+    if (size > 0) {
+      const last = heap[size]!;
+      const value = f[last]!;
       let i = 0;
       for (;;) {
         const left = i * 2 + 1, right = left + 1;
-        let smallest = i;
-        if (left < heap.length && this.f[heap[left]!]! < this.f[heap[smallest]!]!) smallest = left;
-        if (right < heap.length && this.f[heap[right]!]! < this.f[heap[smallest]!]!) smallest = right;
+        let smallest = i, smallestValue = value;
+        if (left < size && f[heap[left]!]! < smallestValue) { smallest = left; smallestValue = f[heap[left]!]!; }
+        if (right < size && f[heap[right]!]! < smallestValue) smallest = right;
         if (smallest === i) break;
-        [heap[smallest], heap[i]] = [heap[i]!, heap[smallest]!];
+        heap[i] = heap[smallest]!;
         i = smallest;
       }
+      heap[i] = last;
     }
     return top;
   }

@@ -151,3 +151,77 @@ Snapshots grew for 9b: your own state carries the ability's time, cooldown and d
 
 ### Environment pass (2026-10-19, large tier seed 7, F1 at spawn)
 Sky, haze, ground and contact shadows (V6a): 127 to 130 draw calls, 4.78M to 4.81M triangles, work about 2.2 to 2.3 ms. Border barrier and backdrop (V6b): 130 to 153 draw calls, 4.81M to 4.92M triangles. Frame times were read in a hidden browser pane, which throttles frames, so they are not trustworthy; the number to trust is Joseph's laptop on large (F1, Performance).
+
+### Performance and size pass (2026-10-19, MacBook Air M4 10-core, 16 GB, Node 25.6, Chrome 155 headless)
+Method. Client: the production build served by `vite preview`, driven over the Chrome DevTools Protocol in headless Chrome at a fixed 1600 x 900 window (device pixel ratio 1, Metal through ANGLE). "Uncapped" runs Chrome with vsync and its frame cap off, so frames per second give the true cost of a frame (CPU and GPU together); a locked 60 fps hides it. Draw calls and triangles are counted by wrapping the WebGL draw calls. Parts of the scene were hidden one at a time to find the GPU cost of each. Allocations: CDP heap sampling with garbage included. Server: `scripts/measure-rooms.ts` and `npm run soak` on fixed seeds, old and new code run alternately on the same afternoon (the laptop was busy with other agents, so compare within these tables only). The scripts live outside the repo except `scripts/measure-dressing.ts`.
+
+**Download** (`npm run build`, sizes gzip -9 / brotli -q11):
+
+| What | Before | After |
+| :- | :- | :- |
+| JS loaded at start (4 files, then 5) | 942 kB, 266 kB gz, 211 kB br | same bytes; three.js now its own 636 kB (160 kB gz) file |
+| JS a returning player re-fetches after a game update | all 266 kB gz | about 107 kB gz (three stays cached) |
+| Fonts in the build | 91 kB woff2 + 93 kB woff never used | 91 kB woff2 |
+| Fonts fetched at start | 56 kB woff2 | same |
+| Mech models fetched at start (all four roster glbs) | 900 kB raw, 156 kB gz, 86 kB br | same (see recommendations) |
+| Whole build | 2220 kB raw, 646 kB gz | 2129 kB raw, 554 kB gz |
+| First load transfer measured (uncached, preview server gzips JS but not glb) | 1222 kB | 1223 kB |
+
+What is in the JS: three.js is 610 kB of the 942 (its own code plus 140 kB of shader text), GLTFLoader 42 kB, lil-gui 19 kB, game code about 190 kB, data JSON inlined about 30 kB. The title screen hangar (24 kB) already loads only on the title screen. The 500 kB chunk warning was three.js itself, which cannot be split; the limit is now 700 kB.
+
+**Client frame cost, offline large tier, three seeds at spawn** (uncapped ms per frame, draw calls, triangles):
+
+| Seed | Before | After |
+| :- | :- | :- |
+| 7 | 4.4 to 5.5 ms, 137 calls, 4.91M | 2.3 to 3.2 ms, 137 calls, 0.62M |
+| 11 | 7.0 to 7.7 ms, 151 calls, 8.20M | 3.3 to 4.0 ms, 129 calls, 2.91M |
+| 23 | 6.9 to 8.2 ms, 151 calls, 8.04M | 3.6 to 5.0 ms, 129 calls, 2.71M |
+
+Where it went: hiding parts of the scene showed the breakable props were 43% of a large-tier frame (5.1 ms with them, 2.9 without): every crate, junk pile and barrel on the whole 2 km map, about 5,300 of them at 100 to 180 triangles plus an outline each, was drawn every frame, because three's culling sphere for an instanced mesh covers all its instances. Now only props inside the camera's view are packed into the instance buffers each frame (`propView.ts`). Screenshots of the three seeds before and after are byte for byte identical. CPU work per frame (F1) stays 0.6 to 0.7 ms median on large; the M4 holds 60 fps either way, so the gain is headroom for a mid-range laptop's GPU, roughly 1.8 to 2.1 times as many frames for the same work.
+
+Garbage per frame on large fell from 154 kB to 35 kB: one material drawn by both instanced and plain meshes (the map's world colours, outlines) made three look its shader program up again at every switch, dozens of times a frame. Instanced meshes now get their own copy (`toon.instanced`). The rest is inside three (uniform uploads, fog colour conversion). Style recalculation is one per frame at about 0.07 ms; layout almost never; DOM writes are not a cost.
+
+Busy online arena (8 mechs fighting, `?create&tier=arena&bots=7`): 3.5 to 4.7 ms uncapped before and after, 150 to 400 draw calls, 0.25M triangles; F1 work 1.5 ms median, 4.5 worst. Top JavaScript: three's `updateMatrixWorld` and `multiplyMatrices` (0.36 ms a frame together, mechs are many parts), then the render list.
+
+**Spectator camera cuts** (`npx tsx scripts/measure-dressing.ts [tier] [seed]`, dressing and edge wall only, seed 7, eight cuts, Node):
+
+| Tier | Frame of the cut, median / worst, before | After | Sprinting corner to corner, worst frame before / after |
+| :- | :- | :- | :- |
+| medium | 58 / 74 ms | 0.03 / 3.7 ms (worst frame of the catch-up 9.7) | 14.0 / 10.1 ms |
+| large | 69 / 92 ms | 0.05 / 5.7 ms (worst frame of the catch-up 11.4) | 13.1 / 11.3 ms |
+
+A cut needed 20 or so dressing chunks and the near edge wall built in one frame. Now, when more than `buildAtOnce` chunks are missing (data/dressing.json, data/backdrop.json barrier), they are built one per frame and the plain boxes or far wall quads stand in for the third of a second until all are ready. Walking is unchanged: two or fewer missing chunks still build at once.
+
+**Server.** Route search (`Pathfinder.ts`): the heap now lives in a typed array and moves a hole instead of swapping through throwaway arrays, and the search loop reads locals. On 2000 random searches over two large maps the routes are identical to the old code, and a search takes 0.43 to 0.49 ms instead of 0.51 to 0.61 (about 19% less). `measure-rooms.ts`, 20 large rooms, alternating: mean 5.06 to 5.55 ms per tick and 99th percentile 15.5 to 18.9 before, 3.95 to 4.34 and 12.3 to 13.7 after. The current full table, before this change (medium now fills to 28, so 40 medium rooms is 1120 mechs):
+
+| Tier | Rooms | Mechs | Mean ms per tick, all rooms | 99th percentile ms | Under 8 ms |
+| :- | :- | :- | :- | :- | :- |
+| medium | 10 | 280 | 0.45 | 1.68 | yes |
+| medium | 20 | 560 | 0.85 | 3.23 | yes |
+| medium | 40 | 1120 | 2.09 | 9.49 | no |
+| large | 5 | 200 | 0.78 | 3.37 | yes |
+| large | 10 | 400 | 1.69 | 6.18 | yes |
+| large | 20 | 800 | 4.24 | 14.63 | no |
+
+A CPU profile of 20 large rooms: route searches are still about 80% of tick time. Half of the whole run was map generation (`validateMap`'s flood fill), which runs on the main thread when a room starts a match, so every other room in the process waits for it (about 160 ms on large in the map generation table above).
+
+**Bandwidth.** Your own state was 20 float32s in every snapshot even though about half are 0 most of the time (dash and ability timers and directions, regen timers, vertical speed on the ground). A 3-byte mask now says which are sent; only exact +0 is left out, so prediction replays from the same numbers. Soak on the same seed (911727268, identical matches), kbps per player:
+
+| Tier | Before | After |
+| :- | :- | :- |
+| arena | 45 | 38 |
+| small | 55 | 50 |
+| medium | 50 | 44 |
+| large | 36 | 30 |
+
+Medium seed 77 failed the soak at 67 kbps before and passes at 61 after. A full `npm run soak` after: arena 41, small 55, medium 41, large 39 kbps, all passing.
+
+**Still to do, ranked by gain for the effort** (owner in brackets):
+1. Serve `.glb` compressed, or quantise the mech models. The four roster models are 900 kB of the 1.2 MB first load when the host does not compress them (many do not for `model/gltf-binary`): brotli makes them 86 kB, gzip 156 kB. A host setting, no code. Failing that, `KHR_mesh_quantization` in the mech build scripts halves them raw with no loader change; meshopt or Draco would need a decoder. [deploy, then `scripts/mechs/`]
+2. Generate maps off the main thread on the server. A large map takes about 160 ms and stalls every room in the process at each match start: a worker thread, or generating the next map during the results screen in a worker. [server, `Room.beginCountdown`]
+3. Cheaper route searches for large rooms (one route field to the ring centre per ring stage, or a coarse grid for long routes): searches are 80% of a large room's tick, the limit on large rooms per process. [server, `Pathfinder.ts`, `Bot.ts`]
+4. Props past about 150 m drawn as plain boxes or not at all: even culled, a view across the map still sends 2.3 to 2.9M triangles, nearly all distant props a few pixels tall. Changes the look slightly far away, so it needs Joseph's eye. [`propView.ts`]
+5. `matrixAutoUpdate = false` on everything that never moves (map, dressing, props, backdrop, wall): `updateMatrixWorld` is the top JavaScript cost in a fight. Small, safe. [`main.ts` and the builders]
+6. Merge each remote mech's leg pieces per paint: a fight is 150 to 400 draw calls, mostly mech parts and their outlines. [`mechModel.ts`, `legRig.ts`]
+7. Load lil-gui and the debug panel on the first F1: 19 kB (6 kB gz) off the start. Small gain. [`main.ts`, `debugPanel.ts`]
+8. On the developer's disk only: `Library/` and `Logs/` in the repo folder are the Unity prototype's editor caches, 1.3 GB, ignored by git. Safe to delete when not working on the `unity-prototype` branch. [Joseph]

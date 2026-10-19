@@ -9,6 +9,7 @@ export interface DressingConfig {
   radiusMeters: number; // boxes in chunks closer than this are dressed; the rest stay plain boxes
   chunkMeters: number; // the size of the map's chunks
   scatterPerChunk: number; // loose junk and grass dropped on open ground per chunk
+  buildAtOnce: number; // a move needing more unbuilt chunks than this (a spectator cut) builds them one per frame
 }
 
 // Things lying about on open ground in one chunk. Visual only: nothing here collides.
@@ -26,6 +27,8 @@ export class Dressing {
   private ahead: number[] = []; // chunks just beyond the dressed ones, to build on quiet frames
   private near = new Set<number>();
   private centreKey = Number.NaN;
+  private wanted = new Set<number>(); // the chunks to dress around centreKey, shown once all are built
+  private missing: number[] = []; // wanted chunks still to build, nearest last
   private perChunk: number;
 
   constructor(
@@ -85,17 +88,38 @@ export class Dressing {
   }
 
   // Call each frame with where the camera's mech is. Real work happens on entering a new chunk; on other frames one
-  // chunk just beyond the dressed ones is built ahead, so crossing into it later costs only the merge.
+  // chunk just beyond the dressed ones is built ahead, so crossing into it later costs only the merge. A big jump (the
+  // spectator camera cutting to another mech) would need a few dozen chunks built at once, a dropped frame of 50 to
+  // 100 ms, so then they are built one per frame and the plain boxes stand in until all are ready.
   update(x: number, z: number): void {
     const key = this.keyAt(x, z);
     if (key === this.centreKey) {
-      const next = this.ahead.pop();
+      const next = this.missing.pop() ?? this.ahead.pop();
       if (next !== undefined) this.piecesOf(next);
+      if (next !== undefined && this.missing.length === 0 && !this.showing()) this.show();
       return;
     }
+    const first = Number.isNaN(this.centreKey);
     this.centreKey = key;
-    const wanted = this.around(key, this.config.radiusMeters);
-    this.ahead = [...this.around(key, this.config.radiusMeters + this.config.chunkMeters)].filter((k) => !wanted.has(k) && !this.chunkPieces.has(k));
+    this.wanted = this.around(key, this.config.radiusMeters);
+    this.ahead = [...this.around(key, this.config.radiusMeters + this.config.chunkMeters)].filter((k) => !this.wanted.has(k) && !this.chunkPieces.has(k));
+    const cx = key % this.perChunk, cz = Math.floor(key / this.perChunk);
+    const away = (k: number) => Math.hypot((k % this.perChunk) - cx, Math.floor(k / this.perChunk) - cz);
+    this.missing = [...this.wanted].filter((k) => !this.chunkPieces.has(k)).sort((a, b) => away(b) - away(a));
+    // The first build happens while the map loads, so it never waits.
+    if (first || this.missing.length <= this.config.buildAtOnce) {
+      this.missing = [];
+      this.show();
+    }
+  }
+
+  private showing(): boolean {
+    return this.near === this.wanted;
+  }
+
+  // Swaps the dressed chunks for `wanted`, building any still missing.
+  private show(): void {
+    const wanted = this.wanted;
     // Plain boxes come back where the dressing leaves, and hide where it arrives.
     for (const k of this.near) if (!wanted.has(k)) for (const i of this.chunkBoxes.get(k) ?? []) this.mapMeshes.setVisible(i, true);
     for (const k of wanted) if (!this.near.has(k)) for (const i of this.chunkBoxes.get(k) ?? []) this.mapMeshes.setVisible(i, false);

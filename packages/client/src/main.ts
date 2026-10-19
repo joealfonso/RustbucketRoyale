@@ -2,12 +2,18 @@ import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
   parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
-  type AbilityMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
+  createRayHit, type AbilityMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import audioJson from "../../../data/audio.json";
 import { Sound, type AudioConfig } from "./audio";
-import { Fireballs } from "./fireballs";
+import { BlastSizes } from "./fx/blastSize";
+import { Debris } from "./fx/debris";
+import { Explosions, parseExplosionFx } from "./fx/explosion";
+import explosionFxJson from "../../../data/explosionFx.json";
+import { FxSprites } from "./fx/fxSprites";
+import { Thrusters, parseThrusterFx } from "./fx/thrusters";
+import thrusterFxJson from "../../../data/thrusterFx.json";
 import weaponsJson from "../../../data/weapons.json";
 import lootJson from "../../../data/loot.json";
 import propsJsonForLoot from "../../../data/props.json";
@@ -24,6 +30,7 @@ import mechKitsJson from "../../../data/mechKits.json";
 import rosterJson from "../../../data/roster.json";
 import abilitiesJson from "../../../data/abilities.json";
 import { mechCards, savedMech } from "./mechPicker";
+import { rejoinQuery, serverQuery } from "./roomLinks";
 import gaitJson from "../../../data/gait.json";
 import { parseGait, type GaitInput } from "./gait";
 import { footInWorld, walkMech } from "./mechWalk";
@@ -37,7 +44,6 @@ import { setAimTarget } from "./aimTarget";
 import { DebugPanel, FrameTimes } from "./debugPanel";
 import { Crt, parseCrt } from "./crt";
 import crtJson from "../../../data/crt.json";
-import { TimedEffects } from "./effects";
 import { Input } from "./input";
 import { ClientGrenades } from "./grenades";
 import { buildPlayMap, propConfig } from "./loadMap";
@@ -54,11 +60,11 @@ import { ContactShadows, parseShadowLook } from "./contactShadows";
 import groundJson from "../../../data/ground.json";
 import { BUILDERS, Dressing, scatter } from "./dressing";
 import { PROP_MODELS } from "./props";
-import { BreakFx } from "./props/breakFx";
+import { BreakFx, parsePropFx } from "./props/breakFx";
 import propFxJson from "../../../data/propFx.json";
 import abilityFxJson from "../../../data/abilityFx.json";
 import { AbilityFx, abilityMoment, parseAbilityFx } from "./abilityFx";
-import { MortarWarnings } from "./mortarWarning";
+import { MortarWarnings, warningSeconds } from "./mortarWarning";
 import dressingJson from "../../../data/dressing.json";
 import backdropJson from "../../../data/backdrop.json";
 import tiersJson from "../../../data/tiers.json";
@@ -69,13 +75,15 @@ import { parseBackdrop } from "./backdrop/layout";
 import chunksJsonForDressing from "../../../data/chunks.json";
 import { createMechModel, legsLimping, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
 import { NetClient } from "./net";
-import { Projectiles } from "./projectiles";
 import { Radar } from "./radar";
 import { parseRadar } from "./radarData";
 import radarJson from "../../../data/radar.json";
 import { RemoteMechs } from "./remoteMechs";
 import { RingView } from "./ringView";
 import { ShotFx } from "./shotFx";
+import { parseWeaponFx } from "./weaponFxData";
+import weaponFxJson from "../../../data/weaponFx.json";
+import { addVfxQualityControl, mostOf, vfxConfig, vfxLevel, vfxQuality } from "./fx/quality";
 import { ThirdPersonCamera } from "./thirdPersonCamera";
 
 const KILL_HEIGHT = -50;
@@ -104,7 +112,8 @@ setCrawlLook(damageFxConfig.crawl, zoneSet.damagedBelowFraction);
 
 // How to play is chosen in the address:
 //   (nothing)                    the start menu
-//   ?create&tier=medium&bots=5   make a new room on the local server with 5 bots, then share the link it shows
+//   ?create&tier=medium&bots=5   make a new room on the local server with 5 bots, then share the link it shows.
+//                                &difficulty=easy|normal|hard|mixed sets how hard its bots are (mixed if left out).
 //   ?room=ABCD                   join that room
 //   ?offline&tier=small&seed=5   practice alone, any tier or "range", any seed. Add &overview to look down on the map.
 //   ?server=ws://host:port       use another server than the local one
@@ -121,26 +130,15 @@ let picked = savedMech(roster, params);
 
 if (!offline && !online) {
   hint.classList.add("hidden");
-  const menu = document.getElementById("menu")!;
-  menu.style.display = "flex";
-  const tierSelect = document.getElementById("tierSelect") as HTMLSelectElement;
-  const codeInput = document.getElementById("roomCode") as HTMLInputElement;
-  const botSelect = document.getElementById("botSelect") as HTMLSelectElement;
-  document.getElementById("createRoom")!.addEventListener("click", () => { location.search = `?create&tier=${tierSelect.value}${botSelect.value === "" ? "" : `&bots=${botSelect.value}`}`; });
-  document.getElementById("joinRoom")!.addEventListener("click", () => { if (codeInput.value.trim()) location.search = `?room=${codeInput.value.trim().toUpperCase()}`; });
-  document.getElementById("playOffline")!.addEventListener("click", () => { location.search = `?offline&tier=${tierSelect.value}`; });
-  // Picking is remembered in this browser, so the game it opens next starts you in that mech.
-  mechCards(document.getElementById("menuMechs")!, roster, picked ?? 0, () => {});
+  // Loaded only here, so a match never downloads or builds the hangar behind the title screen.
+  const { showTitleScreen } = await import("./titleScreen");
+  showTitleScreen(roster, picked ?? 0);
   await new Promise(() => {}); // nothing more to do until a button reloads the page
 }
 
 function serverAddress(): string {
   const base = params.get("server") ?? `ws://${location.hostname}:8080`;
-  const query = new URLSearchParams();
-  if (params.get("room")) query.set("room", params.get("room")!);
-  if (params.get("tier")) query.set("tier", params.get("tier")!);
-  if (params.get("bots")) query.set("bots", params.get("bots")!);
-  return `${base}/?${query}`;
+  return `${base}/?${serverQuery(params)}`;
 }
 
 const net = online ? new NetClient(serverAddress()) : null;
@@ -157,10 +155,7 @@ try {
     if (picked !== null) net.sendMech(picked);
     // Reloading the page now rejoins this room.
     // Keep the room settings in the address too. If the server restarts, reloading brings the room back the same way.
-    const again = new URLSearchParams({ room: roomCode, tier });
-    if (params.has("bots")) again.set("bots", params.get("bots")!);
-    if (params.has("kit")) again.set("kit", params.get("kit")!);
-    history.replaceState(null, "", `?${again}`);
+    history.replaceState(null, "", `?${rejoinQuery(params, roomCode, tier)}`);
   }
   hint.textContent = `Building ${tier} map...`;
   // Let the message paint before the map build holds the thread.
@@ -207,7 +202,14 @@ let edgeBarrier = new EdgeBarrier(scene, toon, map, mapMeshes, barrierConfig);
 const makeBackdrop = () => (map.tier === "range" ? null : new Backdrop(scene, toon, map.meters, tiersJson.edgeWallThickness, backdropConfig));
 let backdrop = makeBackdrop();
 let propView = new PropView(map, propConfig, toon, PROP_MODELS);
-const breakFx = new BreakFx(scene, toon, propFxJson);
+// Effects (V5a): shared sprite and chunk pools, sized for the most generous quality level in data/vfx.json and
+// capped by the active one; explosions, jets and prop breaks draw from them.
+const explosionFx = parseExplosionFx(explosionFxJson);
+const fxSprites = new FxSprites(scene, (c) => toon.color(c), explosionFx.scorch);
+const chunks = new Debris(scene, toon, mostOf(vfxConfig, "debris"), () => vfxLevel().debris ?? 0, explosionFx.chunks);
+const explosions = new Explosions(scene, fxSprites, chunks, explosionFx, (c) => toon.color(c));
+const thrusters = new Thrusters(fxSprites, parseThrusterFx(thrusterFxJson));
+const breakFx = new BreakFx(chunks, fxSprites, parsePropFx(propFxJson), (c) => toon.color(c));
 scene.add(propView.group);
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
 // Soft dark patches under map boxes and mechs, so nothing floats over the ground (data/ground.json shadows).
@@ -229,26 +231,27 @@ let ownModel = makeOwnModel(shownMech);
 let mechGroup = ownModel.group;
 scene.add(mechGroup);
 
-const glow = new THREE.MeshBasicMaterial({ color: "#ffb833" });
-const impacts = new TimedEffects(scene, 24, 0.25, glow);
-const flashes = new TimedEffects(scene, 6, 0.3, glow);
-const projectiles = new Projectiles(scene, 64, glow, impacts);
-const shotFx = new ShotFx(weaponStats, projectiles, flashes, impacts);
+// Muzzle flashes, tracers and impacts in each weapon's look (data/weaponFx.json), the grit in the colours of the map.
+const shotFx = new ShotFx(scene, parseWeaponFx(weaponFxJson), weaponSet.weapons, (c) => toon.color(c), vfxConfig.sprites.growSteps, vfxQuality);
+const showSurfaces = () => shotFx.impacts.setSurfaces(map.palette.map((c) => toon.color(c)), map.colors);
+showSurfaces();
 const sound = new Sound(audioJson as AudioConfig);
-projectiles.onImpact = (x, y, z) => sound.play("impact", { x, y, z });
+shotFx.onImpact = (x, y, z) => sound.play("impact", { x, y, z });
 // Browsers only allow sound after a click, and the click that locks the mouse is the first one.
 for (const el of [canvas, hint]) el.addEventListener("click", () => sound.start());
-const blasts = new Fireballs(scene, 8);
+// A broken barrel goes off a beat later (props.json barrelBlast.delaySeconds) and the server's word on it can lag, so
+// a blast where one broke is taken for it this long afterwards.
+const BARREL_MEMORY_SECONDS = 1;
+const blastSizes = new BlastSizes(grenadeStats.blastRadius, propConfig.barrelBlast.radius);
 const abilityFxConfig = parseAbilityFx(abilityFxJson);
-const abilityFx = new AbilityFx(scene, abilityFxConfig, (c) => toon.color(c));
+const abilityFx = new AbilityFx(fxSprites, explosions, abilityFxConfig);
 const whistleAt = { x: 0, y: 0, z: 0 };
 const mortarWarnings = new MortarWarnings(scene, abilityFxConfig.warning, (c) => toon.color(c), (x, y, z) => {
   whistleAt.x = x; whistleAt.y = y; whistleAt.z = z;
   sound.play("shellIncoming", whistleAt);
 });
-// Walking (gait.ts): each mech's legs follow how fast it is really going. Footfalls kick up dust (art hook for V5).
+// Walking (gait.ts): each mech's legs follow how fast it is really going. Footfalls kick up dust.
 const gaitConfig = parseGait(gaitJson);
-const dust = new TimedEffects(scene, 32, gaitConfig.dustMeters, new THREE.MeshBasicMaterial({ color: "#a39a86", transparent: true, opacity: 0.45 }));
 const gaitInput: GaitInput = { vx: 0, vz: 0, yaw: 0, grounded: true, dashing: false, limping: false, braced: false, walkSpeed: 0, runSpeed: 0 };
 const footAt = new THREE.Vector3();
 // Dust under each foot that came down, and one thud for them, pitched for the mech's weight. `audible` is false for
@@ -259,7 +262,7 @@ function footfalls(model: MechModel, feet: number, audible: boolean): void {
   for (let leg = 0; leg < model.legs.length; leg++) {
     if (!(feet & (1 << leg))) continue;
     footInWorld(model, leg, footAt);
-    dust.spawn(footAt.x, footAt.y, footAt.z, gaitConfig.dustSeconds);
+    fxSprites.dustPuff(footAt.x, footAt.y, footAt.z, gaitConfig.dustMeters, gaitConfig.dustSeconds);
     if (thud) {
       const loud = gaitConfig.stepLoudness + (gaitConfig.runStepLoudness - gaitConfig.stepLoudness) * model.gait!.loud;
       sound.play("step", footAt, loud, gaitConfig.mechs[model.gaitId]?.stepPitch ?? 1);
@@ -279,18 +282,17 @@ const walkRemote = (model: MechModel, m: number, vx: number, vy: number, vz: num
   gaitInput.limping = legsLimping(model);
   gaitInput.walkSpeed = stats.walkSpeed; gaitInput.runSpeed = stats.runSpeed;
   const feet = walkMech(model, gaitConfig, gaitInput, fxDt);
+  thrusters.drive(model, jetting, gaitInput.dashing, gaitInput.grounded, vy, fxDt);
   if (feet) {
     const p = model.group.position, me = mechGroup.position;
     footfalls(model, feet, running || Math.abs(p.x - me.x) + Math.abs(p.z - me.z) < gaitConfig.hearWalkMeters);
   }
 };
 
-// Art hook: a puff where a prop broke. Replace with real debris at V5.
-const debris = new TimedEffects(scene, 12, 1.6, new THREE.MeshBasicMaterial({ color: "#8c8577", transparent: true, opacity: 0.6 }));
 const grenades = new ClientGrenades(scene, 8, grenadeStats);
 const grenadeGate = new FireGate();
 const thrown = createGrenade();
-const damageFx = new DamageFx(scene, damageFxConfig, zoneSet);
+const damageFx = new DamageFx(fxSprites, damageFxConfig, zoneSet);
 let fxDt = 0;
 const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
 const shadowUnder = (model: MechModel) => contactShadows.addObject(model.group);
@@ -332,6 +334,7 @@ const workMs = new FrameTimes(240); // time spent on the frame before the GPU ta
 const panel = new DebugPanel(mechStats, tuningRaws, cameraStats, (file, path, value) => (net ? net.sendTune(file, path, value) : applyLocally(file, path, value)));
 panel.addGait(gaitConfig);
 panel.addHud(crt.setting, (v) => crt.setIntensity(v));
+addVfxQualityControl(panel.gui);
 if (net) {
   net.onTuned = (file, path, value) => { applyLocally(file, path, value); panel.refresh(); };
   void net.welcome.then((w) => panel.setServerTuning(w.tuning), () => {});
@@ -380,6 +383,7 @@ function swapMap(newSeed: number, newTier: string): void {
   map = buildPlayMap(newTier, newSeed, mechStats);
   toon.useLight(toon.presetFor(newSeed, forcedLook));
   mapMeshes = new MapMeshes(scene, map, toon);
+  showSurfaces();
   dressing.dispose();
   dressing = makeDressing();
   edgeBarrier.dispose();
@@ -452,14 +456,14 @@ if (net) {
   };
   net.onShot = (s) => {
     if (s.id === net.id) return; // our own shot already played the moment we fired
-    shotFx.show(s, s.hitMech);
+    shotFx.show(s, remotes.weaponOf(s.id), s.hitMech);
     sound.play("shot", { x: s.ox, y: s.oy, z: s.oz });
   };
   net.onHit = (h) => {
     flashHitMarker(h.killed);
     showHit(h.zone, h.damage, h.killed);
     sound.play("hitMarker");
-    impacts.spawn(h.x, h.y, h.z, 0.15);
+    shotFx.hitMech(h.x, h.y, h.z, loadout.slots[firingSlot]!);
   };
   net.onGrenade = (g) => {
     if (g.id === net.id) return; // our own grenade is already in the air
@@ -486,8 +490,9 @@ if (net) {
     map.world.disable(prop.boxIndex);
     contactShadows.hideBox(prop.boxIndex);
     propView.destroy(id);
-    debris.spawn(prop.x, prop.y, prop.z, 0.3);
-    breakFx.burst(propConfig.types[prop.type]!.id, prop.x, prop.y, prop.z);
+    const type = propConfig.types[prop.type]!;
+    breakFx.burst(type.id, prop.x, prop.y, prop.z, groundBelow(prop.x, prop.y, prop.z));
+    if (type.explodes) blastSizes.barrel(prop.x, prop.z, performance.now() / 1000, BARREL_MEMORY_SECONDS);
     sound.play("smash", { x: prop.x, y: prop.y, z: prop.z });
   };
   net.onRoom = (r) => {
@@ -561,9 +566,16 @@ function shakeNear(x: number, y: number, z: number, radius: number, force: numbe
   if (distance < radius) rig.addShake((1 - distance / radius) * force);
 }
 
+const groundHit = createRayHit();
+// The ground under a spot: the top of whatever box is below it, or the map floor (y = 0 on every map).
+function groundBelow(x: number, y: number, z: number): number {
+  const from = y + 0.5;
+  return map.world.raycast(x, from, z, 0, -1, 0, from, groundHit) ? from - groundHit.distance : 0;
+}
+
 function showBlast(x: number, y: number, z: number): void {
   grenades.removeNear(x, y, z);
-  blasts.spawn(x, y + 0.6, z, 4.5);
+  explosions.blast(x, y, z, blastSizes.radiusAt(x, z, performance.now() / 1000), groundBelow(x, y, z));
   sound.play("explosion", { x, y, z });
   shakeNear(x, y, z, grenadeStats.shakeRadius, grenadeStats.shakeForce);
 }
@@ -595,7 +607,10 @@ const strikeFrom = { x: 0, y: 0, z: 0 };
 // pilot, who heard it from prediction.
 function showStrike(id: number, own: boolean, x: number, y: number, z: number): void {
   const stats = barrageOf(own ? mech.mech : remotes.mechOf(id));
-  if (stats) mortarWarnings.show(x, y, z, stats);
+  if (stats) {
+    mortarWarnings.show(x, y, z, stats);
+    blastSizes.strike(x, z, stats.spreadMeters, performance.now() / 1000, warningSeconds(stats) + BARREL_MEMORY_SECONDS, stats.blastRadius);
+  }
   if (!own && remotes.positionOf(id, strikeFrom)) showAbilityStart("barrage", strikeFrom.x, strikeFrom.y, strikeFrom.z);
 }
 
@@ -717,7 +732,7 @@ function frame(now: number): void {
       const muzzle = muzzles[shotsFired++ % muzzles.length]!;
       for (let i = 0; i < weapon.pellets; i++) {
         computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weapon, Math.random, shot, armsBroken() ? zoneSet.brokenArmsSpreadMultiplier : 1, muzzle);
-        shotFx.show(shot);
+        shotFx.show(shot, weaponSet.weapons.indexOf(weapon));
       }
       sound.play("shot", { x: shot.ox, y: shot.oy, z: shot.oz });
       rig.addShake(weapon.shakeForce);
@@ -731,9 +746,6 @@ function frame(now: number): void {
       sound.play("grenadeThrow", { x: thrown.x, y: thrown.y, z: thrown.z });
     }
     shotFx.update(STEP, map.world);
-    blasts.update(STEP);
-    debris.update(STEP);
-    breakFx.update(STEP);
     // Offline there is no server to send the blast, so it goes off when the fuse ends.
     grenades.update(STEP, map.world, net === null ? showBlast : undefined);
     accumulator -= STEP;
@@ -760,10 +772,12 @@ function frame(now: number): void {
   gaitInput.braced = mech.abilityTime > 0 && ownAbilityStats?.kind === "barrage";
   gaitInput.walkSpeed = ownStats.walkSpeed; gaitInput.runSpeed = ownStats.runSpeed;
   const ownFeet = walkMech(ownModel, gaitConfig, gaitInput, frameTime);
+  thrusters.tick(frameTime);
+  thrusters.drive(ownModel, mech.jetting && !health.dead, gaitInput.dashing, mech.grounded, mech.vy, frameTime);
   if (ownFeet && !health.dead) footfalls(ownModel, ownFeet, true);
   remotes.forEachNear(mechGroup.position.x, mechGroup.position.z, gaitConfig.farMeters, walkRemote);
-  dust.update(frameTime);
-  abilityFx.update(frameTime);
+  explosions.update(frameTime);
+  chunks.update(frameTime);
   mortarWarnings.update(frameTime);
 
   // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.
@@ -811,6 +825,7 @@ function frame(now: number): void {
     rig.camera.lookAt(0, 0, 0);
   }
   edgeBarrier.update(rig.camera.position);
+  propView.cull(rig.camera);
 
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;
   staminaFill.style.width = `${mech.stamina.fraction * 100}%`;
@@ -833,7 +848,7 @@ function frame(now: number): void {
   contactShadows.addObject(mechGroup);
   remotes.forEachModel(shadowUnder);
   contactShadows.endMoving();
-  damageFx.update(frameTime);
+  fxSprites.update(frameTime, rig.camera.position);
   hud.setLoadout(loadout, weaponSet.weapons, lootConfig.armorPlates, upgradeSet.upgrades);
   setMechUpgrades(ownModel, loadout.upgrades, upgradeSet.upgrades);
   radar?.setRangeScale(upgradeScale(loadout, upgradeSet, "radarRange"));
@@ -875,10 +890,14 @@ function frame(now: number): void {
   staminaBar.classList.toggle("locked", mech.stamina.locked);
   if (panel.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection, net?.rttMs ?? 0, net ? remotes.viewDelayMs : 0);
 
+  shotFx.draw(rig.camera, frameTime);
   renderer.render(scene, rig.camera);
   frameMs.record(frameTime * 1000);
   workMs.record(performance.now() - workStarted);
   if (panel.visible) panel.updateRender(frameMs, workMs, renderer.info.render.calls, renderer.info.render.triangles);
   requestAnimationFrame(frame);
 }
+// Effects sit in the scene from the start with nothing to draw, so their shaders build now rather than in the frame
+// of the first explosion or jet, which showed as a hitch.
+renderer.compile(scene, rig.camera);
 requestAnimationFrame(frame);

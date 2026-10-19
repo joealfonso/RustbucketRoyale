@@ -23,3 +23,4 @@ export * from "./hitboxes";
 export * from "./roster";
 export * from "./muzzles";
 export * from "./abilities";
+export * from "./botDifficulty";

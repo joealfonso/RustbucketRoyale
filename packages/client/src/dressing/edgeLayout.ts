@@ -9,6 +9,7 @@ export interface BarrierConfig {
   baysPerChunk: number; // bays built and swapped between near and far detail together
   nearMeters: number; // chunks closer than this to the camera get the full model, the rest the cheap far one
   recheckMeters: number; // the camera must move this far before near and far are decided again
+  buildAtOnce: number; // more unbuilt near chunks than this (a spectator cut) are built one per frame
   panelMeters: number; // between posts; each gap holds two columns of sheets so a seam shows between them
   sheetMeters: [number, number]; // each sheet's height is picked in this range, so seams never line up into rows
   girderEveryMeters: number;
@@ -42,7 +43,7 @@ export function parseBarrier(raw: unknown): BarrierConfig {
   const numbers = (o: object, label: string, keys: string[]) => {
     for (const k of keys) if (typeof (o as Record<string, unknown>)[k] !== "number") throw new Error(`backdrop.json: ${label}.${k} must be a number`);
   };
-  numbers(c ?? {}, "barrier", ["bayMeters", "baysPerChunk", "nearMeters", "recheckMeters", "panelMeters", "girderEveryMeters", "seam", "coreDepth", "sheetDepth",
+  numbers(c ?? {}, "barrier", ["bayMeters", "baysPerChunk", "nearMeters", "recheckMeters", "buildAtOnce", "panelMeters", "girderEveryMeters", "seam", "coreDepth", "sheetDepth",
     "ribDepth", "ribWidth", "ribSpacing", "ribBandMeters", "patchChance", "columnRepaintChance", "patchDepth", "postWidth", "postDepth", "girderHeight", "girderDepth"]);
   numbers(c.container ?? {}, "barrier.container", ["length", "height", "depth", "stackChance", "maxStack", "offsetChance", "ribSpacing", "ribDepth", "frame"]);
   numbers(c.fence ?? {}, "barrier.fence", ["height", "postSpacing", "postSize", "strands", "strandSize", "armLength"]);

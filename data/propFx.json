@@ -1,8 +1,10 @@
 {
   "chunks": 12,
   "speed": 7,
-  "lifeSeconds": 1.2,
+  "lift": 0.8,
+  "lifeSeconds": 1.6,
   "size": 0.28,
+  "dust": { "puffs": 6, "meters": 1.4, "seconds": 0.6, "spreadMeters": 0.8 },
   "colors": {
     "crate": ["rustOrange", "sparkYellow", "deepRust"],
     "junk": ["scrapSteel", "rustOrange", "soot"],

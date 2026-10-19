@@ -27,7 +27,8 @@ describe("parseAbilityFx", () => {
 
   it("fails loudly on a missing number or colour", () => {
     expect(() => parseAbilityFx({ ...abilityFxJson, hit: { ...abilityFxJson.hit, flashSeconds: "long" } })).toThrow(/hit.flashSeconds/);
-    expect(() => parseAbilityFx({ ...abilityFxJson, dust: { ...abilityFxJson.dust, color: 3 } })).toThrow(/dust.color/);
+    expect(() => parseAbilityFx({ ...abilityFxJson, dust: { ...abilityFxJson.dust, seconds: null } })).toThrow(/dust.seconds/);
+    expect(() => parseAbilityFx({ ...abilityFxJson, warning: { ...abilityFxJson.warning, ringColor: 3 } })).toThrow(/warning.ringColor/);
     expect(() => parseAbilityFx({ ...abilityFxJson, warning: { ...abilityFxJson.warning, pulsesPerSecond: -1 } })).toThrow(/warning.pulsesPerSecond/);
     expect(() => parseAbilityFx({ ...abilityFxJson, ghost: { ...abilityFxJson.ghost, tint: null } })).toThrow(/ghost.tint/);
     expect(() => parseAbilityFx({ ...abilityFxJson, warning: { ...abilityFxJson.warning, ringWidth: 1 } })).toThrow(/ringWidth/);

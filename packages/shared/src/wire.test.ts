@@ -76,10 +76,24 @@ describe("snapshot wire format", () => {
 
   // Your own ability timers added 16 bytes (four float32s) and the ability byte one per other mech.
   it("is small: under 130 bytes with nobody else near, 21 bytes per extra mech, 9 per pickup", () => {
-    expect(encodeSnapshot(snapshot([])).length).toBe(snapshotSize(0));
+    expect(encodeSnapshot(snapshot([])).length).toBe(snapshotSize(0, 0, 0, 19)); // staminaTimer is 0
     expect(snapshotSize(0)).toBeLessThan(130);
     expect(snapshotSize(10) - snapshotSize(0)).toBe(210);
     expect(snapshotSize(0, 0, 10) - snapshotSize(0)).toBe(90);
+  });
+
+  it("leaves out your own numbers that are 0, a bit each instead of 4 bytes, and gives back the rest exactly", () => {
+    const s = snapshot([]);
+    Object.assign(s.you, { vy: 0, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0, abilityTime: 0, abilityCooldown: 0, abilityX: 0, abilityZ: 0, fuelTimer: 0 });
+    s.you.vx = -0; // not +0, so it is sent: replaying from -0 must match the server
+    const bytes = encodeSnapshot(s);
+    expect(bytes.length).toBe(snapshotSize(0, 0, 0, 9));
+    const back = decodeSnapshot(bytes)!;
+    expect(Object.is(back.you.vx, -0)).toBe(true);
+    for (const key of ["x", "y", "z", "vz", "vy", "bodyYaw", "dashTime", "dashCooldown", "dashX", "dashZ", "abilityTime", "abilityCooldown", "abilityX", "abilityZ", "fuel", "fuelTimer", "stamina", "staminaTimer", "fuelScale"] as const) {
+      expect(back.you[key]).toBe(Math.fround(s.you[key]));
+    }
+    expect(back.you.mech).toBe(3);
   });
 
   it("carries your loadout and the pickups near you", () => {
@@ -96,7 +110,7 @@ describe("snapshot wire format", () => {
     const s = snapshot([]);
     s.pickups = null;
     expect(decodeSnapshot(encodeSnapshot(s))!.pickups).toBeNull();
-    expect(encodeSnapshot(s).length).toBe(snapshotSize(0));
+    expect(encodeSnapshot(s).length).toBe(snapshotSize(0, 0, 0, 19));
     s.pickups = [];
     expect(decodeSnapshot(encodeSnapshot(s))!.pickups).toEqual([]);
   });

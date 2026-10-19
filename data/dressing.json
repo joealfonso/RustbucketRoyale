@@ -1,4 +1,5 @@
 {
   "radiusMeters": 120,
-  "scatterPerChunk": 40
+  "scatterPerChunk": 40,
+  "buildAtOnce": 2
 }

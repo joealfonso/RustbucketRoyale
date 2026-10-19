@@ -1,4 +1,4 @@
-import type { ServerMessage } from "@rustbucket/shared";
+import type { BotDifficulty, ServerMessage } from "@rustbucket/shared";
 import { Room } from "./Room";
 
 const CODE_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I, O, 0 or 1: they are easy to misread out loud
@@ -15,7 +15,7 @@ export class RoomManager {
   private rooms = new Map<string, Room>();
 
   constructor(
-    private makeRoom: (code: string, tier: string, bots: number | null) => Room,
+    private makeRoom: (code: string, tier: string, bots: number | null, difficulty: BotDifficulty) => Room,
     private tiers: readonly string[],
     private defaultTier: string,
     private maxRooms: number,
@@ -26,8 +26,11 @@ export class RoomManager {
     return this.rooms.size;
   }
 
-  // `code` null means make a new room with a fresh code. The tier and bot count only matter for a room that does not exist yet.
-  join(code: string | null, tier: string | null, send: (message: ServerMessage) => void, bots: number | null = 0): Joined | null {
+  // `code` null means make a new room with a fresh code. The tier, bot count and difficulty only matter for a room
+  // that does not exist yet: joining someone's room never changes it.
+  join(
+    code: string | null, tier: string | null, send: (message: ServerMessage) => void, bots: number | null = 0, difficulty: BotDifficulty = "mixed",
+  ): Joined | null {
     const wanted = code?.toUpperCase() ?? null;
     if (wanted !== null && !CODE_PATTERN.test(wanted)) {
       send({ t: "refused", reason: "That room code does not look right." });
@@ -42,7 +45,7 @@ export class RoomManager {
       }
       const chosenTier = tier && this.tiers.includes(tier) ? tier : this.defaultTier;
       const newCode = wanted ?? this.freshCode();
-      room = this.makeRoom(newCode, chosenTier, bots);
+      room = this.makeRoom(newCode, chosenTier, bots, difficulty);
       this.rooms.set(newCode, room);
     }
 

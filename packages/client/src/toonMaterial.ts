@@ -76,6 +76,7 @@ export class Toon {
   private worldMaterials = new Map<string, THREE.MeshToonMaterial>();
   private outlines = new Map<string, THREE.MeshBasicMaterial>();
   private shellOutlines = new Map<string, THREE.MeshBasicMaterial>();
+  private instancedCopies = new Map<THREE.Material, THREE.Material>();
   private rimColor: THREE.Color;
   // Made by `light`, changed in place by `useLight`, so a new match only changes numbers and compiles nothing.
   private fill = new THREE.HemisphereLight();
@@ -257,6 +258,21 @@ export class Toon {
     return m;
   }
 
+  // The copy of a shared material that instanced meshes use. Three compiles a different program for instanced and
+  // plain meshes, and one material drawn both ways makes it look the program up again at every switch: dozens of
+  // times a frame, about 90 kB of garbage a frame (docs/PERF.md). The copy shares the shader changes and uniforms.
+  instanced<M extends THREE.Material>(material: M): M {
+    let copy = this.instancedCopies.get(material) as M | undefined;
+    if (!copy) {
+      copy = material.clone() as M;
+      copy.onBeforeCompile = material.onBeforeCompile;
+      copy.customProgramCacheKey = material.customProgramCacheKey;
+      copy.userData = material.userData; // clone() deep-copies it, and setRust's uniform must stay shared
+      this.instancedCopies.set(material, copy);
+    }
+    return copy;
+  }
+
   // A box with its outline: a slightly bigger copy drawn from the inside, so only its rim shows round the edges.
   // The outline is a fixed width in metres, so it thins on screen with distance, as far LODs should.
   box(parent: THREE.Object3D, center: readonly number[], size: readonly number[], name: string, material?: THREE.Material): ToonBox {
@@ -350,8 +366,8 @@ export class ToonInstances {
 
   // `ground` draws the bands with no rim and no outline, for the floor.
   constructor(toon: Toon, name: string, count: number, private outlineWidth: number, ground = false) {
-    this.mesh = new THREE.InstancedMesh(unitBox, ground ? toon.ground(name) : toon.world(name), count);
-    this.hull = ground ? null : new THREE.InstancedMesh(unitBox, toon.outlineMaterial(name), count);
+    this.mesh = new THREE.InstancedMesh(unitBox, toon.instanced(ground ? toon.ground(name) : toon.world(name)), count);
+    this.hull = ground ? null : new THREE.InstancedMesh(unitBox, toon.instanced(toon.outlineMaterial(name)), count);
   }
 
   set(i: number, x: number, y: number, z: number, sx: number, sy: number, sz: number): void {

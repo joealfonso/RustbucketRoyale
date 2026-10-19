@@ -32,6 +32,8 @@ export class EdgeBarrier {
   private farMeshes: THREE.InstancedMesh[] = [];
   private nearPieces = new Map<number, Map<string, MeshData[]>>(); // chunk → paint hex → meshes, built once
   private near = new Set<number>();
+  private wanted = new Set<number>(); // the chunks that should be near, shown once all are built
+  private missing: number[] = []; // wanted chunks still to build
   private nearMeshes = new THREE.Group();
   private checkedAt = new THREE.Vector3(Infinity, 0, 0);
 
@@ -54,7 +56,7 @@ export class EdgeBarrier {
     for (const boxes of all) for (const b of boxes) { const hex = this.toon.color(b.paint); counts.set(hex, (counts.get(hex) ?? 0) + 1); }
     const meshes = new Map<string, THREE.InstancedMesh>();
     for (const [hex, count] of counts) {
-      const mesh = new THREE.InstancedMesh(unitQuad, this.toon.world(hex), count);
+      const mesh = new THREE.InstancedMesh(unitQuad, this.toon.instanced(this.toon.world(hex)), count);
       mesh.count = 0;
       meshes.set(hex, mesh);
       this.farMeshes.push(mesh);
@@ -79,13 +81,29 @@ export class EdgeBarrier {
     }
   }
 
-  // Call each frame with the camera's position. Only does work once the camera has moved a few metres.
+  // Call each frame with the camera's position. Only does work once the camera has moved a few metres. When a cut of
+  // the spectator camera needs more chunks built than `buildAtOnce`, they are built one per frame and the far quads
+  // stand in until all are ready, rather than one frame of 20 to 40 ms.
   update(camera: THREE.Vector3): void {
+    if (this.missing.length > 0) {
+      this.piecesOf(this.missing.pop()!);
+      if (this.missing.length === 0) this.show(this.wanted);
+    }
     if (camera.distanceToSquared(this.checkedAt) < this.config.recheckMeters ** 2) return;
+    const first = this.checkedAt.x === Infinity; // while the map loads, so it never waits
     this.checkedAt.copy(camera);
     const wanted = new Set<number>();
     this.chunks.forEach((chunk, c) => { if (distanceToChunk(chunk, camera.x, camera.y, camera.z) < this.config.nearMeters) wanted.add(c); });
-    if (wanted.size === this.near.size && [...wanted].every((c) => this.near.has(c))) return;
+    if (wanted.size === this.wanted.size && [...wanted].every((c) => this.wanted.has(c))) return;
+    this.wanted = wanted;
+    this.missing = [...wanted].filter((c) => !this.nearPieces.has(c));
+    if (first || this.missing.length <= this.config.buildAtOnce) {
+      this.missing = [];
+      this.show(wanted);
+    }
+  }
+
+  private show(wanted: Set<number>): void {
     for (const c of this.near) if (!wanted.has(c)) for (const s of this.farSlots[c]!) s.mesh.setMatrixAt(s.index, s.matrix);
     for (const c of wanted) if (!this.near.has(c)) for (const s of this.farSlots[c]!) s.mesh.setMatrixAt(s.index, gone);
     for (const mesh of this.farMeshes) mesh.instanceMatrix.needsUpdate = true;

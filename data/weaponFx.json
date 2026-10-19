@@ -1,0 +1,75 @@
+{
+  "lowShare": 0.5,
+  "sparks": {
+    "pool": 240,
+    "world": ["#FFF6D8", "sparkYellow", "#F28A2E"],
+    "mech": ["#FFFFFF", "#FFF2B8", "sparkYellow"],
+    "lifeSeconds": 0.3,
+    "size": 0.18,
+    "aspect": 3,
+    "streakSeconds": 0.06,
+    "gravity": 24,
+    "drag": 2,
+    "lift": 0.35
+  },
+  "grit": {
+    "pool": 64,
+    "lifeSeconds": 0.45,
+    "startSize": 0.7,
+    "endSize": 1.6,
+    "rise": 0.9,
+    "families": [
+      { "like": "moss", "colors": ["#B5A57C", "#8A7A57", "#5B5040"] },
+      { "like": "rustOrange", "colors": ["#E39A66", "rustOrange", "deepRust"] },
+      { "like": "deepRust", "colors": ["#C47A4E", "deepRust", "#4A2A1A"] },
+      { "like": "scrapSteel", "colors": ["#B4BDBF", "scrapSteel", "soot"] },
+      { "like": "warmLight", "colors": ["warmLight", "#C8B48F", "#8F7B5E"] }
+    ]
+  },
+  "mechFlash": {
+    "pool": 16,
+    "points": 4,
+    "inner": 0.28,
+    "coreScale": 0.5,
+    "colors": ["#FFFFFF", "sparkYellow"],
+    "frameSeconds": 0.035,
+    "sizes": [1.3, 0.75]
+  },
+  "weapons": {
+    "autocannon": {
+      "flash": {
+        "pool": 10, "points": 4, "inner": 0.3, "aspect": 1, "coreScale": 0.5, "core": "#FFF2B8", "frameSeconds": 0.03,
+        "frames": [
+          { "size": 0.95, "spin": 0, "plume": 1.2, "width": 0.5 },
+          { "size": 0.6, "spin": 45, "plume": 0.7, "width": 0.35 }
+        ]
+      },
+      "tracer": { "pool": 48, "length": 5, "width": 0.16, "core": "#FFF2B8", "coreShare": 0.4 },
+      "impact": { "sparks": [4, 6], "sparkSpeed": 10, "spread": 0.8, "grit": 1, "gritScale": 1, "mechSparks": 6, "mechFlashScale": 1 }
+    },
+    "scattergun": {
+      "flash": {
+        "pool": 6, "points": 7, "inner": 0.45, "aspect": 1.9, "coreScale": 0.45, "core": "#E6F6FF", "frameSeconds": 0.035,
+        "frames": [
+          { "size": 1.5, "spin": 0, "plume": 0.9, "width": 1.3 },
+          { "size": 1.15, "spin": 12, "plume": 0.6, "width": 1.0 },
+          { "size": 0.6, "spin": 25, "plume": 0.35, "width": 0.6 }
+        ]
+      },
+      "tracer": { "pool": 64, "length": 2.2, "width": 0.08, "core": "#E6F6FF", "coreShare": 0.34 },
+      "impact": { "sparks": [2, 3], "sparkSpeed": 8, "spread": 0.9, "grit": 1, "gritScale": 0.6, "mechSparks": 3, "mechFlashScale": 0.7 }
+    },
+    "spikeDriver": {
+      "flash": {
+        "pool": 4, "points": 4, "inner": 0.16, "aspect": 0.7, "coreScale": 0.55, "core": "#FCEBFF", "frameSeconds": 0.04,
+        "frames": [
+          { "size": 1.1, "spin": 0, "plume": 3.4, "width": 0.4 },
+          { "size": 1.4, "spin": 45, "plume": 2.4, "width": 0.3 },
+          { "size": 0.7, "spin": 0, "plume": 1.2, "width": 0.18 }
+        ]
+      },
+      "tracer": { "pool": 12, "length": 9, "width": 0.24, "core": "#FCEBFF", "coreShare": 0.36 },
+      "impact": { "sparks": [8, 10], "sparkSpeed": 15, "spread": 0.7, "grit": 2, "gritScale": 1.7, "mechSparks": 12, "mechFlashScale": 1.8 }
+    }
+  }
+}

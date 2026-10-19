@@ -20,7 +20,11 @@ export const isBinaryType = (first: number) => first === TYPE_SNAPSHOT || first 
 
 // ---- sizes
 
-const SELF_BYTES = 20 * 4 + 1;
+// Your own state: 20 float32s, but most are 0 most of the time (dash and ability timers, regen timers, vertical speed
+// on the ground). A 3-byte mask says which are sent, so a 0 costs one bit instead of 4 bytes. Only +0 is skipped,
+// so prediction replays from exactly the numbers the server has. Then one byte of flags.
+const SELF_FLOATS = 20;
+const SELF_MASK_BYTES = 3;
 const OTHER_BYTES = 21;
 const LOADOUT_BYTES = 9;
 const LOOTING_BYTES = 2; // how far through looting a wreck, then through a repair, 0 to 255 each
@@ -37,15 +41,20 @@ const u8 = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
 
 // ---- snapshot
 
-export function snapshotSize(others: number, noises = 0, pickups = 0): number {
-  return SNAPSHOT_HEADER_BYTES + SELF_BYTES + 1 + others * OTHER_BYTES + 1 + noises * NOISE_BYTES + LOADOUT_BYTES + LOOTING_BYTES + 1 + pickups * PICKUP_BYTES;
+// `selfFloats` is how many of your own numbers are not 0.
+export function snapshotSize(others: number, noises = 0, pickups = 0, selfFloats = SELF_FLOATS): number {
+  return SNAPSHOT_HEADER_BYTES + SELF_MASK_BYTES + selfFloats * 4 + 1 + 1 + others * OTHER_BYTES + 1 + noises * NOISE_BYTES + LOADOUT_BYTES + LOOTING_BYTES + 1 + pickups * PICKUP_BYTES;
 }
 
 export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Uint8Array {
   const others = m.others.slice(0, 255);
   const noises = m.noises.slice(0, 255);
   const pickups = m.pickups?.slice(0, PICKUPS_UNCHANGED - 1) ?? [];
-  const buffer = new ArrayBuffer(snapshotSize(others.length, noises.length, pickups.length));
+  const s = m.you;
+  const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale];
+  let mask = 0, present = 0;
+  selfNumbers.forEach((n, i) => { if (!Object.is(Math.fround(n), 0)) { mask |= 1 << i; present++; } });
+  const buffer = new ArrayBuffer(snapshotSize(others.length, noises.length, pickups.length, present));
   const v = new DataView(buffer);
   let o = 0;
   v.setUint8(o, TYPE_SNAPSHOT); o += 1;
@@ -60,10 +69,8 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
   v.setUint8(o, m.health.dead ? 1 : 0); o += 1;
   v.setUint8(o, u8(Math.ceil(m.health.respawnIn))); o += 1;
 
-  const s = m.you;
-  for (const n of [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale]) {
-    v.setFloat32(o, n, true); o += 4;
-  }
+  for (let i = 0; i < SELF_MASK_BYTES; i++) { v.setUint8(o, (mask >> (i * 8)) & 255); o += 1; }
+  selfNumbers.forEach((n, i) => { if (mask & (1 << i)) { v.setFloat32(o, n, true); o += 4; } });
   v.setUint8(o, (s.grounded ? 1 : 0) | (s.running ? 2 : 0) | (s.jetting ? 4 : 0) | (s.fuelLocked ? 8 : 0) | (s.staminaLocked ? 16 : 0) | (s.crawling ? 32 : 0) | ((s.mech & 3) << 6)); o += 1;
 
   v.setUint8(o, others.length); o += 1;
@@ -110,7 +117,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>): Ui
 }
 
 export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "snapshot" }> | null {
-  if (bytes.length < SNAPSHOT_HEADER_BYTES + SELF_BYTES + 1) return null;
+  if (bytes.length < snapshotSize(0, 0, 0, 0)) return null;
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let o = 1;
   const tick = v.getUint32(o, true); o += 4;
@@ -125,7 +132,12 @@ export function decodeSnapshot(bytes: Uint8Array): Extract<ServerMessage, { t: "
   const dead = v.getUint8(o) === 1; o += 1;
   const respawnIn = v.getUint8(o); o += 1;
 
-  const f = () => { const n = v.getFloat32(o, true); o += 4; return n; };
+  const mask = v.getUint8(o) | (v.getUint8(o + 1) << 8) | (v.getUint8(o + 2) << 16); o += SELF_MASK_BYTES;
+  let present = 0;
+  for (let i = 0; i < SELF_FLOATS; i++) if (mask & (1 << i)) present++;
+  if (bytes.length < snapshotSize(0, 0, 0, present)) return null;
+  let field = 0;
+  const f = () => { if (!(mask & (1 << field++))) return 0; const n = v.getFloat32(o, true); o += 4; return n; };
   const you: SelfState = {
     x: f(), y: f(), z: f(), vx: f(), vz: f(), vy: f(), bodyYaw: f(), dashTime: f(), dashCooldown: f(), dashX: f(), dashZ: f(),
     abilityTime: f(), abilityCooldown: f(), abilityX: f(), abilityZ: f(),

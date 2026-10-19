@@ -4,6 +4,7 @@
     "baysPerChunk": 4,
     "nearMeters": 150,
     "recheckMeters": 8,
+    "buildAtOnce": 1,
     "panelMeters": 6,
     "sheetMeters": [
       3,

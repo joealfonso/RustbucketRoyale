@@ -5,6 +5,8 @@
 @import "@fontsource/share-tech-mono/latin-400.css";
 @import "@fontsource/barlow/latin-400.css";
 @import "@fontsource/barlow/latin-600.css";
+/* The decal face, for the Aegis Dynamics name on the title screen and the stencils painted in the hangar. */
+@import "@fontsource/big-shoulders-stencil/latin-700.css";
 
 /* Other HUD pieces (the damage diagram, warnings) read these, so every colour and face is set once. */
 :root {
@@ -17,6 +19,7 @@
   --hud-word: "Chakra Petch", "Arial Narrow", sans-serif;
   --hud-num: "Share Tech Mono", ui-monospace, monospace;
   --hud-body: "Barlow", system-ui, sans-serif;
+  --hud-decal: "Big Shoulders Stencil", "Arial Narrow", sans-serif;
   --hud-margin: clamp(12px, 1.25vw, 32px);
   --hud-border: 2px;
   /* The one cut corner every panel has, echoing the clipped corners of Chakra Petch. */
@@ -163,17 +166,53 @@ canvas { display: block; width: 100%; height: 100%; }
 #results h2 { margin: 0 0 0.5rem; font: 700 3.6rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.05em; color: var(--hud-amber); text-shadow: 4px 4px 0 var(--hud-soot); }
 #results p { margin: 0; padding: 0.4rem 1rem; font: 600 1.25rem var(--hud-body); color: var(--hud-text); background: var(--hud-panel); }
 
-/* Start menu and pause screen: the same panels at full size, with Barlow for anything that reads as a sentence. */
-#menu { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: var(--hud-soot); z-index: 10; }
-.screen { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1rem; text-align: center; }
-.screen.panel { pointer-events: auto; padding: 2rem 2.4rem; }
-#menu h1 { margin: 0; font: 700 3.2rem/1 var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; color: var(--hud-amber); }
+/* Title screen: over the hangar scene, so only three things stand on it: the name top left, one panel of choices
+   on the right, the mech cards along the bottom. The middle stays open for the mech in the loading bay. */
+#menu { position: fixed; inset: 0; display: none; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr auto; gap: 1rem; padding: calc(var(--hud-margin) * 1.5); box-sizing: border-box; z-index: 10; pointer-events: none; }
+#menu > * { pointer-events: auto; }
+body.titleScreen > :not(#menu, #game) { display: none !important; }
+#titleBlock { grid-area: 1 / 1; align-self: start; }
+#maker { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 0.4rem; color: var(--hud-text); }
+#maker svg { width: 1.9rem; height: 1.7rem; fill: currentColor; }
+#maker span { font: 700 1.5rem/1 var(--hud-decal); text-transform: uppercase; letter-spacing: 0.08em; }
+#maker .where { font: 700 0.8rem var(--hud-word); letter-spacing: 0.16em; color: var(--hud-amber); padding-left: 0.6rem; border-left: var(--hud-border) solid var(--hud-amber-dim); }
+#menu h1 { margin: 0; font: 700 4.4rem/0.95 var(--hud-word); text-transform: uppercase; letter-spacing: 0.04em; color: var(--hud-amber); text-shadow: 0.25rem 0.25rem 0 var(--hud-soot); }
+#menu h2 { margin: 0; font: 700 0.95rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.14em; color: var(--hud-amber); }
+#deploy { position: relative; grid-area: 1 / 2 / 3 / 3; align-self: start; display: flex; flex-direction: column; gap: 0.75rem; width: 20rem; padding: 1.2rem 1.3rem 1.3rem; background: rgba(42, 47, 46, 0.94); }
+#deploy #joinTitle { margin-top: 0.6rem; padding-top: 0.9rem; border-top: 1px solid var(--hud-amber-dim); }
+#menu .field { display: flex; flex-direction: column; gap: 0.3rem; margin: 0; padding: 0; border: 0; min-width: 0; }
+#menu legend { padding: 0; margin-bottom: 0.3rem; }
 #menu .row { display: flex; gap: 0.5rem; align-items: center; }
-#menu input, #menu select { font: 400 1rem var(--hud-num); padding: 0.4rem 0.6rem; border-radius: 0; border: var(--hud-border) solid var(--hud-amber-dim); background: var(--hud-soot); color: var(--hud-amber); }
+#menu input, #menu select { font: 400 1rem var(--hud-num); padding: 0.45rem 0.6rem; border-radius: 0; border: var(--hud-border) solid var(--hud-amber-dim); background: var(--hud-soot); color: var(--hud-amber); }
 #menu input { text-transform: uppercase; width: 6rem; letter-spacing: 0.2em; }
 #menu input::placeholder { color: var(--hud-amber-dim); }
 #menu select { font-family: var(--hud-word); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
-#menu small { font: 400 0.95rem var(--hud-body); color: var(--hud-text); opacity: 0.75; }
+#menu .row input { flex: 1; }
+#deploy > button { width: 100%; padding: 0.6rem 0.8rem; }
+#menu small { font: 400 0.95rem var(--hud-body); color: var(--hud-text); opacity: 0.8; }
+/* Bot difficulty: four radio buttons drawn as one strip of keys. The picked one is filled, so it reads without colour. */
+.segments { display: grid; grid-template-columns: repeat(4, 1fr); border: var(--hud-border) solid var(--hud-amber-dim); }
+.segments label { position: relative; cursor: pointer; }
+.segments input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.segments span { display: block; padding: 0.45rem 0; text-align: center; font: 700 0.8rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.08em; color: var(--hud-amber); }
+.segments label + label span { border-left: 1px solid var(--hud-amber-dim); }
+.segments label:hover span { background: rgba(255, 176, 0, 0.12); }
+.segments input:checked + span { background: var(--hud-amber); color: var(--hud-soot); }
+/* Keyboard focus is a light outline on every control, never only a colour shift. */
+#menu :is(button, select, input[type="text"], #roomCode):focus-visible, .segments input:focus-visible + span { outline: var(--hud-border) solid var(--hud-text); outline-offset: 2px; }
+#pick { grid-area: 3 / 1 / 4 / 3; justify-self: center; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+#pick h2 { color: var(--hud-text); text-shadow: 0.15rem 0.15rem 0 var(--hud-soot); }
+/* Narrower than the desktop sizes it is laid out for: one column that scrolls, so no control is ever cut off. */
+@media (max-width: 1100px) {
+  #menu { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; overflow-y: auto; }
+  #deploy { grid-area: 2 / 1; }
+  #pick { grid-area: 4 / 1; }
+  #menu .mechCards { flex-wrap: wrap; }
+}
+
+/* The pause screen: the same panel at full size, with Barlow for anything that reads as a sentence. */
+.screen { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1rem; text-align: center; }
+.screen.panel { pointer-events: auto; padding: 2rem 2.4rem; }
 #hint { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(42, 47, 46, 0.82); color: var(--hud-amber); font: 700 1.4rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; text-align: center; cursor: pointer; }
 #hint.hidden { display: none; }
 #hint h2 { margin: 0; font: 700 2.2rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.08em; color: var(--hud-amber); }
@@ -188,6 +227,9 @@ canvas { display: block; width: 100%; height: 100%; }
 /* Under an id so the plain button style does not win. */
 :is(#menu, #hint) .mechCards button { cursor: pointer; border-radius: 0; font: inherit; width: 10.5rem; padding: 0.7rem; border: var(--hud-border) solid var(--hud-amber-dim); background: rgba(0, 0, 0, 0.25); color: var(--hud-amber); text-align: left; text-transform: none; letter-spacing: 0; line-height: 1.3; }
 :is(#menu, #hint) .mechCards button:hover { border-color: var(--hud-amber); background: rgba(255, 176, 0, 0.08); }
+/* Over the hangar the cards need a solid back to stay readable. */
+#menu .mechCards button { width: 11.5rem; background: var(--hud-panel); }
+#menu .mechCards button:hover { background: rgba(58, 52, 30, 0.95); }
 /* The picked card is filled, not just recoloured, so it reads without colour. */
 :is(#menu, #hint) .mechCards button.on { border-color: var(--hud-amber); background: var(--hud-amber); color: var(--hud-soot); }
 .mechCards strong { display: block; font: 700 1rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.04em; }

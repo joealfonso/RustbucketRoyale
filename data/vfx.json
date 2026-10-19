@@ -1,0 +1,45 @@
+{
+  "quality": "normal",
+  "levels": {
+    "low": {
+      "fire": 48,
+      "smoke": 120,
+      "dust": 90,
+      "sparks": 80,
+      "scorches": 4,
+      "debris": 40,
+      "flames": 16,
+      "blastBlobs": 1,
+      "blastSmoke": 3,
+      "blastDebris": 4,
+      "blastScorch": 1
+    },
+    "normal": {
+      "fire": 120,
+      "smoke": 300,
+      "dust": 200,
+      "sparks": 200,
+      "scorches": 16,
+      "debris": 120,
+      "flames": 48,
+      "blastBlobs": 3,
+      "blastSmoke": 8,
+      "blastDebris": 10,
+      "blastScorch": 1
+    }
+  },
+  "sprites": {
+    "growSteps": 4,
+    "clearFromMeters": 6,
+    "clearToMeters": 2.5,
+    "palettes": {
+      "fire": ["#FFF1B8", "#F7902F", "deepRust"],
+      "smoke": ["#8E8A82", "#5A5853", "soot"],
+      "thinSmoke": ["#C9C5BB", "#A29E95", "#7D7A73"],
+      "dust": ["warmLight", "#C8B48F", "#8F7B5E"],
+      "sparks": ["#FFFBE6", "sparkYellow", "#F28A2E"],
+      "scorch": ["soot", "#3B302A", "#55493D"],
+      "teal": ["#E6FFFB", "#3FF0E0", "#1C8C86"]
+    }
+  }
+}

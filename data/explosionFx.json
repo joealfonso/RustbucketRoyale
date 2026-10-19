@@ -1,0 +1,70 @@
+{
+  "fireball": {
+    "sizePerMeter": 0.62,
+    "seconds": 0.5,
+    "startShare": 0.55,
+    "lift": 0.5,
+    "riseSpeed": 2.5,
+    "blobSpread": 0.5,
+    "blobSize": 0.6,
+    "blobDelaySeconds": 0.05,
+    "fadeShare": 0.25,
+    "drag": 2
+  },
+  "flash": {
+    "intensity": 60,
+    "seconds": 0.15,
+    "meters": 40,
+    "color": "#ffb060"
+  },
+  "ring": {
+    "radiusPerMeter": 0.85,
+    "seconds": 0.4,
+    "startShare": 0.15,
+    "lift": 0.08
+  },
+  "smoke": {
+    "sizePerMeter": 0.3,
+    "growth": 2.2,
+    "seconds": 2.6,
+    "riseSpeed": 3.2,
+    "spreadPerMeter": 0.08,
+    "delaySeconds": 0.08,
+    "startShade": 0,
+    "endShade": 1.2,
+    "fadeShare": 0.45,
+    "drag": 0.6,
+    "afterFireShare": 0.5
+  },
+  "debris": {
+    "speedPerMeter": 1.4,
+    "lift": 1.1,
+    "size": 0.5,
+    "seconds": 2.2,
+    "colors": ["soot", "scrapSteel", "deepRust"]
+  },
+  "scorch": {
+    "sizePerMeter": 0.6,
+    "seconds": 25,
+    "fadeShare": 0.3,
+    "fadeFromMeters": 60,
+    "fadeToMeters": 100,
+    "lift": 0.03
+  },
+  "chunks": {
+    "gravity": 22,
+    "bounce": 0.35,
+    "friction": 0.55,
+    "spin": 10,
+    "sinkShare": 0.25
+  },
+  "sparks": {
+    "speed": 9,
+    "lift": 6,
+    "gravity": 20,
+    "seconds": 0.4,
+    "size": 0.12,
+    "streakSeconds": 0.04,
+    "fadeShare": 0.4
+  }
+}
