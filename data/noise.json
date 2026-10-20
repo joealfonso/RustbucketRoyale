@@ -3,6 +3,7 @@
   "fuzzFraction": 0.15,
   "fuzzMaxMeters": 25,
   "botInvestigateSeconds": 8,
+  "wadingFootsteps": 0.4,
   "loudness": {
     "run": 55,
     "dash": 70,

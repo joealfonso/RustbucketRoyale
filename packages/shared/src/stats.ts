@@ -270,11 +270,12 @@ export interface NoiseStats {
   fuzzFraction: number; // a pulse is shown off its true spot by up to this share of the distance...
   fuzzMaxMeters: number; // ...but never more than this
   botInvestigateSeconds: number; // how long a bot goes looking for something it heard
+  wadingFootsteps: number; // running and dashing through water is heard this share as far: water muffles footsteps
   loudness: Record<NoiseKind, number>; // metres away it can be heard
 }
 
 export function parseNoiseStats(raw: unknown): NoiseStats {
-  const base = parseNumbers<Omit<NoiseStats, "loudness">>(raw, "noise.json", ["pulseSeconds", "fuzzFraction", "fuzzMaxMeters", "botInvestigateSeconds"]);
+  const base = parseNumbers<Omit<NoiseStats, "loudness">>(raw, "noise.json", ["pulseSeconds", "fuzzFraction", "fuzzMaxMeters", "botInvestigateSeconds", "wadingFootsteps"]);
   const loudness = parseNumbers<Record<NoiseKind, number>>((raw as { loudness?: unknown })?.loudness, "noise.json loudness", [...NOISE_KINDS]);
   return { ...base, loudness };
 }
