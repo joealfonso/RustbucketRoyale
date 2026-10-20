@@ -184,5 +184,61 @@
         "accent": "#56504A"
       }
     }
+  },
+  "ranges": {
+    "seed": 9191,
+    "baseMeters": -80,
+    "valleyMist": 0.3,
+    "mistSteps": 6,
+    "layers": [
+      {
+        "radiusMeters": 2700,
+        "spacingMeters": 420,
+        "heightMeters": [
+          520,
+          860
+        ],
+        "widthMeters": [
+          900,
+          1300
+        ],
+        "sides": 7,
+        "paint": "#7E7B6E",
+        "peak": "#9A9584",
+        "mist": 0.5
+      },
+      {
+        "radiusMeters": 2460,
+        "spacingMeters": 360,
+        "heightMeters": [
+          340,
+          600
+        ],
+        "widthMeters": [
+          700,
+          1200
+        ],
+        "sides": 7,
+        "paint": "#746C5C",
+        "peak": "#8C8371",
+        "mist": 0.38
+      },
+      {
+        "radiusMeters": 2250,
+        "spacingMeters": 300,
+        "heightMeters": [
+          170,
+          320
+        ],
+        "widthMeters": [
+          600,
+          1000
+        ],
+        "sides": 6,
+        "paint": "#3E5232",
+        "peak": "#5A5347",
+        "mist": 0.27
+      }
+    ]
   }
 }

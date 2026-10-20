@@ -139,6 +139,11 @@ export class Toon {
     return this.ramp;
   }
 
+  // The haze colour, changed in place by `useLight`, for things that haze themselves (the far mountain ranges).
+  get hazeColor(): THREE.Color {
+    return this.haze.color;
+  }
+
   // A material of its own, for something whose colour changes on its own (a mech zone darkening with damage).
   // With `rusts`, `setRust` eats its paint away to rust (see DESIGN.md, "Rust").
   ownMaterial(name: string, rusts = false): THREE.MeshToonMaterial {

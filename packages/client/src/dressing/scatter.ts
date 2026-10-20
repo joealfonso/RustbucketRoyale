@@ -1,6 +1,6 @@
 import type { Scatter } from "./dressing";
 import { rng, type DressBox, type DressPiece } from "./kinds";
-import { box, cylinder, merge, turn, type MeshData } from "./shapes";
+import { box, convex, cylinder, merge, turn, type MeshData, type V3 } from "./shapes";
 
 // Loose junk and grass on open ground. Nothing here collides, so everything stays low and small enough that it never
 // reads as cover. Each item is built around the origin, turned about y, dropped at a seeded spot, and kept only if its
@@ -70,8 +70,41 @@ const drum: Item = (r) => {
   return [{ paint: pick(r, ["deepRust", "sparkYellow"]), mesh: turn(can, [between(r, -0.15, 0.15), 0, between(r, -0.15, 0.15)]) }];
 };
 
-// Weights out of 100. Most of it is grass, the junk is the seasoning.
-const MIX: [Item, number][] = [[grass, 58], [tyreFlat, 11], [tyreLeaning, 4], [pipe, 10], [plate, 12], [drum, 5]];
+// A low faceted mound of leaves: a jittered hexagon at the foot, a wider ring above it and a small cap, so it reads
+// as a clump, not a cone.
+function mound(r: Rand, radius: number, height: number): MeshData {
+  const turnBy = r() * Math.PI;
+  const ring = (y: number, reach: number, shift: number): V3[] => Array.from({ length: 6 }, (_, i) => {
+    const a = turnBy + (i / 6) * Math.PI * 2, d = radius * reach * between(r, 0.88, 1.05);
+    return [Math.cos(a) * d + shift, y, Math.sin(a) * d] as V3;
+  });
+  const lean = radius * between(r, -0.12, 0.12);
+  const foot = ring(0, 0.8, 0), belly = ring(height * 0.45, 1, lean * 0.5), cap = ring(height, 0.4, lean);
+  const band = (a: V3[], b: V3[]) => a.map((_, i) => { const j = (i + 1) % a.length; return [a[i]!, a[j]!, b[j]!, b[i]!]; });
+  return convex([foot, cap, ...band(foot, belly), ...band(belly, cap)]);
+}
+
+// A bush: two or three mounds leaning together, mostly green, now and then a dead brown one. Low enough (under
+// MAX_HEIGHT) that it is never mistaken for cover.
+const bush: Item = (r) => {
+  const paint = r() < 0.12 ? "#7A5A2E" : r() < 0.55 ? "darkMoss" : "moss";
+  const mounds: MeshData[] = [];
+  const count = 2 + Math.floor(r() * 2);
+  for (let i = 0; i < count; i++) {
+    const a = r() * Math.PI * 2, d = i === 0 ? 0 : between(r, 0.35, 0.6);
+    const size = i === 0 ? between(r, 0.55, 0.8) : between(r, 0.35, 0.55);
+    mounds.push(turn(mound(r, size, size * between(r, 0.85, 1.05)), [0, 0, 0], [0, 0, 0], [Math.cos(a) * d, -0.04, Math.sin(a) * d]));
+  }
+  return [{ paint, mesh: merge(...mounds) }];
+};
+
+// Weights out of 100. Most of it is grass, the junk is the seasoning, and bushes break up the open ground.
+const MIX: [Item, number][] = [[grass, 50], [bush, 8], [tyreFlat, 11], [tyreLeaning, 4], [pipe, 10], [plate, 12], [drum, 5]];
+
+// Woods get undergrowth: this share of trees (any box with a trunk-sized footprint standing taller than a mech) gets
+// a bush at its foot, a little way out from the trunk.
+const BUSH_BY_TREE = 0.35;
+const isTree = (b: DressBox) => b.max[0] - b.min[0] <= 1.2 && b.max[2] - b.min[2] <= 1.2 && b.max[1] - b.min[1] >= 8;
 
 function chooseItem(r: Rand): Item {
   let roll = r() * 100;
@@ -108,18 +141,28 @@ function drape(mesh: MeshData, groundAt: (x: number, z: number) => number): Mesh
 export const scatter: Scatter = (chunk, boxes, count) => {
   const r = rng(chunk.seed);
   const out: DressPiece[] = [];
-  for (let n = 0; n < count; n++) {
-    const pieces = chooseItem(r)(r);
+  // Drops an item at the first spot `spot` gives that fits, or nowhere after TRIES.
+  const drop = (pieces: DressPiece[], spot: () => [number, number]) => {
     const spin = r() * Math.PI * 2;
     for (let t = 0; t < TRIES; t++) {
-      const x = chunk.minX + r() * chunk.size, z = chunk.minZ + r() * chunk.size;
+      const [x, z] = spot();
       const placed = pieces.map((p) => ({ paint: p.paint, mesh: turn(p.mesh, [0, spin, 0], [0, 0, 0], [x, 0, z]) }));
       if (!fits(placed, chunk.minX, chunk.minZ, chunk.size, boxes)) continue;
       const { groundAt } = chunk;
       if (groundAt) for (const p of placed) drape(p.mesh, groundAt);
       out.push(...placed);
-      break;
+      return;
     }
+  };
+  const anywhere = (): [number, number] => [chunk.minX + r() * chunk.size, chunk.minZ + r() * chunk.size];
+  for (let n = 0; n < count; n++) drop(chooseItem(r)(r), anywhere);
+  for (const b of boxes) {
+    if (!isTree(b) || r() >= BUSH_BY_TREE) continue;
+    const x = (b.min[0] + b.max[0]) / 2, z = (b.min[2] + b.max[2]) / 2;
+    drop(bush(r), () => {
+      const a = r() * Math.PI * 2, d = between(r, 1.6, 3);
+      return [x + Math.cos(a) * d, z + Math.sin(a) * d];
+    });
   }
   return out;
 };

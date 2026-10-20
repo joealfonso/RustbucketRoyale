@@ -165,7 +165,8 @@ class PropInstances {
 // The breakable props. A type with a model in props/ is drawn as that model, turned a quarter or half turn by its id
 // so a field of crates is not all alike (never more, so it always stays inside its collision box), and breaks into
 // debris that stays where it stood. Far away a standing one is a plain box in its main colour (see FarBoxes); debris
-// stays debris at any distance. A type without a model is a plain toon box that disappears.
+// stays debris at any distance. A type without a model is a plain toon box that disappears. Scenery (trees) is left
+// to forest/treeView.ts.
 // Art hook: a real model per type replaces its builder in props/.
 export class PropView {
   readonly group = new THREE.Group();
@@ -184,6 +185,7 @@ export class PropView {
     byType.forEach((ids, type) => {
       if (ids.length === 0) return;
       const t = config.types[type]!;
+      if (t.scenery) return; // trees, drawn and felled by forest/treeView.ts
       const builder = builders[t.id];
       if (builder) {
         const model = builder(t.size, type);

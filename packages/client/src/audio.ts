@@ -8,7 +8,7 @@
 export type SoundName =
   | "shot" | "shotScattergun" | "shotSpikeDriver" | "impact" | "explosion" | "smash" | "hitMarker" | "hurt"
   | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap" | "loot" | "repair"
-  | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz" | "wade" | "splash";
+  | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz" | "wade" | "splash" | "treeFall" | "treeLand";
 
 export interface AudioConfig {
   master: number;
@@ -216,6 +216,21 @@ export class Sound {
         this.burst(into, 0.9, "lowpass", 700 * p, 0.35, 0.06, 0.1);
         this.glide(into, 260 * p, 470 * p, 0.07, "sine", 0.1, 0.25);
         return this.glide(into, 310 * p, 520 * p, 0.06, "sine", 0.07, 0.4) + 0.5;
+      // A tree giving way: the trunk cracking, then a long low groan as it leans, with a splinter snapping now and
+      // then. The crash is "treeLand", played where it comes down. All low, so it sounds big rather than squeaky.
+      case "treeFall":
+        this.crunch(into, 0.12, "bandpass", 900 * p, 1.1, 0.001);
+        this.body(into, 130 * p, 60 * p, 0.2, 0.7);
+        this.creak(into, 120 * p, 78 * p, 1.3, 0.5, 0.08);
+        this.crunch(into, 0.08, "bandpass", 1300 * p, 0.6, 0.002, 0.5);
+        return this.crunch(into, 0.1, "bandpass", 700 * p, 0.7, 0.002, 1.05) + 0.1;
+      // A tree hitting the ground: a deep whump you feel, branches crunching, needles hissing and a rolling rumble.
+      case "treeLand":
+        this.body(into, 78 * p, 26 * p, 0.85, 1.4, 0.004);
+        this.body(into, 170 * p, 70 * p, 0.3, 0.6, 0.004);
+        this.crunch(into, 0.45, "lowpass", 1500 * p, 1.1, 0.004);
+        this.burst(into, 0.7, "bandpass", 2400 * p, 0.18, 0.02, 0.05);
+        return this.burst(into, 1.4, "lowpass", 320 * p, 0.8, 0.03);
       case "grenadeThrow": this.clank(into, 640, 0.05, 0.15); return this.sweep(into, 1300, 500, 0.2, 0.6);
       case "countdown": return this.tone(into, 660, 0.14, "sine", 0.6);
       case "go": this.tone(into, 990, 0.4, "sine", 0.6); return this.tone(into, 495, 0.4, "triangle", 0.3);
@@ -250,11 +265,34 @@ export class Sound {
   }
 
   // Filtered noise driven through the grit curve: gunpowder crack, gravel, a crunching blast.
-  private crunch(into: AudioNode, seconds: number, type: BiquadFilterType, frequency: number, level: number, attack = 0.002): number {
+  private crunch(into: AudioNode, seconds: number, type: BiquadFilterType, frequency: number, level: number, attack = 0.002, d = 0): number {
     const shaper = new WaveShaperNode(this.ctx!, { curve: this.grit! });
     const quiet = new GainNode(this.ctx!, { gain: 0.5 }); // the curve is loud; this keeps the layers in balance
     shaper.connect(quiet).connect(into);
-    return this.burst(shaper, seconds, type, frequency, level, attack);
+    return this.burst(shaper, seconds, type, frequency, level, attack, d);
+  }
+
+  // Wood under strain: a buzzing low tone sliding down, stuttering (a fast wobble in its loudness, the grain
+  // catching and slipping), roughened and kept in the low mids.
+  private creak(into: AudioNode, from: number, to: number, seconds: number, level: number, d = 0): number {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + d;
+    const osc = new OscillatorNode(ctx, { type: "sawtooth", frequency: from });
+    osc.frequency.setValueAtTime(from, t);
+    osc.frequency.exponentialRampToValueAtTime(to, t + seconds);
+    const filter = new BiquadFilterNode(ctx, { type: "bandpass", frequency: 420, Q: 2.5 });
+    const shaper = new WaveShaperNode(ctx, { curve: this.grit! });
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(level, t + seconds * 0.3);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    const stutter = new GainNode(ctx, { gain: 0.6 });
+    const wobble = new OscillatorNode(ctx, { type: "square", frequency: 13 });
+    const depth = new GainNode(ctx, { gain: 0.4 });
+    wobble.connect(depth).connect(stutter.gain);
+    osc.connect(filter).connect(shaper).connect(stutter).connect(env).connect(into);
+    for (const o of [osc, wobble]) { o.start(t); o.stop(t + seconds + 0.02); }
+    return seconds + d;
   }
 
   // An engine: a buzzing low tone sliding up, darkened and roughened.

@@ -148,6 +148,16 @@
       "volume": 0.75,
       "echo": 0.3,
       "file": null
+    },
+    "treeFall": {
+      "volume": 0.7,
+      "echo": 0.35,
+      "file": null
+    },
+    "treeLand": {
+      "volume": 0.95,
+      "echo": 0.55,
+      "file": null
     }
   }
 }

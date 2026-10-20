@@ -39,7 +39,8 @@ function problems(pieces: DressPiece[], size: [number, number, number]): string[
 const topOf = (pieces: DressPiece[]) => Math.max(...pieces.flatMap((p) => p.mesh.positions.filter((_, i) => i % 3 === 1)));
 
 describe("prop models", () => {
-  for (const type of propsJson.types) {
+  // Scenery (the pines) has its own model and tests in forest/.
+  for (const type of propsJson.types.filter((t) => !("scenery" in t && t.scenery))) {
     const size = type.size as [number, number, number];
     describe(type.id, () => {
       const build = PROP_MODELS[type.id]!;

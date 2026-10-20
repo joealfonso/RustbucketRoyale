@@ -49,6 +49,10 @@ import { Input } from "./input";
 import { ClientGrenades } from "./grenades";
 import { buildPlayMap, propConfig } from "./loadMap";
 import { PropView } from "./propView";
+import { TreeView } from "./forest/treeView";
+import { FallHints } from "./forest/fallHints";
+import { parseForest } from "./forest/config";
+import forestJson from "../../../data/forest.json";
 import { PickupView } from "./pickupView";
 import { setMechGear } from "./mechModel";
 import { Hud } from "./hud";
@@ -78,6 +82,7 @@ import { EdgeBarrier } from "./dressing/edgeBarrier";
 import { parseBarrier } from "./dressing/edgeLayout";
 import { Backdrop } from "./backdrop/backdrop";
 import { parseBackdrop } from "./backdrop/layout";
+import { Ranges, parseRanges } from "./backdrop/ranges";
 import chunksJsonForDressing from "../../../data/chunks.json";
 import { createMechModel, legsLimping, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
 import { NetClient, type Session } from "./net";
@@ -234,7 +239,26 @@ const backdropConfig = parseBackdrop(backdropJson.backdrop);
 let edgeBarrier = new EdgeBarrier(scene, toon, map, mapMeshes, barrierConfig);
 const makeBackdrop = () => (map.tier === "range" ? null : new Backdrop(scene, toon, map.meters, tiersJson.edgeWallThickness, backdropConfig));
 let backdrop = makeBackdrop();
+// Mountains on the horizon beyond all of it, travelling with the camera; not round the range, which has no backdrop.
+const ranges = new Ranges(parseRanges(backdropJson.ranges), toon.bands, toon.hazeColor, (c) => toon.color(c));
+scene.add(ranges.mesh);
+ranges.mesh.visible = map.tier !== "range";
 let propView = new PropView(map, propConfig, toon, PROP_MODELS);
+// The woods (data/forest.json): the pines are props, but drawn and felled here.
+const forestConfig = parseForest(forestJson);
+const makeTrees = () => {
+  const view = new TreeView(map, propConfig, toon, forestConfig);
+  view.onLand = (x, y, z) => {
+    breakFx.burst("pineCrown", x, y, z, groundBelow(x, y, z));
+    treeAt.x = x; treeAt.y = y; treeAt.z = z;
+    sound.play("treeLand", treeAt);
+  };
+  scene.add(view.group);
+  return view;
+};
+// What shots and blasts were seen last, so a tree falls away from what hit it.
+const fallHints = new FallHints(forestConfig.fall.hintSeconds, forestConfig.fall.hintShotMeters);
+const treeAt = { x: 0, y: 0, z: 0 };
 // Effects (V5a): shared sprite and chunk pools, sized for the most generous quality level in data/vfx.json and
 // capped by the active one; explosions, jets and prop breaks draw from them.
 const explosionFx = parseExplosionFx(explosionFxJson);
@@ -247,6 +271,7 @@ const thrusters = new Thrusters(fxSprites, parseThrusterFx(thrusterFxJson));
 const splashes = new Splashes(fxSprites.water, waterLook.splashes);
 const breakFx = new BreakFx(chunks, fxSprites, parsePropFx(propFxJson), (c) => toon.color(c));
 scene.add(propView.group);
+let treeView = makeTrees();
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
 // Soft dark patches under map boxes and mechs, so nothing floats over the ground (data/ground.json shadows).
 const shadowLook = parseShadowLook(groundJson.shadows);
@@ -455,6 +480,8 @@ function swapMap(newSeed: number, newTier: string): void {
   mapMeshes.dispose();
   scene.remove(propView.group);
   propView.dispose();
+  scene.remove(treeView.group);
+  treeView.dispose();
   map = buildPlayMap(newTier, newSeed, mechStats);
   toon.useLight(toon.presetFor(newSeed, forcedLook));
   mapMeshes = new MapMeshes(scene, map, toon);
@@ -472,9 +499,11 @@ function swapMap(newSeed: number, newTier: string): void {
     backdrop?.dispose();
     backdrop = makeBackdrop();
   }
+  ranges.mesh.visible = map.tier !== "range";
   propView = new PropView(map, propConfig, toon, PROP_MODELS);
   contactShadows.setMap(map.boxes, map.world);
   scene.add(propView.group);
+  treeView = makeTrees();
   pickupView.clear();
   predictor.setWorld(map.world);
 }
@@ -541,6 +570,7 @@ if (net) {
     if (s.id === net.id) return; // our own shot already played the moment we fired
     const weapon = remotes.weaponOf(s.id);
     shotFx.show(s, weapon, s.hitMech);
+    fallHints.shot(performance.now() / 1000, s.ox, s.oz, s.dx, s.dz, s.length);
     const now = performance.now();
     if (now - (lastShotSound.get(s.id) ?? -Infinity) < 40) return;
     lastShotSound.set(s.id, now);
@@ -570,18 +600,7 @@ if (net) {
     else if (a.kind === "decoy") { if (own) showOwnDecoys(a.ids ?? []); }
     else if (!own) showAbilityStart(a.kind, a.x, a.y, a.z);
   };
-  // A destroyed prop leaves the world here too, so walking where it stood matches the server.
-  net.onPropDestroyed = (id) => {
-    const prop = map.props[id];
-    if (!prop || map.world.isDisabled(prop.boxIndex)) return;
-    map.world.disable(prop.boxIndex);
-    contactShadows.hideBox(prop.boxIndex);
-    propView.destroy(id);
-    const type = propConfig.types[prop.type]!;
-    breakFx.burst(type.id, prop.x, prop.y, prop.z, groundBelow(prop.x, prop.y, prop.z));
-    if (type.explodes) blastSizes.barrel(prop.x, prop.z, performance.now() / 1000, BARREL_MEMORY_SECONDS);
-    sound.play("smash", { x: prop.x, y: prop.y, z: prop.z });
-  };
+  net.onPropDestroyed = propDestroyed;
   net.onRoom = (r) => {
     const wasCountdown = progress.state === "countdown";
     hostId = r.hostId;
@@ -668,9 +687,33 @@ function groundBelow(x: number, y: number, z: number): number {
   return map.world.raycast(x, from, z, 0, -1, 0, reach, groundHit) ? from - groundHit.distance : map.terrain?.heightAt(x, z) ?? 0;
 }
 
+// A destroyed prop leaves the world here too, so walking where it stood matches the server.
+function propDestroyed(id: number, quiet: boolean): void {
+  const prop = map.props[id];
+  if (!prop || map.world.isDisabled(prop.boxIndex)) return;
+  map.world.disable(prop.boxIndex);
+  contactShadows.hideBox(prop.boxIndex);
+  // A tree comes down with a creak, chips flying from the stump; the crash and needles come when it lands.
+  if (treeView.has(id)) {
+    treeView.fell(id, fallHints.directionFor(performance.now() / 1000, prop.x, prop.z), quiet);
+    if (quiet) return;
+    const floor = groundBelow(prop.x, prop.y, prop.z);
+    breakFx.burst("pine", prop.x, floor + forestConfig.pine.stump.heightMeters, prop.z, floor);
+    sound.play("treeFall", { x: prop.x, y: floor + 2, z: prop.z });
+    return;
+  }
+  propView.destroy(id);
+  const type = propConfig.types[prop.type]!;
+  breakFx.burst(type.id, prop.x, prop.y, prop.z, groundBelow(prop.x, prop.y, prop.z));
+  if (type.explodes) blastSizes.barrel(prop.x, prop.z, performance.now() / 1000, BARREL_MEMORY_SECONDS);
+  sound.play("smash", { x: prop.x, y: prop.y, z: prop.z });
+}
+
 function showBlast(x: number, y: number, z: number): void {
   grenades.removeNear(x, y, z);
-  explosions.blast(x, y, z, blastSizes.radiusAt(x, z, performance.now() / 1000), groundBelow(x, y, z));
+  const radius = blastSizes.radiusAt(x, z, performance.now() / 1000);
+  fallHints.blast(performance.now() / 1000, x, z, radius);
+  explosions.blast(x, y, z, radius, groundBelow(x, y, z));
   sound.play("explosion", { x, y, z });
   shakeNear(x, y, z, grenadeStats.shakeRadius, grenadeStats.shakeForce);
 }
@@ -833,6 +876,7 @@ function frame(now: number): void {
       for (let i = 0; i < weapon.pellets; i++) {
         computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weapon, Math.random, shot, armsBroken() ? zoneSet.brokenArmsSpreadMultiplier : 1, muzzle);
         shotFx.show(shot, weaponSet.weapons.indexOf(weapon));
+        fallHints.shot(performance.now() / 1000, shot.ox, shot.oz, shot.dx, shot.dz, shot.length);
       }
       sound.play(sound.shotFor(weapon.id), { x: shot.ox, y: shot.oy, z: shot.oz });
       rig.addShake(weapon.shakeForce);
@@ -926,8 +970,11 @@ function frame(now: number): void {
     rig.camera.lookAt(0, 0, 0);
   }
   edgeBarrier.update(rig.camera.position);
+  ranges.follow(rig.camera.position);
   terrainMeshes?.update(rig.camera.position);
   propView.cull(rig.camera);
+  treeView.update(frameTime);
+  treeView.cull(rig.camera, viewX, viewY + cameraStats.pivotHeight, viewZ);
 
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;
   staminaFill.style.width = `${mech.stamina.fraction * 100}%`;

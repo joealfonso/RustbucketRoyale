@@ -16,8 +16,8 @@ const rings: { y: [number, number]; reach: [number, number] }[] = [
 
 const lerp = (r: () => number, [a, b]: [number, number]) => a + (b - a) * r();
 
-// One boulder over the footprint x0..x1 by z0..z1, standing on y = 0, h tall.
-function boulder(r: () => number, x0: number, x1: number, z0: number, z1: number, h: number): MeshData {
+// One boulder over the footprint x0..x1 by z0..z1, standing on y = 0, h tall. Also the stone of boulder.ts.
+export function boulder(r: () => number, x0: number, x1: number, z0: number, z1: number, h: number): MeshData {
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, ax = (x1 - x0) / 2, az = (z1 - z0) / 2;
   const c = Math.min(ax, az) * lerp(r, [0.3, 0.45]); // the corner chamfer that makes the footprint an octagon
   const octagon: [number, number][] = [[-ax + c, -az], [ax - c, -az], [ax, -az + c], [ax, az - c], [ax - c, az], [-ax + c, az], [-ax, az - c], [-ax, -az + c]];

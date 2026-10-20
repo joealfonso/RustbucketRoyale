@@ -8,6 +8,8 @@
   "colors": {
     "crate": ["rustOrange", "sparkYellow", "deepRust"],
     "junk": ["scrapSteel", "rustOrange", "soot"],
-    "barrel": ["sparkYellow", "soot"]
+    "barrel": ["sparkYellow", "soot"],
+    "pine": ["#5C3B24", "#B98D5A", "darkMoss"],
+    "pineCrown": ["darkMoss", "#33482B", "#46633A", "#5C3B24"]
   }
 }

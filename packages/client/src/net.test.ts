@@ -26,9 +26,10 @@ describe("a page reloaded mid match", () => {
     let state = "";
     host.onRoom = (r) => { state = r.state; };
     const sessions: Session[] = [];
+    await host.welcome; // first in is the room's host, the only one whose start counts
     const guest = new NetClient(url("room=RLDA"));
     guest.onSession = (s) => sessions.push(s);
-    await Promise.all([host.welcome, guest.welcome]);
+    await guest.welcome;
     host.sendStart();
     expect(await until(() => state === "active")).toBe(true);
     return { url, host, guest, session: sessions.at(-1)! };

@@ -395,3 +395,6 @@ Map build (generateMap, median / worst ms, 10 seeds): small 5-6 / 7, medium 55-5
 ### Water (2026-10-19, M11 11b)
 Seed 11 spawn views, renderer.info: medium 115 -> 116 draw calls, 422k -> 434k triangles; large 117 -> 118, 790k -> 834k. The water mesh is one draw call for the whole map; the splash pool draws nothing while empty. Soak with water: small 24 kbps, medium 21, large 17, tick p99 0.15 to 0.26 ms, worst correction 0.01 cm.
 
+### Forests (2026-10-19, M11 11c)
+renderer.info at 1024x768, before -> after: medium seed 11 spawn 120 / 463k -> 130 / 473k (draw calls / triangles), overview 106 / 532k -> 108 / 566k; large seed 2 (5,610 trees) spawn 125 / 966k -> 135 / 934k, overview 91 / 976k -> 97 / 1,064k; inside a medium wood 134 / 420k. Tree culling about 0.18 ms CPU a frame on large. Server: blast prop lookups on large from 134 us (all 10,844 props) to 0.3 us (the world grid); measure-rooms medium 40 rooms 1.78 / 4.68 ms mean / p99 a tick (steering adds about 10 to 25% on medium), large 20 rooms 0.93 / 6.74; large map unpack 3.6 ms on the main thread (was 2.4). Soak: small 25 kbps, medium 22, large 18, worst correction 0.01 cm. Frame time on Joseph's laptop not measured yet.
+

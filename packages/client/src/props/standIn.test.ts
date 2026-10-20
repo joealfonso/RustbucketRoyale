@@ -47,7 +47,8 @@ describe("far stand-in", () => {
     expect(max[0]).toBeGreaterThan(0.5); // stands out past the body, so it never shares its pixels
   });
 
-  for (const type of propsJson.types) {
+  // Scenery (the pines) has its own model and tests in forest/.
+  for (const type of propsJson.types.filter((t) => !("scenery" in t && t.scenery))) {
     it(`fits inside the ${type.id}'s box in one of its paints`, () => {
       const size = type.size as [number, number, number];
       const { intact } = PROP_MODELS[type.id]!(size, 1);
