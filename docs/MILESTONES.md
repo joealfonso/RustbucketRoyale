@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none in progress (M11 done; M10's friend test still open)
-Current visual milestone: V4, V5a and V6 passed. Nothing in progress
+Current visual milestone: V7 (quality pass), V7a and V7b in progress
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -25,6 +25,7 @@ Update the two lines above when a gate passes. Claude Code reads this file first
 - V4 HUD and radar.
 - V5 VFX pass.
 - V6 lighting, fog, and perf pass.
+- V7 quality pass, on Joseph's call ("improve the quality of the lighting, models, textures, mech, and environment"; richer toon, not painterly): V7a lighting (real toon sun shadows near range, baked ambient occlusion, sky and ground bounce, presets retuned), V7b textures (a script-generated painted 2048 atlas: brush strokes, seams, rivets, rust streaks, grime; a close-range ground detail texture), V7c mechs (detail pass on each roster mech's build script within 10k triangles), V7d environment (dense near ground cover, junk and building variety, a less repetitive edge wall). Gates: screenshots at 10, 50 and 150 m, and 60 fps on Joseph's laptop.
 
 ## Gate log
 Record each gate here: date, what was played, who played, what felt bad.
@@ -138,4 +139,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-19: Gate 11c built, waiting for Joseph's playtest. Woods of breakable toon pines grow in clumps on dry open hillsides from the seed (a handful to 80 on small, about 1,100 on medium, 4,500 to 5,600 on large), each a 1 m trunk that blocks shots and movement, with simpler far trees past 140 m; shoot, blast, ram (Ironclad ploughs through) or pounce one and it topples the way it was hit with a creak and a thump, throws needles and chips, lies a few seconds and sinks away, leaving a stump. Crowns between the camera and your mech fade to a stipple so woods never blind you. Boulders sit half-sunk on slopes as solid cover; low bushes scatter round trees and on open ground; three layered rings of faceted toon mountains stand on the horizon in every direction. Bots step round trunks, boulders and crates on their own (stuck time beside trunks down by about two thirds; settings in data/bots.json path.steer*). A grenade at a tree's foot now counts in full (about three to fell one). Check: fight in a wood, shoot a tree onto someone, ram through a row of pines, look at the horizon, and read F1 Performance on large on your laptop. Known: boulders past 120 m still draw as plain grey cubes.
 - 2026-10-19: Gate 11c passed by Joseph's playtest ("11c passes"). M11 is done: hills you fight on, water that slows and hides, breakable pine woods, boulders and mountains. Open from it: far boulders draw as plain cubes past 120 m; an Ironclad ramming through trees gets small prediction corrections until the client predicts the smash; bots standing still for minutes at the end of a short route (an older bug, proposed as its own session).
 - 2026-10-19: M11 loose ends fixed on Joseph's call. Far boulders draw as faceted stones instead of grey cubes (2 draw calls for all of them). An Ironclad's own client now predicts its ram smashing trees with the same shared rule as the server (propsInReach), so a charge through a wood no longer snaps back at each trunk (test: within 5 cm of the server instead of stuck over 1 m back). Bots no longer stand for minutes at the end of routes that stop short, or on loot they cannot take (merged from its own session; knockouts a minute small 4.6 to 5.3, medium 4.6 to 5.8). Tests: default timeout 20 s and a loose clock for the in-suite soak, because a busy laptop timed out tests that were only slow; `npm run soak` keeps the 8 ms budget.
+- 2026-10-19: V7 started on Joseph's go: richer toon, all four gates in order. V7a (lighting) and V7b (textures) run as two agents in parallel; the lighting agent owns the master toon material, the textures agent builds its atlas and shader piece apart and wires it in after.
 
