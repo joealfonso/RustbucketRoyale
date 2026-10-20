@@ -67,6 +67,11 @@ export class Bot {
   private steered = { x: 0, z: 0 };
   private healthMark = Infinity;
   private hurtFor = 0; // seconds left of feeling under fire since the last hit
+  private dodgeFor = 0; // seconds left of getting out from under a Rail Shot laser
+  private dodgeX = 0;
+  private dodgeZ = 0;
+  private dodgeDash = false; // dash once as the dodge starts
+  private laserSeen = -1; // the last laser this bot decided about, so it rolls once per laser, not every tick
   private hasLoot = false;
   private lootX = 0;
   private lootZ = 0;
@@ -211,6 +216,13 @@ export class Bot {
 
     if (this.abilityKind === "decoy" && this.abilities) this.dropDecoys(targetDistance, dt, out);
 
+    // Getting out from under a laser beats everything else it wanted to do.
+    this.dodgeFor -= dt;
+    if (this.dodgeFor > 0) {
+      wantX = this.dodgeX; wantZ = this.dodgeZ; run = true;
+      if (this.dodgeDash) { out.dash = true; this.dodgeDash = false; }
+    }
+
     // Routes go straight through woods, so whatever it wants, it steps round a trunk or crate right in front of it.
     if (this.body && (wantX !== 0 || wantZ !== 0)) {
       steerRound(world, self.x, self.y, self.z, wantX, wantZ, this.body, this.pathStats, this.steering, this.steered, steerWithin);
@@ -277,6 +289,18 @@ export class Bot {
     // perfect aim.
     out.fire = false;
     out.targetX = target.x; out.targetY = target.y; out.targetZ = target.z;
+  }
+
+  // A Longshot's laser is on this bot (the room checks each tick). Once per laser it decides whether it noticed; if so
+  // it dashes and runs off sideways, the way (sideX, sideZ) points, for the rest of the charge.
+  laserOn(laserId: number, sideX: number, sideZ: number, seconds: number): void {
+    if (laserId === this.laserSeen) return;
+    this.laserSeen = laserId;
+    if (!this.abilities || this.random() >= this.abilities.railDodgeChance) return;
+    this.dodgeFor = seconds;
+    this.dodgeX = sideX;
+    this.dodgeZ = sideZ;
+    this.dodgeDash = true;
   }
 
   // An Arbiter under fire, or with someone right on top of it, sends its decoys out to muddle them.

@@ -18,12 +18,14 @@ export interface BotAbilityStats {
   railChancePerSecond: number; // a Longshot with a target between the two ranges below starts a Rail Shot
   railMinRange: number;
   railMaxRange: number;
+  railDodgeChance: number; // share of the lasers aimed at it that a bot notices and runs from, 0 to 1
+  railLaserWidth: number; // metres either side of a laser's line that count as being under it
 }
 
 const KEYS: readonly (keyof BotAbilityStats)[] = [
   "ramChancePerSecond", "ramMaxAngleDegrees", "ramMinRange", "ramMaxRange", "pounceChancePerSecond", "pounceMinRange", "pounceMaxRange",
   "barrageChancePerSecond", "barrageMinRange", "barrageMaxRange", "decoyChancePerSecond", "decoyHurtSeconds", "decoyNearRange",
-  "railChancePerSecond", "railMinRange", "railMaxRange",
+  "railChancePerSecond", "railMinRange", "railMaxRange", "railDodgeChance", "railLaserWidth",
 ];
 
 // Fails loudly on a bad data file, same as the other tuning files.

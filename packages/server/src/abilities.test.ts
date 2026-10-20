@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  World, ZONE_ARMS, ZONE_TORSO, boxFromData, createMechInput, createMechState, type BarrageStats, type DecoyStats, type MechInput, type RailStats, type RamStats, type ServerMessage,
+  World, ZONE_ARMS, ZONE_TORSO, boxFromData, createMechInput, createMechState, stepMech, type BarrageStats, type DecoyStats, type MechInput, type RailStats, type RamStats, type ServerMessage,
 } from "@rustbucket/shared";
 import { Bot } from "./Bot";
 import { loadRoomConfig } from "./config";
@@ -167,6 +167,21 @@ describe("bots with abilities", () => {
     }
     return pressed ?? input;
   }
+
+  it("run sideways out from under a Rail Shot laser, dashing as they go, and decide once per laser", () => {
+    const bot = new Bot(stats, always, botsFile.bots.path, null, 2, botsFile.botAbilities);
+    const self = createMechState(botsFile.mech, 0, 0, 0, 0);
+    const input = createMechInput();
+    bot.laserOn(7, 1, 0, 1.2); // the laser runs along z; +x is away from it
+    bot.think(self, [], null, flat, 1 / 60, input);
+    expect(input.dash).toBe(true);
+    for (let i = 0; i < 60; i++) { bot.think(self, [], null, flat, 1 / 60, input); stepMech(self, input, botsFile.mech, 1 / 60, flat, null); }
+    expect(self.x).toBeGreaterThan(3);
+    const again = new Bot(stats, () => 0.99, botsFile.bots.path, null, 2, botsFile.botAbilities); // a roll that says no
+    again.laserOn(8, 1, 0, 1.2);
+    again.think(createMechState(botsFile.mech, 0, 0, 0, 0), [], null, flat, 1 / 60, input);
+    expect(input.dash).toBe(false);
+  });
 
   it("ram a target lined up in front, not one off to the side or too far", () => {
     const { botAbilities: b } = botsFile;

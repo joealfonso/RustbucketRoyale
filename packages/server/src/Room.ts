@@ -536,8 +536,31 @@ export class Room {
     }
     // Decoys look like any mech to a bot, so it chases and shoots them. Its own are not worth fooling itself with.
     for (const d of this.decoys) if (d.ownerId !== player.id) this.botTargets.push({ id: d.id, x: d.state.x, y: d.state.y, z: d.state.z });
+    this.warnOfLasers(player);
     bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, STEP, input);
     this.processInput(player, input);
+  }
+
+  // Tells a bot about any Rail Shot laser it stands under: a Longshot charging, the bot ahead of it within range and
+  // within railLaserWidth of the line it faces. The side to run to is away from that line.
+  private warnOfLasers(player: Player): void {
+    const width = this.config.botAbilities?.railLaserWidth ?? 0;
+    const me = player.state;
+    for (const other of this.players.values()) {
+      if (other === player || other.dead) continue;
+      const rail = this.abilityFor(other.state.mech);
+      if (rail?.kind !== "rail" || other.state.abilityTime <= 0) continue;
+      const s = other.state;
+      const fx = -Math.sin(s.bodyYaw), fz = -Math.cos(s.bodyYaw);
+      const rx = me.x - s.x, rz = me.z - s.z;
+      const along = rx * fx + rz * fz;
+      const across = rx * -fz + rz * fx; // positive to the laser's left
+      if (along <= 0 || along > rail.range || Math.abs(across) > width) continue;
+      const away = across >= 0 ? 1 : -1;
+      // One laser is one charge: the tick it started on, which stays put for the whole charge, tells charges apart.
+      const startTick = this.tickCount - Math.round((rail.chargeSeconds - s.abilityTime) / STEP);
+      player.bot!.laserOn(other.id * 1_000_000 + startTick, -fz * away, fx * away, s.abilityTime);
+    }
   }
 
   // With nobody to fight, a bot goes for the nearest thing worth having: a pickup it would take, or a full wreck.

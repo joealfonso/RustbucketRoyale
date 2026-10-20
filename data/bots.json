@@ -110,6 +110,8 @@
     "decoyNearRange": 15,
     "railChancePerSecond": 0.4,
     "railMinRange": 35,
-    "railMaxRange": 220
+    "railMaxRange": 220,
+    "railDodgeChance": 0.6,
+    "railLaserWidth": 3
   }
 }
