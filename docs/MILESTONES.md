@@ -1,7 +1,7 @@
 # Milestones
 
-Current code milestone: M13 (big moments), 13a built, waiting for Joseph's playtest; 12c waiting for his laptop numbers (M10's friend test still open)
-Current visual milestone: V8 (more complex geometry) built, waiting for Joseph's playtest
+Current code milestone: M14 (first minute), 14a in progress; 13b and 13c queued; 12c waiting for Joseph's laptop numbers (M10's friend test still open)
+Current visual milestone: none in progress (V8 done)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -154,3 +154,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-19: Queued, in this order: V8, then an optimization evaluation (measure client, server, network, download and map building against docs/PERF.md, fix what is over budget, propose anything that changes the look or play), then M14 (first minute). M13's 13b and 13c wait behind them; 14c's knockout card overlaps 13b's deaths worth watching and may fold into it.
 - 2026-10-19: V8 built, waiting for Joseph's playtest (gauntlet passed). Mechs, near level before to after: Ironclad 6,428 to 9,492, Stiletto 6,720 to 9,332, Cataclysm 6,764 to 9,352, Arbiter 6,382 to 9,434 (budget 10k; middle levels 2.7 to 2.9k, far unchanged); silhouettes and serials kept, hit boxes remeasured (Cataclysm's a few cm longer). Buildings: containers corrugated with castings and barred doors; sheet walls with I-section posts, girts, gutters, bracing, framed and broken windows, shutters; warehouses with rafters, purlins, skylights and cased columns; ruins as concrete frames with slabs, rebar and rubble; towers with sills, glazing and bracing; the edge wall with footings, knee braces, raised columns and props. Building budget now data (60 per m3, 4,500 a box); triangles in view about +10%, draw calls +7 to +9; a clean GPU number waits for the optimization pass (the agents' runs were too noisy). Chunk changes 33 to 2.7 ms, worst sprinting frame 69 to under 10 ms. Check: walk up to buildings and mechs; the Arbiter's dome now has a three-lens window that reads as a friendly face, its drone tethers glow teal in your own view, and the Cataclysm's tan toes may read as paws. Open: the hut roof is still a plain box (it is a plain kind in chunks.json).
 - 2026-10-19: Optimization evaluation done (docs/PERF.md). Everything inside budget except garbage made in the frame loop: fixed (shader programs re-decided 9 times a frame, now 0; garbage down 40%; GPU unchanged). Server EPIPE crash on closed log output fixed. Not measured: Joseph's laptop (F1 > Performance > Measure feature costs). M14 waits for Joseph's playtest of 12c, 13a and V8.
+- 2026-10-20: Gates 13a (supply drops) and V8 (more complex geometry) passed by Joseph's playtest ("13a and V8 pass"). M14 started on his go, 14a (one-click Play) first.

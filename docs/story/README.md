@@ -271,6 +271,20 @@ Four gates in one playtest, built by agents working side by side. The sun now th
 
 The mechs had been slowed twice, and Joseph wanted speed to come back as something you find. Turbo Legs is a fifth upgrade: a green booster bolted across the small of the back, and 20% faster walking and running. Your own client predicts it with the same rule as the server, so the extra speed never snaps you back. The same gate made health scarcer: armor plates drop half as often, and crates went from half the props to a third.
 
+## 37. Supply drops
+*Passed 2026-10-20. Commit `ffe0448`.*
+
+![A small match seen over a Stiletto's shoulder, the supply drop's yellow diamond on the radar in the corner while the crate is in the air](37-13a-supply-drops.jpg)
+
+The first gate of "big moments", after Joseph asked for more ambitious steps. Twice a match a burning crate of the best loot comes down inside the ring: twenty seconds of warning on the radar and a yellow beam over the spot, a landing that flattens crates and anyone careless, five sealed seconds of standoff, then the lid blows and two upgrades, a weapon and armor spill out. Bots race for it too. The same gate made the yard sound less like a tin can and gave bullets an impact you can hear.
+
+## 38. More complex geometry
+*Passed 2026-10-20. Commits `729c4a2`, `62186ed`.*
+
+![A shipping container's doors before (plain box) and after (corrugation, corner castings, locking bars and hinges)](38-v8-more-complex-geometry.jpg)
+
+Five agents at once: one per roster mech, each filling its mech toward the 10,000 triangle budget with layered armour, pistons, cables and properly modelled weapons, and one giving the buildings real structure, from corrugated containers with barred doors to warehouses with rafters, ruins with rebar and an edge wall with braces. Building it also found and fixed a hitch: walking into a new part of the map had cost 33 ms, now under 3.
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
