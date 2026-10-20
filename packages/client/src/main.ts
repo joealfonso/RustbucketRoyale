@@ -312,7 +312,8 @@ const markDrop = (x: number, z: number): void => radar?.markDrop(x, z);
 // The Longshot's Rail Shot: lasers while charging, a beam when it fires (railFx.ts). Its range is the longest any
 // roster mech's rail reaches, so a laser is never drawn shorter than the shot.
 const railRange = Math.max(0, ...Object.values(abilitySet.mechs).map((a) => (a.kind === "rail" ? a.range : 0)));
-const railFx = new RailFx(toon.color("warningRed"), toon.color("warmLight"), railRange);
+const railMuzzle = ((mechKitsJson as { kits: Record<string, { muzzles?: number[][] }> }).kits.longshot?.muzzles?.[0] ?? [0.9, 2.6, -3]);
+const railFx = new RailFx(toon.color("warningRed"), toon.color("warmLight"), railRange, railMuzzle);
 scene.add(railFx.group);
 const railPose: RailPose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
 const railFrom = { x: 0, y: 0, z: 0 };
@@ -692,7 +693,7 @@ if (net) {
         sound.play("railCharge", { x: a.x, y: a.y + 2, z: a.z });
       } else if (a.event === "hit") {
         if (!railPoseOf(a.id, railPose)) { railPose.x = a.x; railPose.y = a.y; railPose.z = a.z; }
-        railFrom.x = railPose.x; railFrom.y = railPose.y; railFrom.z = railPose.z;
+        railFx.muzzleAt(railPose, railFrom);
         railFx.fire(a.id, railFrom, a.x, a.y, a.z, performance.now());
         sound.play("railShot", { x: railFrom.x, y: railFrom.y + 2, z: railFrom.z });
         showAbilityHit(a.x, a.y, a.z);

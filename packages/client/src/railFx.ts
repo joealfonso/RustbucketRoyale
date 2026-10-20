@@ -8,8 +8,6 @@ import { createRayHit, type World } from "@rustbucket/shared";
 
 const LASERS = 6;
 const BEAM_SECONDS = 0.25;
-const GUN_HEIGHT = 2.5; // metres above the feet: the stand-in's gun arm; the real model's muzzle replaces it in 15c
-const GUN_SIDE = 1.2; // metres right of the middle
 
 interface Laser { mesh: THREE.Mesh; glint: THREE.Mesh; ownerId: number; until: number }
 interface Beam { mesh: THREE.Mesh; until: number }
@@ -27,7 +25,8 @@ export class RailFx {
   private from = new THREE.Vector3();
   private dir = new THREE.Vector3();
 
-  constructor(laserColor: string, beamColor: string, private range: number) {
+  // `muzzle`: where the rifle's muzzle is in the mech's own frame (data/mechKits.json, facing -z, +x right).
+  constructor(laserColor: string, beamColor: string, private range: number, private muzzle: readonly number[]) {
     const laserMaterial = new THREE.MeshBasicMaterial({ color: laserColor, transparent: true, opacity: 0.85, depthWrite: false, fog: false });
     for (let i = 0; i < LASERS; i++) {
       const mesh = new THREE.Mesh(unitLine, laserMaterial);
@@ -54,7 +53,7 @@ export class RailFx {
     for (const l of this.lasers) if (l.ownerId === ownerId) { l.until = 0; l.mesh.visible = l.glint.visible = false; }
     const beam = this.beams.find((b) => b.until <= nowMs) ?? this.beams[0]!;
     beam.until = nowMs + BEAM_SECONDS * 1000;
-    this.place(beam.mesh, from.x, from.y + GUN_HEIGHT, from.z, toX, toY, toZ, 0.18);
+    this.place(beam.mesh, from.x, from.y, from.z, toX, toY, toZ, 0.18);
     beam.mesh.visible = true;
   }
 
@@ -67,7 +66,7 @@ export class RailFx {
       const cos = Math.cos(out.pitch);
       this.dir.set(-Math.sin(out.yaw) * cos, Math.sin(out.pitch), -Math.cos(out.yaw) * cos);
       // The gun sits to the right of the middle: right is forward turned a quarter clockwise, seen from above.
-      this.from.set(out.x - Math.cos(out.yaw) * GUN_SIDE, out.y + GUN_HEIGHT, out.z + Math.sin(out.yaw) * GUN_SIDE);
+      this.muzzleAt(out, this.from);
       const length = world.raycast(this.from.x, this.from.y, this.from.z, this.dir.x, this.dir.y, this.dir.z, this.range, this.hit) ? this.hit.distance : this.range;
       this.place(l.mesh, this.from.x, this.from.y, this.from.z, this.from.x + this.dir.x * length, this.from.y + this.dir.y * length, this.from.z + this.dir.z * length, 0.05);
       // The glint throbs in two hard steps, so it reads as a lens catching the light, not as a lamp.
@@ -80,6 +79,15 @@ export class RailFx {
       if (left <= 0) { b.mesh.visible = false; continue; }
       (b.mesh.material as THREE.MeshBasicMaterial).opacity = left;
     }
+  }
+
+  // The muzzle in the world for a mech standing at `pose`: its own-frame point turned by the yaw.
+  muzzleAt(pose: RailPose, out: { x: number; y: number; z: number }): void {
+    const [mx, my, mz] = this.muzzle as [number, number, number];
+    const c = Math.cos(pose.yaw), s = Math.sin(pose.yaw);
+    out.x = pose.x + mx * c + mz * s;
+    out.y = pose.y + my;
+    out.z = pose.z - mx * s + mz * c;
   }
 
   // Stretches the unit line from one point to another, `width` metres thick.

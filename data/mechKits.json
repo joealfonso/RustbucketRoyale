@@ -1904,135 +1904,351 @@
       ]
     },
     "longshot": {
-      "file": "models/mechs/standin-one/Mech_StandinOne.glb",
+      "file": "models/mechs/longshot/Mech_Longshot.glb",
+      "scheme": {
+        "slate": "#4B4660",
+        "bone": "#D9CFB4",
+        "frame": "#1C2023",
+        "lensGlow": "#FF4D3D"
+      },
       "parts": {
         "Torso": {
           "zone": "torso",
-          "paint": "body"
+          "paint": "slate"
         },
-        "Jets": {
+        "Torso_Camo": {
           "zone": "torso",
-          "paint": "trim"
+          "paint": "bone"
+        },
+        "Frame": {
+          "zone": "torso",
+          "paint": "frame",
+          "rusts": false
         },
         "Sensor": {
           "zone": "torso",
-          "paint": "trim"
+          "paint": "slate"
+        },
+        "Rangefinder": {
+          "zone": "torso",
+          "paint": "bone"
+        },
+        "Sensor_Glow": {
+          "zone": "torso",
+          "paint": "lensGlow",
+          "glow": true
+        },
+        "Pack": {
+          "zone": "torso",
+          "paint": "slate"
+        },
+        "Ballast": {
+          "zone": "torso",
+          "paint": "bone"
+        },
+        "Jets": {
+          "zone": "torso",
+          "paint": "frame",
+          "rusts": false
         },
         "Leg_L": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "slate"
         },
         "Leg_R": {
           "zone": "legs",
-          "paint": "body"
+          "paint": "slate"
+        },
+        "Leg_Camo": {
+          "zone": "legs",
+          "paint": "bone"
+        },
+        "Leg_Frame": {
+          "zone": "legs",
+          "paint": "frame",
+          "rusts": false
         },
         "Arm_L": {
           "zone": "arms",
-          "paint": "accent"
+          "paint": "slate"
         },
         "Arm_R": {
           "zone": "arms",
-          "paint": "accent"
+          "paint": "slate"
+        },
+        "Arm_Camo": {
+          "zone": "arms",
+          "paint": "bone",
+          "noHit": true
+        },
+        "Arm_Frame": {
+          "zone": "arms",
+          "paint": "frame",
+          "rusts": false,
+          "noHit": true
+        },
+        "Arm_Band": {
+          "zone": "arms",
+          "paint": "accent",
+          "noHit": true
+        },
+        "Rifle": {
+          "zone": "arms",
+          "paint": "bone"
+        },
+        "Rifle_Rails": {
+          "zone": "arms",
+          "paint": "frame",
+          "rusts": false
+        },
+        "Rifle_Frame": {
+          "zone": "arms",
+          "paint": "frame",
+          "rusts": false,
+          "noHit": true
+        },
+        "Rifle_Weapon": {
+          "zone": "arms",
+          "paint": "weapon",
+          "noHit": true
+        },
+        "Rifle_Glow": {
+          "zone": "arms",
+          "paint": "lensGlow",
+          "glow": true,
+          "noHit": true
         }
       },
       "hitboxes": {
         "legs": [
           {
             "center": [
-              -0.6,
-              0.8,
-              0
+              -0.35,
+              1.07,
+              -0.17
             ],
             "size": [
-              0.6,
-              1.6,
+              0.29,
+              2.07,
               0.7
             ]
           },
           {
             "center": [
-              0.6,
-              0.8,
-              0
+              0.35,
+              1.07,
+              -0.17
             ],
             "size": [
-              0.6,
-              1.6,
+              0.29,
+              2.07,
               0.7
+            ]
+          },
+          {
+            "center": [
+              0.01,
+              1.23,
+              -0.16
+            ],
+            "size": [
+              0.89,
+              1.47,
+              0.22
+            ]
+          },
+          {
+            "center": [
+              0,
+              1.08,
+              -0.1
+            ],
+            "size": [
+              1.08,
+              2.17,
+              0.82
             ]
           }
         ],
         "arms": [
           {
             "center": [
-              -1.2,
-              2.4,
-              0
+              -0.15,
+              2.86,
+              -0.38
             ],
             "size": [
-              0.5,
-              1.2,
-              0.5
+              1.46,
+              0.96,
+              1.32
             ]
           },
           {
             "center": [
-              1.2,
-              2.4,
-              -0.6
+              0.73,
+              2.72,
+              -0.01
             ],
             "size": [
-              0.5,
-              0.6,
-              1.6
+              0.39,
+              0.71,
+              0.61
+            ]
+          },
+          {
+            "center": [
+              0.88,
+              2.71,
+              -1.35
+            ],
+            "size": [
+              0.19,
+              0.53,
+              3.58
+            ]
+          },
+          {
+            "center": [
+              0.88,
+              2.64,
+              -2.02
+            ],
+            "size": [
+              0.2,
+              0.3,
+              1.95
             ]
           }
         ],
         "torso": [
           {
             "center": [
-              0,
-              2.4,
-              0
+              -0.03,
+              2.62,
+              -0.05
             ],
             "size": [
-              1.8,
-              1.6,
-              1.2
+              0.83,
+              1.52,
+              0.62
+            ]
+          },
+          {
+            "center": [
+              0.04,
+              2.73,
+              -0.01
+            ],
+            "size": [
+              0.82,
+              1.3,
+              0.59
             ]
           },
           {
             "center": [
               0,
-              2.6,
-              0.8
+              2.85,
+              -0.11
             ],
             "size": [
-              1,
-              1,
+              1.15,
+              1.96,
+              0.73
+            ]
+          },
+          {
+            "center": [
+              0,
+              3.64,
+              -0.04
+            ],
+            "size": [
+              0.34,
+              0.3,
               0.4
             ]
           },
           {
             "center": [
               0,
-              3.45,
-              -0.2
+              3.71,
+              -0.05
             ],
             "size": [
-              0.7,
-              0.5,
+              1.16,
+              0.17,
+              0.24
+            ]
+          },
+          {
+            "center": [
+              0,
+              3.64,
+              -0.33
+            ],
+            "size": [
+              1.1,
+              0.23,
+              0.24
+            ]
+          },
+          {
+            "center": [
+              0,
+              2.83,
+              0.42
+            ],
+            "size": [
+              0.46,
+              0.71,
+              0.32
+            ]
+          },
+          {
+            "center": [
+              0,
+              2.27,
               0.6
+            ],
+            "size": [
+              0.38,
+              0.24,
+              0.26
+            ]
+          },
+          {
+            "center": [
+              0,
+              2.49,
+              0.51
+            ],
+            "size": [
+              1.05,
+              1.18,
+              0.39
             ]
           }
         ]
       },
       "muzzles": [
         [
-          1.2,
-          2.4,
-          -1.65
+          0.88,
+          2.64,
+          -3.2
         ]
+      ],
+      "serials": [
+        {
+          "text": "05",
+          "facing": "front",
+          "at": [
+            0.19,
+            2.86
+          ],
+          "height": 0.2,
+          "paint": "bone"
+        }
       ]
     }
   }

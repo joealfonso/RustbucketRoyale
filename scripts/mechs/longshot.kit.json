@@ -1,0 +1,116 @@
+{
+  "scheme": {
+    "slate": "#4B4660",
+    "bone": "#D9CFB4",
+    "frame": "#1C2023",
+    "lensGlow": "#FF4D3D"
+  },
+  "parts": {
+    "Torso": {
+      "zone": "torso",
+      "paint": "slate"
+    },
+    "Torso_Camo": {
+      "zone": "torso",
+      "paint": "bone"
+    },
+    "Frame": {
+      "zone": "torso",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Sensor": {
+      "zone": "torso",
+      "paint": "slate"
+    },
+    "Rangefinder": {
+      "zone": "torso",
+      "paint": "bone"
+    },
+    "Sensor_Glow": {
+      "zone": "torso",
+      "paint": "lensGlow",
+      "glow": true
+    },
+    "Pack": {
+      "zone": "torso",
+      "paint": "slate"
+    },
+    "Ballast": {
+      "zone": "torso",
+      "paint": "bone"
+    },
+    "Jets": {
+      "zone": "torso",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Leg_L": {
+      "zone": "legs",
+      "paint": "slate"
+    },
+    "Leg_R": {
+      "zone": "legs",
+      "paint": "slate"
+    },
+    "Leg_Camo": {
+      "zone": "legs",
+      "paint": "bone"
+    },
+    "Leg_Frame": {
+      "zone": "legs",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Arm_L": {
+      "zone": "arms",
+      "paint": "slate"
+    },
+    "Arm_R": {
+      "zone": "arms",
+      "paint": "slate"
+    },
+    "Arm_Camo": {
+      "zone": "arms",
+      "paint": "bone",
+      "noHit": true
+    },
+    "Arm_Frame": {
+      "zone": "arms",
+      "paint": "frame",
+      "rusts": false,
+      "noHit": true
+    },
+    "Arm_Band": {
+      "zone": "arms",
+      "paint": "accent",
+      "noHit": true
+    },
+    "Rifle": {
+      "zone": "arms",
+      "paint": "bone"
+    },
+    "Rifle_Rails": {
+      "zone": "arms",
+      "paint": "frame",
+      "rusts": false
+    },
+    "Rifle_Frame": {
+      "zone": "arms",
+      "paint": "frame",
+      "rusts": false,
+      "noHit": true
+    },
+    "Rifle_Weapon": {
+      "zone": "arms",
+      "paint": "weapon",
+      "noHit": true
+    },
+    "Rifle_Glow": {
+      "zone": "arms",
+      "paint": "lensGlow",
+      "glow": true,
+      "noHit": true
+    }
+  }
+}

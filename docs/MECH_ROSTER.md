@@ -48,6 +48,17 @@ Slender and asymmetrical, built for battlefield control and electronic warfare.
 - **Legs:** slender digitigrade legs with magnetic locking feet, for grip on rooftops or ship decks.
 - **Silhouette at 150 m:** the big round head and the ring of drones.
 
+## 5. Marksman class: "Longshot" (sniper)
+Tall and thin, built to stand still at range and make one shot count. Added after the four above, with its Rail Shot at gate 15b and this model at gate 15c (20 October 2026).
+
+- **Head:** a narrow sensor housing with a long main optic, crossed at the brow by a rangefinder bar as wide as the shoulders, with a red lens at each end: two eyes a metre apart judge range.
+- **Torso and armor:** a narrow armoured chest on a bare spine. Slate violet (no other mech wears it, and it stands out against moss and rust) with a bone breastplate and bone splinter plates on the right pauldron, the left forearm, the right thigh and the left shin. Red optics: the scope glows the colour of the Rail Shot's laser. Serial number **05** in bone on a slate plate on the right of the chest.
+- **Main weapon:** a rail rifle nearly as long as the mech is tall, held at the right of the chest and steadied by the left hand reaching across the body. Bone stock and receiver, two dark rails with a pale armature between them, coil collars along the barrel, a capacitor bank on the receiver, a long scope. Shots and the Rail Shot leave its muzzle.
+- **Legs:** long straight legs whose knees bend forward like a person's (the Stiletto and the Arbiter stand on bird legs, the Ironclad's knees bend back), on long flat two-toed feet.
+- **Back:** a capacitor pack that charges the rail, a drum of cells on each side and two jet nozzles under it, and a bone ballast block hung below that balances the barrel.
+- **Stabilizers:** a spade behind each heel that bites the ground when it braces for Rail Shot.
+- **Silhouette at 150 m:** the long rifle and the T of the rangefinder head on a tall, thin body.
+
 ---
 
 ## The hangar (environment)
