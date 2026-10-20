@@ -248,6 +248,50 @@ describe("bots replanning", () => {
   });
 });
 
+describe("bots that are getting nowhere", () => {
+  const ground: Box = { minX: -200, maxX: 200, minZ: -200, maxZ: 200, minY: -1, maxY: 0 };
+
+  it("walk out of a clearing the route grid sees as sealed in, rather than standing in it", () => {
+    // A thin post in each of the eight 8 m route cells round the one centred on (4, 4), 2 m off the middle of each,
+    // like a clearing in a wood: every cell round it has a trunk in, but a mech walks straight out between them.
+    const posts: Box[] = [];
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx !== 0 || dz !== 0) posts.push({ minX: 4 + dx * 8 + 2, maxX: 4 + dx * 8 + 2.5, minZ: 4 + dz * 8 + 2, maxZ: 4 + dz * 8 + 2.5, minY: 0, maxY: 6 });
+      }
+    }
+    const world = new World([ground, ...posts]);
+    const finder = new Pathfinder(buildNavGrid(posts, 400, 0, 0, { cellMeters: 2, stepHeight: config.mech.stepHeight, mechHeight: config.mech.height }), botConfig.path);
+    const bot = new Bot(stats, random, botConfig.path, finder);
+    const self = createMechState(config.mech, 4, 0, 4, 0);
+    const input = createMechInput();
+    const ring: RingNow = { cx: 4, cz: 150, radius: 15, stage: 1, shrinking: false, damagePerSecond: 2, secondsToChange: 99 };
+    for (let i = 0; i < 60 * 10; i++) {
+      finder.newTick();
+      bot.think(self, [], ring, world, DT, input);
+      stepMech(self, input, config.mech, DT, world);
+    }
+    expect(self.z).toBeGreaterThan(40);
+  });
+
+  it("give up on loot that never comes, rather than holding E on it for ever", () => {
+    const world = new World([ground]);
+    const bot = new Bot(stats, random, botConfig.path, null);
+    const self = createMechState(config.mech, 0, 0, 0, 0);
+    const input = createMechInput();
+    let lastHeld = 0;
+    for (let i = 0; i < 60 * 12; i++) {
+      // A wreck right beside it that never gives anything up, offered again and again as the room does.
+      if (i % config.bots.loot.refreshTicks === 0) bot.setLootGoal(0.5, 0, true);
+      bot.think(self, [], null, world, DT, input);
+      stepMech(self, input, config.mech, DT, world);
+      if (input.interact) lastHeld = i * DT;
+    }
+    expect(lastHeld).toBeLessThan(botConfig.path.giveUpSeconds + 1);
+    expect(Math.hypot(self.x, self.z)).toBeGreaterThan(10);
+  });
+});
+
 describe("rooms that fill themselves", () => {
   it("top up to the tier size with people counted, make room for people who arrive, and refill when they leave", () => {
     const { room, config: c } = makeRoom(undefined, "small", null);

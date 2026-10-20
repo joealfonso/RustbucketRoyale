@@ -10,6 +10,9 @@ const CHEST_HEIGHT = 2.0;
 // enough that a bot standing here really is on top of the thing.
 const LOOT_REACH = 1.2;
 const LOOT_DIRECT = 6; // nearer than this a bot walks straight at loot, not along a route that stops short
+const SAME_LOOT = 0.5; // loot offered this near the last is the same thing; things spilled from a wreck lie further apart
+
+type GoalKind = "ring" | "loot" | "heard" | "wander";
 
 export interface BotTarget {
   id: number;
@@ -48,6 +51,9 @@ export class Bot {
   private replanIn = 0;
   private needsPlan = true; // no route for the current goal yet
   private pathWhole = false; // the route goes all the way to the goal, not just as far as the search got
+  private shortFor = 0; // seconds spent past the end of routes that stop short of the goal, while they end in the same place
+  private shortEndX = 0;
+  private shortEndZ = 0;
   private heading = { x: 0, z: 0 };
   private heardX = 0;
   private heardZ = 0;
@@ -64,6 +70,12 @@ export class Bot {
   private hasLoot = false;
   private lootX = 0;
   private lootZ = 0;
+  private lootWreck = false;
+  private lootTryingFor = 0; // seconds spent close to the current loot, trying to take it
+  private pressE = false; // flips every think beside a pickup, so E goes down afresh for each thing lying there
+  private skipLootX = 0;
+  private skipLootZ = 0;
+  private skipLootFor = 0; // seconds left of leaving alone loot it gave up on
 
   constructor(
     private stats: BotStats,
@@ -89,11 +101,16 @@ export class Bot {
     this.healthMark = health;
   }
 
-  // Something worth having, set by the room. The bot goes for it whenever nobody is in sight.
-  setLootGoal(x: number, z: number): void {
+  // Something worth having, set by the room. The bot goes for it whenever nobody is in sight. A wreck is looted by
+  // holding E, anything else is taken by a press.
+  setLootGoal(x: number, z: number, wreck: boolean): void {
+    // Loot it gave up on is left alone for a while, or the room would send it straight back.
+    if (this.skipLootFor > 0 && Math.hypot(x - this.skipLootX, z - this.skipLootZ) < SAME_LOOT) { this.hasLoot = false; return; }
+    if (!this.hasLoot || Math.hypot(x - this.lootX, z - this.lootZ) > SAME_LOOT) this.lootTryingFor = 0;
     this.hasLoot = true;
     this.lootX = x;
     this.lootZ = z;
+    this.lootWreck = wreck;
   }
 
   clearLootGoal(): void {
@@ -116,6 +133,7 @@ export class Bot {
     this.replanIn -= dt;
     this.heardFor -= dt;
     this.hurtFor -= dt;
+    this.skipLootFor -= dt;
 
     const target = this.pickTarget(self, targets, world);
     let targetDistance = Infinity;
@@ -124,6 +142,7 @@ export class Bot {
     let steerWithin = Infinity; // how far off the spot it walks straight to is, when it is close
 
     if (target) {
+      this.shortFor = 0;
       if (target.id !== this.lastTargetId) { this.spottedFor = 0; this.lastTargetId = target.id; }
       this.spottedFor += dt;
       if (this.retargetIn <= 0) this.rerollAimError(Math.hypot(target.x - self.x, target.z - self.z));
@@ -167,12 +186,24 @@ export class Bot {
       const heading = this.travel(self, goal.x, goal.z, dt);
       wantX = heading.x; wantZ = heading.z;
       run = goal.urgent;
-      // Loot: walk right up to it and hold E. Holding is what loots a wreck; the first step of it takes a weapon.
-      if (goal.loot) {
+      // Past the end of a route that stops short, travel heads straight on for the goal, and steering and hopping often
+      // find the way the coarse grid could not. If they have not after a while, the goal is given up for another.
+      if (this.shortFor > this.pathStats.giveUpSeconds) this.giveUp(goal.kind);
+      // Loot: walk right up to it and use E. Holding it down loots a wreck. Anything else is taken by a press, so E goes
+      // up and down: held down, it would take the first thing and never the one lying next to it.
+      if (goal.kind === "loot") {
         const dx = goal.x - self.x, dz = goal.z - self.z;
         const distance = Math.hypot(dx, dz);
-        if (distance <= LOOT_REACH) { wantX = 0; wantZ = 0; out.interact = true; }
-        else if (distance < LOOT_DIRECT) { wantX = dx / distance; wantZ = dz / distance; steerWithin = distance; }
+        // This close it should be had in a moment. Still not after a while, and it is not coming: up on a roof, say.
+        if (distance < LOOT_DIRECT) {
+          this.lootTryingFor += dt;
+          if (this.lootTryingFor > this.pathStats.giveUpSeconds) this.giveUp("loot");
+        }
+        if (distance <= LOOT_REACH) {
+          wantX = 0; wantZ = 0;
+          this.pressE = !this.pressE;
+          out.interact = this.lootWreck || this.pressE;
+        } else if (distance < LOOT_DIRECT) { wantX = dx / distance; wantZ = dz / distance; steerWithin = distance; }
       }
       // Look where it is going.
       this.turnToward(self, self.x + heading.x * 10, self.y + EYE_HEIGHT, self.z + heading.z * 10, dt);
@@ -252,8 +283,25 @@ export class Bot {
     if (this.random() < a.decoyChancePerSecond * dt) out.ability = true;
   }
 
+  // Getting nowhere with a goal: forget it and find something else to do. The ring is never given up on; heading
+  // straight for its middle is all that is left.
+  private giveUp(kind: GoalKind): void {
+    this.shortFor = 0;
+    if (kind === "loot") {
+      this.hasLoot = false;
+      this.skipLootX = this.lootX;
+      this.skipLootZ = this.lootZ;
+      this.skipLootFor = this.stats.wanderSeconds; // a guess: long enough to be well away before it is tempted back
+    } else if (kind === "heard") {
+      this.heardFor = 0;
+    } else if (kind === "wander") {
+      this.wanderIn = 0;
+    }
+  }
+
   // The direction to walk to reach a spot. Far spots are walked to along a planned route round obstacles,
-  // near ones straight. If no route can be found it just heads straight there.
+  // near ones straight. If no route can be found it just heads straight there, and so it does once past the end of a
+  // route that stops short of the spot.
   private travel(self: MechState, goalX: number, goalZ: number, dt: number): { x: number; z: number } {
     const out = this.heading;
     let tx = goalX, tz = goalZ;
@@ -275,21 +323,38 @@ export class Bot {
         this.replanIn = this.pathStats.replanSeconds * (0.8 + this.random() * 0.4);
         if (!this.finder.findPath(self.x, self.z, goalX, goalZ, this.path)) this.path.length = 0;
         this.pathWhole = this.path.length > 0 && this.finder.reachedGoal;
+        this.noteRouteEnd(goalMoved);
       }
-      while (this.pathIndex * 2 < this.path.length - 2 && Math.hypot(this.path[this.pathIndex * 2]! - self.x, this.path[this.pathIndex * 2 + 1]! - self.z) < this.pathStats.waypointReach) this.pathIndex++;
+      // The last point of a whole route is the goal itself. The last of one that stops short is passed like any other.
+      const last = this.pathWhole ? this.path.length - 2 : this.path.length;
+      while (this.pathIndex * 2 < last && Math.hypot(this.path[this.pathIndex * 2]! - self.x, this.path[this.pathIndex * 2 + 1]! - self.z) < this.pathStats.waypointReach) this.pathIndex++;
       if (this.path.length > 0 && this.pathIndex * 2 < this.path.length) {
         tx = this.path[this.pathIndex * 2]!;
         tz = this.path[this.pathIndex * 2 + 1]!;
+      } else if (this.path.length > 0) {
+        this.shortFor += dt;
       }
     } else {
       this.path.length = 0;
       this.needsPlan = true;
+      this.shortFor = 0;
     }
 
     const dx = tx - self.x, dz = tz - self.z;
     const distance = Math.hypot(dx, dz);
     if (distance > 3) { out.x = dx / distance; out.z = dz / distance; } else { out.x = 0; out.z = 0; }
     return out;
+  }
+
+  // Time past the end of short routes adds up for as long as the new routes keep ending in the same place, so a bot
+  // that walks back to that end and out again still gives up. A whole route, one that gets further, or a new goal
+  // starts it again.
+  private noteRouteEnd(goalMoved: boolean): void {
+    const n = this.path.length;
+    const endX = n > 0 ? this.path[n - 2]! : 0, endZ = n > 0 ? this.path[n - 1]! : 0;
+    if (this.pathWhole || goalMoved || Math.hypot(endX - this.shortEndX, endZ - this.shortEndZ) > this.pathStats.waypointReach) this.shortFor = 0;
+    this.shortEndX = endX;
+    this.shortEndZ = endZ;
   }
 
   private onRoute(self: MechState): boolean {
@@ -334,20 +399,20 @@ export class Bot {
   }
 
   // The ring wins over wandering: near its edge, or outside it, the bot heads for the middle.
-  private chooseGoal(self: MechState, ring: RingNow | null): { x: number; z: number; urgent: boolean; loot: boolean } {
+  private chooseGoal(self: MechState, ring: RingNow | null): { x: number; z: number; urgent: boolean; kind: GoalKind } {
     if (ring) {
       const fromCentre = Math.hypot(self.x - ring.cx, self.z - ring.cz);
-      if (fromCentre > ring.radius - this.stats.ringMargin) return { x: ring.cx, z: ring.cz, urgent: fromCentre > ring.radius, loot: false };
+      if (fromCentre > ring.radius - this.stats.ringMargin) return { x: ring.cx, z: ring.cz, urgent: fromCentre > ring.radius, kind: "ring" };
     }
     // Loot beats a noise: a bot is greedy before it is curious.
     if (this.hasLoot) {
       const inside = !ring || Math.hypot(this.lootX - ring.cx, this.lootZ - ring.cz) < ring.radius;
-      if (inside) return { x: this.lootX, z: this.lootZ, urgent: false, loot: true };
+      if (inside) return { x: this.lootX, z: this.lootZ, urgent: false, kind: "loot" };
     }
     // A sound worth checking, as long as going there does not mean leaving the safe area.
     if (this.heardFor > 0) {
       const inside = !ring || Math.hypot(this.heardX - ring.cx, this.heardZ - ring.cz) < ring.radius - this.stats.ringMargin;
-      if (inside && Math.hypot(this.heardX - self.x, this.heardZ - self.z) > 6) return { x: this.heardX, z: this.heardZ, urgent: false, loot: false };
+      if (inside && Math.hypot(this.heardX - self.x, this.heardZ - self.z) > 6) return { x: this.heardX, z: this.heardZ, urgent: false, kind: "heard" };
     }
     if (this.wanderIn <= 0) {
       const range = ring ? Math.max(10, ring.radius - this.stats.ringMargin) : 60;
@@ -357,7 +422,7 @@ export class Bot {
       this.goalZ = (ring?.cz ?? self.z) + Math.sin(angle) * distance;
       this.wanderIn = this.stats.wanderSeconds;
     }
-    return { x: this.goalX, z: this.goalZ, urgent: false, loot: false };
+    return { x: this.goalX, z: this.goalZ, urgent: false, kind: "wander" };
   }
 
   private turnToward(self: MechState, x: number, y: number, z: number, dt: number): void {

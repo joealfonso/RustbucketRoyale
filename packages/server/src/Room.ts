@@ -538,7 +538,7 @@ export class Room {
     if (pickup) { goalX = pickup.x; goalZ = pickup.z; range = Math.hypot(pickup.x - x, pickup.z - z); found = true; }
     const wreck = this.nearestWreck(player, range);
     if (wreck) { goalX = wreck.state.x; goalZ = wreck.state.z; found = true; }
-    if (found) bot.setLootGoal(goalX, goalZ);
+    if (found) bot.setLootGoal(goalX, goalZ, wreck !== null);
     else bot.clearLootGoal();
   }
 
