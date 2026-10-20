@@ -41,6 +41,10 @@
     "barrel": {
       "chance": 0,
       "table": {}
+    },
+    "pine": {
+      "chance": 0,
+      "table": {}
     }
   }
 }

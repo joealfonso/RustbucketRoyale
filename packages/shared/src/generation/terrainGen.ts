@@ -23,23 +23,29 @@ export function noiseHeights(seed: number, tier: string, meters: number, setting
   const out = new Int32Array(n * n);
   const octaves = settings.tiers[tier]?.octaves ?? [];
   octaves.forEach((o, k) => {
-    const rng = new SeededRng(deriveSeed(seed, 1000 + k));
-    const spacing = o.spacingMeters / settings.cellMeters; // corners between lattice points
-    const amp = Math.round(o.amplitudeMeters * 100);
-    const lattice = Math.floor((n - 1) / spacing) + 2;
-    const values = new Int32Array(lattice * lattice);
-    for (let i = 0; i < values.length; i++) values[i] = rng.nextInt(2 * amp + 1) - amp;
-    for (let j = 0; j < n; j++) {
-      const lj = Math.floor(j / spacing), wz = smooth(j - lj * spacing, spacing);
-      for (let i = 0; i < n; i++) {
-        const li = Math.floor(i / spacing), wx = smooth(i - li * spacing, spacing);
-        const a = values[lj * lattice + li]!, b = values[lj * lattice + li + 1]!;
-        const c = values[(lj + 1) * lattice + li]!, d = values[(lj + 1) * lattice + li + 1]!;
-        const top = a * (ONE - wx) + b * wx, bottom = c * (ONE - wx) + d * wx;
-        out[j * n + i]! += Math.floor((top * (ONE - wz) + bottom * wz) / (ONE * ONE));
-      }
-    }
+    const layer = valueNoise(new SeededRng(deriveSeed(seed, 1000 + k)), n, o.spacingMeters / settings.cellMeters, Math.round(o.amplitudeMeters * 100));
+    for (let i = 0; i < out.length; i++) out[i]! += layer[i]!;
   });
+  return out;
+}
+
+// Smooth random values on an n by n grid: random whole numbers from -amp to amp every `spacing` points, blended
+// in between. The hills are a few of these added up; forests and boulder fields use one each as a mask.
+export function valueNoise(rng: SeededRng, n: number, spacing: number, amp: number): Int32Array {
+  const out = new Int32Array(n * n);
+  const lattice = Math.floor((n - 1) / spacing) + 2;
+  const values = new Int32Array(lattice * lattice);
+  for (let i = 0; i < values.length; i++) values[i] = rng.nextInt(2 * amp + 1) - amp;
+  for (let j = 0; j < n; j++) {
+    const lj = Math.floor(j / spacing), wz = smooth(j - lj * spacing, spacing);
+    for (let i = 0; i < n; i++) {
+      const li = Math.floor(i / spacing), wx = smooth(i - li * spacing, spacing);
+      const a = values[lj * lattice + li]!, b = values[lj * lattice + li + 1]!;
+      const c = values[(lj + 1) * lattice + li]!, d = values[(lj + 1) * lattice + li + 1]!;
+      const top = a * (ONE - wx) + b * wx, bottom = c * (ONE - wx) + d * wx;
+      out[j * n + i] = Math.floor((top * (ONE - wz) + bottom * wz) / (ONE * ONE));
+    }
+  }
   return out;
 }
 

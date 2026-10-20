@@ -81,6 +81,28 @@
         ],
         "waterShare": 0.08
       }
+    },
+    "forest": {
+      "maskSpacingMeters": 100,
+      "maskAbove": 250,
+      "spacingMeters": 9,
+      "jitterMeters": 3,
+      "clearOfSpawnMeters": 20,
+      "clearOfEdgeMeters": 12,
+      "dryAboveWaterMeters": 0.3
+    },
+    "rocks": {
+      "maskSpacingMeters": 100,
+      "maskAbove": 450,
+      "spacingMeters": 22,
+      "jitterMeters": 7,
+      "minSizeMeters": 2,
+      "maxSizeMeters": 4.5,
+      "buriedShare": 0.3,
+      "color": "#746C5C",
+      "clearOfSpawnMeters": 20,
+      "clearOfEdgeMeters": 12,
+      "dryAboveWaterMeters": 0.3
     }
   }
 }

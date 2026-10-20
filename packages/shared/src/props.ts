@@ -8,6 +8,9 @@ export interface PropType {
   color: string;
   explodes: boolean; // goes off like a grenade when destroyed
   dropsLoot: boolean; // can leave something behind when broken (what, and how often, is in loot.json)
+  // Scenery (trees): placed by the forest pass, not scattered in chunks (weight 0), left out of the prop and loot
+  // density checks, and too thin to count as a wall for bot routes.
+  scenery?: boolean;
 }
 
 export interface PropConfig {
@@ -47,7 +50,7 @@ export function parsePropConfig(raw: unknown): PropConfig {
     if (typeof t.id !== "string" || !isVec3(t.size) || typeof t.hp !== "number" || !(t.hp > 0) || typeof t.color !== "string" || typeof t.explodes !== "boolean" || typeof t.dropsLoot !== "boolean") {
       throw new Error(`props.json: type ${String(t.id)} is incomplete`);
     }
-    if (!Number.isInteger(t.weight) || (t.weight as number) <= 0) throw new Error(`props.json: ${t.id} weight must be a whole number above 0`);
+    if (t.scenery === true ? t.weight !== 0 : !Number.isInteger(t.weight) || (t.weight as number) <= 0) throw new Error(`props.json: ${t.id} weight must be a whole number above 0 (exactly 0 for scenery)`);
   }
   const blast = d.barrelBlast as Record<string, unknown> | undefined;
   for (const key of ["radius", "damage", "delaySeconds"]) if (typeof blast?.[key] !== "number") throw new Error(`props.json: barrelBlast.${key} must be a number`);

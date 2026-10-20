@@ -74,7 +74,7 @@ describe("generated hills", () => {
           expect(Math.abs(t.corner(j, i + 1) - t.corner(j, i)) / t.cell).toBeLessThanOrEqual(limit);
         }
         map.boxes.forEach((b, k) => {
-          if (k < 5 || map.propOfBox[k]! >= 0) return; // ground slab, edge walls, props (props sit on slopes)
+          if (k < 5 || map.propOfBox[k]! >= 0 || map.kindNames[map.kinds[k]!] === "boulder") return; // ground slab, edge walls, props and boulders sit on slopes
           const ground = [[b.minX, b.minZ], [b.maxX, b.maxZ], [b.minX, b.maxZ], [b.maxX, b.minZ]].map(([x, z]) => t.heightAt(x!, z!));
           expect(Math.max(...ground) - Math.min(...ground), `${tier} seed ${seed} box ${k}`).toBeLessThan(0.01);
         });
@@ -122,7 +122,7 @@ describe("water", () => {
         expect(wet / t.heights.length).toBeLessThan(share * 3);
         expect(deepest).toBeLessThanOrEqual(tiers.terrain!.water.maxDepthMeters + 1e-9);
         map.boxes.forEach((b, k) => {
-          if (k < 5 || map.propOfBox[k]! >= 0) return;
+          if (k < 5 || map.propOfBox[k]! >= 0 || map.kindNames[map.kinds[k]!] === "boulder") return;
           const ground = [[b.minX, b.minZ], [b.maxX, b.maxZ], [b.minX, b.maxZ], [b.maxX, b.minZ]].map(([x, z]) => t.heightAt(x!, z!));
           expect(Math.max(...ground) - Math.min(...ground), `${tier} seed ${seed} box ${k}`).toBeLessThan(0.01);
           expect(b.minY).toBeGreaterThanOrEqual(Math.min(...ground) - 0.01); // nothing sunk under the raised bed
@@ -151,6 +151,66 @@ describe("water", () => {
     const d = createMechState(stats, 0, 0, 0, Math.PI);
     for (let i = 0; i < 60; i++) stepMech(d, walk, stats, STEP, dry);
     expect(Math.hypot(d.vx, d.vz)).toBeCloseTo(stats.walkSpeed, 3);
+  });
+});
+
+describe("woods and boulders", () => {
+  const mech = { halfWidth: stats.halfWidth, height: stats.height, stepHeight: stats.stepHeight };
+  const props = parsePropConfig(propsJson);
+  const build = (seed: number, tier: string) => generateMap(seed, tier, parseChunkSet(chunksJson), tiers, mech, props);
+  const isTree = (type: number) => props.types[type]!.scenery === true;
+
+  it("grows trees on dry open ground, standing on it, and the same trees from the same seed", () => {
+    const map = build(11, "medium");
+    const t = map.terrain;
+    const trees = map.props.filter((p) => isTree(p.type));
+    expect(trees.length).toBeGreaterThan(200);
+    for (const p of trees) {
+      const b = map.boxes[p.boxIndex]!;
+      expect(t.waterDepthAt(p.x, p.z)).toBe(0);
+      expect(b.minY).toBeLessThanOrEqual(t.heightAt(p.x, p.z) + 1e-9);
+      expect(b.maxY - b.minY).toBeGreaterThan(8);
+    }
+    const again = build(11, "medium").props.filter((p) => isTree(p.type));
+    expect(again.map((p) => [p.x, p.z])).toEqual(trees.map((p) => [p.x, p.z]));
+  });
+
+  it("keeps trees and boulders off buildings, other props and each other", () => {
+    const map = build(2, "medium");
+    const boulder = map.kindNames.indexOf("boulder");
+    const scenery = map.boxes.map((_, k) => map.kinds[k] === boulder || (map.propOfBox[k]! >= 0 && isTree(map.props[map.propOfBox[k]!]!.type)));
+    let checked = 0;
+    const near: number[] = [];
+    map.boxes.forEach((a, i) => {
+      if (!scenery[i]) return;
+      const count = map.world.query(a.minX, a.minZ, a.maxX, a.maxZ, near);
+      for (let k = 0; k < count; k++) {
+        const j = near[k]!;
+        if (j === i || j <= 4) continue; // the ground slab and edge walls
+        const b = map.boxes[j]!;
+        const overlap = a.minX < b.maxX && a.maxX > b.minX && a.minZ < b.maxZ && a.maxZ > b.minZ;
+        expect(overlap, `box ${i} overlaps box ${j}`).toBe(false);
+      }
+      checked++;
+    });
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  it("does not count trunks as walls for bot routes, but does count boulders", () => {
+    const map = build(11, "medium");
+    const grid = map.nav;
+    const cellOf = (x: number, z: number) => Math.floor((z - grid.originZ) / grid.cell) * grid.cols + Math.floor((x - grid.originX) / grid.cell);
+    const tree = map.props.find((p) => isTree(p.type))!;
+    expect(grid.top[cellOf(tree.x, tree.z)]! - grid.ground[cellOf(tree.x, tree.z)]!).toBeLessThan(stats.stepHeight);
+    const boulder = map.boxes.find((_, k) => map.kinds[k] === map.kindNames.indexOf("boulder"))!;
+    const c = cellOf((boulder.minX + boulder.maxX) / 2, (boulder.minZ + boulder.maxZ) / 2);
+    expect(grid.top[c]! - grid.ground[c]!).toBeGreaterThan(stats.stepHeight);
+  });
+
+  it("leaves the trees out of the crate and barrel density checks", () => {
+    const map = build(2, "large");
+    expect(map.props.filter((p) => isTree(p.type)).length).toBeGreaterThan(1000);
+    expect(map.attempts).toBe(1);
   });
 });
 

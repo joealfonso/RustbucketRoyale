@@ -168,7 +168,8 @@ describe("props", () => {
   it("keep within the density bounds on every tier", () => {
     for (const tier of Object.keys(tiers.tiers)) {
       const map = generate(77, tier);
-      const perKm = map.props.length / ((map.meters * map.meters) / 1_000_000);
+      const scattered = map.props.filter((p) => !propConfig.types[p.type]!.scenery); // trees are counted apart
+      const perKm = scattered.length / ((map.meters * map.meters) / 1_000_000);
       expect(perKm).toBeGreaterThanOrEqual(propConfig.density.minPerSquareKm);
       expect(perKm).toBeLessThanOrEqual(propConfig.density.maxPerSquareKm);
     }

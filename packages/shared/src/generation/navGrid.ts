@@ -28,7 +28,8 @@ export interface NavGrid {
 // How far a cell's top stands up off the ground: 0 for bare hillside.
 export const raised = (grid: NavGrid, i: number) => grid.top[i]! - grid.ground[i]!;
 
-export function buildNavGrid(boxes: readonly Box[], meters: number, centerX: number, centerZ: number, params: NavParams, terrain: Terrain | null = null): NavGrid {
+// `skip` marks boxes that are no wall to a route (tree trunks).
+export function buildNavGrid(boxes: readonly Box[], meters: number, centerX: number, centerZ: number, params: NavParams, terrain: Terrain | null = null, skip: Uint8Array | null = null): NavGrid {
   const cols = Math.ceil(meters / params.cellMeters);
   const originX = centerX - meters / 2;
   const originZ = centerZ - meters / 2;
@@ -40,7 +41,9 @@ export function buildNavGrid(boxes: readonly Box[], meters: number, centerX: num
   }
   const top = Float32Array.from(ground);
 
-  for (const b of boxes) {
+  for (let k = 0; k < boxes.length; k++) {
+    const b = boxes[k]!;
+    if (skip?.[k]) continue;
     // The ground slab under the world is no step.
     if (b.maxY <= 0 && !terrain) continue;
     const x0 = Math.max(0, Math.floor((b.minX - originX) / params.cellMeters));

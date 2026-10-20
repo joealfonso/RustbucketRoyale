@@ -44,6 +44,20 @@
       "color": "#c0392b",
       "explodes": true,
       "dropsLoot": false
+    },
+    {
+      "id": "pine",
+      "weight": 0,
+      "scenery": true,
+      "size": [
+        1,
+        12,
+        1
+      ],
+      "hp": 120,
+      "color": "#3B5230",
+      "explodes": false,
+      "dropsLoot": false
     }
   ],
   "barrelBlast": {

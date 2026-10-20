@@ -1,6 +1,6 @@
 import { World, type Box } from "../world";
 import { Terrain } from "../terrain";
-import { cornersFor, floodBed, noiseHeights, padHeights, shapeTerrain, waterLevelFor, type Rect } from "./terrainGen";
+import { cornersFor, floodBed, noiseHeights, padHeights, shapeTerrain, valueNoise, waterLevelFor, type Rect } from "./terrainGen";
 import { addProp, type PropConfig, type PropInstance } from "../props";
 import { orient, type ChunkSet } from "./chunks";
 import { buildNavGrid, floodFill, navCell, raised, type NavGrid, type NavParams } from "./navGrid";
@@ -219,14 +219,91 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
     spawns.push([sx, terrain.heightAt(sx, sz) + 0.05, sz]);
   }
 
+  // Boulders, then woods, on open ground the seed picks. They keep off buildings and their level ground, props,
+  // water, spawns and the map's edge. Taken ground is tracked on a coarse grid so each spot is checked at once.
+  const kindNames = [...chunks.kinds, "boulder"];
+  if (settings && (settings.rocks || settings.forest)) {
+    const takenCols = Math.ceil(def.meters / TAKEN_CELL);
+    const taken = new Uint8Array(takenCols * takenCols);
+    const span = (lo: number, hi: number) => [Math.max(0, Math.floor((lo + half) / TAKEN_CELL)), Math.min(takenCols - 1, Math.floor((hi + half) / TAKEN_CELL))] as const;
+    const mark = (minX: number, minZ: number, maxX: number, maxZ: number) => {
+      const [x0, x1] = span(minX, maxX), [z0, z1] = span(minZ, maxZ);
+      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) taken[z * takenCols + x] = 1;
+    };
+    const free = (minX: number, minZ: number, maxX: number, maxZ: number) => {
+      const [x0, x1] = span(minX, maxX), [z0, z1] = span(minZ, maxZ);
+      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) if (taken[z * takenCols + x]) return false;
+      return true;
+    };
+    for (const rects of held) for (const r of rects) mark(r.minX, r.minZ, r.maxX, r.maxZ);
+    for (const p of props) { const b = boxes[p.boxIndex]!; mark(b.minX - propConfig.margin, b.minZ - propConfig.margin, b.maxX + propConfig.margin, b.maxZ + propConfig.margin); }
+    const clearOfSpawn = Math.max(settings.rocks?.clearOfSpawnMeters ?? 0, settings.forest?.clearOfSpawnMeters ?? 0);
+    for (const [sx, , sz] of spawns) mark(sx - clearOfSpawn, sz - clearOfSpawn, sx + clearOfSpawn, sz + clearOfSpawn);
+
+    const cell = settings.cellMeters;
+    const corner = (x: number, z: number) => heights[Math.round((z + half) / cell) * terrain.corners + Math.round((x + half) / cell)]!;
+    // Dry: every corner round the footprint stands clear of the water by `dryCm`. Whole centimetres.
+    const dry = (minX: number, minZ: number, maxX: number, maxZ: number, dryCm: number) => {
+      if (water === null) return true;
+      for (const [x, z] of [[minX, minZ], [maxX, minZ], [minX, maxZ], [maxX, maxZ]] as const) if (corner(x, z) < water + dryCm) return false;
+      return true;
+    };
+    // Candidate spots on a grid, each nudged by a jitter that is always drawn, so a skipped spot never shifts the rest.
+    const scatter = (s: { maskSpacingMeters: number; maskAbove: number; spacingMeters: number; jitterMeters: number; clearOfEdgeMeters: number }, salt: number, place: (x: number, z: number, rng: SeededRng) => void) => {
+      const r = new SeededRng(deriveSeed(seed, salt));
+      const mask = valueNoise(r, terrain.corners, s.maskSpacingMeters / cell, MASK_RANGE);
+      const lo = -half + s.clearOfEdgeMeters, hi = half - s.clearOfEdgeMeters;
+      for (let z = lo; z <= hi; z += s.spacingMeters) {
+        for (let x = lo; x <= hi; x += s.spacingMeters) {
+          const px = Math.max(lo, Math.min(hi, x + r.nextInt(2 * s.jitterMeters + 1) - s.jitterMeters));
+          const pz = Math.max(lo, Math.min(hi, z + r.nextInt(2 * s.jitterMeters + 1) - s.jitterMeters));
+          const roll = new SeededRng(r.next32());
+          if (mask[Math.round((pz + half) / cell) * terrain.corners + Math.round((px + half) / cell)]! <= s.maskAbove) continue;
+          place(px, pz, roll);
+        }
+      }
+    };
+
+    const rocks = settings.rocks;
+    if (rocks) {
+      const rockColor = palette.length;
+      palette.push(rocks.color);
+      const boulder = kindNames.length - 1;
+      const steps = Math.round((rocks.maxSizeMeters - rocks.minSizeMeters) * 10);
+      scatter(rocks, ROCKS_SALT, (x, z, roll) => {
+        const size = rocks.minSizeMeters + roll.nextInt(steps + 1) / 10;
+        const h = size / 2;
+        if (!free(x - h, z - h, x + h, z + h) || !dry(x - h, z - h, x + h, z + h, Math.round(rocks.dryAboveWaterMeters * 100))) return;
+        const base = propBase(x, z, size, size) - size * rocks.buriedShare;
+        add(x, base + size / 2, z, size, size, size, rockColor);
+        boxKind[boxes.length - 1] = boulder;
+        mark(x - h - 1, z - h - 1, x + h + 1, z + h + 1);
+      });
+    }
+    const forest = settings.forest;
+    const pine = propConfig.types.findIndex((t) => t.id === "pine");
+    if (forest && pine >= 0) {
+      const [sx, , sz] = propConfig.types[pine]!.size;
+      scatter(forest, FOREST_SALT, (x, z) => {
+        if (!free(x - sx, z - sz, x + sx, z + sz) || !dry(x - sx, z - sz, x + sx, z + sz, Math.round(forest.dryAboveWaterMeters * 100))) return;
+        addProp(boxes, props, propConfig, pine, x, z, propBase(x, z, sx, sz));
+        colors.push(propColor + pine);
+        mark(x - sx, z - sz, x + sx, z + sz);
+      });
+    }
+  }
+
   const propOfBox = new Int32Array(boxes.length).fill(-1);
   for (const p of props) propOfBox[p.boxIndex] = p.id;
   const kinds = new Int8Array(boxes.length).fill(-1);
   boxKind.forEach((kind, i) => { kinds[i] = kind; });
-  return { tier, meters: def.meters, boxes, colors, palette, kinds, kindNames: chunks.kinds, spawns, props, propOfBox, terrain };
+  return { tier, meters: def.meters, boxes, colors, palette, kinds, kindNames, spawns, props, propOfBox, terrain };
 }
 
 const nearby: number[] = [];
+const TAKEN_CELL = 2; // metres: the grid that tracks where boulders and trees may still go
+const MASK_RANGE = 1000; // forest and boulder masks run from -MASK_RANGE to MASK_RANGE (maskAbove is on this scale)
+const ROCKS_SALT = 3000, FOREST_SALT = 3001; // each scatter draws from its own stream, apart from the hills and props
 
 // Checks a built map is playable: enough clear spawns, all reachable from each other, and no large sealed-off areas.
 export function validateMap(
@@ -238,7 +315,8 @@ export function validateMap(
 
   // Enough to break and loot, but not a solid field of crates.
   if (propConfig) {
-    const perKm = map.props.length / ((map.meters * map.meters) / 1_000_000);
+    const scattered = map.props.filter((p) => !propConfig.types[p.type]!.scenery);
+    const perKm = scattered.length / ((map.meters * map.meters) / 1_000_000);
     if (perKm < propConfig.density.minPerSquareKm || perKm > propConfig.density.maxPerSquareKm) problems.push(`prop density ${perKm.toFixed(0)} per square km is out of bounds`);
 
     const { lootDensity } = propConfig;
@@ -299,7 +377,10 @@ export function generateMap(seed: number, tier: string, chunks: ChunkSet, tiers:
     const usedSeed = attempt === 0 ? seed >>> 0 : deriveSeed(seed, attempt);
     const built = build(usedSeed, tier, chunks, tiers, propConfig);
     const world = new World(built.boxes, 16, built.terrain);
-    const navGrid = buildNavGrid(built.boxes, built.meters, 0, 0, nav, built.terrain);
+    // Trees are too thin to be walls for bot routes: bots steer round trunks up close instead.
+    const thin = new Uint8Array(built.boxes.length);
+    for (const p of built.props) if (propConfig.types[p.type]!.scenery) thin[p.boxIndex] = 1;
+    const navGrid = buildNavGrid(built.boxes, built.meters, 0, 0, nav, built.terrain, thin);
     const map: GeneratedMap = { ...built, seed: seed >>> 0, usedSeed, attempts: attempt + 1, world, nav: navGrid };
     const report = validateMap(map, tiers, mech, propConfig);
     if (report.ok) return map;

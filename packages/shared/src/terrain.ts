@@ -16,6 +16,11 @@ export interface TerrainSettings {
   // is never deeper than maxDepthMeters, so a mech always wades and never goes under.
   water: { maxDepthMeters: number; wadeMeters: number };
   tiers: Record<string, { octaves: { spacingMeters: number; amplitudeMeters: number }[]; waterShare?: number }>;
+  // Woods of breakable pines on open ground: a slow random mask (from -1000 to 1000) is wooded where above
+  // `maskAbove`; trees stand about `spacingMeters` apart, nudged up to `jitterMeters`. Whole metres throughout.
+  forest?: { maskSpacingMeters: number; maskAbove: number; spacingMeters: number; jitterMeters: number; clearOfSpawnMeters: number; clearOfEdgeMeters: number; dryAboveWaterMeters: number };
+  // Boulders on open ground, the same way, each a solid box partly sunk into the ground.
+  rocks?: { maskSpacingMeters: number; maskAbove: number; spacingMeters: number; jitterMeters: number; minSizeMeters: number; maxSizeMeters: number; buriedShare: number; color: string; clearOfSpawnMeters: number; clearOfEdgeMeters: number; dryAboveWaterMeters: number };
 }
 
 export function parseTerrainSettings(raw: unknown): TerrainSettings {
@@ -28,6 +33,13 @@ export function parseTerrainSettings(raw: unknown): TerrainSettings {
   if (!Number.isInteger(d.apronRisePercent) || d.apronRisePercent > d.maxRisePercent) throw new Error("terrain.json: apronRisePercent must be a whole number no steeper than maxRisePercent");
   if (!Number.isInteger(d.maxRisePercent) || d.maxRisePercent > 170) throw new Error("terrain.json: maxRisePercent must be a whole number up to 170");
   if (!(d.water?.maxDepthMeters > 0) || !(d.water.wadeMeters >= 0)) throw new Error("terrain.json: water needs maxDepthMeters above 0 and wadeMeters");
+  for (const [name, section] of [["forest", d.forest], ["rocks", d.rocks]] as const) {
+    if (!section) continue;
+    for (const [key, value] of Object.entries(section)) {
+      if (key === "color" ? typeof value !== "string" : typeof value !== "number" || !Number.isFinite(value)) throw new Error(`terrain.json: ${name}.${key} is not valid`);
+    }
+    if (section.maskSpacingMeters % d.cellMeters !== 0 || !(section.spacingMeters > 0)) throw new Error(`terrain.json: ${name} spacing must be positive, the mask a whole number of cells`);
+  }
   for (const [tier, t] of Object.entries(d.tiers ?? {})) {
     if (t.waterShare !== undefined && !(t.waterShare >= 0 && t.waterShare < 0.5)) throw new Error(`terrain.json: ${tier} waterShare must be from 0 to under 0.5`);
     for (const o of t.octaves ?? []) {
