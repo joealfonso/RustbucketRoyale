@@ -3,14 +3,14 @@
   "maxVoices": 24,
   "hearingMeters": 300,
   "echo": {
-    "seconds": 1.6,
-    "level": 0.35
+    "seconds": 0.7,
+    "level": 0.12
   },
   "air": {
     "nearHz": 16000,
     "halfMeters": 70,
     "farHz": 900,
-    "farEcho": 2.5
+    "farEcho": 1.4
   },
   "variation": {
     "pitch": 0.06,
@@ -38,8 +38,8 @@
       "file": null
     },
     "impact": {
-      "volume": 0.25,
-      "echo": 0.25,
+      "volume": 0.6,
+      "echo": 0.1,
       "file": null
     },
     "explosion": {

@@ -178,7 +178,12 @@ export class Sound {
         this.burst(into, 0.025, "highpass", 3500, 0.7, 0.0005);
         this.clank(into, 1350 * p, 0.45, 0.16);
         return this.burst(into, 0.35, "lowpass", 900 * p, 0.25, 0.01);
-      case "impact": this.clank(into, (900 + r() * 500) * p, 0.07, 0.3); return this.burst(into, 0.07, "bandpass", 2200 * p, 0.6);
+      // A round landing: a dull thud into whatever it hit, a short metal ping, and grit pattering off it.
+      case "impact":
+        this.body(into, 180 * p, 70 * p, 0.09, 0.7);
+        this.crunch(into, 0.06, "bandpass", (1600 + r() * 900) * p, 0.9);
+        this.clank(into, (1100 + r() * 700) * p, 0.12, 0.22, 0.004);
+        return this.burst(into, 0.18, "lowpass", 2400 * p, 0.25, 0.02);
       // A blast: a crack, a long low punch, and a rumble that rolls on and on.
       case "explosion":
         this.burst(into, 0.02, "highpass", 2000, 0.8, 0.0005);
@@ -418,7 +423,8 @@ export function yardImpulse(ctx: BaseAudioContext, seconds: number): AudioBuffer
       smooth = smooth * lean + (Math.random() * 2 - 1) * (1 - lean);
       data[i] = smooth * Math.exp(-t * (6 / seconds)) * 2.2;
     }
-    for (const [at, level] of [[0.011, 0.7], [0.027, 0.45], [0.041, 0.5], [0.067, 0.3], [0.093, 0.25]] as const) {
+    // Kept faint: loud early slaps made everything sound like the inside of a tin can (Joseph's playtest).
+    for (const [at, level] of [[0.011, 0.2], [0.027, 0.12], [0.041, 0.12], [0.067, 0.08], [0.093, 0.06]] as const) {
       const i = Math.floor((at + channel * 0.004) * rate);
       if (i < length) data[i] = (data[i] ?? 0) + (channel === 0 ? level : -level);
     }
