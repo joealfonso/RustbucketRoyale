@@ -299,6 +299,34 @@ Getting into a match used to take seven steps and started first-timers in the Ar
 
 The click-to-play screen dropped from fourteen keys to five. The rest arrive once each, at the moment they help, in the same box as "Hold F: repair": sprint after a stretch of walking, Q when the ability first comes up, G when you are first hit with a grenade in hand. Freeing the mouse no longer hides the fight behind a full screen.
 
+## 41. Terrain in the way
+*Passed 2026-10-20. Commit `17e5d5e`.*
+
+![A medium map at street level: the Arbiter in the grass before tall dark rock outcrops, hills and mountains behind](41-15a-terrain-in-the-way.jpg)
+
+Joseph found the yard "great for a sniper mech, but it needs more terrain in the way to walk around". Clusters of tall stone blocks now rise from open ground, boulders are thicker and the hills taller, and how often two spots can see each other was measured before and after: about half as often, held there by a test.
+
+## 42. The Longshot
+*Passed 2026-10-20. Commits `10b963a`, `54adedd`, `bf09b27`.*
+
+![The five roster mechs side by side at 50 m, the slate-violet Longshot with its long rail rifle at the end](42-15bc-longshot.jpg)
+
+A fifth mech and the game's first sniper. Q plants it for 1.2 s with the scope zoomed and a red laser everyone can see, then one rail shot goes down the line, 85 damage, stopped by any rock. A hit breaks the charge, and bots that see the laser on them run. Its model, built by script like the other four, is all legs and rifle in slate violet and bone.
+
+## 43. The Arena island
+*Passed 2026-10-20. Commit `10b963a`.*
+
+![The Arena from above: a ragged island of junkyard in a dark sea, sand along the shore](43-arena-island.jpg)
+
+The 200 m Arena is now an island with a coastline drawn from its seed. The sea is the edge: wade into the shallows, but nobody walks, dashes or jets past them, and the server and every client stop at exactly the same line. Open sea, islets and old rigs replace the junkyard wall.
+
+## 44. Menus that move
+*Passed 2026-10-20. Commit `5843588`.*
+
+![Four frames of the title screen arriving: the name slides in, then the Play panel, then the mech cards rise one by one](44-ui-motion.jpg)
+
+The menus and HUD move now, quickly and never in the way of a click: panels and cards arrive in steps, buttons press down, the countdown slams in and the results count down to your place, all as fades for players who ask for less motion. On the way it fixed a GO and a supply-drop banner that had been vanishing a frame after they showed.
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
