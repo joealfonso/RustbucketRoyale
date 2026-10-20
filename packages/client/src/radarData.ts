@@ -9,10 +9,6 @@ export interface RadarConfig {
   drawUnits: number; // the radar is drawn as if it were this many units across, then scaled to its size on screen
   discShade: number; // how much darker than the panel the scope's disc is, 0 to 1
   rangeRings: number; // evenly spaced rings out to the edge, the outermost being the edge itself
-  sweepSeconds: number; // one full turn of the sweep line
-  sweepTrailDegrees: number;
-  sweepTrailBands: number; // the trail is flat bands that step down, not a smooth glow
-  sweepTrailAlpha: number; // the band nearest the line; each one behind it is a step fainter
   pulseSeconds: number; // how long a heard sound stays on the radar
   maxPulses: number;
   markSize: number; // in draw units
@@ -24,7 +20,7 @@ export interface RadarConfig {
   warn: NoiseKind[]; // also drawn in warning red; the shape still tells them apart
 }
 
-const NUMBERS = ["drawUnits", "discShade", "rangeRings", "sweepSeconds", "sweepTrailDegrees", "sweepTrailBands", "sweepTrailAlpha", "pulseSeconds", "maxPulses", "markSize", "markGrowth", "mechDotSize", "zoneLineWidth"] as const;
+const NUMBERS = ["drawUnits", "discShade", "rangeRings", "pulseSeconds", "maxPulses", "markSize", "markGrowth", "mechDotSize", "zoneLineWidth"] as const;
 
 // Fails loudly on a bad data file, same as the other tuning files.
 export function parseRadar(raw: unknown): RadarConfig {
@@ -32,7 +28,7 @@ export function parseRadar(raw: unknown): RadarConfig {
   for (const key of NUMBERS) {
     if (typeof d?.[key] !== "number" || !(d[key] >= 0)) throw new Error(`radar.json: ${key} must be a number, 0 or more`);
   }
-  for (const key of ["drawUnits", "sweepSeconds", "pulseSeconds", "sweepTrailBands", "maxPulses"] as const) {
+  for (const key of ["drawUnits", "pulseSeconds", "maxPulses"] as const) {
     if (!(d[key]! > 0)) throw new Error(`radar.json: ${key} must be above 0`);
   }
   if (!Array.isArray(d.zoneDash) || d.zoneDash.length !== 2 || !d.zoneDash.every((n) => typeof n === "number" && n > 0)) {

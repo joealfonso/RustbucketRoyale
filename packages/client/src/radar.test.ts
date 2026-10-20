@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NOISE_KINDS } from "@rustbucket/shared";
 import radarJson from "../../../data/radar.json";
 import { parseRadar, shapesByKind, warnByKind } from "./radarData";
-import { placeOnRadar, sweepAngle } from "./radarMath";
+import { placeOnRadar } from "./radarMath";
 
 const config = parseRadar(radarJson);
 
@@ -51,15 +51,5 @@ describe("radar placement", () => {
     const range = 150, mid = 75;
     placeOnRadar(0, -range, 0, mid / range, out);
     expect(Math.hypot(out.x, out.y)).toBeCloseTo(mid);
-  });
-});
-
-describe("radar sweep", () => {
-  it("starts straight up, turns clockwise and comes round once per sweep", () => {
-    const period = config.sweepSeconds;
-    expect(sweepAngle(0, period)).toBeCloseTo(-Math.PI / 2);
-    expect(sweepAngle(period * 250, period)).toBeCloseTo(0);
-    expect(sweepAngle(period * 1000, period)).toBeCloseTo(-Math.PI / 2);
-    expect(sweepAngle(period * 1000 * 7.5, period)).toBeCloseTo(Math.PI / 2);
   });
 });

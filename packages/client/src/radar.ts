@@ -1,7 +1,7 @@
 import type { Circle } from "@rustbucket/shared";
 import type { RemoteMechs } from "./remoteMechs";
 import { shapesByKind, warnByKind, type MarkShape, type RadarConfig } from "./radarData";
-import { placeOnRadar, sweepAngle, type RadarPoint } from "./radarMath";
+import { placeOnRadar, type RadarPoint } from "./radarMath";
 
 interface Pulse {
   x: number;
@@ -19,7 +19,7 @@ const ZONE_BLINK_MS = 120;
 // filled dots, the same for bots and people so the radar never gives away who is who. Anything further off only shows
 // when it makes a sound, as a mark whose shape says what kind of sound it was (radar.json), fading out. A sound beyond
 // the edge shows its mark on the rim, pointing its way. The zone edge is a dashed amber circle: magenta is kept for
-// the zone ring in the world. The sweep line is only for looks; marks show whether it has passed them or not.
+// the zone ring in the world.
 export class Radar {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -125,7 +125,7 @@ export class Radar {
     ctx.lineWidth = 1;
     ctx.setLineDash(this.noDash);
 
-    this.drawScope(nowMs);
+    this.drawScope();
 
     ctx.save();
     ctx.beginPath();
@@ -154,8 +154,8 @@ export class Radar {
     ctx.fill();
   }
 
-  // Soot disc, range rings, cross hairs, the sweep and its stepped trail, and the edge.
-  private drawScope(nowMs: number): void {
+  // Soot disc, range rings, cross hairs and the edge. No sweep line: it only turned for looks and told you nothing.
+  private drawScope(): void {
     const ctx = this.ctx;
     const c = this.config;
     const mid = this.mid;
@@ -167,18 +167,6 @@ export class Radar {
     ctx.fillStyle = "#000";
     ctx.globalAlpha = c.discShade;
     ctx.fill();
-
-    const angle = sweepAngle(nowMs, c.sweepSeconds);
-    const bandWidth = (c.sweepTrailDegrees * Math.PI) / 180 / c.sweepTrailBands;
-    ctx.fillStyle = this.colours.amber;
-    for (let i = 0; i < c.sweepTrailBands; i++) {
-      ctx.globalAlpha = c.sweepTrailAlpha * (1 - i / c.sweepTrailBands);
-      ctx.beginPath();
-      ctx.moveTo(mid, mid);
-      ctx.arc(mid, mid, mid - 1, angle - bandWidth * (i + 1), angle - bandWidth * i);
-      ctx.closePath();
-      ctx.fill();
-    }
 
     ctx.globalAlpha = 1;
     ctx.strokeStyle = this.colours.dim;
@@ -202,10 +190,6 @@ export class Radar {
 
     ctx.globalAlpha = 1;
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(mid, mid);
-    ctx.lineTo(mid + Math.cos(angle) * (mid - 1), mid + Math.sin(angle) * (mid - 1));
-    ctx.stroke();
     ctx.strokeStyle = this.colours.dim;
     ctx.beginPath();
     ctx.arc(mid, mid, mid - 1, 0, TAU);

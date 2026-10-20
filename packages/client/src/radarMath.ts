@@ -13,9 +13,3 @@ export function placeOnRadar(dx: number, dz: number, yaw: number, scale: number,
   out.y = -forward * scale;
   return out;
 }
-
-// The sweep line's angle in canvas terms (0 is right, growing clockwise), starting straight up at time 0.
-export function sweepAngle(nowMs: number, sweepSeconds: number): number {
-  const turn = (nowMs / (sweepSeconds * 1000)) % 1;
-  return -Math.PI / 2 + turn * Math.PI * 2;
-}
