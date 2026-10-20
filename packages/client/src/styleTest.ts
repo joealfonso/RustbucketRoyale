@@ -268,7 +268,8 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "KeyF") fireAtRange();
   if (e.code === "KeyG") rangeWeapon = (rangeWeapon + 1) % weapons.length;
   if (e.code === "KeyT") rangeSlow = !rangeSlow;
-  if (e.code === "Digit4") { distance = 14; lookingAtRoster = true; lookingAtProps = false; closeUp = -1; }
+  // Far enough back for the whole line-up: 14 m framed four mechs 6 m apart, and the roster grows.
+  if (e.code === "Digit4") { distance = 14 * Math.max(1, roster.length / 4); lookingAtRoster = true; lookingAtProps = false; closeUp = -1; }
   if (e.code === "Digit6" && rosterModels.length > 0) { closeUp = (closeUp + 1) % rosterModels.length; distance = 7; turn = Math.PI / 2; lookingAtRoster = true; }
   if (e.code === "Digit5") { distance = 9; lookingAtProps = true; lookingAtRoster = false; closeUp = -1; }
   if (e.code === "KeyQ") turn -= 0.3;
