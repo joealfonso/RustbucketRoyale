@@ -2,6 +2,7 @@
   "walkSpeed": 7.4,
   "runSpeed": 14.7,
   "crawlSpeedMultiplier": 0.4,
+  "waterSpeedMultiplier": 0.7,
   "acceleration": 40,
   "deceleration": 50,
   "airControl": 0.4,

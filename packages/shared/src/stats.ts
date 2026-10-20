@@ -3,6 +3,7 @@ export interface MechStats {
   walkSpeed: number;
   runSpeed: number;
   crawlSpeedMultiplier: number; // share of walk speed left with broken legs
+  waterSpeedMultiplier: number; // share of walk and run speed left while wading (dash and jets are untouched)
   acceleration: number;
   deceleration: number;
   airControl: number;
@@ -176,7 +177,7 @@ function parseNumbers<T>(raw: unknown, name: string, keys: readonly (keyof T & s
 }
 
 const MECH_KEYS: (keyof MechStats & string)[] = [
-  "walkSpeed", "runSpeed", "crawlSpeedMultiplier", "acceleration", "deceleration", "airControl", "turnSpeedDegrees",
+  "walkSpeed", "runSpeed", "crawlSpeedMultiplier", "waterSpeedMultiplier", "acceleration", "deceleration", "airControl", "turnSpeedDegrees",
   "gravity", "maxFallSpeed", "stepHeight", "halfWidth", "height",
   "jetLift", "jetMaxRiseSpeed", "fuelMax", "fuelDrainPerSecond", "fuelRegenPerSecond", "fuelRegenDelay", "fuelUnlockFraction",
   "staminaMax", "runDrainPerSecond", "staminaRegenPerSecond", "staminaRegenDelay", "staminaUnlockFraction",

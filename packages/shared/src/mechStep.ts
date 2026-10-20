@@ -145,7 +145,8 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
     // Dash over: bleed the extra speed off so the mech slides out of it instead of keeping a 38 m/s run.
     if (s.dashTime <= 0) capToRunSpeed(s, stats);
   } else {
-    const topSpeed = s.crawling ? stats.walkSpeed * stats.crawlSpeedMultiplier : s.running ? stats.runSpeed : stats.walkSpeed;
+    const legs = s.crawling ? stats.walkSpeed * stats.crawlSpeedMultiplier : s.running ? stats.runSpeed : stats.walkSpeed;
+    const topSpeed = world.terrain?.wading(s.x, s.y, s.z) ? legs * stats.waterSpeedMultiplier : legs;
     const rate = (moving ? stats.acceleration : stats.deceleration) * (s.grounded ? 1 : stats.airControl);
     const toX = wishX * topSpeed - s.vx;
     const toZ = wishZ * topSpeed - s.vz;

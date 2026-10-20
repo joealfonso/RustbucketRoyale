@@ -1,6 +1,6 @@
 import { World, type Box } from "../world";
 import { Terrain } from "../terrain";
-import { cornersFor, noiseHeights, padHeights, shapeTerrain, type Pad, type Rect } from "./terrainGen";
+import { cornersFor, floodBed, noiseHeights, padHeights, shapeTerrain, waterLevelFor, type Rect } from "./terrainGen";
 import { addProp, type PropConfig, type PropInstance } from "../props";
 import { orient, type ChunkSet } from "./chunks";
 import { buildNavGrid, floodFill, navCell, raised, type NavGrid, type NavParams } from "./navGrid";
@@ -158,12 +158,22 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
     }));
   }
   const padOf = settings ? padHeights(noise, def.meters, chunks.size, held, settings) : new Int32Array(n * n);
+  const padsAt = () => held.flatMap((rects, cell) => rects.map((r) => ({ ...r, height: padOf[cell]! })));
+  let heights = settings ? shapeTerrain(noise, def.meters, padsAt(), settings) : noise;
+  // Water fills the lowest ground. Its bed is raised so it is never deeper than a wade; a building pad lower than
+  // the bed is raised with it (still level, now standing in shallow water), and the ground is shaped again round it.
+  const water = settings ? waterLevelFor(heights, settings.tiers[tier]?.waterShare ?? 0) : null;
+  if (settings && water !== null) {
+    const depth = Math.round(settings.water.maxDepthMeters * 100);
+    for (let cell = 0; cell < n * n; cell++) padOf[cell] = Math.max(padOf[cell]!, water - depth);
+    heights = shapeTerrain(noise, def.meters, padsAt(), settings);
+    floodBed(heights, water, depth);
+  }
 
   // Each chunk's boxes stand on its pad, and the ground round each box is held level.
   const spawnCandidates: number[] = [];
   const firstBoxOf = new Int32Array(n * n);
   const lastBoxOf = new Int32Array(n * n);
-  const pads: Pad[] = [];
   for (let z = 0; z < n; z++) {
     for (let x = 0; x < n; x++) {
       const cell = z * n + x;
@@ -176,15 +186,12 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
         orient(b, chunks.size, turnsOf[cell]!, mirrorOf[cell] === 1, oriented);
         add(originX + oriented.center[0], padY + oriented.center[1], originZ + oriented.center[2], oriented.size[0], oriented.size[1], oriented.size[2], b.colorIndex + 1);
         boxKind[boxes.length - 1] = b.kindIndex;
-        const placed = boxes[boxes.length - 1]!;
-        pads.push({ minX: placed.minX - padMargin, minZ: placed.minZ - padMargin, maxX: placed.maxX + padMargin, maxZ: placed.maxZ + padMargin, height: padOf[cell]! });
       }
       lastBoxOf[cell] = boxes.length;
       if (template.spawnable) spawnCandidates.push(cell);
     }
   }
-  const heights = settings ? shapeTerrain(noise, def.meters, pads, settings) : noise;
-  const terrain = new Terrain(def.meters, settings?.cellMeters ?? chunks.size, heights, settings?.snapMeters ?? 0.5);
+  const terrain = new Terrain(def.meters, settings?.cellMeters ?? chunks.size, heights, settings?.snapMeters ?? 0.5, water, settings?.water.wadeMeters);
   const ground = boxes[0]!;
   ground.maxY = Math.min(0, terrain.minHeight) - 1;
   ground.minY = ground.maxY - 1;

@@ -33,9 +33,14 @@
     "apronRisePercent": 30,
     "padMarginMeters": 4,
     "snapMeters": 0.5,
+    "water": {
+      "maxDepthMeters": 1.2,
+      "wadeMeters": 0.1
+    },
     "tiers": {
       "arena": {
-        "octaves": []
+        "octaves": [],
+        "waterShare": 0
       },
       "small": {
         "octaves": [
@@ -47,7 +52,8 @@
             "spacingMeters": 28,
             "amplitudeMeters": 1.2
           }
-        ]
+        ],
+        "waterShare": 0.06
       },
       "medium": {
         "octaves": [
@@ -59,7 +65,8 @@
             "spacingMeters": 44,
             "amplitudeMeters": 2.5
           }
-        ]
+        ],
+        "waterShare": 0.08
       },
       "large": {
         "octaves": [
@@ -71,7 +78,8 @@
             "spacingMeters": 48,
             "amplitudeMeters": 3
           }
-        ]
+        ],
+        "waterShare": 0.08
       }
     }
   }

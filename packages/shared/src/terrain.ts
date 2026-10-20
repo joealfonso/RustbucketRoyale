@@ -12,7 +12,10 @@ export interface TerrainSettings {
   padMarginMeters: number; // ground kept level this far around anything built on it, at least one cell
   apronRisePercent: number; // ground round a level pad eases into it no steeper than this (metres per 100), so no cliffs
   snapMeters: number; // a walking mech stays on the ground when it drops by up to this in one step (downhill)
-  tiers: Record<string, { octaves: { spacingMeters: number; amplitudeMeters: number }[] }>;
+  // Water fills the lowest ground: `share` of each map's corners (per tier) is under it, and the bed is raised so it
+  // is never deeper than maxDepthMeters, so a mech always wades and never goes under.
+  water: { maxDepthMeters: number; wadeMeters: number };
+  tiers: Record<string, { octaves: { spacingMeters: number; amplitudeMeters: number }[]; waterShare?: number }>;
 }
 
 export function parseTerrainSettings(raw: unknown): TerrainSettings {
@@ -24,7 +27,9 @@ export function parseTerrainSettings(raw: unknown): TerrainSettings {
   if (d.padMarginMeters < d.cellMeters) throw new Error("terrain.json: padMarginMeters must be at least cellMeters");
   if (!Number.isInteger(d.apronRisePercent) || d.apronRisePercent > d.maxRisePercent) throw new Error("terrain.json: apronRisePercent must be a whole number no steeper than maxRisePercent");
   if (!Number.isInteger(d.maxRisePercent) || d.maxRisePercent > 170) throw new Error("terrain.json: maxRisePercent must be a whole number up to 170");
+  if (!(d.water?.maxDepthMeters > 0) || !(d.water.wadeMeters >= 0)) throw new Error("terrain.json: water needs maxDepthMeters above 0 and wadeMeters");
   for (const [tier, t] of Object.entries(d.tiers ?? {})) {
+    if (t.waterShare !== undefined && !(t.waterShare >= 0 && t.waterShare < 0.5)) throw new Error(`terrain.json: ${tier} waterShare must be from 0 to under 0.5`);
     for (const o of t.octaves ?? []) {
       if (!(o.spacingMeters > 0) || o.spacingMeters % d.cellMeters !== 0) throw new Error(`terrain.json: ${tier} spacingMeters must be a whole number of cells`);
       if (!(o.amplitudeMeters >= 0)) throw new Error(`terrain.json: ${tier} amplitudeMeters must be 0 or more`);
@@ -34,13 +39,17 @@ export function parseTerrainSettings(raw: unknown): TerrainSettings {
 }
 
 export class Terrain {
+  // The water surface in metres; -Infinity for a dry map. Everywhere lower than it is under water.
+  readonly waterLevel: number;
   readonly minHeight: number;
   readonly maxHeight: number;
   readonly corners: number; // corners per side: cells per side + 1
 
   // `heights` in centimetres, corners row by row from (-meters/2, -meters/2), +x first.
-  constructor(readonly meters: number, readonly cell: number, readonly heights: Int32Array, readonly snapMeters: number) {
+  // `waterLevelCm` null for a dry map. `wadeMeters`: how far under the surface the feet must be to count as wading.
+  constructor(readonly meters: number, readonly cell: number, readonly heights: Int32Array, readonly snapMeters: number, readonly waterLevelCm: number | null = null, readonly wadeMeters = 0.1) {
     this.corners = Math.round(meters / cell) + 1;
+    this.waterLevel = waterLevelCm === null ? -Infinity : waterLevelCm / 100;
     if (heights.length !== this.corners * this.corners) throw new Error("Terrain: heights do not match the size");
     let lo = Infinity, hi = -Infinity;
     for (const h of heights) { if (h < lo) lo = h; if (h > hi) hi = h; }
@@ -73,6 +82,16 @@ export class Terrain {
     const h00 = this.heights[row]!, h10 = this.heights[row + 1]!, h01 = this.heights[row + this.corners]!, h11 = this.heights[row + this.corners + 1]!;
     const cm = fx + fz <= 1 ? h00 + (h10 - h00) * fx + (h01 - h00) * fz : h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fz);
     return cm / 100;
+  }
+
+  // How deep the water is over the ground at (x, z), 0 where it is dry.
+  waterDepthAt(x: number, z: number): number {
+    return Math.max(0, this.waterLevel - this.heightAt(x, z));
+  }
+
+  // Whether something with its feet at height y over (x, z) is wading: standing in water, not flying over it.
+  wading(x: number, y: number, z: number): boolean {
+    return y < this.waterLevel - this.wadeMeters && this.waterDepthAt(x, z) > this.wadeMeters;
   }
 
   // The upward surface normal under (x, z), of the triangle there. Writes [x, y, z] into `out`.

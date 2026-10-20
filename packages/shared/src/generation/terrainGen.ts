@@ -126,6 +126,21 @@ export function padHeights(noise: Int32Array, meters: number, chunkSize: number,
   return pads;
 }
 
+// The water level for a map, in centimetres: the height under which `share` of the corners lie. Null when the share
+// is 0. Sorting whole numbers gives the same order on every machine.
+export function waterLevelFor(heights: Int32Array, share: number): number | null {
+  if (!(share > 0)) return null;
+  const sorted = Int32Array.from(heights).sort();
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * share))]!;
+}
+
+// Raises the lowest ground to a shallow bed under the water, so it is never deeper than `maxDepth` cm. Raising
+// everything below one height to that height cannot make any slope steeper.
+export function floodBed(heights: Int32Array, level: number, maxDepth: number): void {
+  const bed = level - maxDepth;
+  for (let k = 0; k < heights.length; k++) if (heights[k]! < bed) heights[k] = bed;
+}
+
 // One level area: corners inside the rectangle (metres, already widened by the pad margin) are held at `height` cm.
 export interface Pad {
   minX: number; minZ: number; maxX: number; maxZ: number;

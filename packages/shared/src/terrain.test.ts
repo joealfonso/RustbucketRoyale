@@ -102,3 +102,55 @@ describe("generated hills", () => {
     expect(map.terrain.minHeight).toBe(0);
   });
 });
+
+describe("water", () => {
+  const mech = { halfWidth: stats.halfWidth, height: stats.height, stepHeight: stats.stepHeight };
+  const build = (seed: number, tier: string) => generateMap(seed, tier, parseChunkSet(chunksJson), tiers, mech, parsePropConfig(propsJson));
+
+  for (const tier of ["small", "medium"]) {
+    it(`${tier}: floods about its share of the lowest ground, never deeper than a wade, and keeps buildings level`, () => {
+      const share = tiers.terrain!.tiers[tier]!.waterShare!;
+      for (const seed of [1, 2]) {
+        const map = build(seed, tier);
+        const t = map.terrain;
+        let wet = 0, deepest = 0;
+        for (let k = 0; k < t.heights.length; k++) {
+          const depth = t.waterLevel - t.heights[k]! / 100;
+          if (depth > 0) { wet++; deepest = Math.max(deepest, depth); }
+        }
+        expect(wet / t.heights.length).toBeGreaterThan(share * 0.5);
+        expect(wet / t.heights.length).toBeLessThan(share * 3);
+        expect(deepest).toBeLessThanOrEqual(tiers.terrain!.water.maxDepthMeters + 1e-9);
+        map.boxes.forEach((b, k) => {
+          if (k < 5 || map.propOfBox[k]! >= 0) return;
+          const ground = [[b.minX, b.minZ], [b.maxX, b.maxZ], [b.minX, b.maxZ], [b.maxX, b.minZ]].map(([x, z]) => t.heightAt(x!, z!));
+          expect(Math.max(...ground) - Math.min(...ground), `${tier} seed ${seed} box ${k}`).toBeLessThan(0.01);
+          expect(b.minY).toBeGreaterThanOrEqual(Math.min(...ground) - 0.01); // nothing sunk under the raised bed
+        });
+      }
+    });
+  }
+
+  it("is the same water from the same seed", () => {
+    expect(build(5, "medium").terrain.waterLevel).toBe(build(5, "medium").terrain.waterLevel);
+  });
+
+  it("leaves the arena dry", () => {
+    expect(build(1, "arena").terrain.waterLevel).toBe(-Infinity);
+  });
+
+  it("slows a wading mech to its share of walking speed, and not one jetting over the water", () => {
+    // A flat bed 0.8 m under the water everywhere.
+    const n = 21, heights = new Int32Array(n * n).fill(-80);
+    const world = new World([], 16, new Terrain(80, 4, heights, 0.5, 0, 0.1));
+    const s = createMechState(stats, 0, -0.8, 0, Math.PI);
+    const walk = { ...createMechInput(), moveY: 1, aimYaw: Math.PI };
+    for (let i = 0; i < 60; i++) stepMech(s, walk, stats, STEP, world);
+    expect(Math.hypot(s.vx, s.vz)).toBeCloseTo(stats.walkSpeed * stats.waterSpeedMultiplier, 3);
+    const dry = new World([], 16, Terrain.flat(80, 4));
+    const d = createMechState(stats, 0, 0, 0, Math.PI);
+    for (let i = 0; i < 60; i++) stepMech(d, walk, stats, STEP, dry);
+    expect(Math.hypot(d.vx, d.vz)).toBeCloseTo(stats.walkSpeed, 3);
+  });
+});
+
