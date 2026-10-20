@@ -59,6 +59,8 @@ export class Input {
     canvas.addEventListener("click", () => { if (!this.locked) this.lock(); });
     document.addEventListener("pointerlockchange", () => {
       this.locked = document.pointerLockElement === canvas;
+      // Once you have played, freeing the mouse shows a small bar instead of the whole screen, so the fight stays in view.
+      if (this.locked) hint.classList.add("resume");
       hint.classList.toggle("hidden", this.locked || this.panelOpen);
       if (!this.locked) this.mouseDown = false;
     });

@@ -222,6 +222,11 @@ body.titleScreen > :not(#menu, #game) { display: none !important; }
 .screen.panel { pointer-events: auto; padding: 2rem 2.4rem; }
 #hint { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(42, 47, 46, 0.82); color: var(--hud-amber); font: 700 1.4rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; text-align: center; cursor: pointer; }
 #hint.hidden { display: none; }
+#hint .resumeLine { display: none; }
+#hint.resume { inset: auto 0 auto 0; top: 22%; background: none; pointer-events: none; }
+#hint.resume .screen { display: none; }
+#hint.resume .resumeLine { display: block; pointer-events: auto; margin: 0; padding: 0.6rem 1.2rem; font: 700 1.1rem var(--hud-word); letter-spacing: 0.1em; cursor: pointer; }
+#hint.resume .resumeLine small { display: block; margin-top: 0.2rem; font: 500 0.75rem var(--hud-word); letter-spacing: 0.08em; color: var(--hud-amber-dim); }
 #hint h2 { margin: 0; font: 700 2.2rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.08em; color: var(--hud-amber); }
 #hint .screen.panel { cursor: pointer; }
 /* The controls as key and action pairs, two pairs a row. */

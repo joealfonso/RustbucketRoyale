@@ -33,6 +33,6 @@ export function serverQuery(params: URLSearchParams): URLSearchParams {
 // The address once you are in a room: reloading rejoins it, and if the server restarted it comes back the same way.
 export function rejoinQuery(params: URLSearchParams, roomCode: string, tier: string): URLSearchParams {
   const again = new URLSearchParams({ room: roomCode, tier });
-  for (const key of ["bots", "difficulty", "kit"]) if (params.has(key)) again.set(key, params.get(key)!);
+  for (const key of ["bots", "difficulty", "kit", "tuning"]) if (params.has(key)) again.set(key, params.get(key)!);
   return again;
 }

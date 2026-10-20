@@ -1,0 +1,10 @@
+{
+  "showSeconds": 6,
+  "walkSecondsBeforeSprint": 12,
+  "tips": {
+    "sprint": "Double-tap W and hold: sprint",
+    "ability": "Q: {ability} ready",
+    "grenade": "G: throw a grenade",
+    "weapons": "1 / 2 or the wheel: switch weapons"
+  }
+}

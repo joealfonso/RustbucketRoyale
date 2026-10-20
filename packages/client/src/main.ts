@@ -95,6 +95,8 @@ import radarJson from "../../../data/radar.json";
 import { RemoteMechs } from "./remoteMechs";
 import { RingView } from "./ringView";
 import { DropView } from "./dropView";
+import { Tips, browserTipStore, parseTips } from "./tips";
+import tipsJson from "../../../data/tips.json";
 import dropsJson from "../../../data/drops.json";
 import { ShotFx } from "./shotFx";
 import { parseWeaponFx } from "./weaponFxData";
@@ -205,6 +207,10 @@ document.getElementById("menuButton")!.addEventListener("click", () => { locatio
 // Play from the title screen: the match starts the first time you click into the game, so it never counts down while
 // you are still reading the screen. Only on the page Play opened: a reload or an invite link waits for Enter as before.
 let autoStart = params.has("play");
+// Players never see the tuning panel: a production build opens it only with &tuning in the address (for measuring
+// on a laptop through the tunnel). Development always has it.
+const tuningAllowed = import.meta.env.DEV || params.has("tuning");
+const tips = new Tips(parseTips(tipsJson), browserTipStore(() => localStorage));
 let clickedIn = false;
 hint.addEventListener("click", () => { clickedIn = true; });
 
@@ -594,7 +600,10 @@ if (net) {
     progressAt = performance.now();
     health = snap.health;
     loadout = snap.loadout;
-    if (sum(health.hp) + sum(loadout.armor) < before) flashHurt();
+    if (sum(health.hp) + sum(loadout.armor) < before) {
+      flashHurt();
+      if (loadout.grenades > 0) tips.offer("grenade"); // under fire with a grenade in hand: the moment to say G
+    }
     if (loadout.grenades > old.grenades || loadout.armor.some((a, zone) => a > old.armor[zone]!)) sound.play("pickup");
     if (loadout.slots[0] !== old.slots[0] || loadout.slots[1] !== old.slots[1]) sound.play("swap");
     // When the server changes the weapon in hand itself (taking a weapon into an empty slot), follow it.
@@ -868,7 +877,7 @@ function frame(now: number): void {
   last = now;
   fps += (1 / Math.max(frameTime, 1e-4) - fps) * 0.1;
 
-  if (input.wasPressed("F1")) {
+  if (input.wasPressed("F1") && tuningAllowed) {
     if (panel) togglePanel(panel);
     else if (!panelLoading) {
       panelLoading = true;
@@ -1060,6 +1069,14 @@ function frame(now: number): void {
   radar?.setRangeScale(upgradeScale(loadout, upgradeSet, "radarRange"));
   setMechGear(ownModel, weaponColors[loadout.slots[loadout.active]!] ?? weaponStats.color, loadout.armor);
   pickupView.update(performance.now());
+  // Tips, once each in this browser, at the moment they help (tips.ts). Only while you are playing, not watching.
+  const playing = !health.dead && !spectating && input.locked && (net === null || progress.state === "active");
+  if (playing) {
+    tips.walking(frameTime, mech.grounded && !mech.running && Math.hypot(mech.vx, mech.vz) > 1);
+    if (ownAbilityStats && mech.abilityCooldown <= 0) tips.offer("ability", ownAbilityStats.name);
+    if (loadout.slots[1]! >= 0) tips.offer("weapons");
+  }
+  const tipNow = tips.current(frameTime);
   // Standing by a weapon, say what E would do.
   let near: PickupState | null = null;
   let nearDistance = lootConfig.interactRange;
@@ -1087,7 +1104,7 @@ function frame(now: number): void {
   } else if (!health.dead && net && partToRepair(health.hp, zoneSet) >= 0) {
     hud.setPrompt(`Hold F: repair ${zoneSet.zones[partToRepair(health.hp, zoneSet)]!.name}`);
   } else {
-    hud.setPrompt("");
+    hud.setPrompt(tipNow);
   }
   statusText.textContent = spectating
     ? `${myPlace ? `You placed ${myPlace}. ` : ""}${spectateId ? `Watching ${name(spectateId)}. Click to switch.` : "Nobody left to watch."}`
