@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: none in progress (13b and 14c done); 13c (Junk Titan) and V9b (mech motion) queued; 12c waiting for Joseph's laptop numbers (M10's friend test still open)
+Current code milestone: none in progress (13c done); 12c waiting for Joseph's laptop numbers (M10's friend test still open)
 Current visual milestone: none in progress (V9b done)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -171,3 +171,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-20: Gates 13b, 14c and V9 passed by Joseph's playtest ("13b, 14c and V9 pass").
 - 2026-10-20: V9b built on Joseph's go, waiting for his playtest. Recoil: each mech's guns kick back and up on a spring per weapon (autocannon a rattle, scattergun a punch, spike driver a slow shove, Rail Shot the biggest), heavy weapons shove the body; yours, everyone else's and in the kill replay. Flicker: glowing sensors flicker in hard steps when their zone is damaged, an ember when broken, dark on a wreck. Pistons: leg rams on all five mechs telescope with the knee (Cataclysm's ankle rams stay fixed). Sway: the Arbiter's mast and drones, the Longshot's ballast and the Stiletto's fuel hose lag and swing with movement (off on low effects). Style page: R fires, Y rail kick, H damage steps. Draw calls +39 near your own Arbiter, GPU unchanged. Settings in data/recoil.json and data/sway.json, first guesses.
 - 2026-10-20: V9b passed by Joseph's playtest ("V9b passes").
+- 2026-10-20: 13c built and logged done on Joseph's call, with no playtest stop ("lay out the 13c Junk Titan plan, then build it with agents"; he asked that it be logged once checks pass). On medium and large a 12 m Junk Titan wakes 45 s in, announced to everyone; it walks to the nearest mech, stomps whoever is within 8 m (knocked back, props smashed), throws cars at whoever is 15 to 80 m off (the car lands exactly where the server says), and chases whoever hurt it last for 10 s, so you can lure it onto someone else. 10,000 hit points in one pool, core shots 1.5x. When it falls it crushes what is under it and spills 12 pieces of loot. Boss bar within range, red cog on the radar, its kills in the feed and on the knockout card. Model 8,740 triangles near. Gauntlet passed; soaks pass on medium (Titan felled) and large; bandwidth +1 to 3 kbps. Not played by hand: how it feels to fight is Joseph's to judge. `TITAN_TIERS=small` on the server puts it on small maps to try it.

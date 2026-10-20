@@ -348,6 +348,13 @@ Joseph asked for better mechs again, and the answer was shape, not triangles. Si
 
 Motion sells the metal. Every gun now kicks on its own spring, a rattle for the autocannon and a heavy shove for the rail shot. Leg rams telescope as the knees bend instead of sliding through the armour. The Arbiter's mast and drones lag and swing as it moves, and a damaged sensor stutters in hard steps until the part breaks and goes dark.
 
+## 48. The Junk Titan
+*Logged done 2026-10-20 on Joseph's call. Commit `be509ad`.*
+
+![The Junk Titan beside the roster at 10 m: a shipping container chest with a glowing furnace, legs on car feet, an excavator claw for an arm](48-13c-junk-titan.jpg)
+
+Medium and large maps now have a boss. Forty-five seconds in, a giant built from containers, cars and an excavator arm wakes up and goes for the nearest mech. Get close and it stomps you flat; stay far and it throws a car at you. It holds a grudge against whoever shot it last, so the best move is to lure it into someone else. It walks straight through anything in its way, and when it finally falls it spills a pile of the best loot.
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
