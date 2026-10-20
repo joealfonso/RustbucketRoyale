@@ -250,6 +250,13 @@ The flat yard became rolling hills, after Joseph showed a reference of hills, pi
 
 The lowest ground of every map floods into shallow marshes, never deeper than a wade. Wading slows you to 70%, but your footsteps carry less than half as far on the radar, so a marsh is the sneaky way in. Bots go round ponds unless it is much shorter to wade, which leaves the water to the players. The water is murky toon green with a light shore and darker deeps, feet splash, shots splash, landings splash, and steps slosh. The soak caught the server walking on dry ground where clients waded, the same trap as the hills, before anyone played it.
 
+## 34. Forests, rocks and mountains
+*Passed 18:00. Commit `73c9aa1`. M11 is done.*
+
+![A wood of chunky toon pines at dusk, one rust-brown dead tree among them, crates and a container in the clearing, the junkyard wall and mountains beyond](34-11c-forests-and-mountains.jpg)
+
+Pine woods grow in clumps on the hillsides, with a few dead rust-brown trees among the green, and every tree can be brought down: shoot it, blast it, ram through a row of them with the Ironclad, or pounce onto one with the Stiletto, and it topples the way it was hit with a creak and a thump. Trunks are cover; crowns fade so a wood never blinds the camera. Boulders sit half-sunk in the slopes, bushes dot the open ground, and three rings of rocky mountains stand on the horizon. Bots weave between trunks on their own. With this the junkyard looks like Joseph's reference, in the game's own toon style: hills, water, woods and mountains in three gates over one day.
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
