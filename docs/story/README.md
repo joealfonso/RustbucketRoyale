@@ -341,6 +341,13 @@ Getting knocked out used to be a mech going still. Now a card says who got you a
 
 Joseph asked for better mechs again, and the answer was shape, not triangles. Six agents worked from art research: exaggerated silhouettes tested as black shapes side by side, paint schemes split light, mid and dark and kept clear of the ground, bolts moved into paint so the triangles could go to armour lips, guns, pistons and hoses, and a shared pass that cleaned the shading on every bevel, chips paint on worn edges and gives bare metal its glint.
 
+## 47. Mechs that move like machines
+*Passed 2026-10-20. Commit `788928d`.*
+
+![Frames of the roster walking, leg pistons sliding in and out of their sleeves as the knees bend](47-v9b-mech-motion.jpg)
+
+Motion sells the metal. Every gun now kicks on its own spring, a rattle for the autocannon and a heavy shove for the rail shot. Leg rams telescope as the knees bend instead of sliding through the armour. The Arbiter's mast and drones lag and swing as it moves, and a damaged sensor stutters in hard steps until the part breaks and goes dark.
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
