@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import {
-  FireGate, Predictor, STEP, applyLook, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
+  FireGate, Predictor, STEP, applyLook, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
   parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
   createRayHit, type AbilityMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
@@ -445,6 +445,18 @@ const [spawnX, spawnY, spawnZ] = map.spawn;
 // Yaw PI faces +Z.
 const predictor = new Predictor(statsFor, map.world, spawnX, spawnY, spawnZ, Math.PI, abilityOf);
 const mech = predictor.state;
+// Online, your own ram ploughs through props in prediction on the same step the server smashes them (the shared rule,
+// propsInReach), so a charge through a row of trees is not stopped by each trunk until the server's word arrives.
+// Only their collision goes here: they break on screen when the server says so. Offline nothing breaks them.
+const smashScratch: number[] = [], smashed: number[] = [];
+if (net) {
+  predictor.afterStep = (s) => {
+    const ram = abilityOf(s.mech);
+    if (ram?.kind !== "ram" || s.abilityTime <= 0) return;
+    const count = propsInReach(map.world, map.propOfBox, s.x, s.y, s.z, ram.hitRadius, statsFor(s.mech).height, smashScratch, smashed);
+    for (let i = 0; i < count; i++) map.world.disable(map.props[smashed[i]!]!.boxIndex);
+  };
+}
 mech.mech = shownMech; // offline this is the mech you drive; online the first snapshot says
 const aim = { yaw: Math.PI, pitch: 0 };
 const mechInput = createMechInput();

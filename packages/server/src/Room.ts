@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
-  FireGate, STEP, ZONE_ARMS, ZONE_COUNT, ZONE_LEGS, ZONE_TORSO, applyDamage, computeShot, createGrenade, createHealth, createMechInput,
+  FireGate, STEP, ZONE_ARMS, ZONE_COUNT, ZONE_LEGS, ZONE_TORSO, applyDamage, propsInReach, computeShot, createGrenade, createHealth, createMechInput,
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule, partToRepair,
   decodeInput, parseClientMessage, ringAt, rollLoot, itemWeapon, weaponItem, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
   NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
@@ -1014,15 +1014,13 @@ export class Room {
 
   // Every prop within reach of a ram or a slam, at about the mech's height, is smashed outright with all its
   // remaining hit points: a charge or a blade goes through cover, it does not chip at it. Trees too.
+  // The rule is shared (propsInReach), because the rammer's own client applies it in prediction too.
   private smashProps(player: Player, radius: number, height: number): void {
     const s = player.state;
-    const count = this.propsTouching(s.x - radius, s.z - radius, s.x + radius, s.z + radius);
+    const count = propsInReach(this.map.world, this.map.propOfBox, s.x, s.y, s.z, radius, height, this.nearBoxes, this.nearProps);
     for (let i = 0; i < count; i++) {
       const id = this.nearProps[i]!;
-      const box = this.map.world.boxes[this.map.props[id]!.boxIndex]!;
-      if (box.maxY < s.y || box.minY > s.y + height) continue;
-      const nearX = Math.max(box.minX, Math.min(s.x, box.maxX)), nearZ = Math.max(box.minZ, Math.min(s.z, box.maxZ));
-      if (Math.hypot(nearX - s.x, nearZ - s.z) <= radius) this.damageProp(id, this.propHp[id]!, player);
+      if (this.propHp[id]! > 0) this.damageProp(id, this.propHp[id]!, player);
     }
   }
 

@@ -1,4 +1,4 @@
-import type { Box } from "./world";
+import type { Box, World } from "./world";
 
 export interface PropType {
   id: string;
@@ -70,3 +70,23 @@ export function addProp(boxes: Box[], props: PropInstance[], config: PropConfig,
   props.push(prop);
   return prop;
 }
+
+// The props a ram or a slam smashes from where a mech is: every standing prop whose box comes within `radius`
+// across the ground and overlaps the mech's height. The server breaks them; the rammer's own client takes them out
+// of its prediction at the same step, so a charge ploughs through a row of trees instead of being stopped by each
+// trunk until the server's word arrives. Fills `out` with prop ids and returns how many. `scratch` is reused.
+export function propsInReach(world: World, propOfBox: ArrayLike<number>, x: number, y: number, z: number, radius: number, height: number, scratch: number[], out: number[]): number {
+  const boxes = world.query(x - radius, z - radius, x + radius, z + radius, scratch);
+  let count = 0;
+  for (let i = 0; i < boxes; i++) {
+    const index = scratch[i]!;
+    const id = propOfBox[index]!;
+    if (id < 0) continue;
+    const box = world.boxes[index]!;
+    if (box.maxY < y || box.minY > y + height) continue;
+    const nearX = Math.max(box.minX, Math.min(x, box.maxX)), nearZ = Math.max(box.minZ, Math.min(z, box.maxZ));
+    if (Math.hypot(nearX - x, nearZ - z) <= radius) out[count++] = id;
+  }
+  return count;
+}
+

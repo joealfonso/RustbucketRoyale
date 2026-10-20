@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { World, addProp, type MechInput, type ServerMessage } from "@rustbucket/shared";
+import { Predictor, STEP, World, abilityFor, addProp, mechStatsFor, propsInReach, readSelf, type MechInput, type ServerMessage } from "@rustbucket/shared";
 import { loadRoomConfig } from "./config";
 import { Client, idle, makeRoom, startMatch } from "./testClient";
 import type { Room, RoomConfig } from "./Room";
@@ -55,6 +55,43 @@ describe("trees", () => {
     run(room, [a, b], () => idle(), 60);
     expect(broken(b)).toEqual(expect.arrayContaining([FIRST_ADDED, FIRST_ADDED + 1]));
     expect(where(room, a).z).toBeGreaterThan(13); // charged on through both
+  });
+
+  it("ram through in the rammer's own prediction the same as on the server, with the shared smash rule", () => {
+    const pines = [{ type: "pine", x: -21, z: 6 }, { type: "pine", x: -21, z: 11 }];
+    // How far the rammer's own prediction ends up from the server after a charge through two pines.
+    const drift = (smash: boolean) => {
+      const { room, config } = makeRoom((c) => withProps(pines)(withRoster(c)));
+      const a = new Client(room, config), b = new Client(room, config);
+      pick(room, a, "ironclad", config);
+      startMatch(room, a);
+      run(room, [a, b], () => idle(), 30);
+      // A client's view of the map: its own copy of the world, as a browser builds it.
+      const map = config.mapFor("small", 0);
+      const statsFor = mechStatsFor(config.mech, config.roster!);
+      const ram = abilityFor(config.abilities, config.roster!);
+      const p = new Predictor(statsFor, map.world, 0, 0, 0, Math.PI, ram);
+      readSelf(p.state, a.last().you);
+      const scratch: number[] = [], hit: number[] = [];
+      if (smash) {
+        p.afterStep = (s) => {
+          const r = ram(s.mech);
+          if (r?.kind !== "ram" || s.abilityTime <= 0) return;
+          const count = propsInReach(map.world, map.propOfBox, s.x, s.y, s.z, r.hitRadius, statsFor(s.mech).height, scratch, hit);
+          for (let i = 0; i < count; i++) map.world.disable(map.props[hit[i]!]!.boxIndex);
+        };
+      }
+      for (let tick = 0; tick < 60; tick++) {
+        const input = (c: Client) => idle({ ability: c === a && tick === 0 });
+        p.step(input(a), STEP);
+        run(room, [a, b], input, 1);
+      }
+      const server = where(room, a);
+      expect(server.z).toBeGreaterThan(13); // the server charged on through both
+      return Math.hypot(p.state.x - server.x, p.state.z - server.z);
+    };
+    expect(drift(true)).toBeLessThan(0.05);
+    expect(drift(false)).toBeGreaterThan(1); // without it, prediction is stuck at the first trunk
   });
 
   it("are felled by a Pounce that lands at their foot, and one out of reach of the slam stands", () => {

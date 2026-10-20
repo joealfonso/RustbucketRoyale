@@ -38,11 +38,16 @@ export class Predictor {
     this.world = world;
   }
 
+  // Called after every predicted step, replays included, for what the server does to the world right after it steps
+  // a mech: a ram smashing the props it drives into.
+  afterStep: ((state: MechState) => void) | null = null;
+
   // Steps the mech one tick with this input and returns its sequence number.
   step(input: MechInput, dt: number): number {
     this.seq++;
     Object.assign(this.ring[this.seq % HISTORY]!, input);
     stepMech(this.state, input, this.statsFor(this.state.mech), dt, this.world, this.abilityFor(this.state.mech));
+    this.afterStep?.(this.state);
     return this.seq;
   }
 
@@ -55,6 +60,7 @@ export class Predictor {
     if (this.seq - ack < HISTORY) {
       for (let s = ack + 1; s <= this.seq; s++) {
         stepMech(this.state, this.ring[s % HISTORY]!, this.statsFor(this.state.mech), dt, this.world, this.abilityFor(this.state.mech));
+        this.afterStep?.(this.state);
       }
     }
 

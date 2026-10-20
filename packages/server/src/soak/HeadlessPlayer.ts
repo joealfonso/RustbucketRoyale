@@ -1,5 +1,5 @@
 import {
-  Predictor, STEP, SnapshotMemory, abilityFor, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
+  Predictor, STEP, SnapshotMemory, abilityFor, propsInReach, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
   mechStatsFor, ringAt, type Roster, type BotConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type AbilitySet, type AbilityStats, type RingSchedule, type ServerMessage, type TierSet, type World,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "../Bot";
@@ -39,6 +39,9 @@ export class HeadlessPlayer {
   private wasCrawling = false;
   private abilityOf: (mech: number) => AbilityStats | null;
   private statsOf: (mech: number) => MechStats;
+  private propOfBox: Int32Array = new Int32Array(0);
+  private smashScratch: number[] = [];
+  private smashed: number[] = [];
 
   constructor(
     private room: Room,
@@ -84,9 +87,17 @@ export class HeadlessPlayer {
     const map = generateMap(seed, tier, this.chunks, this.tiers, this.mech, this.propConfig);
     this.world = map.world;
     this.props = map.props;
-    const finder = new Pathfinder(map.nav, this.bots.path);
+    this.propOfBox = map.propOfBox;
+    const finder = new Pathfinder(map.nav, this.bots.path, map.terrain);
     if (!this.predictor) {
       this.predictor = new Predictor(this.statsOf, map.world, ...map.spawns[0]!, Math.PI, this.abilityOf);
+      // As the browser does: its own ram ploughs through props in prediction on the step the server smashes them.
+      this.predictor.afterStep = (s) => {
+        const ram = this.abilityOf(s.mech);
+        if (ram?.kind !== "ram" || s.abilityTime <= 0 || !this.world) return;
+        const count = propsInReach(this.world, this.propOfBox, s.x, s.y, s.z, ram.hitRadius, this.statsOf(s.mech).height, this.smashScratch, this.smashed);
+        for (let i = 0; i < count; i++) this.world.disable(this.props[this.smashed[i]!]!.boxIndex);
+      };
       this.brain = new Bot(this.bots.difficulties.normal!, this.random, this.bots.path, finder, 2, this.botAbilities);
     } else {
       this.predictor.setWorld(map.world);
