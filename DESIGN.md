@@ -66,7 +66,7 @@ Hand painted flipbooks and simple meshes. Pooled, capped by data file values, wi
 
 ## Asset intake checklist
 1. Source and license logged in docs/ASSETS.md, including how AI was used, if at all.
-2. Retopo to budget (mech 10k, props 300 to 2000 triangles).
+2. Retopo to budget (mech 15k, props 300 to 2000 triangles).
 3. Unwrapped to the shared atlas.
 4. Master toon material assigned, original materials removed.
 5. Palette and outline match checked next to the reference mech at 10 m and 150 m.

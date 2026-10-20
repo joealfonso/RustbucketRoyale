@@ -373,3 +373,7 @@ The Titan (packages/server/src/Titan.ts, data/titan.json) lives beside the playe
 
 ## 2026-10-20: The Junk Titan's model is a "Junk" asset with its car beside it (13c)
 The asset checker takes an asset's kind from the first word of its file name, so the Titan and its car are `Junk_*.glb` under a "Junk" kind capped at 20k triangles, apart from the 10k mech cap; the Titan uses 9.4k near. The thrown car is its own file built round its own middle, so the client can draw it held at the model's `Mount_Hand` and then fly it without re-centring. The upper body leans forward 8 degrees, because upright it read as a table on legs from the side, and the edge wear is twice as wide as a mech's because its chamfers are twice as big.
+
+## 2026-10-20: Mech near level budget 15k, not 20k
+Measured at 0.33 ms more GPU on the M4 for every 141k extra triangles. 15k keeps a nine-mech brawl within about 0.3 ms here and an estimated 1 to 1.5 ms on a mid-range laptop; 20k would double that, and dynamic resolution cannot win triangle cost back. Only the near level (inside 25 m) grows. V9 showed shape beats triangle count, so the extra 5k should go to silhouette and big forms first.
+

@@ -3,7 +3,7 @@
   "material": "MasterToon",
   "kinds": {
     "Mech": {
-      "maxTriangles": 10000,
+      "maxTriangles": 15000,
       "states": []
     },
     "Prop": {

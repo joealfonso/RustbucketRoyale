@@ -36,7 +36,7 @@ describe("asset checker", () => {
   });
 
   it("fails one over budget, badly named, missing its state, or with its own material", () => {
-    expect(checkModel("Mech_Torso_Intact", model(12000), rules).problems.join()).toMatch(/over the 10000 budget/);
+    expect(checkModel("Mech_Torso_Intact", model(16000), rules).problems.join()).toMatch(/over the 15000 budget/);
     expect(checkModel("mech_torso_intact", model(100), rules).problems.length).toBeGreaterThan(0);
     expect(checkModel("Prop_Barrel", model(800), rules).problems.join()).toMatch(/must end with its state/);
     expect(checkModel("Prop_Barrel_Intact", model(800, "Rusty_PBR"), rules).problems.join()).toMatch(/Rusty_PBR/);

@@ -9,7 +9,7 @@
 | Rooms per server process | measure at M8 on the large tier with full bots, record here |
 | Bandwidth per client | under 64 kbps |
 | Map generation | under 3 s on small and medium, large number recorded here |
-| Mech triangles, near LOD | 10k |
+| Mech triangles, near LOD | 15k (raised from 10k on 2026-10-20, measured below) |
 | Prop triangles | 300 to 2000 |
 | Atlas | 2048 shared, 1024 per mech set |
 
@@ -492,3 +492,15 @@ The surface changes cost nothing measurable here (within the run-to-run swing). 
 Pistons and swaying parts are separate objects within 25 m (about 16 to 40 per mech, the Arbiter most), guns split out for recoil add about one outline each. Production build, headless Chrome 1600 x 900, frame cap off, offline spawn with your own Arbiter: small 182 to 221 draw calls, GPU 3.1 ms; medium 204 to 243, GPU 3.8 ms (both as before); work 1.3 ms. A fight with many mechs within 25 m adds the most; if it bites, the Ironclad's inner rams and the per-drone split go first.
 
 **The Junk Titan (13c).** Every snapshot carries one more byte (is the Titan near), and 11 more while it is within interest range (position at mech steps, 16-bit yaw, hit points, action, action time). Its stomp, throw, landing and fall go as readable "titan" messages to people near. measure-bandwidth.ts, before / after (kbps, one person): small 23 / 24, medium 17 / 18, large 9 / 12 (bots wander differently each run). Worst case, the Titan beside the one person for a whole minute: medium 13.8 kbps, large 15.5, of which its messages 0.15 to 0.22 kbps. Soak seed 4242 before / after: medium 26 / 28 kbps, large 15 / 14, tick p99 0.14 / 0.24 ms (medium) and 0.17 / 0.27 ms (large), worst correction unchanged at 0.01 cm or less. Random seeds after: medium 23, large 12 kbps, all passing.
+
+### Mech triangle budget raised to 15k (2026-10-20)
+Joseph asked for a bigger mech budget if it costs no real performance. Style page roster view (all five mechs at 10 to 20 m, so at their near level), headless Chrome 1600 x 900 on the M4 (ANGLE Metal, vsync and frame cap off, machine otherwise idle), GPU time per frame from timer queries, every mech triangle drawn one, two and three times, three rounds each:
+
+| Mech triangles | Triangles per frame | GPU ms median (three rounds) |
+| :- | -: | :- |
+| as built (about 9.4k near per mech) | 159k | 1.76 / 1.75 / 1.75 |
+| twice | 300k | 2.08 / 2.09 / 2.09 |
+| three times | 441k | 2.41 / 2.42 / 2.42 |
+
+Each near mech is drawn about three times (colour, outline, shadow), so the five add 141k triangles a frame, and every extra 141k costs 0.33 ms here. Doubled triangles also shade their pixels again, so this overstates the cost of real denser meshes. Draw calls do not change with triangle count. At 15k a near mech draws about 16k more triangles a frame: about +0.04 ms each here, +0.3 ms with nine mechs within 25 m (the worst arena brawl), guessed at 1 to 1.5 ms on a mid-range integrated GPU at four to five times slower. At 20k that worst case would be about +0.65 ms here and 2.5 to 3 ms there, and triangle cost is not saved by dynamic resolution, which only cuts pixels. Middle and far levels keep their sizes. Download: mech files are 1.77 MB raw, 248 kB as served; filling every near level to 15k adds roughly half that, against a 15 MB budget.
+
