@@ -45,25 +45,26 @@
       "small": {
         "octaves": [
           {
-            "spacingMeters": 80,
-            "amplitudeMeters": 5
+            "spacingMeters": 72,
+            "amplitudeMeters": 13
           },
           {
             "spacingMeters": 28,
-            "amplitudeMeters": 1.2
+            "amplitudeMeters": 2.5
           }
         ],
-        "waterShare": 0.06
+        "waterShare": 0.06,
+        "outcropSpacingMeters": 16
       },
       "medium": {
         "octaves": [
           {
             "spacingMeters": 140,
-            "amplitudeMeters": 11
+            "amplitudeMeters": 16
           },
           {
             "spacingMeters": 44,
-            "amplitudeMeters": 2.5
+            "amplitudeMeters": 4
           }
         ],
         "waterShare": 0.08
@@ -72,11 +73,11 @@
         "octaves": [
           {
             "spacingMeters": 160,
-            "amplitudeMeters": 13
+            "amplitudeMeters": 18
           },
           {
             "spacingMeters": 48,
-            "amplitudeMeters": 3
+            "amplitudeMeters": 4.5
           }
         ],
         "waterShare": 0.08
@@ -93,15 +94,33 @@
     },
     "rocks": {
       "maskSpacingMeters": 100,
-      "maskAbove": 450,
-      "spacingMeters": 22,
+      "maskAbove": 300,
+      "spacingMeters": 16,
       "jitterMeters": 7,
       "minSizeMeters": 2,
       "maxSizeMeters": 4.5,
       "buriedShare": 0.3,
       "color": "#746C5C",
-      "clearOfSpawnMeters": 20,
+      "clearOfSpawnMeters": 10,
       "clearOfEdgeMeters": 12,
+      "dryAboveWaterMeters": 0.3
+    },
+    "outcrops": {
+      "maskSpacingMeters": 120,
+      "maskAbove": -400,
+      "spacingMeters": 28,
+      "jitterMeters": 8,
+      "minPieces": 3,
+      "maxPieces": 6,
+      "spreadMeters": 8,
+      "minWidthMeters": 4,
+      "maxWidthMeters": 9,
+      "minHeightMeters": 5,
+      "maxHeightMeters": 13,
+      "buriedMeters": 1.5,
+      "color": "#6B6354",
+      "clearOfSpawnMeters": 10,
+      "clearOfEdgeMeters": 10,
       "dryAboveWaterMeters": 0.3
     }
   }

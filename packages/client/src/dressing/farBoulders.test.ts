@@ -97,11 +97,16 @@ describe("far boulders", () => {
       check();
       for (let frame = 0; frame < 120; frame++) dressing.update(-sx, -sz);
       check();
-      // The plain boxes of boulders never come back, and their colour (only boulders wear it) is not drawn at all.
+      // The plain boxes of boulders never come back, and their colours (boulders and outcrops each have their own, and
+      // nothing else wears them) are not drawn at all: one mesh and one outline per colour.
       expect(boulders.filter((i) => shownBoxes.has(i))).toEqual([]);
-      const boulderColour = meshes.group.children.filter((c) => (c as THREE.InstancedMesh).count === boulders.length);
-      expect(boulderColour.length).toBe(2);
-      for (const c of boulderColour) expect(c.visible).toBe(false);
+      const perColour = new Map<number, number>();
+      for (const i of boulders) perColour.set(map.colors[i]!, (perColour.get(map.colors[i]!) ?? 0) + 1);
+      for (const count of perColour.values()) {
+        const meshesOfColour = meshes.group.children.filter((c) => (c as THREE.InstancedMesh).count === count);
+        expect(meshesOfColour.length).toBeGreaterThanOrEqual(2);
+        for (const c of meshesOfColour) expect(c.visible).toBe(false);
+      }
     });
   }
 });

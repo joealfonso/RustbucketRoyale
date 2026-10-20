@@ -456,3 +456,14 @@ Method as in the earlier performance pass: production build served by `vite prev
 Where the garbage came from: three.js re-deciding shader programs every frame (getParameters, the program cache key strings), because one material was shared by objects that need different programs. Seven a frame were the shadow pass, where three draws every caster with one shared depth material and every switch between an instanced and a plain mesh re-decides it; two were the trees' white fill, shared by trunks (no instance colour) and crowns (instance colour). Fixed by one depth material per kind of caster (sunShadows.ts depthFor) and a trunk material of its own: re-decisions 9 a frame to 0, garbage 22.8 to 13.3 MB/s uncapped (about 3 MB/s at 60 fps). GPU time: within noise of before when the two builds alternated (with 4.8, 5.0, 4.6; without 4.6, 4.4, 4.6 ms). What is left is inside three's uniform upload (its value caches box numbers as V8 stores them), short lived and collected in well under a millisecond every few seconds; not worth patching three for. Two small ones of ours went too: the dressing worked out the camera's chunk through a closure and a pair every frame, and the supply drop's radar hook made a closure every frame.
 
 Also fixed: a server whose log output closes (a load test ending, a host restarting its log collector) crashed with EPIPE on its next line; it now ignores that.
+
+### Terrain in the way (2026-10-20, gate 15a)
+How open the maps are, from `npx tsx scripts/measure-sightlines.ts 6`: the share of open-ground spots at a mech's eye height (3 m) that can see each other, by distance apart.
+
+| Tier | 40 to 100 m, before / after | 100 to 250 m, before / after | Boxes, before / after |
+| :- | :- | :- | :- |
+| small | 51% / 32% | 23% / 10% | 453 / 538 |
+| medium | 49% / 28% | 20% / 7% | 5,629 / 6,775 |
+| large | 47% / 26% | 18% / 6% | 23,498 / 28,414 |
+
+Map building (measure-generation, median / worst): small 7 / 8 ms, medium 62 / 131, large 253 / 511, retries unchanged. Server (measure-rooms): 40 medium rooms 1.55 to 1.97 ms a tick, 20 large 0.86 to 1.04; soak passes on every tier. Bot routes cost more on large: the weighted search now looks at about two thirds of the cells the exact one does, not under half (Pathfinder test relaxed to three quarters). Client, uncapped, headless, a busier machine than the earlier rows: small 0.59M triangles and 3.3 to 5.2 GPU ms as before; medium 0.98M to 1.3M triangles, GPU 3.9 to 4.5 ms (about as before); large 1.7M to 2.8M triangles and about 10 GPU ms, up from about 5. Large's extra is the far stone stand-ins (farBoulders.ts), which draw every outcrop on the 2 km map at once; distance-culling them is the fix, left for when large is the focus.

@@ -227,7 +227,7 @@ describe("Pathfinder", () => {
     expect(f.canWalkStraight(-6, 0, -40, 0)).toBe(true); // standing right against the wall, walking away from it
   });
 
-  it("with a heuristic weight above 1, looks at far fewer cells on a real large map for routes only a little longer", () => {
+  it("with a heuristic weight above 1, looks at clearly fewer cells on a real large map for routes only a little longer", () => {
     const map = generateMap(7, "large", parseChunkSet(chunksJson), parseTiers(tiersJson), mech, parsePropConfig(propsJson));
     const exact = new Pathfinder(map.nav, { ...pathStats, heuristicWeight: 1 });
     const eager = new Pathfinder(map.nav, { ...pathStats, heuristicWeight: 1.5 });
@@ -249,7 +249,8 @@ describe("Pathfinder", () => {
     }
     expect(eagerWhole).toBeGreaterThanOrEqual(exactWhole);
     expect(ratio / compared).toBeLessThan(1.1);
-    expect(eagerCells).toBeLessThan(exactCells / 2);
+    // Under half before the outcrops (gate 15a); with more rock to route round, the saving is about a third.
+    expect(eagerCells).toBeLessThan(exactCells * 0.75);
   });
 
   // Cost is counted in cells looked at, not milliseconds: a clock is at the mercy of whatever else the computer is doing

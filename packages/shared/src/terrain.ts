@@ -15,12 +15,22 @@ export interface TerrainSettings {
   // Water fills the lowest ground: `share` of each map's corners (per tier) is under it, and the bed is raised so it
   // is never deeper than maxDepthMeters, so a mech always wades and never goes under.
   water: { maxDepthMeters: number; wadeMeters: number };
-  tiers: Record<string, { octaves: { spacingMeters: number; amplitudeMeters: number }[]; waterShare?: number }>;
+  // `outcropSpacingMeters` packs a tier's outcrops closer than outcrops.spacingMeters: a small yard needs them denser.
+  tiers: Record<string, { octaves: { spacingMeters: number; amplitudeMeters: number }[]; waterShare?: number; outcropSpacingMeters?: number }>;
   // Woods of breakable pines on open ground: a slow random mask (from -1000 to 1000) is wooded where above
   // `maskAbove`; trees stand about `spacingMeters` apart, nudged up to `jitterMeters`. Whole metres throughout.
   forest?: { maskSpacingMeters: number; maskAbove: number; spacingMeters: number; jitterMeters: number; clearOfSpawnMeters: number; clearOfEdgeMeters: number; dryAboveWaterMeters: number };
   // Boulders on open ground, the same way, each a solid box partly sunk into the ground.
   rocks?: { maskSpacingMeters: number; maskAbove: number; spacingMeters: number; jitterMeters: number; minSizeMeters: number; maxSizeMeters: number; buriedShare: number; color: string; clearOfSpawnMeters: number; clearOfEdgeMeters: number; dryAboveWaterMeters: number };
+  // Rock outcrops (gate 15a): clusters of `minPieces` to `maxPieces` big stone blocks, each up to `spreadMeters` from
+  // the cluster's middle, too tall to see or jet over in a hurry, so a fight has something to walk round. Placed
+  // before boulders and woods, on the same mask-and-grid scatter.
+  outcrops?: {
+    maskSpacingMeters: number; maskAbove: number; spacingMeters: number; jitterMeters: number;
+    minPieces: number; maxPieces: number; spreadMeters: number;
+    minWidthMeters: number; maxWidthMeters: number; minHeightMeters: number; maxHeightMeters: number; buriedMeters: number;
+    color: string; clearOfSpawnMeters: number; clearOfEdgeMeters: number; dryAboveWaterMeters: number;
+  };
 }
 
 export function parseTerrainSettings(raw: unknown): TerrainSettings {
@@ -33,15 +43,21 @@ export function parseTerrainSettings(raw: unknown): TerrainSettings {
   if (!Number.isInteger(d.apronRisePercent) || d.apronRisePercent > d.maxRisePercent) throw new Error("terrain.json: apronRisePercent must be a whole number no steeper than maxRisePercent");
   if (!Number.isInteger(d.maxRisePercent) || d.maxRisePercent > 170) throw new Error("terrain.json: maxRisePercent must be a whole number up to 170");
   if (!(d.water?.maxDepthMeters > 0) || !(d.water.wadeMeters >= 0)) throw new Error("terrain.json: water needs maxDepthMeters above 0 and wadeMeters");
-  for (const [name, section] of [["forest", d.forest], ["rocks", d.rocks]] as const) {
+  for (const [name, section] of [["forest", d.forest], ["rocks", d.rocks], ["outcrops", d.outcrops]] as const) {
     if (!section) continue;
     for (const [key, value] of Object.entries(section)) {
       if (key === "color" ? typeof value !== "string" : typeof value !== "number" || !Number.isFinite(value)) throw new Error(`terrain.json: ${name}.${key} is not valid`);
     }
     if (section.maskSpacingMeters % d.cellMeters !== 0 || !(section.spacingMeters > 0)) throw new Error(`terrain.json: ${name} spacing must be positive, the mask a whole number of cells`);
   }
+  const o = d.outcrops;
+  if (o && !(Number.isInteger(o.minPieces) && o.minPieces >= 1 && Number.isInteger(o.maxPieces) && o.maxPieces >= o.minPieces && o.minWidthMeters > 0
+    && o.maxWidthMeters >= o.minWidthMeters && o.minHeightMeters > 0 && o.maxHeightMeters >= o.minHeightMeters && o.buriedMeters >= 0 && o.buriedMeters < o.minHeightMeters)) {
+    throw new Error("terrain.json: outcrops needs whole minPieces 1 or more up to maxPieces, widths and heights low to high, and buriedMeters under minHeightMeters");
+  }
   for (const [tier, t] of Object.entries(d.tiers ?? {})) {
     if (t.waterShare !== undefined && !(t.waterShare >= 0 && t.waterShare < 0.5)) throw new Error(`terrain.json: ${tier} waterShare must be from 0 to under 0.5`);
+    if (t.outcropSpacingMeters !== undefined && !(Number.isInteger(t.outcropSpacingMeters) && t.outcropSpacingMeters > 0)) throw new Error(`terrain.json: ${tier} outcropSpacingMeters must be a whole number above 0`);
     for (const o of t.octaves ?? []) {
       if (!(o.spacingMeters > 0) || o.spacingMeters % d.cellMeters !== 0) throw new Error(`terrain.json: ${tier} spacingMeters must be a whole number of cells`);
       if (!(o.amplitudeMeters >= 0)) throw new Error(`terrain.json: ${tier} amplitudeMeters must be 0 or more`);

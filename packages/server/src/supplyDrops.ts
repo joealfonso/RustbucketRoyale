@@ -4,7 +4,7 @@ import { createRingNow, navCell, raised, ringAt, type DropsConfig, type NavGrid,
 // ground with nothing standing close, so the crate is reachable and the fight round it has room. A drop with no
 // such spot after a few tries is left out rather than dropped into a wall.
 
-const TRIES = 40;
+const TRIES = 200; // outcrops leave fewer open spots, and planning runs once a match
 const FLAT_STEP = 0.6; // metres of rise between neighbouring cells that still counts as open ground
 
 export function planDrops(config: DropsConfig, tier: string, ring: RingSchedule, map: { world: World; nav: NavGrid; meters: number }, random: () => number): SupplyDrop[] {

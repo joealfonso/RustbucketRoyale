@@ -149,10 +149,16 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   const padMargin = settings?.padMarginMeters ?? 0;
   const oriented = { center: [0, 0, 0] as [number, number, number], size: [0, 0, 0] as [number, number, number] };
   const held: Rect[][] = [];
+  // Held ground under something no taller than this is a floor or a terrace, which an outcrop may rise out of.
+  const tallHeld: Rect[] = [];
   for (let cell = 0; cell < n * n; cell++) {
     const x = cell % n, z = (cell - x) / n;
     held.push(templates[grid[cell]!]!.boxes.map((b) => {
       orient(b, chunks.size, turnsOf[cell]!, mirrorOf[cell] === 1, oriented);
+      if (oriented.size[1] > LOW_HELD_METERS) {
+        const tx = x * chunks.size - half + oriented.center[0], tz = z * chunks.size - half + oriented.center[2];
+        tallHeld.push({ minX: tx - oriented.size[0] / 2 - WALL_GAP_METERS, maxX: tx + oriented.size[0] / 2 + WALL_GAP_METERS, minZ: tz - oriented.size[2] / 2 - WALL_GAP_METERS, maxZ: tz + oriented.size[2] / 2 + WALL_GAP_METERS });
+      }
       const cx = x * chunks.size - half + oriented.center[0], cz = z * chunks.size - half + oriented.center[2];
       return { minX: cx - oriented.size[0] / 2 - padMargin, maxX: cx + oriented.size[0] / 2 + padMargin, minZ: cz - oriented.size[2] / 2 - padMargin, maxZ: cz + oriented.size[2] / 2 + padMargin };
     }));
@@ -222,22 +228,32 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   // Boulders, then woods, on open ground the seed picks. They keep off buildings and their level ground, props,
   // water, spawns and the map's edge. Taken ground is tracked on a coarse grid so each spot is checked at once.
   const kindNames = [...chunks.kinds, "boulder"];
-  if (settings && (settings.rocks || settings.forest)) {
+  if (settings && (settings.rocks || settings.forest || settings.outcrops)) {
     const takenCols = Math.ceil(def.meters / TAKEN_CELL);
-    const taken = new Uint8Array(takenCols * takenCols);
+    // Two grids of taken ground: `taken` for boulders and woods, which keep off every building's level ground, and
+    // `takenTall` for outcrops, which may rise out of floors and terraces but not walls, props or spawns.
+    const taken = new Uint8Array(takenCols * takenCols), takenTall = new Uint8Array(takenCols * takenCols);
     const span = (lo: number, hi: number) => [Math.max(0, Math.floor((lo + half) / TAKEN_CELL)), Math.min(takenCols - 1, Math.floor((hi + half) / TAKEN_CELL))] as const;
-    const mark = (minX: number, minZ: number, maxX: number, maxZ: number) => {
+    const markIn = (grid: Uint8Array, minX: number, minZ: number, maxX: number, maxZ: number) => {
       const [x0, x1] = span(minX, maxX), [z0, z1] = span(minZ, maxZ);
-      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) taken[z * takenCols + x] = 1;
+      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) grid[z * takenCols + x] = 1;
     };
-    const free = (minX: number, minZ: number, maxX: number, maxZ: number) => {
+    const freeIn = (grid: Uint8Array, minX: number, minZ: number, maxX: number, maxZ: number) => {
       const [x0, x1] = span(minX, maxX), [z0, z1] = span(minZ, maxZ);
-      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) if (taken[z * takenCols + x]) return false;
+      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) if (grid[z * takenCols + x]) return false;
       return true;
     };
-    for (const rects of held) for (const r of rects) mark(r.minX, r.minZ, r.maxX, r.maxZ);
-    for (const p of props) { const b = boxes[p.boxIndex]!; mark(b.minX - propConfig.margin, b.minZ - propConfig.margin, b.maxX + propConfig.margin, b.maxZ + propConfig.margin); }
-    const clearOfSpawn = Math.max(settings.rocks?.clearOfSpawnMeters ?? 0, settings.forest?.clearOfSpawnMeters ?? 0);
+    const mark = (minX: number, minZ: number, maxX: number, maxZ: number) => { markIn(taken, minX, minZ, maxX, maxZ); markIn(takenTall, minX, minZ, maxX, maxZ); };
+    const free = (minX: number, minZ: number, maxX: number, maxZ: number) => freeIn(taken, minX, minZ, maxX, maxZ);
+    for (const rects of held) for (const r of rects) markIn(taken, r.minX, r.minZ, r.maxX, r.maxZ);
+    for (const r of tallHeld) markIn(takenTall, r.minX, r.minZ, r.maxX, r.maxZ);
+    // A crate may stand right against an outcrop, so the outcrops' grid takes only the prop itself, not its margin.
+    for (const p of props) {
+      const b = boxes[p.boxIndex]!;
+      markIn(taken, b.minX - propConfig.margin, b.minZ - propConfig.margin, b.maxX + propConfig.margin, b.maxZ + propConfig.margin);
+      markIn(takenTall, b.minX, b.minZ, b.maxX, b.maxZ);
+    }
+    const clearOfSpawn = Math.max(settings.rocks?.clearOfSpawnMeters ?? 0, settings.forest?.clearOfSpawnMeters ?? 0, settings.outcrops?.clearOfSpawnMeters ?? 0);
     for (const [sx, , sz] of spawns) mark(sx - clearOfSpawn, sz - clearOfSpawn, sx + clearOfSpawn, sz + clearOfSpawn);
 
     const cell = settings.cellMeters;
@@ -264,6 +280,36 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
       }
     };
 
+    // Outcrops first: they are the biggest, and boulders and woods fill in round them. A piece that would land on taken
+    // or wet ground is left out; the rest of its cluster still stands. Sizes in tenths of a metre, whole numbers.
+    const outcrops = settings.outcrops;
+    if (outcrops) {
+      const outcropColor = palette.length;
+      palette.push(outcrops.color);
+      const boulder = kindNames.length - 1;
+      const tenths = (lo: number, hi: number, roll: SeededRng) => lo + roll.nextInt(Math.round((hi - lo) * 10) + 1) / 10;
+      scatter({ ...outcrops, spacingMeters: settings.tiers[tier]?.outcropSpacingMeters ?? outcrops.spacingMeters }, OUTCROP_SALT, (x, z, roll) => {
+        const count = outcrops.minPieces + roll.nextInt(outcrops.maxPieces - outcrops.minPieces + 1);
+        const pieces: [number, number, number, number, number][] = [];
+        for (let i = 0; i < count; i++) {
+          const px = x + roll.nextInt(2 * outcrops.spreadMeters + 1) - outcrops.spreadMeters;
+          const pz = z + roll.nextInt(2 * outcrops.spreadMeters + 1) - outcrops.spreadMeters;
+          const sx = tenths(outcrops.minWidthMeters, outcrops.maxWidthMeters, roll), sz = tenths(outcrops.minWidthMeters, outcrops.maxWidthMeters, roll);
+          const sy = tenths(outcrops.minHeightMeters, outcrops.maxHeightMeters, roll);
+          const hx = sx / 2, hz = sz / 2;
+          if (Math.abs(px) + hx > half - outcrops.clearOfEdgeMeters || Math.abs(pz) + hz > half - outcrops.clearOfEdgeMeters) continue;
+          if (!freeIn(takenTall, px - hx, pz - hz, px + hx, pz + hz) || !dry(px - hx, pz - hz, px + hx, pz + hz, Math.round(outcrops.dryAboveWaterMeters * 100))) continue;
+          pieces.push([px, pz, sx, sy, sz]);
+        }
+        // Marked only once the whole cluster is chosen, so its own pieces may lean into each other.
+        for (const [px, pz, sx, sy, sz] of pieces) {
+          const base = propBase(px, pz, sx, sz) - outcrops.buriedMeters;
+          add(px, base + sy / 2, pz, sx, sy, sz, outcropColor);
+          boxKind[boxes.length - 1] = boulder;
+        }
+        for (const [px, pz, sx, , sz] of pieces) mark(px - sx / 2 - 2, pz - sz / 2 - 2, px + sx / 2 + 2, pz + sz / 2 + 2);
+      });
+    }
     const rocks = settings.rocks;
     if (rocks) {
       const rockColor = palette.length;
@@ -303,7 +349,9 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
 const nearby: number[] = [];
 const TAKEN_CELL = 2; // metres: the grid that tracks where boulders and trees may still go
 const MASK_RANGE = 1000; // forest and boulder masks run from -MASK_RANGE to MASK_RANGE (maskAbove is on this scale)
-const ROCKS_SALT = 3000, FOREST_SALT = 3001; // each scatter draws from its own stream, apart from the hills and props
+const ROCKS_SALT = 3000, FOREST_SALT = 3001, OUTCROP_SALT = 3002;
+const LOW_HELD_METERS = 1.6; // a floor slab or one of the old grey-box hill terraces, not a wall
+const WALL_GAP_METERS = 3; // an outcrop keeps this clear of any wall, so a gap beside it still fits a mech // each scatter draws from its own stream, apart from the hills and props
 
 // Checks a built map is playable: enough clear spawns, all reachable from each other, and no large sealed-off areas.
 export function validateMap(

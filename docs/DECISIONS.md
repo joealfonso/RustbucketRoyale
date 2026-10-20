@@ -344,3 +344,6 @@ The dressing's triangle budget is now one setting (data/dressing.json triangleBu
 
 ## 2026-10-19: One shadow depth material per kind of caster (optimization pass)
 three draws every shadow caster with one shared depth material, and each switch between an instanced mesh, a plain one or a coloured instanced one re-decides its shader program, which made most of the frame loop's garbage. Each kind (instanced or not, coloured or not, which side) now gets its own shared depth material as castShadows marks it; meshes with a texture or cut-out keep three's own per-material copy, which they need.
+
+## 2026-10-20: Rock outcrops for cover, measured by sightlines (15a)
+Joseph found the yard "great for a sniper" with too little in the way. Clusters of big stone blocks (5 to 13 m) now stand on open ground, scattered like boulders but placed first; taller hills help on medium and large, where building pads do not flatten the ground. Success is a number, not a look: how often open-ground spots can see each other, about halved (docs/PERF.md, sightlines.test.ts). Outcrops may rise out of low floors and the old grey-box hill terraces but keep 3 m from any wall, so a gap beside one always fits a mech, and the map check still rejects a seed that cuts a spawn off. Small needs its own closer spacing (tiers.json outcropSpacingMeters), since its pads and props leave little room.

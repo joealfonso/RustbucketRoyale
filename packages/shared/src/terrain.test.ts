@@ -192,6 +192,10 @@ describe("woods and boulders", () => {
         const j = near[k]!;
         if (j === i || j <= 4) continue; // the ground slab and edge walls
         const b = map.boxes[j]!;
+        // An outcrop's pieces lean into each other and rise out of floors and old terraces (gate 15a); the rule is for
+        // the scattered boulders and trees.
+        const outcrop = (k: number) => map.kinds[k] === boulder && map.boxes[k]!.maxY - map.boxes[k]!.minY > 4.6;
+        if (outcrop(i) && (outcrop(j) || b.maxY - b.minY <= 1.6)) continue;
         const overlap = a.minX < b.maxX && a.maxX > b.minX && a.minZ < b.maxZ && a.maxZ > b.minZ;
         expect(overlap, `box ${i} overlaps box ${j}`).toBe(false);
       }
