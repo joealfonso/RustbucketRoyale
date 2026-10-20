@@ -7,12 +7,16 @@ import type { Toon, ToonInstances } from "./toonMaterial";
 // of boxes cost a handful of draw calls. On the range the floor (colour 0) gets the bands with no rim or outline; on
 // a map with hills the floor box lies out of sight under the lowest valley and the hills are drawn instead
 // (terrainMesh.ts). A box can be hidden while the junkyard dressing stands in for it nearby (see dressing/dressing.ts).
+// A colour whose boxes are all hidden (the boulders, drawn by dressing/farBoulders.ts instead) is not drawn at all.
 export class MapMeshes {
   readonly group = new THREE.Group();
-  private slot: { boxes: ToonInstances; instance: number }[] = [];
+  private slot: { boxes: ToonInstances; instance: number; set: number }[] = [];
   private all: ToonInstances[] = [];
+  private shownIn: number[] = []; // per entry of `all`, how many of its boxes are showing
+  private hidden: Uint8Array;
 
   constructor(private scene: THREE.Scene, private map: PlayMap, toon: Toon) {
+    this.hidden = new Uint8Array(map.boxes.length);
     const byColor = new Map<number, number[]>();
     map.colors.forEach((color, box) => {
       if (map.propOfBox[box]! >= 0) return; // props are drawn by PropView, so they can disappear
@@ -23,13 +27,15 @@ export class MapMeshes {
     });
     for (const [color, indices] of byColor) {
       const boxes = toon.instances(map.palette[color]!, indices.length, color === 0);
+      const set = this.all.length;
       indices.forEach((boxIndex, instance) => {
         this.place(boxes, instance, boxIndex);
-        this.slot[boxIndex] = { boxes, instance };
+        this.slot[boxIndex] = { boxes, instance, set };
       });
       boxes.commit();
       boxes.addTo(this.group);
       this.all.push(boxes);
+      this.shownIn.push(indices.length);
     }
     // Hiding a box changes its instance, never the mesh, so the meshes themselves never move.
     freeze(this.group);
@@ -44,13 +50,21 @@ export class MapMeshes {
   // Shows or hides one box. Changes are sent to the graphics card on the next `commit`.
   setVisible(boxIndex: number, visible: boolean): void {
     const s = this.slot[boxIndex];
-    if (!s) return;
+    if (!s || (this.hidden[boxIndex] === 0) === visible) return;
+    this.hidden[boxIndex] = visible ? 0 : 1;
+    this.shownIn[s.set]! += visible ? 1 : -1;
     if (visible) this.place(s.boxes, s.instance, boxIndex);
     else s.boxes.hideOnly(s.instance);
   }
 
   commit(): void {
-    for (const boxes of this.all) boxes.commit();
+    this.all.forEach((boxes, set) => {
+      boxes.commit();
+      // Hidden instances still cost a draw call and their (empty) triangles, so a colour with none showing is skipped.
+      const any = this.shownIn[set]! > 0;
+      boxes.mesh.visible = any;
+      if (boxes.hull) boxes.hull.visible = any;
+    });
   }
 
   // Takes the map out of the scene and frees its meshes. The materials are the toon look's shared ones and stay.

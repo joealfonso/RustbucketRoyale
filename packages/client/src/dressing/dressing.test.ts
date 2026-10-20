@@ -44,12 +44,14 @@ describe("junkyard dressing", () => {
   it("hides the plain boxes it dresses near you, and gives them back when you leave", () => {
     const { map, dressing, hidden } = setup();
     dressing.update(0, 0);
-    expect(hidden.size).toBeGreaterThan(0);
-    for (const i of hidden) {
+    // Boulders' plain boxes are hidden everywhere: far away they are drawn as far stones (farBoulders.test.ts).
+    const boulder = (i: number) => map.kindNames[map.kinds[i]!] === "boulder";
+    const near = new Set([...hidden].filter((i) => !boulder(i)));
+    expect(near.size).toBeGreaterThan(0);
+    for (const i of near) {
       const b = map.boxes[i]!;
       expect(Math.hypot((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2)).toBeLessThan(120 + 50 * 1.5);
     }
-    const near = new Set(hidden);
     for (let frame = 0; frame < 60; frame++) dressing.update(400, 400);
     for (const i of near) {
       const b = map.boxes[i]!;

@@ -4,6 +4,7 @@ import { addOutlineNormals } from "../outlineNormals";
 import type { PlayMap } from "../loadMap";
 import type { MapMeshes } from "../mapRenderer";
 import type { Toon } from "../toonMaterial";
+import { FarBoulders } from "./farBoulders";
 import { seedOf, type DressBox, type DressPiece, type KindBuilder } from "./kinds";
 import type { MeshData } from "./shapes";
 
@@ -25,8 +26,11 @@ export type Scatter = (
 // a corrugated wall) and open ground gets scattered junk. Collision never changes: the dressing stays inside each box.
 // Each chunk's pieces are built once and kept. The chunks near you are merged into one mesh (plus its outline) per
 // paint, rebuilt only when you move into another chunk, so it costs a few draw calls and almost nothing per frame.
+// Beyond the dressed chunks every kind is its plain box again, except boulders, which have a far stone of their own
+// (farBoulders.ts) because a hillside of grey cubes does not read as rock.
 export class Dressing {
   readonly group = new THREE.Group();
+  readonly far: FarBoulders | null = null;
   private chunkPieces = new Map<number, Map<string, MeshData[]>>(); // chunk key → paint → meshes
   private chunkBoxes = new Map<number, number[]>(); // chunk key → dressed box indices in it
   private chunkBlockers = new Map<number, number[]>(); // chunk key → every box standing in it, for the scatter
@@ -45,9 +49,11 @@ export class Dressing {
     this.perChunk = Math.ceil(map.meters / config.chunkMeters);
     const terrain = map.terrain;
     this.groundAt = terrain ? (x, z) => terrain.heightAt(x, z) : undefined;
+    const boulders: number[] = [];
     map.boxes.forEach((b, i) => {
       const kind = map.kinds[i]!;
       if (kind < 0 || !builders[map.kindNames[kind]!]) return;
+      if (map.kindNames[kind] === "boulder") boulders.push(i);
       const key = this.keyAt((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2);
       const list = this.chunkBoxes.get(key);
       if (list) list.push(i);
@@ -67,6 +73,12 @@ export class Dressing {
         }
       }
     });
+    if (boulders.length > 0) {
+      this.far = new FarBoulders(toon, map, boulders);
+      for (const i of boulders) mapMeshes.setVisible(i, false);
+      mapMeshes.commit();
+      scene.add(this.far.group);
+    }
     freeze(this.group);
     scene.add(this.group);
   }
@@ -131,12 +143,26 @@ export class Dressing {
   // Swaps the dressed chunks for `wanted`, building any still missing.
   private show(): void {
     const wanted = this.wanted;
-    // Plain boxes come back where the dressing leaves, and hide where it arrives.
-    for (const k of this.near) if (!wanted.has(k)) for (const i of this.chunkBoxes.get(k) ?? []) this.mapMeshes.setVisible(i, true);
-    for (const k of wanted) if (!this.near.has(k)) for (const i of this.chunkBoxes.get(k) ?? []) this.mapMeshes.setVisible(i, false);
+    // Plain boxes (far stones, for boulders) come back where the dressing leaves, and hide where it arrives.
+    for (const k of this.near) if (!wanted.has(k)) for (const i of this.chunkBoxes.get(k) ?? []) this.showFar(i, true);
+    for (const k of wanted) if (!this.near.has(k)) for (const i of this.chunkBoxes.get(k) ?? []) this.showFar(i, false);
     this.mapMeshes.commit();
+    this.far?.commit();
     this.near = wanted;
     this.rebuild();
+  }
+
+  // A box leaving or joining the dressed chunks: a boulder swaps with its far stone, anything else with its plain box.
+  private showFar(boxIndex: number, shown: boolean): void {
+    if (this.far?.has(boxIndex)) this.far.setShown(boxIndex, shown);
+    else this.mapMeshes.setVisible(boxIndex, shown);
+  }
+
+  // Whether a box is drawn by the dressing right now, rather than as its plain box or far stone.
+  isDressed(boxIndex: number): boolean {
+    const b = this.map.boxes[boxIndex]!;
+    const key = this.keyAt((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2);
+    return this.near.has(key) && (this.chunkBoxes.get(key)?.includes(boxIndex) ?? false);
   }
 
   private piecesOf(key: number): Map<string, MeshData[]> {
@@ -197,6 +223,10 @@ export class Dressing {
   dispose(): void {
     for (const child of this.group.children) (child as THREE.Mesh).geometry.dispose();
     this.scene.remove(this.group);
+    if (this.far) {
+      this.scene.remove(this.far.group);
+      this.far.dispose();
+    }
   }
 }
 
