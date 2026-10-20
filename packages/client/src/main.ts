@@ -2,7 +2,7 @@ import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
   parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
-  createRayHit, parseDropsConfig, type AbilityMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
+  createRayHit, parseDropsConfig, parseTitanConfig, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import audioJson from "../../../data/audio.json";
@@ -115,6 +115,12 @@ import { KillReplay, parseReplay } from "./killReplay";
 import replayJson from "../../../data/replay.json";
 import deathFxJson from "../../../data/deathFx.json";
 import { DeathFx, parseDeathFx } from "./deathFx";
+import titanJson from "../../../data/titan.json";
+import titanLookJson from "../../../data/titanLook.json";
+import { parseTitanLook } from "./titanLook";
+import { TitanView } from "./titanView";
+import { carFuseSeconds, carLanding, loadCarModel } from "./thrownCars";
+import { bossBarShown } from "./hud";
 
 const KILL_HEIGHT = -50;
 
@@ -486,13 +492,51 @@ remotes.onKnockedOut = (id, model, alreadyDown) => {
   const at = model.group.position;
   deathFx.blowApart(model, from ? at.x - from.x : 0, from ? at.z - from.z : 0, id);
 };
+// The Junk Titan (gate 13c): drawn from the snapshots, its moments from "titan" messages (titanView.ts). Its model is
+// fetched the first time one is near, so a map without one never downloads it; until then a grey-box stand-in.
+const titanConfig = parseTitanConfig(titanJson);
+const titanLook = parseTitanLook(titanLookJson);
+const titanView = new TitanView({
+  scene, toon, look: titanLook, config: titanConfig, zoneMaxHp, gait: gaitConfig, sprites: fxSprites, explosions,
+  deathFx: parseDeathFx(deathFxJson), ground: groundBelow,
+  sound: (name, at, loudness, pitch) => sound.play(name, at, loudness, pitch),
+  shake: (x, y, z, radius, force) => shakeNear(x, y, z, radius, force),
+}, null);
+let titanKitAsked = kitId === "grey";
+const askTitanKit = () => {
+  if (titanKitAsked) return;
+  titanKitAsked = true;
+  void loadKit(titanLook.kit, kitsData).then((kit) => { if (kit) titanView.setKit(kit); });
+  void loadCarModel(kitsData, titanLook.kit).then((car) => { if (car) titanView.setCarModel(car); });
+};
+const titanFuse = carFuseSeconds(titanConfig.throw.flightSeconds, STEP);
+const TITAN_ID = 0; // who the server says was hit when a shot strikes the Titan (server Titan.ts)
+const carLands = { x: 0, y: 0, z: 0 };
+// A Titan moment, live or in the kill replay. The blasts it leads to are the server's explode messages, which carry
+// only a spot: a thrown car's landing (worked out now, from the same flight) and the body coming down are
+// remembered there, so those blasts are drawn their own size.
+function showTitan(m: TitanMessage): void {
+  const now = performance.now() / 1000;
+  if (m.event === "throw") {
+    carLanding(m.x, m.y, m.z, m.vx ?? 0, m.vy ?? 0, m.vz ?? 0, titanConfig.car, titanFuse, STEP, map.world, carLands);
+    blastSizes.strike(carLands.x, carLands.z, 0, now, titanFuse + BARREL_MEMORY_SECONDS, titanConfig.throw.blastRadius);
+  } else if (m.event === "fall") {
+    blastSizes.strike(m.x, m.z, 0, now, titanConfig.fall.seconds + BARREL_MEMORY_SECONDS, titanConfig.fall.radius);
+  }
+  titanView.event(m);
+}
 const aimHit = createZoneHit();
 // The crosshair checks each mech against its own hit boxes, the ones the server uses (only with the roster drawn).
 const zonesFor = kitId === "roster" ? makeZonesFor(zoneSet, roster, mechKitsJson) : () => zoneSet;
 // Your shots leave your mech's own gun, the same muzzles the server fires from, taking turns where it has two.
 const muzzlesFor = makeMuzzlesFor(roster, mechKitsJson);
 let shotsFired = 0;
-const aimAtMechs = (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number) => remotes.raycast(ox, oy, oz, dx, dy, dz, max, zonesFor, aimHit);
+// The Titan's hit boxes count too, so shots aimed at it converge on it rather than on the wall behind.
+const aimAtMechs = (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number) => {
+  const mech = remotes.raycast(ox, oy, oz, dx, dy, dz, max, zonesFor, aimHit);
+  const titan = titanView.raycast(ox, oy, oz, dx, dy, dz, mech >= 0 ? mech : max, aimHit);
+  return titan >= 0 ? titan : mech;
+};
 const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgradeSet.upgrades.map((u) => u.color), toon);
 if (net) net.viewDelayMs = () => remotes.viewDelayMs;
 
@@ -501,6 +545,7 @@ const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerH
 const killReplay = new KillReplay(parseReplay(replayJson), zoneMaxHp.length);
 killReplay.listenForSkip(window);
 killReplay.onExplode = (x, y, z) => showBlast(x, y, z);
+killReplay.onTitan = (m) => showTitan(m);
 killReplay.onGrenade = (_id, x, y, z, vx, vy, vz) => { grenades.spawn(x, y, z, vx, vy, vz); sound.play("grenadeThrow", { x, y, z }); };
 // The replay puts your mech back together (it is alive at the start of the clip) and blows it apart again here.
 killReplay.onVictimDown = (model, awayX, awayZ) => deathFx.blowApart(model, awayX, awayZ, net?.id ?? 0);
@@ -516,9 +561,11 @@ const input = new Input(canvas, hint, () => mechStats.sprintDoubleTapSeconds);
 // copied into the live values in place, so everything already holding them sees it.
 const tuningRaws = JSON.parse(JSON.stringify({
   mech: mechJson, weapons: weaponsJson, grenade: grenadeJson, zones: zonesJson, loot: lootJson, upgrades: upgradesJson,
-  bots: botsJson, noise: noiseJson, combat: combatJson, roster: rosterJson, abilities: abilitiesJson, props: propsJsonForLoot,
+  bots: botsJson, noise: noiseJson, combat: combatJson, roster: rosterJson, abilities: abilitiesJson, props: propsJsonForLoot, titan: titanJson,
 })) as TuningRaws;
-const liveData: Partial<Record<TunableFile, unknown>> = { mech: mechStats, weapons: weaponSet, grenade: grenadeStats, zones: zoneSet, loot: lootConfig, upgrades: upgradeSet, roster, abilities: abilitySet };
+// The Titan's numbers change in place too, so its moves keep the server's timing; a thrown car's flight time is read
+// once at the start (titanFuse), so a tuned flight only takes on a reload.
+const liveData: Partial<Record<TunableFile, unknown>> = { mech: mechStats, weapons: weaponSet, grenade: grenadeStats, zones: zoneSet, loot: lootConfig, upgrades: upgradeSet, roster, abilities: abilitySet, titan: titanConfig };
 const applyLocally = (file: string, path: string, value: number) => {
   const parsed = applyTune(tuningRaws, file, path, value);
   if (parsed !== null) assignDeep(liveData[file as TunableFile], parsed);
@@ -710,6 +757,8 @@ if (net) {
     }
     net.noteSnapshot(snap.ack, snap.ackAgeMs, performance.now());
     remotes.push(snap.others, snap.tick, performance.now());
+    if (snap.titan) askTitanKit();
+    titanView.push(snap.titan, snap.tick * STEP * 1000, performance.now());
     for (const n of snap.noises) radar?.hear(n.x, n.z, n.kind, performance.now());
   };
   // A scattergun's pellets each arrive as their own shot, a few milliseconds apart: one sound per pull, not one per
@@ -734,7 +783,7 @@ if (net) {
   };
   net.onHit = (h) => {
     flashHitMarker(h.killed);
-    showHit(h.zone, h.damage, h.killed);
+    showHit(h.zone, h.damage, h.killed, h.targetId === TITAN_ID);
     sound.play("hitMarker");
     shotFx.hitMech(h.x, h.y, h.z, loadout.slots[firingSlot]!);
   };
@@ -743,6 +792,10 @@ if (net) {
     if (g.id === net.id || killReplay.playing) return; // our own grenade is already in the air
     grenades.spawn(g.x, g.y, g.z, g.vx, g.vy, g.vz);
     sound.play("grenadeThrow", { x: g.x, y: g.y, z: g.z });
+  };
+  net.onTitan = (m) => {
+    killReplay.titan(performance.now(), m);
+    if (!killReplay.playing) showTitan(m);
   };
   net.onExplode = (e) => {
     killReplay.explode(performance.now(), e.x, e.y, e.z);
@@ -787,14 +840,15 @@ if (net) {
     ringView.setSchedule(r.ring);
     dropView.setDrops(r.drops);
     hud.setRoom(r, net.id);
-    if (r.state === "countdown") { hud.hideResult(); myPlace = null; killReplay.clear(); knockedFrom.clear(); }
+    if (r.state === "countdown") { hud.hideResult(); myPlace = null; killReplay.clear(); knockedFrom.clear(); titanView.clear(); }
     if (r.state === "active" && wasCountdown) hud.flash("GO", 900);
     progress = { ...progress, state: r.state };
   };
   net.onEliminated = (e) => {
     if (e.killerId === net.id) knockedFrom.set(e.id, { x: mech.x, z: mech.z });
     else if (e.killerId !== null && remotes.positionOf(e.killerId, killerAt)) knockedFrom.set(e.id, { x: killerAt.x, z: killerAt.z });
-    hud.feed(e.left ? `${name(e.id)} dropped out` : e.killerId === null && e.id !== net.id ? `${name(e.id)} fell to the zone` : `${name(e.killerId)} knocked out ${name(e.id)}`);
+    const byTitan = e.killerId === null && (e.how?.causes.at(-1) ?? "").startsWith("titan:");
+    hud.feed(e.left ? `${name(e.id)} dropped out` : byTitan && e.id !== net.id ? `The Junk Titan flattened ${name(e.id)}` : e.killerId === null && e.id !== net.id ? `${name(e.id)} fell to the zone` : `${name(e.killerId)} knocked out ${name(e.id)}`);
     if (e.id === net.id) {
       myPlace = e.place;
       // Knocked out by a mech you saw: the replay first, and the server keeps sending what is round the killer.
@@ -845,14 +899,14 @@ function flashHitMarker(killed: boolean): void {
 // Every hit that lands pops the tick marks again (restarting the animation), and says what it struck.
 const hitMarker = document.getElementById("hitmarker")!;
 const hitLabel = document.getElementById("hitlabel")!;
-function showHit(zone: number, damage: number, killed: boolean): void {
+function showHit(zone: number, damage: number, killed: boolean, titan = false): void {
   for (const el of [hitMarker, hitLabel]) {
     el.classList.remove("pop", "kill");
     void el.offsetWidth; // lets the same animation start again straight away
     el.classList.add("pop");
     if (killed) el.classList.add("kill");
   }
-  const part = zone < 0 ? "SPLASH" : (zoneSet.zones[zone]?.name ?? "").toUpperCase();
+  const part = titan ? "TITAN" : zone < 0 ? "SPLASH" : (zoneSet.zones[zone]?.name ?? "").toUpperCase();
   // A part already at zero takes nothing more, so say so rather than "-0".
   const amount = damage > 0 ? `-${Math.round(damage)}` : "BROKEN";
   hitLabel.textContent = killed ? `${part} ${amount} · DOWN` : `${part} ${amount}`;
@@ -904,6 +958,7 @@ function propDestroyed(id: number, quiet: boolean): void {
 
 function showBlast(x: number, y: number, z: number): void {
   grenades.removeNear(x, y, z);
+  titanView.blastAt(x, y, z);
   const radius = blastSizes.radiusAt(x, z, performance.now() / 1000);
   fallHints.blast(performance.now() / 1000, x, z, radius);
   explosions.blast(x, y, z, radius, groundBelow(x, y, z));
@@ -1086,6 +1141,7 @@ function frame(now: number): void {
     shotFx.update(STEP, map.world);
     // Offline there is no server to send the blast, so it goes off when the fuse ends.
     grenades.update(STEP, map.world, net === null ? showBlast : undefined);
+    titanView.step(map.world);
     accumulator -= STEP;
   }
 
@@ -1127,6 +1183,7 @@ function frame(now: number): void {
     if (ownFeet && !health.dead) footfalls(ownModel, ownFeet, true);
   }
   remotes.forEachNear(mechGroup.position.x, mechGroup.position.z, gaitConfig.farMeters, walkRemote);
+  titanView.update(performance.now(), fxTime, remotes.viewDelayMs, rig.camera.position, killReplay.clock);
   moveGunsAndSensors(ownModel, fxTime);
   remotes.forEachModel(moveGuns);
   explosions.update(fxTime);
@@ -1182,6 +1239,10 @@ function frame(now: number): void {
     else if (lastCountdown > 0 && progress.state === "active") sound.play("go");
     lastCountdown = countdown;
   }
+  // The Titan's bar while it stands near whoever you are watching, and its mark on the radar.
+  const titanNear = bossBarShown(titanView.shown, titanView.fallen, titanView.x - viewX, titanView.z - viewZ, titanLook.hud.bossBarMeters);
+  hud.setBoss(titanLook.hud.name, titanNear && progress.state === "active", titanView.hp);
+  if (titanView.shown && !titanView.fallen) radar?.markTitan(titanView.x, titanView.z, titanLook.hud.radarMarkSize);
   // Watching someone, the radar is centred on them.
   radar?.draw(viewX, viewZ, aim.yaw, remotes, progress.state === "lobby" ? null : ring, outside, performance.now());
 
@@ -1214,6 +1275,7 @@ function frame(now: number): void {
   hud.setAbility(ownAbilityStats?.name ?? null, mech.abilityCooldown, ownAbilityStats?.cooldownSeconds ?? 0);
   damageFx.emitFrom(ownModel, frameTime);
   remotes.forEachModel(emitDamage);
+  if (titanView.shown && !titanView.fallen) damageFx.emitFrom(titanView.model, fxTime);
   contactShadows.beginMoving();
   contactShadows.addObject(mechGroup);
   remotes.forEachModel(shadowUnder);

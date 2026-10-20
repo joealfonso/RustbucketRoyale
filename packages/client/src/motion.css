@@ -104,6 +104,11 @@
 
 /* The knockout card lands with a punch; the results' fun stats arrive one after another (gate 14c). */
 #knockout.shown { --punch-from: var(--ui-punch-small); animation: ui-punch-a var(--ui-in) var(--ui-steps) backwards; }
+/* The Titan's bar drops in from the top when it comes near, and kicks each time it takes a chunk of damage. */
+#bossBar.shown { --from-y: calc(var(--ui-shift) * -1); animation: ui-slide var(--ui-in) var(--ui-steps) backwards; }
+#bossBar.shown[data-beat] { --punch-from: 1.06; animation-duration: var(--ui-in); animation-timing-function: var(--ui-steps); }
+#bossBar.shown[data-beat="a"] { animation-name: ui-punch-a; }
+#bossBar.shown[data-beat="b"] { animation-name: ui-punch-b; }
 /* The REPLAY tag rises into place each time a replay starts. */
 #replayTag { --from-y: var(--ui-shift); animation: ui-slide var(--ui-in) var(--ui-steps) backwards; }
 #resultStats li { --from-y: var(--ui-shift); animation: ui-slide var(--ui-in) var(--ui-ease) calc(var(--ui-stagger) * (3 + var(--i, 0))) backwards; }

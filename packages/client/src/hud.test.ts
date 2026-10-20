@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COOLDOWN_STEPS, clock, cooldownStep, plateText, ringLabel } from "./hud";
+import { COOLDOWN_STEPS, bossBarShown, clock, cooldownStep, plateText, ringLabel } from "./hud";
 
 describe("cooldownStep", () => {
   it("is full, meaning ready, once the cooldown is over", () => {
@@ -43,5 +43,17 @@ describe("plateText", () => {
     expect(plateText(30)).toBe("30");
     expect(plateText(12.6)).toBe("13");
     expect(plateText(0)).toBe("--");
+  });
+});
+
+describe("bossBarShown", () => {
+  it("shows while the Titan stands within reach, and only then", () => {
+    expect(bossBarShown(true, false, 90, 120, 150)).toBe(true); // 150 m away exactly
+    expect(bossBarShown(true, false, 100, 120, 150)).toBe(false);
+    expect(bossBarShown(false, false, 0, 0, 150)).toBe(false); // none near you
+  });
+
+  it("goes once it has fallen", () => {
+    expect(bossBarShown(true, true, 10, 0, 150)).toBe(false);
   });
 });

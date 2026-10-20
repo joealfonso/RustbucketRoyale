@@ -27,3 +27,4 @@ export * from "./abilities";
 export * from "./botDifficulty";
 export * from "./drops";
 export * from "./sightlines";
+export * from "./titan";

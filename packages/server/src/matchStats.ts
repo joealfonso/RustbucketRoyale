@@ -1,11 +1,13 @@
 import type { MatchStat, MatchStatKind } from "@rustbucket/shared";
 
 // One player's fun numbers for the current match, one per stat the results screen can show. Counts, except the two
-// longest ones, which are metres. `mostDamage` is the damage this player dealt to other mechs.
+// longest ones, which are metres. `mostDamage` is the damage this player dealt to other mechs,
+// `titanDamage` the damage they dealt to the Junk Titan.
 export type Tally = Record<MatchStatKind, number>;
 
-// Most fun first: long shots and leaps make the best clips, then the mess left behind, then plain damage.
-const ORDER: readonly MatchStatKind[] = ["longestRailShot", "longestPounce", "treesFelled", "barrelsSetOff", "propsSmashed", "mostDamage"];
+// Most fun first: long shots and leaps make the best clips, then fighting the Junk Titan, then the mess left behind,
+// then plain damage.
+const ORDER: readonly MatchStatKind[] = ["longestRailShot", "longestPounce", "titanDamage", "treesFelled", "barrelsSetOff", "propsSmashed", "mostDamage"];
 const DISTANCES: ReadonlySet<MatchStatKind> = new Set(["longestRailShot", "longestPounce"]);
 // Joseph asked for two or three on the results screen, so a fourth would only be cut by the client.
 const MAX_STATS = 3;

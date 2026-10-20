@@ -1,8 +1,9 @@
 import {
   Predictor, STEP, SnapshotMemory, abilityFor, propsInReach, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
-  mechStatsFor, ringAt, type Roster, type BotConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type AbilitySet, type AbilityStats, type RingSchedule, type ServerMessage, type TierSet, type World,
+  mechStatsFor, ringAt, type Roster, type BotConfig, type TitanConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type AbilitySet, type AbilityStats, type RingSchedule, type ServerMessage, type TierSet, type World,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "../Bot";
+import { TITAN_ID } from "../Titan";
 import type { BotAbilityStats } from "../botAbilities";
 import { Pathfinder } from "../Pathfinder";
 import type { Room } from "../Room";
@@ -55,6 +56,7 @@ export class HeadlessPlayer {
     pick = 0, // the roster mech this player picks, so the soak drives every kind
     abilities: AbilitySet | null = null,
     private botAbilities: BotAbilityStats | null = null,
+    private titan: TitanConfig | null = null,
   ) {
     this.abilityOf = abilities ? abilityFor(abilities, roster) : () => null;
     this.statsOf = mechStatsFor(mech, roster);
@@ -78,6 +80,8 @@ export class HeadlessPlayer {
     if (message.t === "result") this.winnerSeen = true;
     // Being rammed is a shove only the server knows about, so the snapshots right after it are not judged.
     if (message.t === "ability" && message.event === "hit" && this.predictor && Math.hypot(message.x - this.predictor.state.x, message.z - this.predictor.state.z) < RAMMED_NEAR) this.settleSnapshots = 3;
+    // So is the Junk Titan's stomp.
+    if (message.t === "titan" && message.event === "stomp" && this.predictor && Math.hypot(message.x - this.predictor.state.x, message.z - this.predictor.state.z) <= (message.radius ?? 0) + 1) this.settleSnapshots = 3;
   }
 
   private useMap(seed: number, tier: string): void {
@@ -117,6 +121,9 @@ export class HeadlessPlayer {
     // Legs breaking is only known from the snapshot that reports it, so the inputs already predicted at walk speed
     // get one unavoidable correction then, like a respawn.
     if (snap.health.dead !== this.wasDead || snap.you.crawling !== this.wasCrawling) this.settleSnapshots = 3;
+    // Only the server knows the Titan's body, so being pushed out of it is corrected, as in the browser.
+    const titan = snap.titan;
+    if (titan && this.titan && titan.action !== "down" && Math.hypot(titan.x - snap.you.x, titan.z - snap.you.z) < this.titan.radius + 2) this.settleSnapshots = 3;
     this.wasDead = snap.health.dead;
     this.wasCrawling = snap.you.crawling;
     if (this.settleSnapshots > 0) this.settleSnapshots--;
@@ -134,6 +141,10 @@ export class HeadlessPlayer {
     const input = this.input;
 
     const targets: BotTarget[] = snap.others.filter((o) => !o.dead).map((o) => ({ id: o.id, x: o.x, y: o.y, z: o.z }));
+    // The Titan as the room's bots see it: something to shoot, and somewhere not to stand.
+    const titan = snap.titan && this.titan && snap.titan.action !== "down" ? snap.titan : null;
+    if (titan) targets.push({ id: TITAN_ID, x: titan.x, y: titan.y, z: titan.z, aimHeight: this.titan!.aimHeight });
+    this.brain.keepOutOf(titan?.x ?? 0, titan?.z ?? 0, titan ? this.titan!.botKeepOutMeters : 0);
     const ring = this.ring && snap.match.state === "active" ? ringAt(this.ring, snap.match.seconds, this.ringNow) : null;
     this.brain.abilityKind = this.abilityOf(this.predictor.state.mech)?.kind ?? null;
     this.brain.body = this.statsOf(this.predictor.state.mech);

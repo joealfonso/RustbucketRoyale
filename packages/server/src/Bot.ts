@@ -17,6 +17,7 @@ type GoalKind = "ring" | "loot" | "heard" | "wander";
 export interface BotTarget {
   id: number;
   x: number; y: number; z: number; // feet position
+  aimHeight?: number; // how far above the feet to aim, when not a mech's chest (the Junk Titan)
 }
 
 // A deliberately simple bot. It sees whoever is close and unobstructed, aims a little badly, backs off or closes in
@@ -81,6 +82,9 @@ export class Bot {
   private skipLootX = 0;
   private skipLootZ = 0;
   private skipLootFor = 0; // seconds left of leaving alone loot it gave up on
+  private dangerX = 0; // a circle to keep out of, the Junk Titan's reach; radius 0 for none
+  private dangerZ = 0;
+  private dangerRadius = 0;
 
   constructor(
     private stats: BotStats,
@@ -122,6 +126,13 @@ export class Bot {
     this.hasLoot = false;
   }
 
+  // Set by the room every tick: somewhere it must not stand, the Junk Titan's stomp. Radius 0 for nowhere.
+  keepOutOf(x: number, z: number, radius: number): void {
+    this.dangerX = x;
+    this.dangerZ = z;
+    this.dangerRadius = radius;
+  }
+
   // A new map means the old routes are meaningless.
   setFinder(finder: Pathfinder | null): void {
     this.finder = finder;
@@ -152,7 +163,7 @@ export class Bot {
       this.spottedFor += dt;
       if (this.retargetIn <= 0) this.rerollAimError(Math.hypot(target.x - self.x, target.z - self.z));
 
-      const aimX = target.x + this.aimOffsetX, aimY = target.y + CHEST_HEIGHT + this.aimOffsetY, aimZ = target.z + this.aimOffsetZ;
+      const aimX = target.x + this.aimOffsetX, aimY = target.y + (target.aimHeight ?? CHEST_HEIGHT) + this.aimOffsetY, aimZ = target.z + this.aimOffsetZ;
       this.turnToward(self, aimX, aimY, aimZ, dt);
 
       const dx = target.x - self.x, dz = target.z - self.z;
@@ -221,6 +232,17 @@ export class Bot {
     if (this.dodgeFor > 0) {
       wantX = this.dodgeX; wantZ = this.dodgeZ; run = true;
       if (this.dodgeDash) { out.dash = true; this.dodgeDash = false; }
+    }
+
+    // Too near the Titan: get out first, running straight away from it, whatever else it wanted. Also keeps it from
+    // being pinned against the Titan's body.
+    if (this.dangerRadius > 0) {
+      const dx = self.x - this.dangerX, dz = self.z - this.dangerZ;
+      const distance = Math.hypot(dx, dz);
+      if (distance < this.dangerRadius) {
+        wantX = distance > 1e-3 ? dx / distance : 1; wantZ = distance > 1e-3 ? dz / distance : 0;
+        run = true;
+      }
     }
 
     // Routes go straight through woods, so whatever it wants, it steps round a trunk or crate right in front of it.
@@ -394,7 +416,7 @@ export class Bot {
     let best: BotTarget | null = null;
     let bestDistance = this.stats.sightRange;
     for (const t of targets) {
-      const dx = t.x - self.x, dy = t.y + CHEST_HEIGHT - (self.y + EYE_HEIGHT), dz = t.z - self.z;
+      const dx = t.x - self.x, dy = t.y + (t.aimHeight ?? CHEST_HEIGHT) - (self.y + EYE_HEIGHT), dz = t.z - self.z;
       const distance = Math.hypot(dx, dy, dz);
       if (distance >= bestDistance) continue;
       // Anything solid in between hides them.

@@ -1,13 +1,14 @@
-import type { AbilityMessage, Shot } from "@rustbucket/shared";
+import type { AbilityMessage, Shot, TitanMessage } from "@rustbucket/shared";
 
 // The shots, blasts, grenade throws and ability moments of the last few seconds, as this screen showed them, so the
 // kill replay can fire them again through the same effects (gate 13b). A fixed ring: the oldest is written over.
 
-export const SHOT = 0, EXPLODE = 1, GRENADE = 2, ABILITY = 3;
+export const SHOT = 0, EXPLODE = 1, GRENADE = 2, ABILITY = 3, TITAN = 4;
 
 const ABILITY_KINDS: readonly AbilityMessage["kind"][] = ["ram", "pounce", "barrage", "decoy", "rail"];
 const ABILITY_EVENTS: readonly AbilityMessage["event"][] = ["start", "hit", "land", "pop"];
-const VALUES = 7; // a shot's origin, direction and length; a grenade's position and velocity; a place
+const TITAN_EVENTS: readonly TitanMessage["event"][] = ["stomp", "throw", "land", "fall"];
+const VALUES = 7; // a shot's origin, direction and length; a grenade's or a thrown car's position and velocity; a place
 
 export class ReplayEvents {
   private times: Float64Array;
@@ -56,6 +57,12 @@ export class ReplayEvents {
   ability(timeMs: number, a: AbilityMessage): void {
     const at = this.push(timeMs, ABILITY, a.id, Math.max(0, ABILITY_KINDS.indexOf(a.kind)), Math.max(0, ABILITY_EVENTS.indexOf(a.event)));
     this.set(at, a.x, a.y, a.z, 0, 0, 0, 0);
+  }
+
+  // A Junk Titan moment (gate 13c): a stomp's radius rides in the last value.
+  titan(timeMs: number, m: TitanMessage): void {
+    const at = this.push(timeMs, TITAN, 0, Math.max(0, TITAN_EVENTS.indexOf(m.event)), 0);
+    this.set(at, m.x, m.y, m.z, m.vx ?? 0, m.vy ?? 0, m.vz ?? 0, m.radius ?? 0);
   }
 
   // The age (0 the oldest) of the first event later than `fromMs`, or `size` if there is none. Events are kept in
@@ -109,6 +116,14 @@ export class ReplayEvents {
     out.event = ABILITY_EVENTS[this.marks[at]!]!;
     out.x = this.values[at * VALUES]!; out.y = this.values[at * VALUES + 1]!; out.z = this.values[at * VALUES + 2]!;
     out.ids = undefined;
+  }
+
+  readTitan(age: number, out: TitanMessage): void {
+    const v = this.slot(age) * VALUES;
+    out.event = TITAN_EVENTS[this.codes[this.slot(age)]!]!;
+    out.x = this.values[v]!; out.y = this.values[v + 1]!; out.z = this.values[v + 2]!;
+    out.vx = this.values[v + 3]!; out.vy = this.values[v + 4]!; out.vz = this.values[v + 5]!;
+    out.radius = this.values[v + 6]!;
   }
 
   private push(timeMs: number, kind: number, id: number, code: number, mark: number): number {

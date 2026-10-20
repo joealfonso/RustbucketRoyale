@@ -27,7 +27,8 @@ export function planDrops(config: DropsConfig, tier: string, ring: RingSchedule,
 }
 
 // Bare, dry and roughly level for `clear` metres all round: no box raised off the ground in any nav cell there.
-function openGround(map: { world: World; nav: NavGrid; meters: number }, x: number, z: number, clear: number): boolean {
+// The Junk Titan wakes up on such a spot too.
+export function openGround(map: { world: World; nav: NavGrid; meters: number }, x: number, z: number, clear: number): boolean {
   const half = map.meters / 2 - clear;
   if (Math.abs(x) > half || Math.abs(z) > half) return false;
   const terrain = map.world.terrain;

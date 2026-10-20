@@ -5,9 +5,10 @@ import { parseUpgrades } from "./upgrades";
 import { parseZones } from "./zones";
 import { parseRoster } from "./roster";
 import { parseAbilities } from "./abilities";
+import { parseTitanConfig } from "./titan";
 
 // The data files that can be tuned live during a playtest. Map files are left out: the map is already built from them.
-export const TUNABLE_FILES = ["mech", "weapons", "grenade", "zones", "loot", "upgrades", "bots", "noise", "combat", "roster", "abilities"] as const;
+export const TUNABLE_FILES = ["mech", "weapons", "grenade", "zones", "loot", "upgrades", "bots", "noise", "combat", "roster", "abilities", "titan"] as const;
 export type TunableFile = (typeof TUNABLE_FILES)[number];
 
 // The raw JSON of each tunable file, as it is on disk, plus props.json which loot.json is checked against.
@@ -33,6 +34,7 @@ export function parseTunable(file: TunableFile, raws: TuningRaws): unknown {
     case "combat": return parseCombatStats(raws.combat);
     case "roster": return parseRoster(copy(raws.roster));
     case "abilities": return parseAbilities(raws.abilities);
+    case "titan": return parseTitanConfig(raws.titan);
   }
 }
 

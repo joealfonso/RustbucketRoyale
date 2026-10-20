@@ -40,6 +40,12 @@ export function plateText(points: number): string {
   return points > 0 ? String(Math.round(points)) : "--";
 }
 
+// Whether the Titan's bar is up: while it stands within `meters` of you (gate 13c). A fallen one has no bar; its fall
+// says it on its own.
+export function bossBarShown(shown: boolean, fallen: boolean, dx: number, dz: number, meters: number): boolean {
+  return shown && !fallen && dx * dx + dz * dz <= meters * meters;
+}
+
 // All the plain text and buttons for rooms and matches. Only touches the page when a value actually changes.
 export class Hud {
   private roomBar = byId("roomBar");
@@ -73,6 +79,10 @@ export class Hud {
   private replayFill = byId("replayFill");
   private crosshair = byId("crosshair");
   private replayShown = -1; // the hundredths of the replay last drawn, so the bar is touched only when it moves
+  private bossBar = byId("bossBar");
+  private bossFill = byId("bossFill");
+  private bossHp = byId("bossHp");
+  private bossShown = -1; // the hit points in whole percent last drawn, -1 while hidden
   private promptOn = false;
   private flashTimer = 0; // while a flash (GO) is up, the countdown's clearing of the big text waits for it
   private stopCount: (() => void) | null = null;
@@ -261,6 +271,23 @@ export class Hud {
     this.replayShown = step;
     if (step >= 0) this.replayFill.style.scale = `${step / 100} 1`;
   }
+
+  // The Junk Titan's bar: its name and its hit points (`hp` a share, 0 to 1), or hidden. It kicks every few percent
+  // it loses, so wearing it down is felt in the corner of your eye.
+  setBoss(name: string, shown: boolean, hp: number): void {
+    const step = shown ? Math.max(0, Math.min(100, Math.ceil(hp * 100))) : -1;
+    if (step === this.bossShown) return;
+    const was = this.bossShown;
+    this.bossShown = step;
+    this.bossBar.classList.toggle("shown", shown);
+    if (!shown) { delete this.bossBar.dataset.beat; return; }
+    this.text(byId("bossName"), name);
+    this.bossFill.style.scale = `${step / 100} 1`;
+    this.text(this.bossHp, `${step}%`);
+    if (was < 0 || step > this.bossKickFrom) this.bossKickFrom = step;
+    else if (this.bossKickFrom - step >= 3) { this.bossKickFrom = step; replay(this.bossBar); }
+  }
+  private bossKickFrom = 100; // the percent at the last kick: the next comes three percent below it
 
   // The knockout card (gate 14c): who got you and how, for a few seconds as the replay or the spectate camera takes over.
   showKnockout(title: string, by: string, how: string, seconds: number): void {

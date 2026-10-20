@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { solveLeg, stepGait, type GaitConfig, type GaitInput } from "./gait";
+import { solveLeg, stepGait, type GaitConfig, type GaitInput, type MechGait } from "./gait";
 import type { MechModel } from "./mechModel";
 
 const solved = new Float32Array(2);
@@ -17,7 +17,14 @@ export function walkMech(model: MechModel, config: GaitConfig, input: GaitInput,
     return 0;
   }
   stepGait(g, input, params, model.legSides, config.smoothing, dt);
+  bendLegs(model, params, config.footInward);
+  return g.footfalls;
+}
 
+// Sets the body's bob and lean from the gait and bends each leg so its foot lands where the gait puts it. Split out
+// so the Titan (titanView.ts) can lay its stomp over the gait's numbers first. Allocates nothing.
+export function bendLegs(model: MechModel, params: MechGait, footInward: number): void {
+  const g = model.gait!;
   const body = model.body;
   body.position.y = model.crawlDrop + g.bob;
   body.rotation.set(model.crawlTilt + g.pitch, 0, g.roll);
@@ -31,7 +38,7 @@ export function walkMech(model: MechModel, config: GaitConfig, input: GaitInput,
     const z = clamp(a.z + g.feet[i * 3 + 2]!, h.z - leg.reach, h.z + leg.reach);
     // Each foot keeps to its own side of the body, so a sideways step never sweeps it through the other leg.
     // The limit is a share of the leg's own standing width, so a wide-footed mech keeps a gap between its feet.
-    const inner = a.x * config.footInward;
+    const inner = a.x * footInward;
     const x = a.x > 0 ? Math.max(inner, a.x + g.feet[i * 3]!) : Math.min(inner, a.x + g.feet[i * 3]!);
     // An insect leg (a short thigh up to a high knee, a long shin down) stands nearly folded, so lifting its foot by
     // bending the knee whips the thigh round in a frame. It lifts the way an insect does: the whole leg swings out
@@ -55,7 +62,6 @@ export function walkMech(model: MechModel, config: GaitConfig, input: GaitInput,
     // The foot stays level with the ground whatever the leg and body are doing.
     leg.ankle.rotation.set(-(solved[0]! + solved[1]!) - g.pitch, 0, -(swing + g.roll));
   }
-  return g.footfalls;
 }
 
 // Back to the modelled pose: legs straight as built, body at its crawl or rest height.

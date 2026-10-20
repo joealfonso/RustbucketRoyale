@@ -39,9 +39,18 @@ if (site && site.fileCount === 0) {
 // main thread instead (the old way, for comparing).
 const mapWorkers = Number(process.env.MAP_WORKERS ?? 2);
 const pool = mapWorkers > 0 ? new MapPool(mapWorkers) : null;
+// TITAN_TIERS=small,arena gives the Junk Titan to those tiers in place of the list in data/titan.json, for trying it
+// on a small map. Development only, like the rest of these.
+const titanTiers = process.env.TITAN_TIERS?.split(",").map((t) => t.trim()).filter(Boolean);
+const baseConfig = loadRoomConfig({ maps: "generated", roster: true });
+const tuningRaws = devTuning ? loadTuningRaws() : null;
+if (titanTiers) {
+  baseConfig.titan = { ...baseConfig.titan, tiers: titanTiers };
+  if (tuningRaws) (tuningRaws.titan as { tiers: string[] }).tiers = titanTiers; // a tuned room parses its own copy
+}
 const config = {
-  ...loadRoomConfig({ maps: "generated", roster: true }),
-  ...(devTuning ? { tuningRaws: loadTuningRaws() } : {}),
+  ...baseConfig,
+  ...(tuningRaws ? { tuningRaws } : {}),
   ...(pool ? { mapLater: (tier: string, seed: number) => pool.generate(tier, seed) } : {}),
 };
 // With workers a new room's lobby map is built on them too, so making a room never stalls the others.
@@ -85,4 +94,4 @@ if (production) {
     logged = manager.roomCount;
   }, 60_000).unref();
 }
-console.log(`Rustbucket Royale server listening on ${production ? `http://localhost:${server.port} (the game and its page)` : `ws://localhost:${server.port}`} (default ${defaultTier}, up to ${maxRooms} rooms, ${defaultBots === null ? "bots fill to the tier size" : `${defaultBots} bots by default`}${devTuning ? ", live tuning ON" : ""}${simLag ? `, pretending ${simLag.ms} ms of lag` : ""}, ${mapWorkers} map workers)`);
+console.log(`Rustbucket Royale server listening on ${production ? `http://localhost:${server.port} (the game and its page)` : `ws://localhost:${server.port}`} (default ${defaultTier}, up to ${maxRooms} rooms, ${defaultBots === null ? "bots fill to the tier size" : `${defaultBots} bots by default`}${devTuning ? ", live tuning ON" : ""}${simLag ? `, pretending ${simLag.ms} ms of lag` : ""}${titanTiers ? `, Junk Titan on ${titanTiers.join(", ")}` : ""}, ${mapWorkers} map workers)`);

@@ -17,6 +17,10 @@
     "Chunk": {
       "maxTriangles": 20000,
       "states": []
+    },
+    "Junk": {
+      "maxTriangles": 20000,
+      "states": []
     }
   }
 }

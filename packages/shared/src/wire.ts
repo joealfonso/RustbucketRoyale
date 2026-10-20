@@ -1,5 +1,6 @@
-import { sanitizeInput, type InputMessage, type Loadout, type NoiseEvent, type OtherState, type PickupState, type SelfState, type ServerMessage, type ShotMessage } from "./protocol";
+import { sanitizeInput, type InputMessage, type Loadout, type NoiseEvent, type OtherState, type PickupState, type SelfState, type ServerMessage, type ShotMessage, type TitanState } from "./protocol";
 import type { MatchState } from "./match";
+import { TITAN_ACTIONS } from "./titan";
 
 // Packed binary forms of the three messages that make up nearly all the traffic: a client's input,
 // a snapshot, and a shot. Everything else stays readable text, because it is rare.
@@ -53,6 +54,10 @@ const SHOT_ORIGIN_STEP = 0.05;
 const INPUT_BASE_BYTES = 1 + 4 + 1 + 1 + 1 + 1 + 4 + 4;
 const EMPTY_SLOT = 255;
 const PICKUPS_UNCHANGED = 255; // in place of the pickup count: keep the list from the last snapshot
+// The Junk Titan, after a byte saying whether it is near: position in the same steps as a mech, yaw, hit points as a
+// share of 255, what it is doing, and how far into that in 0.05 s steps (long enough for every move it makes).
+const TITAN_BYTES = POSITION_BYTES + YAW_BYTES + 3;
+const ACTION_SECONDS_STEP = 0.05;
 
 const u8 = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
 
@@ -75,10 +80,12 @@ const fitsByte = (n: number) => n >= -128 && n <= 127;
 
 // ---- snapshot
 
-// `selfFloats` is how many of your own numbers are not 0.
-export function snapshotSize(others: number, noises = 0, pickups = 0, selfFloats = SELF_FLOATS): number {
-  return SNAPSHOT_HEADER_BYTES + SELF_MASK_BYTES + selfFloats * 4 + 1 + 1 + 1 + others * OTHER_BYTES + 1 + noises * NOISE_BYTES + LOADOUT_BYTES + LOOTING_BYTES + 1 + pickups * PICKUP_BYTES;
+// `selfFloats` is how many of your own numbers are not 0. `titan`: the Junk Titan is near.
+export function snapshotSize(others: number, noises = 0, pickups = 0, selfFloats = SELF_FLOATS, titan = false): number {
+  return SNAPSHOT_HEADER_BYTES + SELF_MASK_BYTES + selfFloats * 4 + 1 + 1 + 1 + others * OTHER_BYTES + 1 + noises * NOISE_BYTES + LOADOUT_BYTES + LOOTING_BYTES + 1 + pickups * PICKUP_BYTES + 1 + (titan ? TITAN_BYTES : 0);
 }
+
+const encodeYaw = (yaw: number) => Math.round(((((yaw % TWO_PI) + TWO_PI) % TWO_PI) / TWO_PI) * 65535);
 
 export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, memory = new SnapshotMemory()): Uint8Array {
   const others = m.others.slice(0, 255);
@@ -110,7 +117,8 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
     seen.set(other.id, now);
   }
 
-  const buffer = new ArrayBuffer(snapshotSize(0, noises.length, pickups.length, present) + otherBytes);
+  const titan = m.titan ?? null;
+  const buffer = new ArrayBuffer(snapshotSize(0, noises.length, pickups.length, present, titan !== null) + otherBytes);
   const v = new DataView(buffer);
   let o = 0;
   v.setUint8(o, TYPE_SNAPSHOT); o += 1;
@@ -142,8 +150,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
     } else {
       v.setInt16(o, now.x, true); v.setInt16(o + 2, now.y, true); v.setInt16(o + 4, now.z, true); o += POSITION_BYTES;
     }
-    const turns = ((other.yaw % TWO_PI) + TWO_PI) % TWO_PI;
-    v.setUint16(o, Math.round((turns / TWO_PI) * 65535), true); o += 2;
+    v.setUint16(o, encodeYaw(other.yaw), true); o += 2;
     if (kind & DETAILS_BIT) for (const b of now.details) { v.setUint8(o, b); o += 1; }
   });
   memory.others = seen;
@@ -170,6 +177,14 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
     v.setInt16(o, Math.round(p.x / POSITION_STEP), true); o += 2;
     v.setInt16(o, Math.round(p.y / HEIGHT_STEP), true); o += 2;
     v.setInt16(o, Math.round(p.z / POSITION_STEP), true); o += 2;
+  }
+  v.setUint8(o, titan ? 1 : 0); o += 1;
+  if (titan) {
+    v.setInt16(o, Math.round(titan.x / POSITION_STEP), true); v.setInt16(o + 2, Math.round(titan.y / HEIGHT_STEP), true); v.setInt16(o + 4, Math.round(titan.z / POSITION_STEP), true); o += POSITION_BYTES;
+    v.setUint16(o, encodeYaw(titan.yaw), true); o += YAW_BYTES;
+    v.setUint8(o, u8(Math.max(0, Math.min(1, titan.hp)) * 255)); o += 1;
+    v.setUint8(o, Math.max(0, TITAN_ACTIONS.indexOf(titan.action))); o += 1;
+    v.setUint8(o, u8(titan.actionSeconds / ACTION_SECONDS_STEP)); o += 1;
   }
   return new Uint8Array(buffer);
 }
@@ -256,7 +271,7 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
   const countByte = v.getUint8(o); o += 1;
   const unchanged = countByte === PICKUPS_UNCHANGED;
   const pickupCount = unchanged ? 0 : countByte;
-  if (bytes.length !== o + pickupCount * PICKUP_BYTES) return null;
+  if (bytes.length < o + pickupCount * PICKUP_BYTES + 1) return null;
   const pickups: PickupState[] = [];
   for (let i = 0; i < pickupCount; i++) {
     pickups.push({
@@ -265,9 +280,20 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
     });
     o += PICKUP_BYTES;
   }
+  const hasTitan = v.getUint8(o) === 1; o += 1;
+  if (bytes.length !== o + (hasTitan ? TITAN_BYTES : 0)) return null;
+  let titan: TitanState | null = null;
+  if (hasTitan) {
+    const action = TITAN_ACTIONS[v.getUint8(o + 9)];
+    if (!action) return null;
+    titan = {
+      x: v.getInt16(o, true) * POSITION_STEP, y: v.getInt16(o + 2, true) * HEIGHT_STEP, z: v.getInt16(o + 4, true) * POSITION_STEP,
+      yaw: (v.getUint16(o + 6, true) / 65535) * TWO_PI, hp: v.getUint8(o + 8) / 255, action, actionSeconds: v.getUint8(o + 10) * ACTION_SECONDS_STEP,
+    };
+  }
   memory.others = seen;
   for (let i = 0; i < SELF_FLOATS; i++) memory.self[i] = selfOrder[i]!;
-  return { t: "snapshot", tick, ack, ackAgeMs, you, health: { hp, dead, respawnIn }, match: { state, seconds, alive, total }, others, noises, loadout, looting, repairing, pickups: unchanged ? null : pickups };
+  return { t: "snapshot", tick, ack, ackAgeMs, you, health: { hp, dead, respawnIn }, match: { state, seconds, alive, total }, others, noises, loadout, looting, repairing, pickups: unchanged ? null : pickups, titan };
 }
 
 // ---- shot

@@ -1,0 +1,91 @@
+{
+  "tiers": ["medium", "large"],
+  "kit": "titan",
+  "appearSeconds": 45,
+  "announce": "The Junk Titan is awake. It is slow, it is angry, and it is full of loot.",
+  "fallNotice": "The Junk Titan is down! Its loot is everywhere.",
+  "height": 12,
+  "radius": 4.5,
+  "aimHeight": 7.5,
+  "hp": 10000,
+  "blastMultiplier": 2,
+  "walkSpeed": 3.2,
+  "turnDegreesPerSecond": 40,
+  "walkingAngleDegrees": 50,
+  "aggroRange": 90,
+  "grudgeSeconds": 10,
+  "grudgeRange": 160,
+  "ringMargin": 20,
+  "placeShareOfRing": 0.5,
+  "clearOfMechsMeters": 60,
+  "pushSpeed": 9,
+  "botKeepOutMeters": 14,
+  "walkNoiseSeconds": 1.5,
+  "zones": [
+    {
+      "name": "legs",
+      "damageMultiplier": 1,
+      "boxes": [
+        { "center": [-1.8, 2.75, 0], "size": [2.2, 5.5, 2.4] },
+        { "center": [1.8, 2.75, 0], "size": [2.2, 5.5, 2.4] }
+      ]
+    },
+    {
+      "name": "arms",
+      "damageMultiplier": 0.75,
+      "boxes": [
+        { "center": [-3.9, 7.4, -0.4], "size": [1.8, 5.6, 2.0] },
+        { "center": [3.9, 7.4, -0.4], "size": [1.8, 5.6, 2.0] }
+      ]
+    },
+    {
+      "name": "core",
+      "damageMultiplier": 1.5,
+      "boxes": [
+        { "center": [0, 7.6, 0], "size": [5.6, 4.6, 3.8] },
+        { "center": [0, 10.9, -0.3], "size": [2.4, 2.0, 2.4] }
+      ]
+    }
+  ],
+  "stomp": {
+    "triggerRadius": 8,
+    "radius": 11,
+    "reachHeight": 3,
+    "windupSeconds": 0.9,
+    "recoverSeconds": 0.8,
+    "cooldownSeconds": 3,
+    "zoneDamage": [35, 0, 25],
+    "knockback": 19,
+    "pop": 8,
+    "propHeight": 6
+  },
+  "throw": {
+    "minRange": 15,
+    "range": 80,
+    "windupSeconds": 1.1,
+    "recoverSeconds": 0.9,
+    "cooldownSeconds": 5,
+    "flightSeconds": 2.4,
+    "handHeight": 11,
+    "handForward": 2,
+    "damage": 80,
+    "blastRadius": 9
+  },
+  "car": {
+    "gravity": 22,
+    "bounce": 0.15,
+    "friction": 0.4,
+    "radius": 1.2
+  },
+  "roar": {
+    "seconds": 1.6,
+    "cooldownSeconds": 20
+  },
+  "fall": {
+    "seconds": 2,
+    "damage": 120,
+    "radius": 12,
+    "spillMeters": 6,
+    "contents": ["upgrade", "upgrade", "upgrade", "weapon", "weapon", "weapon", "armor", "armor", "armor", "grenade", "grenade", "grenade"]
+  }
+}

@@ -19,6 +19,7 @@ import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import { SunShadows, castShadows } from "./sunShadows";
 import mechKitsJson from "../../../data/mechKits.json";
 import { loadKit, parseKits, type LoadedKit } from "./mechKit";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { PROP_MODELS } from "./props";
 import { toGeometry } from "./dressing/dressing";
 import weaponsJson from "../../../data/weapons.json";
@@ -129,6 +130,34 @@ roster.forEach((r, i) => {
   rigMechMotion(model.body, model.legs, model.kitPieces); // gate V9b; does nothing once createMechModel rigs it
   rosterModels.push(model);
 });
+
+// Key U: the Junk Titan (gate 13c) at the end of the roster line, for scale, seen from 10, 50, 150 and 300 m in turn
+// from about where a player's camera would be, then from 14 m at chest height, to judge the head, the furnace and the
+// hands.
+const TITAN_X = 25;
+const TITAN_DISTANCES = [10, 50, 150, 300, 14];
+let titanView = -1; // which of TITAN_DISTANCES, -1 when not looking at it
+const titanKit = await loadKit("titan", kitsData);
+if (titanKit) {
+  // Its levels switch four times farther out than a mech's, as it is about four times a mech's size. A guess until
+  // the client sets the Titan's own distances.
+  const titan = createMechModel(palette.mech.othersAccent, zoneMaxHp, toon, palette.mech.body, { ...titanKit, lodDistances: titanKit.lodDistances.map((d) => d * 4) }, palette.mech.trim);
+  for (const gun of titan.gunParts) gun.visible = false; // it has no gun: the plain barrel a gunless kit gets would hang in its legs
+  titan.group.position.set(TITAN_X, 0, ROSTER_Z);
+  titan.group.rotation.y = Math.PI;
+  scene.add(titan.group);
+  // A car in the grapple, as the game holds one before a throw: the thrown car's model, unturned at Mount_Hand.
+  const { scheme, car } = mechKitsJson.kits.titan;
+  const carData = parseKits({ lodDistances: kitsData.lodDistances, kits: { car: { file: car.file, scheme, parts: Object.fromEntries(Object.entries(car.parts).map(([name, p]) => [name, { ...p, zone: "torso" }])) } } });
+  const carKit = await loadKit("car", carData);
+  const hand = (await new GLTFLoader().loadAsync(`/${kitsData.kits.titan!.file}`)).scene.getObjectByName("Mount_Hand");
+  if (carKit && hand) {
+    const held = createMechModel(palette.mech.othersAccent, zoneMaxHp, toon, palette.mech.body, carKit, palette.mech.trim);
+    for (const gun of held.gunParts) gun.visible = false;
+    held.group.position.copy(hand.position);
+    titan.group.add(held.group);
+  }
+}
 
 // Key 9: the painted atlas (V7b) on a row of boxes, dressing, a crate and a roster mech, left of the chunk.
 // 9 steps close / 10 m / 50 m, 0 the next thing, P paint on and off.
@@ -283,6 +312,15 @@ function place(): void {
     label.textContent = paintPreview.place(camera, turn);
     return;
   }
+  if (titanView >= 0) {
+    const d = TITAN_DISTANCES[titanView]!;
+    const chest = titanView === TITAN_DISTANCES.length - 1;
+    const target = chest ? new THREE.Vector3(TITAN_X, 7.5, ROSTER_Z) : new THREE.Vector3(TITAN_X - 3, 5, ROSTER_Z);
+    camera.position.set(target.x + Math.sin(turn) * d, chest ? 8.5 : 2 + d * 0.04, target.z + Math.cos(turn) * d);
+    camera.lookAt(target);
+    label.textContent = `Junk Titan${titanKit ? "" : " (failed to load)"} ${chest ? "up close, at chest height" : `beside the roster, ${d} m`} · U: next view · Q / E: turn · L: light · 1 / 2 / 3: back`;
+    return;
+  }
   if (lookingAtFx) {
     camera.position.set(5 + Math.sin(turn) * 22, 5, ROSTER_Z + Math.cos(turn) * 22);
     camera.lookAt(5, 3, ROSTER_Z - 4);
@@ -308,6 +346,8 @@ function place(): void {
     : `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · 4: the roster · 5: the props · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · behind, left to right: you (clean), then 75%, 40%, 15%, arms and legs broken`);
 }
 window.addEventListener("keydown", (e) => {
+  if (e.code.startsWith("Digit")) titanView = -1;
+  if (e.code === "KeyU") { titanView = (titanView + 1) % TITAN_DISTANCES.length; lookingAtPaint = false; lookingAtRange = false; lookingAtFx = false; closeUp = -1; }
   const index = ["Digit1", "Digit2", "Digit3"].indexOf(e.code);
   if (index >= 0) { distance = DISTANCES[index]!; lookingAtRoster = false; lookingAtProps = false; closeUp = -1; lookingAtRange = false; lookingAtFx = false; }
   if (index >= 0 || ["Digit4", "Digit5", "Digit6", "Digit7", "Digit8"].includes(e.code)) lookingAtPaint = false;
@@ -358,3 +398,92 @@ renderer.setAnimationLoop(() => {
   sunShadows.follow(camera);
   renderer.render(scene, camera);
 });
+
+// ---- Gate 13c (client): the Junk Titan's moves. Key I stands a live Titan beside the roster, past the scale Titan
+// (key U), and steps it through walk, stomp, throw, roar and down; each move repeats so it can be watched again. It
+// is fed made-up snapshots and messages on the timings the server uses (data/titan.json), through the same TitanView
+// the game draws it with. No sound and no camera shake here. Kept in its own block, loaded with its own imports.
+{
+  const [{ TitanView }, { parseTitanLook }, { crossed }, { carFuseSeconds, carLanding, loadCarModel }, shared, titanLookJson, titanJson] = await Promise.all([
+    import("./titanView"), import("./titanLook"), import("./titanPose"), import("./thrownCars"), import("@rustbucket/shared"),
+    import("../../../data/titanLook.json"), import("../../../data/titan.json"),
+  ]);
+  const look = parseTitanLook(titanLookJson.default);
+  const config = shared.parseTitanConfig(titanJson.default);
+  const titan = new TitanView({
+    scene, toon, look, config, zoneMaxHp, gait, sprites: fxSprites, explosions, deathFx: parseDeathFx(deathFxJson), ground: () => 0,
+    sound: () => {}, shake: () => {},
+  }, await loadKit(look.kit, kitsData));
+  const car = await loadCarModel(kitsData, look.kit);
+  if (car) titan.setCarModel(car);
+  const MOVES = ["walk", "stomp", "throw", "roar", "down"] as const;
+  const HOME_X = 48, HOME_Z = ROSTER_Z;
+  const fuse = carFuseSeconds(config.throw.flightSeconds, shared.STEP);
+  const flying = shared.createGrenade();
+  const lands = { x: 0, y: 0, z: 0 };
+  const state = { x: HOME_X, y: 0, z: HOME_Z, yaw: Math.PI, hp: 1, action: "walk" as (typeof MOVES)[number], actionSeconds: 0 };
+  let move = -1; // index in MOVES, -1 while not looking
+  let time = 0, seconds = 0, landIn = -1, stepLeft = 0;
+  const moveSeconds = () => (state.action === "stomp" ? config.stomp.windupSeconds + config.stomp.recoverSeconds
+    : state.action === "throw" ? config.throw.windupSeconds + config.throw.recoverSeconds : state.action === "roar" ? config.roar.seconds : Infinity);
+  const frame = () => {
+    if (move < 0) return;
+    camera.position.set(HOME_X + Math.sin(turn) * 42, 14, HOME_Z + Math.cos(turn) * 42);
+    camera.lookAt(HOME_X, 7, HOME_Z);
+    label.textContent = `Junk Titan moves · I: next (now: ${MOVES[move]}) · Q / E: turn · V: effects ${vfxQuality()} · L: light · 1 / 2 / 3: back`;
+  };
+  window.addEventListener("keydown", (e) => {
+    if (e.code.startsWith("Digit") || e.code === "KeyU") { move = -1; return; }
+    if (e.code === "KeyI") {
+      move = (move + 1) % MOVES.length;
+      lookingAtPaint = false; lookingAtRange = false; lookingAtFx = false; closeUp = -1;
+      if (MOVES[move] === "walk") titan.clear(); // stands back up after "down"
+      state.action = MOVES[move]!;
+      state.actionSeconds = seconds = 0;
+      state.hp = MOVES[move] === "down" ? 0 : 1 - move * 0.2; // worn down a little more each move, to see the rust
+      state.x = HOME_X; state.z = HOME_Z; state.yaw = Math.PI;
+      if (state.action === "down") titan.event({ t: "titan", event: "fall", x: state.x, y: 0, z: state.z });
+    }
+    frame(); // after the page's own handler, so Q / E turn round the Titan here
+  });
+  let last = performance.now();
+  const tick = (now: number) => {
+    requestAnimationFrame(tick);
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (move < 0) return;
+    time += dt;
+    const before = seconds;
+    seconds += dt;
+    if (state.action === "walk") {
+      // Back and forth in front of the roster at its walking speed, facing the way it goes.
+      const reach = 14, w = config.walkSpeed / reach;
+      state.x = HOME_X + Math.sin(time * w) * reach;
+      state.yaw = Math.cos(time * w) > 0 ? -Math.PI / 2 : Math.PI / 2;
+    } else if (state.action !== "down" && seconds > moveSeconds() + 0.6) {
+      seconds = 0; // again
+    }
+    const fx = -Math.sin(state.yaw), fz = -Math.cos(state.yaw);
+    if (state.action === "stomp" && crossed(before, seconds, config.stomp.windupSeconds)) {
+      titan.event({ t: "titan", event: "stomp", x: state.x, y: 0, z: state.z, radius: config.stomp.radius });
+    }
+    if (state.action === "throw" && crossed(before, seconds, config.throw.windupSeconds)) {
+      const t = config.throw;
+      shared.aimCar(state.x + fx * t.handForward, t.handHeight, state.z + fz * t.handForward, state.x + fx * 45, config.car.radius, state.z + fz * 45, t.flightSeconds, config.car, shared.STEP, flying);
+      titan.event({ t: "titan", event: "throw", x: flying.x, y: flying.y, z: flying.z, vx: flying.vx, vy: flying.vy, vz: flying.vz });
+      carLanding(flying.x, flying.y, flying.z, flying.vx, flying.vy, flying.vz, config.car, fuse, shared.STEP, rangeWorld, lands);
+      landIn = fuse;
+    }
+    if (landIn >= 0 && (landIn -= dt) < 0) {
+      titan.event({ t: "titan", event: "land", x: lands.x, y: lands.y, z: lands.z });
+      explosions.blast(lands.x, lands.y, lands.z, config.throw.blastRadius, 0);
+    }
+    if (state.action === "down" && crossed(before, seconds, config.fall.seconds)) explosions.blast(state.x, 1, state.z, config.fall.radius, 0);
+    // A hand-made snapshot every frame, drawn a tenth of a second behind as the game draws it.
+    state.actionSeconds = state.action === "walk" ? time : seconds;
+    titan.push(state, now, now);
+    for (stepLeft += dt; stepLeft >= shared.STEP; stepLeft -= shared.STEP) titan.step(rangeWorld);
+    titan.update(now, dt, 100, camera.position, null);
+  };
+  requestAnimationFrame(tick);
+}

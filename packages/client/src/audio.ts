@@ -9,7 +9,8 @@ export type SoundName =
   | "shot" | "shotScattergun" | "shotSpikeDriver" | "impact" | "explosion" | "smash" | "hitMarker" | "hurt"
   | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap" | "loot" | "repair"
   | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz" | "wade" | "splash" | "treeFall" | "treeLand"
-  | "uiHover" | "uiClick" | "uiPick" | "uiWhoosh" | "railCharge" | "railShot";
+  | "uiHover" | "uiClick" | "uiPick" | "uiWhoosh" | "railCharge" | "railShot"
+  | "titanStep" | "titanStomp" | "titanThrow" | "titanRoar" | "titanFall";
 
 export interface AudioConfig {
   master: number;
@@ -281,6 +282,44 @@ export class Sound {
         return this.tone(into, 1320 * p, 0.09, "triangle", 0.22, 0.05);
       // Something sliding in: a short rising breath of air.
       case "uiWhoosh": return this.sweep(into, 380 * p, 2200 * p, 0.22, 0.6);
+      // The Junk Titan (gate 13c). Its footfall: a deep boom you feel through the floor, scrap rattling on its frame,
+      // and the ground giving a little under it. Far lower and longer than any mech's step.
+      case "titanStep":
+        this.body(into, 58 * p, 22 * p, 0.7, 1.3, 0.01);
+        this.body(into, 120 * p, 48 * p, 0.3, 0.6, 0.008);
+        this.crunch(into, 0.3, "lowpass", 900 * p, 0.8, 0.01);
+        this.clank(into, (95 + r() * 30) * p, 0.5, 0.18, 0.06);
+        return this.burst(into, 1, "lowpass", 260 * p, 0.6, 0.03);
+      // The stomp landing: a crack like a wall splitting, a huge low punch, the ground breaking up and a long rumble.
+      case "titanStomp":
+        this.burst(into, 0.02, "highpass", 1800, 0.9, 0.0005);
+        this.crunch(into, 0.5, "lowpass", 1800 * p, 1.3, 0.002);
+        this.body(into, 70 * p, 18 * p, 1.4, 1.6, 0.004);
+        this.body(into, 150 * p, 40 * p, 0.5, 0.8, 0.004);
+        this.crunch(into, 0.6, "bandpass", 600 * p, 0.9, 0.01, 0.12);
+        return this.burst(into, 2.6, "lowpass", 300 * p, 1, 0.04);
+      // A car hurled: the arm's servos straining, then a heavy whoosh going past, with the car's loose metal rattling.
+      case "titanThrow":
+        this.roar(into, 50 * p, 95 * p, 0.5, 0.6);
+        this.sweep(into, 260 * p, 1400 * p, 0.7, 1);
+        this.sweep(into, 180 * p, 700 * p, 0.9, 0.7);
+        return this.clank(into, (300 + r() * 80) * p, 0.25, 0.25, 0.25) + 0.3;
+      // The roar: two detuned engines bellowing up together through grit, a horn-like blare on top, metal shuddering.
+      case "titanRoar":
+        this.roar(into, 42 * p, 70 * p, 1.6, 1);
+        this.roar(into, 63 * p, 104 * p, 1.5, 0.8);
+        this.glide(into, 180 * p, 140 * p, 1.4, "sawtooth", 0.12, 0.1, true);
+        this.crunch(into, 1.2, "lowpass", 1100 * p, 0.6, 0.15);
+        return this.clank(into, 140 * p, 1, 0.15, 0.3) + 0.4;
+      // The fall: a groan of bending steel, the crash of a building's worth of scrap hitting the ground, the blast,
+      // and pieces raining down after.
+      case "titanFall":
+        this.creak(into, 90 * p, 45 * p, 1.4, 0.7);
+        this.body(into, 52 * p, 16 * p, 2.2, 1.8, 0.01);
+        this.crunch(into, 0.9, "lowpass", 1400 * p, 1.4, 0.005, 0.4);
+        this.burst(into, 3.2, "lowpass", 260 * p, 1, 0.05, 0.4);
+        this.clank(into, 210 * p, 0.6, 0.3, 0.9);
+        return this.clank(into, 330 * p, 0.5, 0.22, 1.3) + 0.5;
       case "jets": return 0;
     }
   }

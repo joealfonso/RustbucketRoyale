@@ -18,8 +18,8 @@ const ZONE_BLINK_MS = 120;
 // An amber scope in the bottom-right panel with you in the middle and forward at the top. Mechs very close show as
 // filled dots, the same for bots and people so the radar never gives away who is who. Anything further off only shows
 // when it makes a sound, as a mark whose shape says what kind of sound it was (radar.json), fading out. A sound beyond
-// the edge shows its mark on the rim, pointing its way. The zone edge is a dashed amber circle: magenta is kept for
-// the zone ring in the world.
+// the edge shows its mark on the rim, pointing its way. The Junk Titan is a red cog wherever the server shows it. The
+// zone edge is a dashed amber circle: magenta is kept for the zone ring in the world.
 export class Radar {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -45,6 +45,10 @@ export class Radar {
   // Supply drops to mark this frame, as x, z pairs (see `markDrop`). Kept, not remade, so drawing allocates nothing.
   private drops: number[] = [];
   private dropCount = 0;
+  // The Junk Titan to mark this frame (see `markTitan`), and how big; size 0 for none.
+  private titanX = 0;
+  private titanZ = 0;
+  private titanSize = 0;
   private drawMech = (wx: number, wz: number, _bot: boolean, dead: boolean): void => {
     if (dead || Math.hypot(wx - this.viewX, wz - this.viewZ) > this.detectMeters) return;
     const p = placeOnRadar(wx - this.viewX, wz - this.viewZ, this.viewYaw, this.scale, this.point);
@@ -113,6 +117,14 @@ export class Radar {
     this.dropCount++;
   }
 
+  // The Junk Titan (gate 13c), for the next `draw` only: a red cog, bigger than any other mark, held at the edge when
+  // out of range so you know which way it is.
+  markTitan(x: number, z: number, size: number): void {
+    this.titanX = x;
+    this.titanZ = z;
+    this.titanSize = size;
+  }
+
   // `outside` turns the zone arrow red and makes it blink, so it never rests on colour alone.
   draw(x: number, z: number, yaw: number, remotes: RemoteMechs, ring: Circle | null, outside: boolean, nowMs: number): void {
     const ctx = this.ctx;
@@ -137,6 +149,7 @@ export class Radar {
     if (ring) this.drawZoneArrow(x, z, yaw, ring, outside, nowMs);
     this.drawPulses(x, z, yaw, nowMs);
     this.drawDrops(x, z, yaw, nowMs);
+    this.drawTitan(x, z, yaw);
 
     this.viewX = x;
     this.viewZ = z;
@@ -257,6 +270,40 @@ export class Radar {
       ctx.stroke();
     }
     this.dropCount = 0;
+  }
+
+  // A ring with six teeth round a solid middle: no other mark has teeth, so it reads without its colour.
+  private drawTitan(x: number, z: number, yaw: number): void {
+    const s = this.titanSize;
+    if (s <= 0) return;
+    this.titanSize = 0;
+    const ctx = this.ctx;
+    const mid = this.mid;
+    const p = placeOnRadar(this.titanX - x, this.titanZ - z, yaw, this.scale, this.point);
+    const reach = Math.hypot(p.x, p.y), edge = mid - s * 1.5;
+    const k = reach > edge ? edge / reach : 1;
+    const px = mid + p.x * k, py = mid + p.y * k;
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = this.colours.soot;
+    ctx.beginPath();
+    ctx.arc(px, py, s + 1, 0, TAU);
+    ctx.stroke();
+    ctx.strokeStyle = this.colours.warn;
+    ctx.fillStyle = this.colours.warn;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, py, s, 0, TAU);
+    for (let i = 0; i < 6; i++) {
+      const a = (i * TAU) / 6;
+      ctx.moveTo(px + Math.cos(a) * s, py + Math.sin(a) * s);
+      ctx.lineTo(px + Math.cos(a) * s * 1.45, py + Math.sin(a) * s * 1.45);
+    }
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(px, py, s * 0.45, 0, TAU);
+    ctx.fill();
+    ctx.lineWidth = 1;
   }
 
   private drawPulses(x: number, z: number, yaw: number, nowMs: number): void {

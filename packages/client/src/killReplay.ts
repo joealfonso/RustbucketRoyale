@@ -1,9 +1,9 @@
 import type * as THREE from "three";
-import type { AbilityMessage, HealthState, MechState, Shot, World } from "@rustbucket/shared";
+import type { AbilityMessage, HealthState, MechState, Shot, TitanMessage, World } from "@rustbucket/shared";
 import { createShot } from "@rustbucket/shared";
 import { setMechDamage, type MechModel } from "./mechModel";
 import { damageDiffers, type RemoteMechs } from "./remoteMechs";
-import { ABILITY, EXPLODE, GRENADE, ReplayEvents, SHOT } from "./replayEvents";
+import { ABILITY, EXPLODE, GRENADE, ReplayEvents, SHOT, TITAN } from "./replayEvents";
 import { ReplayFrames, createDrawnMech, type Bracket, type DrawnMech } from "./replayFrames";
 import { createCameraPose, followPose, keepOutOfWalls, replayCameraPose, type ReplayCameraConfig } from "./replayCamera";
 
@@ -84,6 +84,7 @@ export class KillReplay {
   onExplode?: (x: number, y: number, z: number) => void;
   onGrenade?: (id: number, x: number, y: number, z: number, vx: number, vy: number, vz: number) => void;
   onAbility?: (moment: AbilityMessage) => void;
+  onTitan?: (moment: TitanMessage) => void;
   // Your mech goes down in the replay, for the blow-apart. (awayX, awayZ) is the way the killer's blow pushed it.
   onVictimDown?: (model: MechModel, awayX: number, awayZ: number) => void;
   // The replay is over, played out or skipped: time to watch the killer.
@@ -113,6 +114,7 @@ export class KillReplay {
   private current = createCameraPose();
   private shotOut: Shot = createShot();
   private abilityOut: AbilityMessage = { t: "ability", id: 0, kind: "ram", event: "start", x: 0, y: 0, z: 0 };
+  private titanOut: TitanMessage = { t: "titan", event: "stomp", x: 0, y: 0, z: 0 };
   private recordRemote = (id: number, m: DrawnMech) => { if (id !== this.ownId) this.frames.add(id, m); }; // made once
   private ownId = 0;
 
@@ -142,6 +144,12 @@ export class KillReplay {
   // How far through the replay is on screen, 0 to 1.
   get progress(): number {
     return this.phase === "playing" && this.total > 0 ? Math.min(1, this.shown / this.total) : 0;
+  }
+
+  // The moment of the recording on screen (the local clock it was recorded on), or null while none plays: the Junk
+  // Titan keeps its own recording (titanView.ts) and draws itself at this moment.
+  get clock(): number | null {
+    return this.phase === "playing" ? this.time : null;
   }
 
   get killerId(): number {
@@ -184,6 +192,10 @@ export class KillReplay {
 
   ability(nowMs: number, moment: AbilityMessage): void {
     if (this.phase !== "playing") this.events.ability(nowMs, moment);
+  }
+
+  titan(nowMs: number, moment: TitanMessage): void {
+    if (this.phase !== "playing") this.events.titan(nowMs, moment);
   }
 
   // You were knocked out. True if a replay will play: there was a killer and it was in view long enough.
@@ -297,6 +309,9 @@ export class KillReplay {
       } else if (kind === ABILITY) {
         events.readAbility(age, this.abilityOut);
         this.onAbility?.(this.abilityOut);
+      } else if (kind === TITAN) {
+        events.readTitan(age, this.titanOut);
+        this.onTitan?.(this.titanOut);
       }
     }
     this.firedUpTo = toMs;

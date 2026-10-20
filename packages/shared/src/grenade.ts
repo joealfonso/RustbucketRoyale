@@ -32,7 +32,8 @@ const hit = createRayHit();
 
 // One step of a grenade: gravity, bounce off boxes, fuse. Returns true on the step it goes off.
 // Pure and deterministic, so the client can fly the same arc the server does without being told each frame.
-export function stepGrenade(g: GrenadeState, stats: GrenadeStats, dt: number, world: World): boolean {
+// Takes only the numbers the flight needs, so the Junk Titan's thrown cars fly with it too.
+export function stepGrenade(g: GrenadeState, stats: Pick<GrenadeStats, "gravity" | "bounce" | "friction" | "radius">, dt: number, world: World): boolean {
   g.vy -= stats.gravity * dt;
   const sx = g.vx * dt, sy = g.vy * dt, sz = g.vz * dt;
   const length = Math.hypot(sx, sy, sz);

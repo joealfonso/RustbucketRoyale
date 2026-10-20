@@ -1,0 +1,328 @@
+{
+  "scheme": {
+    "container": "#4A7896",
+    "carCream": "#DCCFA8",
+    "carRed": "#A23B2C",
+    "excavator": "#D9A324",
+    "iron": "#3B3633",
+    "pipe": "#7F8A8E",
+    "steel": "#9AA1A4",
+    "rust": "#C4622D",
+    "rubber": "#1F2123",
+    "glass": "#2B3438",
+    "fire": "#FF8A2A",
+    "eyes": "#FFC93C"
+  },
+  "parts": {
+    "Torso": {
+      "zone": "torso",
+      "paint": "container",
+      "finish": "paint"
+    },
+    "Furnace": {
+      "zone": "torso",
+      "paint": "iron",
+      "finish": "metal"
+    },
+    "Furnace_Core": {
+      "zone": "torso",
+      "paint": "fire",
+      "glow": true
+    },
+    "Chimney": {
+      "zone": "torso",
+      "paint": "rust",
+      "finish": "metal"
+    },
+    "Head": {
+      "zone": "torso",
+      "paint": "carCream",
+      "finish": "paint"
+    },
+    "Torso_Patch": {
+      "zone": "torso",
+      "paint": "carRed",
+      "finish": "paint",
+      "noHit": true
+    },
+    "Head_Trim": {
+      "zone": "torso",
+      "paint": "steel",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Head_Grille": {
+      "zone": "torso",
+      "paint": "iron",
+      "finish": "metal",
+      "noHit": true
+    },
+    "Eyes": {
+      "zone": "torso",
+      "paint": "eyes",
+      "glow": true,
+      "noHit": true
+    },
+    "Pelvis": {
+      "zone": "torso",
+      "paint": "carRed",
+      "finish": "paint"
+    },
+    "Pelvis_Trim": {
+      "zone": "torso",
+      "paint": "steel",
+      "finish": "metal",
+      "rusts": false
+    },
+    "Torso_Glass": {
+      "zone": "torso",
+      "paint": "glass",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Torso_Rubber": {
+      "zone": "torso",
+      "paint": "rubber",
+      "finish": "rubber"
+    },
+    "Torso_Chains": {
+      "zone": "torso",
+      "paint": "iron",
+      "finish": "metal",
+      "noHit": true
+    },
+    "Shoulder_R": {
+      "zone": "arms",
+      "paint": "rubber",
+      "finish": "rubber"
+    },
+    "Shoulder_L": {
+      "zone": "arms",
+      "paint": "rubber",
+      "finish": "rubber"
+    },
+    "Shoulder_Rims": {
+      "zone": "arms",
+      "paint": "steel",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Arm_R": {
+      "zone": "arms",
+      "paint": "excavator",
+      "finish": "paint"
+    },
+    "Forearm_R": {
+      "zone": "arms",
+      "paint": "excavator",
+      "finish": "paint"
+    },
+    "Arm_R_Frame": {
+      "zone": "arms",
+      "paint": "steel",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Arm_R_Hoses": {
+      "zone": "arms",
+      "paint": "rubber",
+      "finish": "rubber",
+      "noHit": true
+    },
+    "Hand_R": {
+      "zone": "arms",
+      "paint": "iron",
+      "finish": "metal"
+    },
+    "Arm_L": {
+      "zone": "arms",
+      "paint": "iron",
+      "finish": "metal"
+    },
+    "Forearm_L": {
+      "zone": "arms",
+      "paint": "pipe",
+      "finish": "metal"
+    },
+    "Fist_L": {
+      "zone": "arms",
+      "paint": "iron",
+      "finish": "metal"
+    },
+    "Arm_L_Tyre": {
+      "zone": "arms",
+      "paint": "rubber",
+      "finish": "rubber"
+    },
+    "Arm_L_Frame": {
+      "zone": "arms",
+      "paint": "steel",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Arm_L_Chains": {
+      "zone": "arms",
+      "paint": "iron",
+      "finish": "metal",
+      "noHit": true
+    },
+    "Leg_R": {
+      "zone": "legs",
+      "paint": "iron",
+      "finish": "metal"
+    },
+    "Leg_L": {
+      "zone": "legs",
+      "paint": "iron",
+      "finish": "metal"
+    },
+    "Shin_R": {
+      "zone": "legs",
+      "paint": "pipe",
+      "finish": "metal"
+    },
+    "Shin_L": {
+      "zone": "legs",
+      "paint": "pipe",
+      "finish": "metal"
+    },
+    "Door_R": {
+      "zone": "legs",
+      "paint": "carRed",
+      "finish": "paint"
+    },
+    "Door_L": {
+      "zone": "legs",
+      "paint": "carCream",
+      "finish": "paint"
+    },
+    "Leg_Frame_R": {
+      "zone": "legs",
+      "paint": "steel",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Leg_Frame_L": {
+      "zone": "legs",
+      "paint": "steel",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Knee_Tyre_R": {
+      "zone": "legs",
+      "paint": "rubber",
+      "finish": "rubber"
+    },
+    "Knee_Tyre_L": {
+      "zone": "legs",
+      "paint": "rubber",
+      "finish": "rubber"
+    },
+    "Foot_R": {
+      "zone": "legs",
+      "paint": "carCream",
+      "finish": "paint"
+    },
+    "Foot_L": {
+      "zone": "legs",
+      "paint": "carRed",
+      "finish": "paint"
+    },
+    "Foot_Trim": {
+      "zone": "legs",
+      "paint": "steel",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Foot_Glass": {
+      "zone": "legs",
+      "paint": "glass",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Foot_Tyres": {
+      "zone": "legs",
+      "paint": "rubber",
+      "finish": "rubber",
+      "noHit": true
+    }
+  },
+  "motion": [
+    {
+      "name": "Knee_Ram_R",
+      "parts": [
+        "Leg_Frame_R"
+      ],
+      "path": [
+        [
+          1.7,
+          4.896,
+          -0.702
+        ],
+        [
+          1.7,
+          2.405,
+          -1.001
+        ]
+      ],
+      "radius": 0.24,
+      "piston": [
+        "thigh_R",
+        "shin_R"
+      ]
+    },
+    {
+      "name": "Knee_Ram_L",
+      "parts": [
+        "Leg_Frame_L"
+      ],
+      "path": [
+        [
+          -1.7,
+          4.896,
+          -0.702
+        ],
+        [
+          -1.7,
+          2.405,
+          -1.001
+        ]
+      ],
+      "radius": 0.24,
+      "piston": [
+        "thigh_L",
+        "shin_L"
+      ]
+    }
+  ],
+  "car": {
+    "file": "models/titan/Junk_Car.glb",
+    "parts": {
+      "Car_Body": {
+        "paint": "carCream",
+        "finish": "paint"
+      },
+      "Car_Glass": {
+        "paint": "glass",
+        "finish": "metal"
+      },
+      "Car_Trim": {
+        "paint": "steel",
+        "finish": "metal"
+      },
+      "Car_Tyres": {
+        "paint": "rubber",
+        "finish": "rubber"
+      }
+    }
+  }
+}

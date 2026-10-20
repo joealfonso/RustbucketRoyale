@@ -115,10 +115,11 @@ export function createZoneHit(): ZoneHit {
 
 const scratch: RayHit = createRayHit();
 
-// Ray against one mech standing at (mx, my, mz) facing `yaw`. Writes the nearest zone hit into `out`.
+// Ray against one mech standing at (mx, my, mz) facing `yaw`. Writes the nearest zone hit into `out`. Only the boxes are
+// read, so the Junk Titan's hit boxes go through it too.
 export function raycastMech(
   ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDistance: number,
-  mx: number, my: number, mz: number, yaw: number, set: ZoneSet, out: ZoneHit,
+  mx: number, my: number, mz: number, yaw: number, set: Pick<ZoneSet, "boxes" | "boxZone">, out: ZoneHit,
 ): boolean {
   // Move the ray into the mech's own frame (inverse of the yaw turn) so the zone boxes stay axis aligned.
   const cos = Math.cos(yaw), sin = Math.sin(yaw);

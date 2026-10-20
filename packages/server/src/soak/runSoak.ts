@@ -12,6 +12,7 @@ export interface SoakOptions {
   bandwidthKbps?: number; // per player, averaged over the match
   maxCorrection?: number; // metres, the largest prediction correction allowed outside respawns and new maps
   fill?: number; // people plus bots in the room, in place of the tier's number in bots.json, for trying other counts
+  titanHp?: number; // the Junk Titan's hit points in place of titan.json's, to see it fall within a match
 }
 
 export interface SoakReport {
@@ -31,6 +32,7 @@ export interface SoakReport {
   firstContactSeconds: number;
   knockoutsPerMinute: number;
   propsBroken: number; // props (crates, barrels, trees) broken in the match, as one player was told of them
+  titanHpLeft: number | null; // the Junk Titan's share of hit points at the end, null when it never woke
 }
 
 const CONTACT_METERS = 150; // the radar's range: anything closer can be seen or heard to matter
@@ -55,11 +57,12 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
   const { fakePlayers = 3, tickBudgetMs = 8, bandwidthKbps = 64, maxCorrection = 0.05 } = options;
   const base = loadRoomConfig({ maps: "generated", roster: true });
   const bots = options.fill === undefined ? base.bots : { ...base.bots, fill: { ...base.bots.fill, [tier]: options.fill } };
-  const config = { ...base, bots, random: lcg(seed), mapLater: (t: string, s: number) => pool.generate(t, s) };
+  const titan = options.titanHp === undefined ? base.titan : { ...base.titan, hp: options.titanHp };
+  const config = { ...base, bots, titan, random: lcg(seed), mapLater: (t: string, s: number) => pool.generate(t, s) };
   const chunks = parseChunkSet(readData("chunks.json"));
   const tiers = parseTiers(readData("tiers.json"));
   const room = new Room("SOAK", tier, config, null);
-  const players = Array.from({ length: fakePlayers }, (_, i) => new HeadlessPlayer(room, config.mech, config.bots, chunks, tiers, parsePropConfig(readData("props.json")), lcg(seed + i + 1), config.roster ?? null, i, config.abilities, config.botAbilities));
+  const players = Array.from({ length: fakePlayers }, (_, i) => new HeadlessPlayer(room, config.mech, config.bots, chunks, tiers, parsePropConfig(readData("props.json")), lcg(seed + i + 1), config.roster ?? null, i, config.abilities, config.botAbilities, config.titan));
   const problems: string[] = [];
   const problem = (text: string) => { if (problems.length < 20) problems.push(text); };
 
@@ -92,6 +95,13 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
       if (m.y < -50) problem(`tick ${tick}: mech ${m.id} fell under the map`);
       m.hp.forEach((hp, zone) => { if (hp < 0 || hp > zoneMax[zone]! + 1e-9) problem(`tick ${tick}: mech ${m.id} zone ${zone} has ${hp} hit points`); });
       if (m.participant && !m.eliminated) alive++;
+    }
+    // The Junk Titan too: real numbers, on the map, hit points inside its limits.
+    const titan = room.junkTitan;
+    if (titan) {
+      if (![titan.x, titan.y, titan.z, titan.yaw, titan.hp].every(Number.isFinite)) problem(`tick ${tick}: the Titan has a bad number`);
+      else if (Math.abs(titan.x) > edge || Math.abs(titan.z) > edge) problem(`tick ${tick}: the Titan is outside the map at ${titan.x.toFixed(1)}, ${titan.z.toFixed(1)}`);
+      if (titan.hp < 0 || titan.hp > config.titan.hp) problem(`tick ${tick}: the Titan has ${titan.hp} hit points`);
     }
     if (room.matchState === "active") {
       const mechs = room.inspect();
@@ -137,5 +147,6 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
     knockoutsPerMinute: places.length / matchMinutes,
     tier, seed, problems, matchSeconds: activeTicks * STEP, players: fakePlayers, eliminations: places.length,
     tickP99Ms, tickWorstMs: times.at(-1) ?? 0, kbpsPerPlayer, worstCorrection, propsBroken: players[0]!.propsBroken,
+    titanHpLeft: room.junkTitan ? room.junkTitan.hp / config.titan.hp : null,
   };
 }

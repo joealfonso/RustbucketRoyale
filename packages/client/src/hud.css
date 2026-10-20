@@ -179,6 +179,14 @@ canvas { display: block; width: 100%; height: 100%; }
 #knockout p { margin: 0; font: 600 1.15rem var(--hud-body); color: var(--hud-text); }
 #knockout #knockoutHow { color: var(--hud-amber); }
 /* The kill replay (gate 13b): a small tag low in the middle, out of the way of the clip, and no crosshair over it. */
+/* The Junk Titan's bar (gate 13c), top middle under the room bar while it is near: its name in warning red, its
+   hit points as a long bar and a number, so it never rests on colour alone. */
+#bossBar { left: 50%; top: calc(var(--hud-margin) + 3.2rem); transform: translateX(-50%); display: none; align-items: center; gap: 0.7rem; padding: 0.35rem 0.9rem; }
+#bossBar.shown { display: flex; }
+#bossBar .word { font: 700 1.05rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.16em; color: var(--hud-warn); white-space: nowrap; }
+#bossBar i { display: block; width: clamp(10rem, 24vw, 22rem); height: 0.55rem; background: var(--hud-soot); border: 1px solid var(--hud-amber-dim); }
+#bossBar b { display: block; height: 100%; background: var(--hud-warn); transform-origin: left; scale: 1 1; }
+#bossBar .num { min-width: 3.2ch; text-align: right; font-size: 1rem; color: var(--hud-text); }
 #replayTag { left: 50%; bottom: 14%; transform: translateX(-50%); display: none; align-items: center; gap: 0.7rem; padding: 0.35rem 0.8rem; }
 #replayTag .word { font: 700 1.1rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.16em; color: var(--hud-warn); }
 #replayTag i { display: block; width: 6rem; height: 0.35rem; background: var(--hud-soot); border: 1px solid var(--hud-amber-dim); }

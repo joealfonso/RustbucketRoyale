@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMechInput } from "./MechInput";
 import { SnapshotMemory, decodeInput, decodeServerBinary, decodeShot, decodeSnapshot, encodeInput, encodeServerBinary, encodeShot, encodeSnapshot, snapshotSize } from "./wire";
-import type { InputMessage, OtherState, ServerMessage, ShotMessage } from "./protocol";
+import type { InputMessage, OtherState, ServerMessage, ShotMessage, TitanState } from "./protocol";
 
 type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
 
@@ -75,12 +75,38 @@ describe("snapshot wire format", () => {
     expect(encodeSnapshot(s).length - encodeSnapshot(snapshot([other(1, 2)])).length).toBe(10);
   });
 
-  // Your own ability timers added 16 bytes (four float32s) and the ability byte one per other mech.
-  it("is small: under 130 bytes with nobody else near, 21 bytes per extra mech, 9 per pickup", () => {
+  // Your own ability timers added 16 bytes (four float32s) and the ability byte one per other mech. The Junk Titan
+  // (gate 13c) added a byte to every snapshot saying whether it is near, and 11 more when it is.
+  it("is small: under 130 bytes with nobody else near, 21 bytes per extra mech, 9 per pickup, 11 for the Titan", () => {
     expect(encodeSnapshot(snapshot([])).length).toBe(snapshotSize(0, 0, 0, 20)); // staminaTimer is 0
     expect(snapshotSize(0)).toBeLessThan(130);
     expect(snapshotSize(10) - snapshotSize(0)).toBe(210);
     expect(snapshotSize(0, 0, 10) - snapshotSize(0)).toBe(90);
+    expect(snapshotSize(0, 0, 0, 21, true) - snapshotSize(0)).toBe(11);
+  });
+
+  it("carries the Junk Titan when it is near, to a mech's steps, and null when it is not", () => {
+    const s = snapshot([other(1, 2)]);
+    expect(decodeSnapshot(encodeSnapshot(s))!.titan).toBeNull();
+    const titan: TitanState = { x: -812.37, y: 14.62, z: 455.55, yaw: -2.5, hp: 0.437, action: "throw", actionSeconds: 1.23 };
+    s.titan = titan;
+    const bytes = encodeSnapshot(s);
+    expect(bytes.length - encodeSnapshot({ ...s, titan: null }).length).toBe(11);
+    const back = decodeSnapshot(bytes)!.titan!;
+    expect(Math.abs(back.x - titan.x)).toBeLessThanOrEqual(0.05 + 1e-9);
+    expect(Math.abs(back.y - titan.y)).toBeLessThanOrEqual(0.025 + 1e-9);
+    expect(Math.abs(back.z - titan.z)).toBeLessThanOrEqual(0.05 + 1e-9);
+    expect(Math.cos(back.yaw - titan.yaw)).toBeCloseTo(1, 6);
+    expect(Math.abs(back.hp - titan.hp)).toBeLessThanOrEqual(0.5 / 255 + 1e-9);
+    expect(Math.abs(back.actionSeconds - titan.actionSeconds)).toBeLessThanOrEqual(0.025 + 1e-9);
+    expect(back.action).toBe("throw");
+    for (const action of ["walk", "stomp", "throw", "roar", "down"] as const) {
+      expect(decodeSnapshot(encodeSnapshot({ ...s, titan: { ...titan, action } }))!.titan!.action).toBe(action);
+    }
+    // Full and empty, and an action held longer than the byte holds, which stays at its top.
+    const ends = decodeSnapshot(encodeSnapshot({ ...s, titan: { ...titan, hp: 1, action: "down", actionSeconds: 60 } }))!.titan!;
+    expect(ends).toMatchObject({ hp: 1, action: "down", actionSeconds: 12.75 });
+    expect(decodeSnapshot(encodeSnapshot({ ...s, titan: { ...titan, hp: 0 } }))!.titan!.hp).toBe(0);
   });
 
   it("leaves out your own numbers that are 0, a bit each instead of 4 bytes, and gives back the rest exactly", () => {

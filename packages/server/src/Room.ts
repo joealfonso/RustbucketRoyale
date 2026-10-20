@@ -10,6 +10,7 @@ import {
   type BotDifficulty, type DecoyStats, type PounceStats, type RamStats,
   ITEM_ARMOR_FIRST, ITEM_GRENADE, type DropsConfig, type SupplyDrop,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
+  titanHitBoxes, type TitanConfig, type TitanState,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
 import { parseBotAbilities, type BotAbilityStats } from "./botAbilities";
@@ -21,6 +22,7 @@ import { CAUSE_BARREL, CAUSE_DROP, CAUSE_GRENADE, CAUSE_NONE, CAUSE_RING, abilit
 import { clearTally, createTally, noteLongest, topStats } from "./matchStats";
 import { Pickups } from "./Pickups";
 import { planDrops } from "./supplyDrops";
+import { TITAN_ID, Titan, placeTitan, type TitanHost } from "./Titan";
 import type { Player } from "./Player";
 
 const KILL_HEIGHT = -50;
@@ -70,6 +72,7 @@ export interface RoomConfig {
   drops: DropsConfig;
   zones: ZoneSet;
   abilities: AbilitySet;
+  titan: TitanConfig;
   // Builds the map for a tier and seed. The room asks for a fresh one at the start of every match.
   mapFor: (tier: string, seed: number) => MapForRoom;
   // The real server builds match maps on worker threads (MapPool) through this. With it, the room asks for the next
@@ -127,6 +130,9 @@ export class Room {
   private decoys: Decoy[] = [];
   private decoyHit = createZoneHit();
   private strikeAt = { x: 0, z: 0 };
+  private titan: Titan | null = null; // the Junk Titan, from when it wakes up until the next countdown
+  private titanHit = createZoneHit();
+  private titanHost: TitanHost;
 
   private botInput = createMechInput();
   private botTargets: BotTarget[] = [];
@@ -173,6 +179,7 @@ export class Room {
     this.resetProps();
     this.finder = new Pathfinder(this.map.nav, config.bots.path, this.map.world.terrain);
     this.fixedBots = botCount;
+    this.titanHost = this.makeTitanHost();
     this.fillBots();
     this.prepareNextMap(); // the lobby usually lasts long enough that the first match never waits
   }
@@ -242,6 +249,11 @@ export class Room {
   // How many decoys are out, for checks: nobody but their owner is told they exist.
   get decoyCount(): number {
     return this.decoys.length;
+  }
+
+  // The Junk Titan, for checks and tests. Not used by the game itself.
+  get junkTitan(): Titan | null {
+    return this.titan;
   }
 
   get mapMeters(): number {
@@ -491,6 +503,7 @@ export class Room {
     this.setOffPendingBlasts();
     if (this.state === "active") this.applyRing();
     if (this.state === "active") this.runDrops();
+    if (this.state === "active") this.runTitan();
     if (this.tickCount % net.snapshotEvery === 0) this.broadcastSnapshots();
   }
 
@@ -506,6 +519,9 @@ export class Room {
     let health = 0;
     for (let zone = 0; zone < ZONE_COUNT; zone++) health += player.hp[zone]! + player.loadout.armor[zone]!;
     bot.noteHealth(health);
+
+    const titan = this.titan?.alive && this.state === "active" ? this.titan : null;
+    bot.keepOutOf(titan?.x ?? 0, titan?.z ?? 0, titan ? this.config.titan.botKeepOutMeters : 0);
 
     if (this.state === "countdown" || player.dead) {
       Object.assign(input, createMechInput(), { aimYaw: player.state.bodyYaw });
@@ -538,6 +554,8 @@ export class Room {
     }
     // Decoys look like any mech to a bot, so it chases and shoots them. Its own are not worth fooling itself with.
     for (const d of this.decoys) if (d.ownerId !== player.id) this.botTargets.push({ id: d.id, x: d.state.x, y: d.state.y, z: d.state.z });
+    // The Titan is one more thing to shoot, aimed at high up its body. Being the nearest is what makes it the target.
+    if (titan) this.botTargets.push({ id: TITAN_ID, x: titan.x, y: titan.y, z: titan.z, aimHeight: this.config.titan.aimHeight });
     this.warnOfLasers(player);
     bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, STEP, input);
     this.processInput(player, input);
@@ -600,7 +618,11 @@ export class Room {
 
   // The lid blows off and the best loot in the match lands in a ring round the crate.
   private openDrop(d: SupplyDrop): void {
-    const { contents, spillMeters } = this.config.drops;
+    this.spillContents(d.x, d.y, d.z, this.config.drops.contents, this.config.drops.spillMeters);
+  }
+
+  // A ring of loot round a spot, from a list of kinds: a supply drop's lid blowing off, or the fallen Junk Titan.
+  private spillContents(cx: number, cy: number, cz: number, contents: readonly string[], spillMeters: number): void {
     const weapons = this.config.weapons.weapons.length;
     const start = this.config.weapons.start;
     const turn = this.random() * Math.PI * 2;
@@ -610,10 +632,75 @@ export class Room {
       else if (kind === "armor") item = ITEM_ARMOR_FIRST + Math.floor(this.random() * 3);
       else if (kind === "weapon") item = weaponItem((start + 1 + Math.floor(this.random() * (weapons - 1))) % weapons);
       const angle = turn + (i / contents.length) * Math.PI * 2;
-      const x = d.x + Math.cos(angle) * spillMeters, z = d.z + Math.sin(angle) * spillMeters;
-      this.pickups.add(item, x, this.surfaceBelow(x, z, d.y + 1) + PICKUP_LIFT, z);
+      const x = cx + Math.cos(angle) * spillMeters, z = cz + Math.sin(angle) * spillMeters;
+      this.pickups.add(item, x, this.surfaceBelow(x, z, cy + 1) + PICKUP_LIFT, z);
     });
-    this.makeNoise(null, "explosion", d.x, d.z);
+    this.makeNoise(null, "explosion", cx, cz);
+  }
+
+  // ---- the Junk Titan
+
+  // It wakes on its tiers at its time in the match, announced to everyone, then walks and fights every tick.
+  private runTitan(): void {
+    const config = this.config.titan;
+    if (!this.titan) {
+      const elapsed = this.elapsedSeconds();
+      if (!config.tiers.includes(this.tier) || !this.ring || elapsed < config.appearSeconds) return;
+      const at = placeTitan(config, this.ring, elapsed, this.map, this.players.values(), this.random);
+      this.titan = new Titan(config, this.map.world, this.finder, this.config.bots.path, this.map.meters, this.titanHost, titanHitBoxes(config, this.config.kitHitboxes ?? null), at.x, at.z);
+      this.tellEveryone({ t: "notice", text: config.announce });
+      this.makeNoise(null, "explosion", at.x, at.z);
+    }
+    this.titan.step(STEP, this.ringNow);
+  }
+
+  // What the Titan does goes through the room's own rules: armor, knockouts, props, loot, who hears what.
+  private makeTitanHost(): TitanHost {
+    return {
+      mechs: () => this.players.values(),
+      hurt: (target, zoneDamage, cause) => this.titanHurts(target, zoneDamage, cause),
+      smashProps: (x, y, z, radius, height) => this.smashPropsAt(x, y, z, radius, height, null),
+      blast: (x, y, z, damage, radius, cause) => this.blast(x, y, z, damage, radius, null, cause),
+      spill: (x, y, z, contents, spillMeters) => this.spillContents(x, y, z, contents, spillMeters),
+      sendNear: (x, z, message) => this.sendNear(x, z, message),
+      sendNearEither: (x1, z1, x2, z2, message) => this.sendNearEither(x1, z1, x2, z2, message),
+      tellEveryone: (message) => this.tellEveryone(message),
+      noise: (kind, x, z) => this.makeNoise(null, kind, x, z),
+    };
+  }
+
+  // A stomp: each zone takes its share, armor first, as with any hit. Nobody is credited: the Titan knocks mechs out on
+  // its own (killerMech -1 on the knockout card).
+  private titanHurts(target: Player, zoneDamage: readonly number[], cause: number): void {
+    if (target.dead || !target.participant) return;
+    const zones = this.zonesFor(target.state.mech);
+    let total = 0;
+    for (let zone = 0; zone < ZONE_COUNT; zone++) total += applyDamage(target.hp, zones, zone, zoneDamage[zone] ?? 0, target.loadout.armor);
+    this.hurt(target, cause, null, total);
+    if (isDestroyed(target.hp)) this.eliminate(target, null);
+  }
+
+  // Damage to the Titan, already scaled for where it landed. It counts for the attacker's "titanDamage" stat, and the
+  // attacker gets a hit marker like any hit (targetId TITAN_ID). Returns what it took.
+  private hurtTitan(by: Player | null, amount: number, zone: number, x: number, y: number, z: number): number {
+    const titan = this.titan;
+    if (!titan || this.state !== "active") return 0;
+    const wasAlive = titan.alive;
+    const taken = titan.damage(amount, by?.id ?? 0);
+    if (!by || taken <= 0) return taken;
+    by.tally.titanDamage += taken;
+    by.send({ t: "hit", targetId: TITAN_ID, zone, damage: taken, killed: wasAlive && !titan.alive, x, y, z });
+    return taken;
+  }
+
+  // A ram or a pounce that reaches the Titan's body hurts it too, once per use.
+  private abilityOnTitan(player: Player, reach: number, damage: number): void {
+    const titan = this.titan;
+    if (!titan || this.state !== "active" || player.rammed.includes(TITAN_ID)) return;
+    const s = player.state;
+    if (titan.blastShare(s.x, s.y + CHEST_HEIGHT, s.z, reach) <= 0) return;
+    player.rammed.push(TITAN_ID);
+    this.hurtTitan(player, damage, -1, s.x, s.y + CHEST_HEIGHT, s.z);
   }
 
   // The nearest drop that has been announced and not yet opened, within the pull of bots, or null.
@@ -698,6 +785,7 @@ export class Room {
     this.resetProps();
     this.pendingBlasts = [];
     this.decoys = [];
+    this.titan = null;
     this.finder = new Pathfinder(this.map.nav, this.config.bots.path, this.map.world.terrain);
     for (const p of this.players.values()) p.bot?.setFinder(this.finder);
     this.fillBots();
@@ -909,12 +997,19 @@ export class Room {
     // Shots do damage in the lobby too, so there is something to practise on. Only the countdown is safe.
     let target = this.state !== "countdown" ? this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach) : null;
     if (target) reach = this.zoneHit.distance;
+    // The Titan, when it stands nearer than any mech the shot met. It is too slow to need rewinding for lag.
+    let titanHit = this.state === "active" && this.titan?.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.titanHit) === true;
+    if (titanHit) { target = null; reach = this.titanHit.distance; }
     // A decoy in front of everything else takes the shot and bursts. No damage and no hit marker: the pop is the tell.
     const decoy = decoyAlong(this.decoys, player.id, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.zonesFor, this.decoyHit);
     if (decoy) {
       reach = this.decoyHit.distance;
       target = null;
+      titanHit = false;
       this.popDecoy(decoy, player);
+    } else if (titanHit) {
+      const zone = this.titanHit.zone;
+      this.hurtTitan(player, weapon.damage * this.titan!.zoneMultiplier(zone), zone, s.ox + s.dx * reach, s.oy + s.dy * reach, s.oz + s.dz * reach);
     } else if (target) {
       const damage = weapon.damage * this.shieldFactor(target, s.dx, s.dz);
       const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, damage, target.loadout.armor);
@@ -931,7 +1026,7 @@ export class Room {
     }
 
     const message: ServerMessage = {
-      t: "shot", id: player.id, ox: s.ox, oy: s.oy, oz: s.oz, dx: s.dx, dy: s.dy, dz: s.dz, length: reach, hitMech: target !== null || decoy !== null,
+      t: "shot", id: player.id, ox: s.ox, oy: s.oy, oz: s.oz, dx: s.dx, dy: s.dy, dz: s.dz, length: reach, hitMech: target !== null || decoy !== null || titanHit,
     };
     this.sendNear(s.ox, s.oz, message, player);
   }
@@ -1035,6 +1130,10 @@ export class Room {
       if (killed) this.eliminate(target, owner);
     }
 
+    // The Titan is too big for walls to shelter it: it takes its share of any blast that reaches its body.
+    const titanShare = this.titan?.blastShare(bx, by, bz, radius) ?? 0;
+    if (titanShare > 0) this.hurtTitan(owner, damage * titanShare * this.config.titan.blastMultiplier, -1, this.titan!.x, this.titan!.y + this.config.titan.aimHeight, this.titan!.z);
+
     // Measured to the nearest height on the prop, so a blast at the foot of a 12 m pine hits its trunk, not a point
     // 6 m up. Looked up through the world's grid: a large map has thousands of trees.
     const count = this.propsTouching(bx - radius, bz - radius, bx + radius, bz + radius);
@@ -1090,9 +1189,15 @@ export class Room {
     let reach = rail.range;
     let hitBox = -1;
     if (this.map.world.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.worldHit)) { reach = this.worldHit.distance; hitBox = this.worldHit.index; }
-    const target = this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach);
-    if (target) {
-      reach = this.zoneHit.distance;
+    let target = this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach);
+    if (target) reach = this.zoneHit.distance;
+    const titanHit = this.state === "active" && this.titan?.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.titanHit) === true;
+    if (titanHit) {
+      target = null;
+      reach = this.titanHit.distance;
+      const zone = this.titanHit.zone;
+      this.hurtTitan(player, rail.damage * this.titan!.zoneMultiplier(zone), zone, s.ox + s.dx * reach, s.oy + s.dy * reach, s.oz + s.dz * reach);
+    } else if (target) {
       const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, rail.damage * this.shieldFactor(target, s.dx, s.dz), target.loadout.armor);
       this.hurt(target, abilityCause(rail.kind), player, taken);
       noteLongest(player.tally, "longestRailShot", reach);
@@ -1129,6 +1234,7 @@ export class Room {
       this.abilityDamage(player, target, ram.damage, abilityCause(ram.kind));
     }
     this.popDecoysAround(s.x, s.y, s.z, ram.hitRadius, height, player);
+    this.abilityOnTitan(player, ram.hitRadius, ram.damage);
 
     this.smashProps(player, ram.hitRadius, height);
   }
@@ -1148,6 +1254,7 @@ export class Room {
       this.abilityDamage(player, target, pounce.damage, abilityCause(pounce.kind));
     }
     this.popDecoysAround(s.x, s.y, s.z, pounce.slamRadius, height, player);
+    this.abilityOnTitan(player, pounce.slamRadius, pounce.damage);
     this.smashProps(player, pounce.slamRadius, height);
   }
 
@@ -1155,11 +1262,15 @@ export class Room {
   // remaining hit points: a charge or a blade goes through cover, it does not chip at it. Trees too.
   // The rule is shared (propsInReach), because the rammer's own client applies it in prediction too.
   private smashProps(player: Player, radius: number, height: number): void {
-    const s = player.state;
-    const count = propsInReach(this.map.world, this.map.propOfBox, s.x, s.y, s.z, radius, height, this.nearBoxes, this.nearProps);
+    this.smashPropsAt(player.state.x, player.state.y, player.state.z, radius, height, player);
+  }
+
+  // The same round any spot: the Junk Titan walks through props and its stomp breaks everything round its feet.
+  private smashPropsAt(x: number, y: number, z: number, radius: number, height: number, by: Player | null): void {
+    const count = propsInReach(this.map.world, this.map.propOfBox, x, y, z, radius, height, this.nearBoxes, this.nearProps);
     for (let i = 0; i < count; i++) {
       const id = this.nearProps[i]!;
-      if (this.propHp[id]! > 0) this.damageProp(id, this.propHp[id]!, player);
+      if (this.propHp[id]! > 0) this.damageProp(id, this.propHp[id]!, by);
     }
   }
 
@@ -1539,6 +1650,17 @@ export class Room {
     }
   }
 
+  // Whether a client is near enough the Titan to be sent it, with the same give at the edge as for mechs, so it does
+  // not flicker in and out. Its place in the interest list is TITAN_ID.
+  private seesTitan(player: Player, view: { x: number; z: number }, titan: TitanState): boolean {
+    const { interestRange, interestLeaveFactor } = this.config.net;
+    const wasInView = player.interested.has(TITAN_ID);
+    const near = Math.hypot(titan.x - view.x, titan.z - view.z) <= (wasInView ? interestRange * interestLeaveFactor : interestRange);
+    if (near) player.interested.add(TITAN_ID);
+    else player.interested.delete(TITAN_ID);
+    return near;
+  }
+
   private broadcastSnapshots(): void {
     const { interestRange, interestLeaveFactor } = this.config.net;
     const everyone: OtherState[] = [];
@@ -1563,6 +1685,8 @@ export class Room {
       });
     }
     const match = this.progress();
+    // One copy per snapshot round: messages can be held on to (lag simulation, tests), so it is never written again.
+    const titan = this.titan ? this.titan.state({ x: 0, y: 0, z: 0, yaw: 0, hp: 0, action: "walk", actionSeconds: 0 }) : null;
     for (const player of this.players.values()) {
       if (player.bot) continue;
       // Each client gets mechs within the interest range of where it is looking from, and a mech already in view
@@ -1589,6 +1713,7 @@ export class Room {
         looting: player.lootingId ? player.lootSeconds / this.config.loot.wreckLootSeconds : 0,
         repairing: player.repairZone >= 0 ? player.repairSeconds / this.config.zones.repairSeconds : 0,
         pickups: this.pickupsChanged(player, this.pickups.near(view.x, view.z, interestRange, this.pickupScratch)),
+        titan: titan && this.seesTitan(player, view, titan) ? titan : null,
       });
     }
   }

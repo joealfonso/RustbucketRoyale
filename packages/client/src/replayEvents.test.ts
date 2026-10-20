@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createShot, type AbilityMessage } from "@rustbucket/shared";
-import { ABILITY, EXPLODE, ReplayEvents, SHOT } from "./replayEvents";
+import { createShot, type AbilityMessage, type TitanMessage } from "@rustbucket/shared";
+import { ABILITY, EXPLODE, ReplayEvents, SHOT, TITAN } from "./replayEvents";
 
 const shotAt = (x: number) => ({ ...createShot(), ox: x, oy: 2, oz: 3, dx: 0, dy: 0, dz: -1, length: 40 });
 
@@ -44,5 +44,19 @@ describe("ReplayEvents", () => {
     expect(events.kindAt(0)).toBe(ABILITY);
     expect(events.kindAt(1)).toBe(EXPLODE);
     expect(out).toEqual({ ...moment, ids: undefined });
+  });
+});
+
+describe("ReplayEvents, the Junk Titan", () => {
+  it("gives back a thrown car and a stomp as they were recorded", () => {
+    const events = new ReplayEvents(8);
+    events.titan(100, { t: "titan", event: "throw", x: 1, y: 11, z: 3, vx: 4, vy: 5, vz: 6 });
+    events.titan(200, { t: "titan", event: "stomp", x: 7, y: 0, z: 8, radius: 11 });
+    const out: TitanMessage = { t: "titan", event: "fall", x: 0, y: 0, z: 0 };
+    expect(events.kindAt(0)).toBe(TITAN);
+    events.readTitan(0, out);
+    expect(out).toMatchObject({ event: "throw", x: 1, y: 11, z: 3, vx: 4, vy: 5, vz: 6 });
+    events.readTitan(1, out);
+    expect(out).toMatchObject({ event: "stomp", x: 7, z: 8, radius: 11 });
   });
 });

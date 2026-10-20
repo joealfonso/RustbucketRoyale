@@ -184,6 +184,31 @@
     "uiWhoosh": {
       "volume": 0.2,
       "file": null
+    },
+    "titanStep": {
+      "volume": 0.6,
+      "echo": 0.5,
+      "file": null
+    },
+    "titanStomp": {
+      "volume": 1,
+      "echo": 0.6,
+      "file": null
+    },
+    "titanThrow": {
+      "volume": 0.7,
+      "echo": 0.3,
+      "file": null
+    },
+    "titanRoar": {
+      "volume": 0.85,
+      "echo": 0.6,
+      "file": null
+    },
+    "titanFall": {
+      "volume": 1,
+      "echo": 0.7,
+      "file": null
     }
   }
 }
