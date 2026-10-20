@@ -101,3 +101,9 @@
   #hint.busy::after { animation: none; }
   :is(#menu, #hint) .mechCards button.on::before { animation-name: ui-fade; }
 }
+
+/* The knockout card lands with a punch; the results' fun stats arrive one after another (gate 14c). */
+#knockout.shown { --punch-from: var(--ui-punch-small); animation: ui-punch-a var(--ui-in) var(--ui-steps) backwards; }
+/* The REPLAY tag rises into place each time a replay starts. */
+#replayTag { --from-y: var(--ui-shift); animation: ui-slide var(--ui-in) var(--ui-steps) backwards; }
+#resultStats li { --from-y: var(--ui-shift); animation: ui-slide var(--ui-in) var(--ui-ease) calc(var(--ui-stagger) * (3 + var(--i, 0))) backwards; }

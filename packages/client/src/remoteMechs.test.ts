@@ -8,6 +8,7 @@ import { parseAbilityFx } from "./abilityFx";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import { STEP, ZONE_ARMS, createZoneHit, parseZones, type OtherState } from "@rustbucket/shared";
 import { RemoteMechs } from "./remoteMechs";
+import { createDrawnMech } from "./replayFrames";
 
 const INTERVAL = 3 * STEP * 1000; // snapshots every 3 ticks
 const other = (id: number, x: number): OtherState => ({ id, x, y: 0, z: 0, yaw: 0, running: false, jetting: false, dead: false, looted: false, repairing: false, bot: false, hp: [60, 60, 100], weapon: 0, armor: [0, 0, 0], upgrades: [-1, -1], mech: 0, ability: false });
@@ -123,6 +124,28 @@ describe("RemoteMechs", () => {
     expect(distance).toBeGreaterThan(18);
     expect(hit.zone).toBe(ZONE_ARMS);
     expect(remotes.raycast(p.x + 5, 2.4, p.z - 20, 0, 0, 1, 300, () => zones, hit)).toBe(-1);
+  });
+
+  it("tells the blow-apart who went down, live, in a replay, and lying there after one", () => {
+    const { remotes } = make();
+    const calls: string[] = [];
+    remotes.onKnockedOut = (id, _model, alreadyDown) => calls.push(`${id}:${alreadyDown}`);
+    remotes.push([{ ...other(2, 0), dead: true }], 0, 0); // first seen a wreck
+    remotes.push([other(1, 0), { ...other(2, 0), dead: true }], 3, 50);
+    remotes.push([{ ...other(1, 0), dead: true }, { ...other(2, 0), dead: true }], 6, 100);
+    expect(calls).toEqual(["2:true", "1:false"]);
+    calls.length = 0;
+    remotes.beginReplay();
+    const drawn = createDrawnMech(3);
+    drawn.hp = [60, 60, 100];
+    remotes.showRecorded(1, drawn); // alive in the clip
+    remotes.showRecorded(1, { ...drawn, dead: true }); // and down again
+    expect(calls).toEqual(["1:false"]);
+    calls.length = 0;
+    remotes.push([{ ...other(1, 0), dead: true }, { ...other(2, 0), dead: true }, { ...other(3, 0), dead: true }], 9, 150); // 3 seen down mid replay
+    remotes.endReplay();
+    // Nothing is blown apart in this test, so every wreck is handed back to lie down.
+    expect(calls.sort()).toEqual(["1:true", "2:true", "3:true"]);
   });
 
   describe("your own decoys", () => {

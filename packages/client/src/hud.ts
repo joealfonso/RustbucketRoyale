@@ -69,6 +69,10 @@ export class Hud {
   private abilityShown: string | null = null;
   private abilityKey = -1;
   private promptBox = byId("prompt");
+  private replayTag = byId("replayTag");
+  private replayFill = byId("replayFill");
+  private crosshair = byId("crosshair");
+  private replayShown = -1; // the hundredths of the replay last drawn, so the bar is touched only when it moves
   private promptOn = false;
   private flashTimer = 0; // while a flash (GO) is up, the countdown's clearing of the big text waits for it
   private stopCount: (() => void) | null = null;
@@ -223,8 +227,15 @@ export class Hud {
 
   // The match result. Your place rolls down from the size of the field to where you finished. `place` is null
   // for the winner and for someone who never had a mech.
-  showResult(title: string, place: number | null, field: number): void {
+  showResult(title: string, place: number | null, field: number, stats: readonly string[] = []): void {
     byId("resultTitle").textContent = title;
+    // The match's fun numbers (knockoutCard.ts statLines), one line each, arriving one after another.
+    byId("resultStats").replaceChildren(...stats.map((line, i) => {
+      const item = document.createElement("li");
+      item.textContent = line;
+      item.style.setProperty("--i", String(i));
+      return item;
+    }));
     const sub = byId("resultSub");
     this.stopCount?.();
     this.stopCount = null;
@@ -239,6 +250,38 @@ export class Hud {
       this.stopCount = countUp(number, Math.max(field, place), place, cssSeconds("--ui-count"));
     }
     this.results.style.display = "flex";
+  }
+
+  // The kill replay (gate 13b): the REPLAY tag with how far through it is, and no crosshair over the clip.
+  setReplay(playing: boolean, progress: number): void {
+    this.display(this.replayTag, playing ? "flex" : "none");
+    this.crosshair.classList.toggle("off", playing);
+    const step = playing ? Math.round(progress * 100) : -1;
+    if (step === this.replayShown) return;
+    this.replayShown = step;
+    if (step >= 0) this.replayFill.style.scale = `${step / 100} 1`;
+  }
+
+  // The knockout card (gate 14c): who got you and how, for a few seconds as the replay or the spectate camera takes over.
+  showKnockout(title: string, by: string, how: string, seconds: number): void {
+    byId("knockoutTitle").textContent = title;
+    byId("knockoutBy").textContent = by;
+    byId("knockoutBy").style.display = by ? "block" : "none";
+    const howLine = byId("knockoutHow");
+    howLine.textContent = how;
+    howLine.style.display = how ? "block" : "none";
+    const card = byId("knockout");
+    card.classList.remove("shown");
+    void card.offsetWidth; // restart the arrival animation for a second knockout in a row
+    card.classList.add("shown");
+    window.clearTimeout(this.knockoutTimer);
+    this.knockoutTimer = window.setTimeout(() => card.classList.remove("shown"), seconds * 1000);
+  }
+  private knockoutTimer = 0;
+
+  hideKnockout(): void {
+    window.clearTimeout(this.knockoutTimer);
+    byId("knockout").classList.remove("shown");
   }
 
   hideResult(): void {

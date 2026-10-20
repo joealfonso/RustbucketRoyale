@@ -1,0 +1,25 @@
+{
+  "keepSeconds": 5,
+  "sampleHz": 30,
+  "maxMechs": 64,
+  "maxEvents": 1024,
+  "playSeconds": 4,
+  "afterSeconds": 0.8,
+  "minKillerSeconds": 0.5,
+  "speed": 1,
+  "slowMotion": {
+    "beforeSeconds": 0.3,
+    "afterSeconds": 0.4,
+    "speed": 0.4
+  },
+  "camera": {
+    "pivotHeightMeters": 5.2,
+    "backMeters": 10,
+    "upMeters": 1,
+    "shoulderMeters": 3,
+    "lookHeightMeters": 2.5,
+    "closeMeters": 3,
+    "wallMarginMeters": 0.4,
+    "sharpness": 6
+  }
+}

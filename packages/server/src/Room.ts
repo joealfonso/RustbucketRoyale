@@ -17,6 +17,8 @@ import { AbstractFights, RATINGS, botsNeeded, pickDifficulty, type FarBot } from
 import { decoyAlong, spawnDecoys, stepDecoy, type Decoy } from "./decoys";
 import { Pathfinder } from "./Pathfinder";
 import { activeWeapon, collectSmall, freshLoadout, selectSlot, spillItems, takeUpgrade, takeWeapon, wantsItem } from "./loadout";
+import { CAUSE_BARREL, CAUSE_DROP, CAUSE_GRENADE, CAUSE_NONE, CAUSE_RING, abilityCause, clearCauses, knockoutHow, noteCause, weaponCause } from "./knockout";
+import { clearTally, createTally, noteLongest, topStats } from "./matchStats";
 import { Pickups } from "./Pickups";
 import { planDrops } from "./supplyDrops";
 import type { Player } from "./Player";
@@ -121,7 +123,7 @@ export class Room {
   private nearProps: number[] = [];
   private pickups: Pickups;
   private pickupScratch: PickupState[] = [];
-  private pendingBlasts: { x: number; y: number; z: number; tick: number; owner: Player | null; damage: number; radius: number }[] = [];
+  private pendingBlasts: { x: number; y: number; z: number; tick: number; owner: Player | null; damage: number; radius: number; cause: number }[] = [];
   private decoys: Decoy[] = [];
   private decoyHit = createZoneHit();
   private strikeAt = { x: 0, z: 0 };
@@ -209,7 +211,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: this.newBot(), send: () => {}, gone: false, goneTick: 0, rejoinToken: "", mech, state: this.freshState(slot, mech),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, launchX: 0, launchZ: 0, cause: CAUSE_NONE, causeBefore: CAUSE_NONE, tally: createTally(), rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -309,7 +311,7 @@ export class Room {
     const mech = this.dealtMech(id);
     const player: Player = {
       id, slot, bot: null, send, gone: false, goneTick: 0, rejoinToken: randomBytes(16).toString("hex"), mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(),
-      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length),
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, launchX: 0, launchZ: 0, cause: CAUSE_NONE, causeBefore: CAUSE_NONE, tally: createTally(), rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -589,7 +591,7 @@ export class Room {
     while (this.dropsLanded < this.drops.length && this.drops[this.dropsLanded]!.landAt <= elapsed) {
       const d = this.drops[this.dropsLanded++]!;
       // Landing is a blast nobody owns: it flattens props and hurts whoever stood underneath, and everyone near hears it.
-      this.blast(d.x, d.y, d.z, config.impact.damage, config.impact.radius, null);
+      this.blast(d.x, d.y, d.z, config.impact.damage, config.impact.radius, null, CAUSE_DROP);
     }
     while (this.dropsOpened < this.dropsLanded && this.drops[this.dropsOpened]!.landAt + config.openSeconds <= elapsed) {
       this.openDrop(this.drops[this.dropsOpened++]!);
@@ -652,6 +654,9 @@ export class Room {
     for (const { winnerId, loserId } of this.fights.update(this.farBots, lod.cheapEveryTicks * STEP, lod, this.random)) {
       const winner = this.players.get(winnerId), loser = this.players.get(loserId);
       if (!winner || !loser || winner.dead || loser.dead) continue;
+      // A fight on paper has no shots, so each side is taken to have been hurt by the other's gun in hand.
+      noteCause(loser, weaponCause(Math.max(0, activeWeapon(winner.loadout))));
+      noteCause(winner, weaponCause(Math.max(0, activeWeapon(loser.loadout))));
       for (let zone = 0; zone < ZONE_COUNT; zone++) {
         const max = this.config.zones.zones[zone]!.hp;
         applyDamage(loser.hp, this.config.zones, zone, lod.abstractLoserDamage * max);
@@ -712,6 +717,8 @@ export class Room {
       player.askedSlot = 0;
       player.looted = false;
       this.stopLooting(player);
+      clearCauses(player);
+      clearTally(player.tally);
       player.state = this.freshState(player.slot, player.mech);
       player.queue.length = 0;
     }
@@ -749,7 +756,10 @@ export class Room {
     player.hp[ZONE_COUNT - 1] = 0;
     const place = this.placeCounter--;
     const alive = this.alivePlayers().length;
-    const message: ServerMessage = { t: "eliminated", id: player.id, killerId: killer?.id ?? null, place, alive, ...(left ? { left: true } : {}) };
+    // Someone who walked out was not knocked out by anything, so they get no card.
+    const message: ServerMessage = {
+      t: "eliminated", id: player.id, killerId: killer?.id ?? null, place, alive, ...(left ? { left: true } : { how: knockoutHow(player, killer, this.config.weapons) }),
+    };
     for (const p of this.players.values()) p.send(message);
     this.checkMatchOver();
   }
@@ -781,7 +791,7 @@ export class Room {
   private endMatch(winner: Player | null): void {
     this.state = "results";
     this.phaseEndTick = this.tickCount + Math.ceil(this.config.match.resultsSeconds / STEP);
-    const message: ServerMessage = { t: "result", winnerId: winner?.id ?? null };
+    const message: ServerMessage = { t: "result", winnerId: winner?.id ?? null, stats: topStats([...this.players.values()]) };
     for (const p of this.players.values()) p.send(message);
     this.broadcastRoom();
     this.prepareNextMap();
@@ -812,6 +822,7 @@ export class Room {
     ringAt(this.ring, elapsed, ring);
     for (const player of this.alivePlayers()) {
       if (!isOutsideRing(ring, player.state.x, player.state.z)) continue;
+      noteCause(player, CAUSE_RING);
       for (let zone = 0; zone < ZONE_COUNT; zone++) applyDamage(player.hp, this.config.zones, zone, ring.damagePerSecond * STEP);
       if (isDestroyed(player.hp)) this.eliminate(player, null);
     }
@@ -832,6 +843,7 @@ export class Room {
     if (ability?.kind === "rail" && player.state.abilityTime > 0 && hp < player.railHpMark) player.state.abilityTime = 0;
     player.railHpMark = hp;
     const abilityBefore = player.state.abilityTime, cooldownBefore = player.state.abilityCooldown;
+    if (abilityBefore <= 0) { player.launchX = player.state.x; player.launchZ = player.state.z; }
     player.state.crawling = player.hp[ZONE_LEGS]! <= 0;
     player.state.fuelScale = upgradeScale(player.loadout, this.config.upgrades, "fuel");
     player.state.speedScale = upgradeScale(player.loadout, this.config.upgrades, "speed");
@@ -878,11 +890,11 @@ export class Room {
     const muzzles = this.muzzlesFor(player.state.mech);
     const muzzle = muzzles[player.shotsFired++ % muzzles.length]!;
     // A scattergun fires several pellets with one pull. Each is its own shot, with its own spread and its own hit.
-    for (let i = 0; i < weapon.pellets; i++) this.firePellet(player, input, weapon, muzzle);
+    for (let i = 0; i < weapon.pellets; i++) this.firePellet(player, input, weapon, weaponIndex, muzzle);
     this.makeNoise(player, "shot", player.state.x, player.state.z);
   }
 
-  private firePellet(player: Player, input: MechInput, weapon: WeaponStats, muzzle: readonly number[]): void {
+  private firePellet(player: Player, input: MechInput, weapon: WeaponStats, weaponIndex: number, muzzle: readonly number[]): void {
     // The aim point is only a direction hint, so it cannot send a shot faster or from anywhere but the barrel.
     // A broken arm still fires, just nowhere near where it is pointed.
     const spread = player.hp[ZONE_ARMS]! <= 0 ? this.config.zones.brokenArmsSpreadMultiplier : 1;
@@ -906,6 +918,7 @@ export class Room {
     } else if (target) {
       const damage = weapon.damage * this.shieldFactor(target, s.dx, s.dz);
       const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, damage, target.loadout.armor);
+      this.hurt(target, weaponCause(weaponIndex), player, taken);
       const killed = !target.dead && isDestroyed(target.hp);
       player.send({
         t: "hit", targetId: target.id, zone: this.zoneHit.zone, damage: taken, killed,
@@ -993,12 +1006,12 @@ export class Room {
   private explode(live: LiveGrenade): void {
     const g = live.state;
     const { grenade } = this.config;
-    this.blast(g.x, g.y, g.z, grenade.damage, grenade.blastRadius, this.players.get(live.ownerId) ?? null);
+    this.blast(g.x, g.y, g.z, grenade.damage, grenade.blastRadius, this.players.get(live.ownerId) ?? null, CAUSE_GRENADE);
   }
 
   // Splash hits every zone of everyone in range, so a close blast wrecks parts and makes a story. Walls block it,
   // props in range take damage too (so barrels set each other off), and it does nothing during the countdown.
-  private blast(x: number, y: number, z: number, damage: number, radius: number, owner: Player | null): void {
+  private blast(x: number, y: number, z: number, damage: number, radius: number, owner: Player | null, cause: number): void {
     const { zones } = this.config;
     const bx = x, by = y + BLAST_LIFT, bz = z;
     const message: ServerMessage = { t: "explode", x, y, z };
@@ -1016,6 +1029,7 @@ export class Room {
       const amount = damage * (1 - distance / radius);
       let total = 0;
       for (let zone = 0; zone < ZONE_COUNT; zone++) total += applyDamage(target.hp, this.zonesFor(target.state.mech), zone, amount, target.loadout.armor);
+      this.hurt(target, cause, owner, total);
       const killed = isDestroyed(target.hp);
       owner?.send({ t: "hit", targetId: target.id, zone: -1, damage: total, killed, x: target.state.x, y: target.state.y + CHEST_HEIGHT, z: target.state.z });
       if (killed) this.eliminate(target, owner);
@@ -1080,6 +1094,8 @@ export class Room {
     if (target) {
       reach = this.zoneHit.distance;
       const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, rail.damage * this.shieldFactor(target, s.dx, s.dz), target.loadout.armor);
+      this.hurt(target, abilityCause(rail.kind), player, taken);
+      noteLongest(player.tally, "longestRailShot", reach);
       const killed = !target.dead && isDestroyed(target.hp);
       player.send({ t: "hit", targetId: target.id, zone: this.zoneHit.zone, damage: taken, killed, x: s.ox + s.dx * reach, y: s.oy + s.dy * reach, z: s.oz + s.dz * reach });
       if (killed) this.eliminate(target, player);
@@ -1110,7 +1126,7 @@ export class Room {
       }
       t.vy = Math.max(t.vy, ram.pop); // a little air, so it slides instead of grinding to a halt on its feet
       this.sendNear(t.x, t.z, { t: "ability", id: player.id, kind: "ram", event: "hit", x: t.x, y: t.y, z: t.z }, player);
-      this.abilityDamage(player, target, ram.damage);
+      this.abilityDamage(player, target, ram.damage, abilityCause(ram.kind));
     }
     this.popDecoysAround(s.x, s.y, s.z, ram.hitRadius, height, player);
 
@@ -1124,11 +1140,12 @@ export class Room {
     const height = this.statsFor(s.mech).height;
     this.sendNear(s.x, s.z, { t: "ability", id: player.id, kind: "pounce", event: "land", x: s.x, y: s.y, z: s.z }, player);
     this.makeNoise(player, "smash", s.x, s.z);
+    noteLongest(player.tally, "longestPounce", Math.hypot(s.x - player.launchX, s.z - player.launchZ));
     for (const target of this.players.values()) {
       if (target === player || target.dead || !target.participant) continue;
       const t = target.state;
       if (Math.hypot(t.x - s.x, t.z - s.z) > pounce.slamRadius || Math.abs(t.y - s.y) > height) continue;
-      this.abilityDamage(player, target, pounce.damage);
+      this.abilityDamage(player, target, pounce.damage, abilityCause(pounce.kind));
     }
     this.popDecoysAround(s.x, s.y, s.z, pounce.slamRadius, height, player);
     this.smashProps(player, pounce.slamRadius, height);
@@ -1161,7 +1178,7 @@ export class Room {
       const r = strike.spreadMeters * Math.sqrt(this.random()), angle = this.random() * Math.PI * 2;
       const x = at.x + Math.cos(angle) * r, z = at.z + Math.sin(angle) * r;
       const tick = this.tickCount + Math.round((strike.delaySeconds + i * strike.shellSeconds) / STEP);
-      this.pendingBlasts.push({ x, y: this.groundAt(x, z, y), z, tick, owner: player, damage: strike.damage, radius: strike.blastRadius });
+      this.pendingBlasts.push({ x, y: this.groundAt(x, z, y), z, tick, owner: player, damage: strike.damage, radius: strike.blastRadius, cause: abilityCause(strike.kind) });
     }
   }
 
@@ -1231,13 +1248,21 @@ export class Room {
   // Rams and slams land on the upper body, half on the arms and half on the torso: a shield bash and a blade cut
   // both strike high. Legs are left out so crippling a mech stays the job of aimed shots. Armor and each mech's own
   // toughness count as they do for a shot.
-  private abilityDamage(attacker: Player, target: Player, damage: number): void {
+  private abilityDamage(attacker: Player, target: Player, damage: number, cause: number): void {
     const zones = this.zonesFor(target.state.mech);
     const t = target.state;
     const total = applyDamage(target.hp, zones, ZONE_ARMS, damage / 2, target.loadout.armor) + applyDamage(target.hp, zones, ZONE_TORSO, damage / 2, target.loadout.armor);
+    this.hurt(target, cause, attacker, total);
     const killed = isDestroyed(target.hp);
     attacker.send({ t: "hit", targetId: target.id, zone: -1, damage: total, killed, x: t.x, y: t.y + CHEST_HEIGHT, z: t.z });
     if (killed) this.eliminate(target, attacker);
+  }
+
+  // Notes what hurt a mech, for its knockout card, and the damage for its attacker's match tally. Hurting yourself
+  // with your own grenade is a cause but not a score.
+  private hurt(target: Player, cause: number, by: Player | null, taken: number): void {
+    noteCause(target, cause);
+    if (by && by !== target) by.tally.mostDamage += taken;
   }
 
   // ---- pickups
@@ -1355,21 +1380,27 @@ export class Room {
     if (this.propHp[id]! > 0) return;
 
     const prop = this.map.props[id]!;
+    const type = this.config.props.types[prop.type]!;
+    if (by) {
+      by.tally.propsSmashed++;
+      if (type.scenery) by.tally.treesFelled++; // the pine is the only scenery prop
+      if (type.explodes) by.tally.barrelsSetOff++;
+    }
     this.map.world.disable(prop.boxIndex);
     this.destroyedProps.push(id);
     const message: ServerMessage = { t: "prop", id };
     for (const p of this.players.values()) if (!p.bot) p.send(message);
     this.makeNoise(by, "smash", prop.x, prop.z);
-    const item = rollLoot(this.config.loot, this.config.weapons, this.config.upgrades.upgrades.length, this.config.props.types[prop.type]!.id, this.random);
+    const item = rollLoot(this.config.loot, this.config.weapons, this.config.upgrades.upgrades.length, type.id, this.random);
     // Its box is already out of the world, so the drop finds the ground the prop stood on.
     if (item !== null) {
       const x = prop.x + (this.random() - 0.5), z = prop.z + (this.random() - 0.5);
       this.pickups.add(item, x, this.surfaceBelow(x, z, prop.y) + PICKUP_LIFT, z);
     }
-    if (this.config.props.types[prop.type]!.explodes) {
+    if (type.explodes) {
       const delay = Math.round(this.config.props.barrelBlast.delaySeconds / STEP);
       const { damage, radius } = this.config.props.barrelBlast;
-      this.pendingBlasts.push({ x: prop.x, y: this.surfaceBelow(prop.x, prop.z, prop.y), z: prop.z, tick: this.tickCount + delay, owner: by, damage, radius });
+      this.pendingBlasts.push({ x: prop.x, y: this.surfaceBelow(prop.x, prop.z, prop.y), z: prop.z, tick: this.tickCount + delay, owner: by, damage, radius, cause: CAUSE_BARREL });
     }
   }
 
@@ -1391,7 +1422,7 @@ export class Room {
       const b = this.pendingBlasts[i]!;
       if (this.tickCount < b.tick) continue;
       this.pendingBlasts.splice(i, 1);
-      this.blast(b.x, b.y, b.z, b.damage, b.radius, b.owner);
+      this.blast(b.x, b.y, b.z, b.damage, b.radius, b.owner, b.cause);
     }
   }
 

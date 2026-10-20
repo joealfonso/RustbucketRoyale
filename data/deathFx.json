@@ -1,0 +1,50 @@
+{
+  "maxWrecks": 32,
+  "meshesPerPiece": 16,
+  "middleMeters": 0.6,
+  "blast": {
+    "meters": 3.2,
+    "sparks": 16,
+    "popSize": 2.6,
+    "popSeconds": 0.3,
+    "model": null
+  },
+  "torso": {
+    "seconds": 1.5,
+    "meters": 3,
+    "degrees": 270,
+    "rollDegrees": 25,
+    "hopMeters": 1.4,
+    "hopShare": 0.45
+  },
+  "pieces": {
+    "legs": 1,
+    "speed": 7,
+    "awayShare": 0.8,
+    "lift": 8,
+    "spin": 9,
+    "gravity": 22,
+    "bounce": 0.35,
+    "friction": 0.55,
+    "spinKeep": 0.5,
+    "maxBounces": 2,
+    "settleSpeed": 2,
+    "layFlatSeconds": 0.3,
+    "trailEverySeconds": 0.07,
+    "landDustMeters": 1.0,
+    "model": null
+  },
+  "smoke": {
+    "pourSeconds": 2.5,
+    "sparkEverySeconds": 0.18,
+    "sparkCount": 4,
+    "sparkSpeed": 7,
+    "lingerEverySeconds": 0.35,
+    "riseSpeed": 2.8,
+    "lifeSeconds": 2.2,
+    "startSize": 0.9,
+    "endSize": 3.4,
+    "lingerShare": 0.5,
+    "model": null
+  }
+}

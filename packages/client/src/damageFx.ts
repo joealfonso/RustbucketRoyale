@@ -45,6 +45,7 @@ export class DamageFx {
 
   // Counts down this mech's timers and lets off sparks and smoke for each part that is not intact.
   emitFrom(model: MechModel, dt: number): void {
+    if (model.blownApart) return; // a blown-apart wreck smokes from where its torso lies, in deathFx.ts
     const { sparks, smoke } = this.config;
     // Repairing: a steady shower of welding sparks off the part being fixed, so everyone can see who is busy.
     const welding = model.repairing && !model.dead ? partToRepair(model.hp, this.zones) : -1;

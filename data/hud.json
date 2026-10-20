@@ -1,4 +1,5 @@
 {
   "radarRangeMeters": 150,
-  "detectRangeMeters": 40
+  "detectRangeMeters": 40,
+  "knockoutCardSeconds": 4.5
 }

@@ -33,6 +33,8 @@ import { Explosions, parseExplosionFx } from "./fx/explosion";
 import { FxSprites } from "./fx/fxSprites";
 import { Thrusters, parseThrusterFx } from "./fx/thrusters";
 import { DamageFx } from "./damageFx";
+import deathFxJson from "../../../data/deathFx.json";
+import { DeathFx, parseDeathFx } from "./deathFx";
 import { PaintPreview } from "./paint/paintPreview";
 
 // The V1 style test (style.html): one chunk, its props and three mechs in the game's look, seen from 10, 50 and
@@ -141,6 +143,7 @@ const clock = new THREE.Clock();
 function walkRoster(dt: number): void {
   const mode = WALKS[walk]!;
   rosterModels.forEach((model, i) => {
+    if (model.dead) return; // blown apart (key X): left lying until X again
     const stats = statsFor(rosterStats.mechs.findIndex((m) => m.id === roster[i]!.id));
     const speed = mode === "standing" || mode === "in the air" || mode === "braced" ? 0 : mode === "walking" || mode === "limping" || mode === "side-stepping" ? stats.walkSpeed : mode === "dashing" ? stats.dashSpeed : stats.runSpeed;
     const yaw = model.group.rotation.y;
@@ -199,6 +202,26 @@ let jetsOn = false;
 let dashFrames = 0;
 let dropFrames = 0;
 let lookingAtFx = false;
+// X blows the roster and a grey-box mech apart, as if shot from the camera; Z shows them already lying as wrecks, as
+// a wreck that comes into view later is drawn; either again stands them back up.
+const deathFx = new DeathFx(fxSprites, explosions, parseDeathFx(deathFxJson), () => 0);
+const greyWreck = createMechModel(palette.mech.othersAccent, zoneMaxHp, toon, palette.mech.body, null, palette.mech.trim);
+greyWreck.group.position.set(((roster.length + 1) * 6) / 2 + 5, 0, ROSTER_Z);
+greyWreck.group.rotation.y = Math.PI;
+greyWreck.group.visible = false;
+scene.add(greyWreck.group);
+const wreckable = [...rosterModels, greyWreck];
+let wrecked = false;
+function blowApart(already: boolean): void {
+  wrecked = !wrecked;
+  wreckable.forEach((model, i) => {
+    if (!wrecked) { setMechDamage(model, zoneMaxHp, false); return; }
+    setMechDamage(model, [zoneMaxHp[0]!, zoneMaxHp[1]!, 0], true);
+    const p = model.group.position;
+    if (already) deathFx.lieDown(model, i + 1);
+    else deathFx.blowApart(model, p.x - camera.position.x, p.z - camera.position.z, i + 1);
+  });
+}
 function showFx(dt: number): void {
   thrusters.tick(dt);
   const dashing = dashFrames > 0, dropping = dropFrames > 0;
@@ -206,6 +229,7 @@ function showFx(dt: number): void {
   dashFrames = Math.max(0, dashFrames - 1); dropFrames = Math.max(0, dropFrames - 1);
   for (const model of damageRow) damageFx.emitFrom(model, dt);
   if (kitModel) damageFx.emitFrom(kitModel, dt);
+  deathFx.update(dt, camera.position);
   explosions.update(dt);
   fxChunks.update(dt);
   fxSprites.update(dt, camera.position);
@@ -224,6 +248,7 @@ function place(): void {
   // The middle of the line-up being looked at: the damage row, or the roster further out.
   const close = rosterModels[closeUp];
   rosterModels.forEach((m, i) => { m.group.visible = !close || i === closeUp; }); // the others would stand in the way
+  greyWreck.group.visible = lookingAtFx;
   if (lookingAtPaint) {
     label.textContent = paintPreview.place(camera, turn);
     return;
@@ -231,7 +256,7 @@ function place(): void {
   if (lookingAtFx) {
     camera.position.set(5 + Math.sin(turn) * 22, 5, ROSTER_Z + Math.cos(turn) * 22);
     camera.lookAt(5, 3, ROSTER_Z - 4);
-    label.textContent = `Effects · B: blast (next: ${BLASTS[nextBlast]![0]}) · J: jets ${jetsOn ? "on" : "off"} · K: dash · V: effects ${vfxQuality()} · Q / E: turn · 1 / 2 / 3: back`;
+    label.textContent = `Effects · B: blast (next: ${BLASTS[nextBlast]![0]}) · J: jets ${jetsOn ? "on" : "off"} · K: dash · X / Z: ${wrecked ? "stand back up" : "blow apart / lying"} · T: ${rangeSlow ? "quarter speed" : "full speed"} · V: effects ${vfxQuality()} · Q / E: turn · 1 / 2 / 3: back`;
     return;
   }
   if (lookingAtRange) {
@@ -247,7 +272,7 @@ function place(): void {
   label.textContent = `Light: ${toon.presets[preset]!.name} (L) · ` + (lookingAtProps
     ? "Props, standing and broken: crate, junk pile, barrel · 1 / 2 / 3: back to the damage row · Q / E: turn"
     : close
-    ? `${roster[closeUp]!.id} up close · W: ${WALKS[walk]} · 6: next mech · Q / E: turn · 4: the whole roster`
+    ? `${roster[closeUp]!.id} up close · W: ${WALKS[walk]} · X / Z: ${wrecked ? "stand back up" : "blow apart / lying"} · 6: next mech · Q / E: turn · 4: the whole roster`
     : lookingAtRoster
     ? `Roster: ${roster.map((r) => r.id).join(", ") || "none loaded"} · W: ${WALKS[walk]} · 1 / 2 / 3: back to the damage row · Q / E: turn`
     : `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · 4: the roster · 5: the props · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · behind, left to right: you (clean), then 75%, 40%, 15%, arms and legs broken`);
@@ -263,6 +288,7 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "KeyB") { const [, radius] = BLASTS[nextBlast]!; explosions.blast(5, 0.3, ROSTER_Z - 7, radius, 0); nextBlast = (nextBlast + 1) % BLASTS.length; }
   if (e.code === "KeyJ") { jetsOn = !jetsOn; if (!jetsOn) dropFrames = 1; }
   if (e.code === "KeyK") dashFrames = 1;
+  if ((e.code === "KeyX" || e.code === "KeyZ") && (lookingAtFx || closeUp >= 0)) blowApart(e.code === "KeyZ");
   if (e.code === "KeyV") setVfxQuality(vfxQuality() === "low" ? "normal" : "low");
   if (e.code === "Digit7") lookingAtRange = true;
   if (e.code === "KeyF") fireAtRange();
@@ -290,8 +316,8 @@ castShadows(scene);
 renderer.setAnimationLoop(() => {
   const dt = Math.min(0.05, clock.getDelta());
   walkRoster(dt);
-  showFx(dt);
   const fxDt = rangeSlow ? dt / 4 : dt;
+  showFx(lookingAtFx || closeUp >= 0 ? fxDt : dt);
   shotFx.update(fxDt, rangeWorld);
   shotFx.draw(camera, fxDt);
   sunShadows.follow(camera);

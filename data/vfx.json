@@ -13,6 +13,8 @@
       "blastSmoke": 3,
       "blastDebris": 4,
       "blastScorch": 1,
+      "deathPieces": 2,
+      "deathSmoke": 4,
       "splashes": 60
     },
     "normal": {
@@ -27,6 +29,8 @@
       "blastSmoke": 8,
       "blastDebris": 10,
       "blastScorch": 1,
+      "deathPieces": 4,
+      "deathSmoke": 10,
       "splashes": 160
     }
   },

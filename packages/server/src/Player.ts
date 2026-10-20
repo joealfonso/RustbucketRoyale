@@ -1,4 +1,5 @@
 import type { Bot } from "./Bot";
+import type { Tally } from "./matchStats";
 import type { FireGate, Loadout, MechInput, MechState, NoiseEvent, ServerMessage } from "@rustbucket/shared";
 
 // One person in a room. Plain data: the room moves it, this file just names the fields.
@@ -36,6 +37,11 @@ export interface Player {
   healthMark: number; // hit points plus armor last step, so any damage at all can cancel a repair
   rammed: number[]; // ids of the mechs the current ram has already hit, so it hits each one once
   railHpMark: number; // hit points last step: a Rail Shot charge breaks when they drop
+  launchX: number; launchZ: number; // where the mech stood when its current ability began, for the longest pounce
+  // The last two different things that hurt this mech, as cause codes (knockout.ts), for the knockout card.
+  cause: number;
+  causeBefore: number;
+  tally: Tally; // this match's fun numbers, for the results screen
   interested: Set<number>;
   watchId: number;
   heard: NoiseEvent[];

@@ -42,6 +42,9 @@ export interface MechModel {
   // The last damage shown, kept so the spark and smoke effects can read it each frame.
   hp: number[];
   dead: boolean;
+  // Knocked out and drawn blown apart by deathFx.ts, which moves the body and the parts that flew off: the slump
+  // below leaves it alone.
+  blownApart: boolean;
   repairing: boolean; // shown with welding sparks
   upgradeParts: THREE.Mesh[]; // one per upgrade, made the first time it is fitted, shown while fitted
   fxTimers: number[]; // per zone: seconds until the next spark, then the next puff of smoke. Last: welding sparks
@@ -268,7 +271,7 @@ export function createMechModel(
   ];
   return {
     group, body, legMeshes, zoneMaterials, toon, armMeshes, baseColors, zoneMaxHp: [...zoneMaxHp], plates, gunMaterial,
-    hp: [...zoneMaxHp], dead: false, repairing: false, upgradeParts: [], fxTimers: [0, 0, 0, 0, 0, 0, 0],
+    hp: [...zoneMaxHp], dead: false, blownApart: false, repairing: false, upgradeParts: [], fxTimers: [0, 0, 0, 0, 0, 0, 0],
     kitPieces, fxAnchors, gunParts, serials, paints, glows,
     legs, legSides: legs.map((l) => l.side), gait: legs.length > 0 ? createGait(legs.length) : null, gaitId: kit?.id ?? "", crawlDrop: 0, crawlTilt: 0,
   };
@@ -345,7 +348,7 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
     leg.position.y = 1.6 - length / 2;
     model.toon?.refit(leg);
   }
-  model.group.scale.y = dead ? 0.35 : 1;
+  model.group.scale.y = dead && !model.blownApart ? 0.35 : 1;
 }
 
 // Shows the weapon in hand and the armor still on. A plate disappears the moment its points run out.

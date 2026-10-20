@@ -7,6 +7,7 @@ import type { LoadedKit } from "./mechKit";
 import type { AbilityFxConfig } from "./abilityFx";
 import { makeGhost } from "./ghostLook";
 import { castShadows } from "./sunShadows";
+import { createDrawnMech, type DrawnMech } from "./replayFrames";
 
 interface Sample {
   time: number;
@@ -14,6 +15,7 @@ interface Sample {
 }
 
 interface Remote {
+  id: number;
   model: MechModel;
   vx: number; vy: number; vz: number; // how fast it is moving where it is drawn, for its walk
   jetting: boolean;
@@ -22,6 +24,7 @@ interface Remote {
   mech: number; // the roster mech it is drawn as. A new one swaps the model.
   weapon: number; // the weapon in hand, by index in weapons.json, so its shots are drawn in that weapon's look
   dead: boolean;
+  hp: number[]; // the newest hit points the server sent, so a replay can hand the mech back as it is now
   looted: boolean;
   bot: boolean;
   ghost: THREE.Material[] | null; // drawn see-through as one of your own decoys, with the material copies that took
@@ -43,6 +46,10 @@ export class RemoteMechs {
   private jitter = 0;
   private hasClock = false;
   private ownDecoys = new Set<number>(); // ids of your own decoys, drawn see-through for you alone
+  // While the kill replay plays it moves and damages the models from its recording; snapshots still arrive and are
+  // kept, so everyone is back where they are now the moment it ends.
+  private replaying = false;
+  private drawn: DrawnMech;
 
   // The colour of each weapon by index, for drawing the gun in hand.
   weaponColors: string[] = [];
@@ -51,6 +58,9 @@ export class RemoteMechs {
   look: { toon: Toon; accentFor: (id: number) => string; body: string; kitFor: (mech: number) => LoadedKit | null; trim: string } | null = null;
   // How your own decoys look to you. Without it they are drawn like anyone else.
   ghostLook: AbilityFxConfig["ghost"] | null = null;
+  // A mech just knocked out, for the blow-apart (deathFx.ts). `alreadyDown`: it was a wreck when first seen, or came
+  // back from a replay a wreck that the replay never showed going down, so it should lie there rather than blow up.
+  onKnockedOut: ((id: number, model: MechModel, alreadyDown: boolean) => void) | null = null;
 
   constructor(
     private scene: THREE.Scene,
@@ -58,7 +68,9 @@ export class RemoteMechs {
     private maxDelayMs: number,
     private snapshotIntervalMs: number,
     private zoneMaxHp: readonly number[],
-  ) {}
+  ) {
+    this.drawn = createDrawnMech(zoneMaxHp.length);
+  }
 
   // How far behind the server the picture of other mechs is right now, in ms. Shots are rewound by this much plus the ping.
   get viewDelayMs(): number {
@@ -206,18 +218,24 @@ export class RemoteMechs {
         remote.mech = o.mech;
       }
       if (!remote) {
-        remote = { model: this.makeModel(o), mech: o.mech, weapon: o.weapon, vx: 0, vy: 0, vz: 0, jetting: false, running: false, ability: false, dead: false, looted: false, bot: o.bot, ghost: null, samples: [], seen: true };
+        remote = { id: o.id, model: this.makeModel(o), mech: o.mech, weapon: o.weapon, vx: 0, vy: 0, vz: 0, jetting: false, running: false, ability: false, dead: false, hp: [...o.hp], looted: false, bot: o.bot, ghost: null, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;
       remote.weapon = o.weapon;
+      const wasDead = remote.dead, firstSeen = remote.samples.length === 0;
       remote.dead = o.dead;
       remote.looted = o.looted;
       remote.jetting = o.jetting;
       remote.running = o.running;
       remote.ability = o.ability;
       remote.model.repairing = o.repairing;
-      setMechDamage(remote.model, o.hp, o.dead);
+      for (let zone = 0; zone < remote.hp.length; zone++) remote.hp[zone] = o.hp[zone] ?? 0;
+      // Going down during a replay shows when it ends, lying there: the replay has the old picture on screen.
+      if (!this.replaying) {
+        setMechDamage(remote.model, o.hp, o.dead);
+        if (o.dead && !wasDead) this.onKnockedOut?.(o.id, remote.model, firstSeen);
+      }
       setMechGear(remote.model, this.weaponColors[o.weapon] ?? "#d9731a", o.armor);
       setMechUpgrades(remote.model, o.upgrades, this.upgrades);
       this.ghostIfOwn(o.id, remote); // after the upgrades, so their parts go see-through too
@@ -234,8 +252,61 @@ export class RemoteMechs {
     }
   }
 
+  // Calls `fn` for every mech as it is drawn this frame, for the kill replay's recording. The same object is passed
+  // each time and overwritten, so nothing is allocated.
+  forEachDrawn(fn: (id: number, m: DrawnMech) => void): void {
+    const d = this.drawn;
+    for (const r of this.remotes.values()) {
+      const p = r.model.group.position;
+      d.x = p.x; d.y = p.y; d.z = p.z; d.yaw = r.model.group.rotation.y;
+      d.vx = r.vx; d.vy = r.vy; d.vz = r.vz;
+      d.jetting = r.jetting; d.running = r.running; d.ability = r.ability; d.dead = r.dead;
+      for (let zone = 0; zone < d.hp.length; zone++) d.hp[zone] = r.hp[zone] ?? 0;
+      fn(r.id, d);
+    }
+  }
+
+  // The kill replay takes over: `update` stops moving anyone and snapshots stop changing their damage.
+  beginReplay(): void {
+    this.replaying = true;
+  }
+
+  // Each replay frame starts with everyone hidden; `showRecorded` brings back the ones in the recording, so a mech
+  // that arrived since is not standing in the middle of the past.
+  hideAll(): void {
+    for (const r of this.remotes.values()) r.model.group.visible = false;
+  }
+
+  // Draws a mech as the recording has it. False if it has left since, so there is no model to draw.
+  showRecorded(id: number, m: DrawnMech): boolean {
+    const r = this.remotes.get(id);
+    if (!r) return false;
+    r.model.group.visible = true;
+    r.model.group.position.set(m.x, m.y, m.z);
+    r.model.group.rotation.y = m.yaw;
+    r.vx = m.vx; r.vy = m.vy; r.vz = m.vz;
+    r.jetting = m.jetting; r.running = m.running; r.ability = m.ability;
+    if (damageDiffers(r.model, m)) {
+      const wasDead = r.model.dead;
+      setMechDamage(r.model, m.hp, m.dead);
+      if (m.dead && !wasDead) this.onKnockedOut?.(id, r.model, false); // blows apart again, as it did then
+    }
+    return true;
+  }
+
+  // Everyone back as they are now: shown, damaged as the newest snapshot says, and moved again by `update`.
+  endReplay(): void {
+    if (!this.replaying) return;
+    this.replaying = false;
+    for (const r of this.remotes.values()) {
+      r.model.group.visible = true;
+      setMechDamage(r.model, r.hp, r.dead);
+      if (r.dead && !r.model.blownApart) this.onKnockedOut?.(r.id, r.model, true);
+    }
+  }
+
   update(nowMs: number): void {
-    if (!this.hasClock) return;
+    if (!this.hasClock || this.replaying) return;
     // Where the server's clock is as far as this client can tell, minus the buffer: the moment we draw.
     const renderTime = nowMs - this.offset - this.viewDelayMs;
     for (const remote of this.remotes.values()) {
@@ -261,4 +332,11 @@ export class RemoteMechs {
       remote.model.group.rotation.y = a.yaw + dyaw * t;
     }
   }
+}
+
+// Damage is shown only when it changes: setMechDamage walks every part of the model.
+export function damageDiffers(model: MechModel, m: DrawnMech): boolean {
+  if (model.dead !== m.dead) return true;
+  for (let zone = 0; zone < model.hp.length; zone++) if (model.hp[zone] !== m.hp[zone]) return true;
+  return false;
 }

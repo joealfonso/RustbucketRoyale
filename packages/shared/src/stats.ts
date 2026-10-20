@@ -139,6 +139,7 @@ export interface BotConfig {
 export interface HudStats {
   radarRangeMeters: number; // how far the radar's edge reaches
   detectRangeMeters: number; // mechs closer than this show on the radar whether they make a sound or not
+  knockoutCardSeconds: number; // how long the knockout card stays up (gate 14c)
 }
 
 export interface CameraStats {
@@ -243,7 +244,7 @@ export function parseBotConfig(raw: unknown): BotConfig {
     loot: parseNumbers<BotLootStats>(d?.loot, "bots.json loot", ["searchMeters", "refreshTicks"]),
   };
 }
-export const parseHudStats = (raw: unknown) => parseNumbers<HudStats>(raw, "hud.json", ["radarRangeMeters", "detectRangeMeters"]);
+export const parseHudStats = (raw: unknown) => parseNumbers<HudStats>(raw, "hud.json", ["radarRangeMeters", "detectRangeMeters", "knockoutCardSeconds"]);
 export const parseMechStats = (raw: unknown) => parseNumbers<MechStats>(raw, "mech.json", MECH_KEYS);
 export interface WeaponSet {
   start: number; // index of the weapon everyone begins with

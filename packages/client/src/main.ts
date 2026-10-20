@@ -97,6 +97,7 @@ import { RemoteMechs } from "./remoteMechs";
 import { RingView } from "./ringView";
 import { DropView } from "./dropView";
 import { RailFx, type RailPose } from "./railFx";
+import { knockoutWords, statLines, type Names } from "./knockoutCard";
 import { RenderScale, parseRenderScale } from "./renderScale";
 import renderJson from "../../../data/render.json";
 import { Tips, browserTipStore, parseTips } from "./tips";
@@ -107,6 +108,10 @@ import { parseWeaponFx } from "./weaponFxData";
 import weaponFxJson from "../../../data/weaponFx.json";
 import { addVfxQualityControl, mostOf, onVfxQuality, vfxConfig, vfxLevel, vfxQuality } from "./fx/quality";
 import { ThirdPersonCamera } from "./thirdPersonCamera";
+import { KillReplay, parseReplay } from "./killReplay";
+import replayJson from "../../../data/replay.json";
+import deathFxJson from "../../../data/deathFx.json";
+import { DeathFx, parseDeathFx } from "./deathFx";
 
 const KILL_HEIGHT = -50;
 
@@ -457,6 +462,18 @@ remotes.weaponColors = weaponColors;
 remotes.upgrades = upgradeSet.upgrades;
 remotes.look = remoteLook;
 remotes.ghostLook = abilityFxConfig.ghost;
+// A mech knocked out blows apart (deathFx.ts), pushed the way the killing blow went: from where its killer stood,
+// noted when the knockout is announced, which comes just before the snapshot that shows it dead.
+const deathFx = new DeathFx(fxSprites, explosions, parseDeathFx(deathFxJson), groundBelow);
+const knockedFrom = new Map<number, { x: number; z: number }>();
+const killerAt = { x: 0, y: 0, z: 0 };
+remotes.onKnockedOut = (id, model, alreadyDown) => {
+  if (alreadyDown) { deathFx.lieDown(model, id); return; }
+  const from = knockedFrom.get(id);
+  knockedFrom.delete(id);
+  const at = model.group.position;
+  deathFx.blowApart(model, from ? at.x - from.x : 0, from ? at.z - from.z : 0, id);
+};
 const aimHit = createZoneHit();
 // The crosshair checks each mech against its own hit boxes, the ones the server uses (only with the roster drawn).
 const zonesFor = kitId === "roster" ? makeZonesFor(zoneSet, roster, mechKitsJson) : () => zoneSet;
@@ -468,6 +485,20 @@ const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgrad
 if (net) net.viewDelayMs = () => remotes.viewDelayMs;
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
+// The kill replay (gate 13b): the last seconds again from over your killer's shoulder, then you watch them.
+const killReplay = new KillReplay(parseReplay(replayJson), zoneMaxHp.length);
+killReplay.listenForSkip(window);
+killReplay.onExplode = (x, y, z) => showBlast(x, y, z);
+killReplay.onGrenade = (_id, x, y, z, vx, vy, vz) => { grenades.spawn(x, y, z, vx, vy, vz); sound.play("grenadeThrow", { x, y, z }); };
+// The replay puts your mech back together (it is alive at the start of the clip) and blows it apart again here.
+killReplay.onVictimDown = (model, awayX, awayZ) => deathFx.blowApart(model, awayX, awayZ, net?.id ?? 0);
+// Over, played out or skipped: watch the killer. The click that skipped it must not also switch who you watch.
+// Your wreck lies where it is live, even if the clip ended before it went down.
+killReplay.onEnd = (killerId) => {
+  spectateId = killerId;
+  input.takeClick();
+  if (ownModel.dead && !ownModel.blownApart) deathFx.lieDown(ownModel, net?.id ?? 0);
+};
 const input = new Input(canvas, hint, () => mechStats.sprintDoubleTapSeconds);
 // Live tuning works on copies of the raw data files. A change is checked and parsed like loading the file, then
 // copied into the live values in place, so everything already holding them sees it.
@@ -603,6 +634,7 @@ function swapMap(newSeed: number, newTier: string): void {
 if (net) net.watchId = () => (health.dead ? spectateId : 0);
 
 const name = (id: number | null) => (id === null ? "the zone" : id === net?.id ? "You" : remotes.isBot(id) ? `Bot ${id}` : `Player ${id}`);
+const cardNames: Names = { roster, weapons: weaponSet, abilities: abilitySet, player: (id) => name(id), get selfId() { return net?.id ?? null; } };
 
 // Online: wait for the first snapshot before stepping, so we start from where the server put us.
 let ready = net === null;
@@ -632,6 +664,7 @@ if (net) {
     const old = loadout;
     progress = snap.match;
     progressAt = performance.now();
+    const wasDead = health.dead;
     health = snap.health;
     loadout = snap.loadout;
     if (sum(health.hp) + sum(loadout.armor) < before) {
@@ -653,7 +686,14 @@ if (net) {
     if (Math.floor(snap.repairing * 5) > Math.floor(repairing * 5)) sound.play("repair");
     repairing = snap.repairing;
     ownModel.repairing = repairing > 0;
-    setMechDamage(ownModel, health.hp, health.dead);
+    if (!killReplay.playing) {
+      setMechDamage(ownModel, health.hp, health.dead); // the replay shows your mech as it was
+      if (health.dead && !wasDead) {
+        const from = knockedFrom.get(net.id);
+        knockedFrom.delete(net.id);
+        deathFx.blowApart(ownModel, from ? mech.x - from.x : 0, from ? mech.z - from.z : 0, net.id);
+      }
+    }
     net.noteSnapshot(snap.ack, snap.ackAgeMs, performance.now());
     remotes.push(snap.others, snap.tick, performance.now());
     for (const n of snap.noises) radar?.hear(n.x, n.z, n.kind, performance.now());
@@ -661,15 +701,21 @@ if (net) {
   // A scattergun's pellets each arrive as their own shot, a few milliseconds apart: one sound per pull, not one per
   // pellet, or a blast stacks into a harsh chorus.
   const lastShotSound = new Map<number, number>();
-  net.onShot = (s) => {
-    if (s.id === net.id) return; // our own shot already played the moment we fired
-    const weapon = remotes.weaponOf(s.id);
-    shotFx.show(s, weapon, s.hitMech);
+  const showShot = (id: number, s: Shot, weapon: number, hitMech: boolean) => {
+    shotFx.show(s, weapon, hitMech);
     fallHints.shot(performance.now() / 1000, s.ox, s.oz, s.dx, s.dz, s.length);
     const now = performance.now();
-    if (now - (lastShotSound.get(s.id) ?? -Infinity) < 40) return;
-    lastShotSound.set(s.id, now);
+    if (now - (lastShotSound.get(id) ?? -Infinity) < 40) return;
+    lastShotSound.set(id, now);
     sound.play(sound.shotFor(weaponSet.weapons[weapon]?.id), { x: s.ox, y: s.oy, z: s.oz });
+  };
+  killReplay.onShot = showShot;
+  net.onShot = (s) => {
+    // Your own shots come back too: the replay draws them, live they already showed the moment you fired.
+    const weapon = s.id === net.id ? loadout.slots[firingSlot]! : remotes.weaponOf(s.id);
+    killReplay.shot(performance.now(), s.id, s, weapon, s.hitMech);
+    if (s.id === net.id || killReplay.playing) return;
+    showShot(s.id, s, weapon, s.hitMech);
   };
   net.onHit = (h) => {
     flashHitMarker(h.killed);
@@ -678,14 +724,23 @@ if (net) {
     shotFx.hitMech(h.x, h.y, h.z, loadout.slots[firingSlot]!);
   };
   net.onGrenade = (g) => {
-    if (g.id === net.id) return; // our own grenade is already in the air
+    killReplay.grenade(performance.now(), g.id, g.x, g.y, g.z, g.vx, g.vy, g.vz);
+    if (g.id === net.id || killReplay.playing) return; // our own grenade is already in the air
     grenades.spawn(g.x, g.y, g.z, g.vx, g.vy, g.vz);
     sound.play("grenadeThrow", { x: g.x, y: g.y, z: g.z });
   };
-  net.onExplode = (e) => showBlast(e.x, e.y, e.z);
+  net.onExplode = (e) => {
+    killReplay.explode(performance.now(), e.x, e.y, e.z);
+    if (!killReplay.playing) showBlast(e.x, e.y, e.z);
+  };
   // Your own start and landing already showed from prediction; anyone's ram or slam connecting shows here. The
   // warning ring for a strike is always the server's, yours too, so everyone sees the same spot.
   net.onAbility = (a) => {
+    killReplay.ability(performance.now(), a);
+    if (!killReplay.playing) showAbilityMoment(a);
+  };
+  killReplay.onAbility = (a) => showAbilityMoment(a);
+  const showAbilityMoment = (a: AbilityMessage) => {
     const own = a.id === net.id;
     if (a.kind === "rail") {
       if (a.event === "start") {
@@ -716,17 +771,29 @@ if (net) {
     ringView.setSchedule(r.ring);
     dropView.setDrops(r.drops);
     hud.setRoom(r, net.id);
-    if (r.state === "countdown") { hud.hideResult(); myPlace = null; }
+    if (r.state === "countdown") { hud.hideResult(); myPlace = null; killReplay.clear(); knockedFrom.clear(); }
     if (r.state === "active" && wasCountdown) hud.flash("GO", 900);
     progress = { ...progress, state: r.state };
   };
   net.onEliminated = (e) => {
+    if (e.killerId === net.id) knockedFrom.set(e.id, { x: mech.x, z: mech.z });
+    else if (e.killerId !== null && remotes.positionOf(e.killerId, killerAt)) knockedFrom.set(e.id, { x: killerAt.x, z: killerAt.z });
     hud.feed(e.left ? `${name(e.id)} dropped out` : e.killerId === null && e.id !== net.id ? `${name(e.id)} fell to the zone` : `${name(e.killerId)} knocked out ${name(e.id)}`);
-    if (e.id === net.id) myPlace = e.place;
+    if (e.id === net.id) {
+      myPlace = e.place;
+      // Knocked out by a mech you saw: the replay first, and the server keeps sending what is round the killer.
+      if (!e.left && killReplay.knockedOut(performance.now(), net.id, e.killerId)) spectateId = e.killerId!;
+      // Who got you and how (gate 14c), up as the replay or the spectate camera takes over.
+      if (!e.left) {
+        const words = knockoutWords(e.killerId, e.how, cardNames);
+        hud.showKnockout(words.title, words.by, words.how, hudStats.knockoutCardSeconds);
+      }
+    }
   };
   net.onResult = (r) => {
     const won = r.winnerId === net.id;
-    hud.showResult(won ? "Victory!" : r.winnerId === null ? "Nobody wins" : `${name(r.winnerId)} wins`, myPlace && !won ? myPlace : null, progress.total);
+    hud.hideKnockout();
+    hud.showResult(won ? "Victory!" : r.winnerId === null ? "Nobody wins" : `${name(r.winnerId)} wins`, myPlace && !won ? myPlace : null, progress.total, statLines(r.stats, name));
     sound.play("uiWhoosh");
   };
   net.onClose = (reason) => {
@@ -1014,10 +1081,17 @@ function frame(now: number): void {
   mechGroup.position.set(x, y, z);
   // With an instant body turn, face exactly where the camera looks, even between sim steps.
   mechGroup.rotation.y = mechStats.turnSpeedDegrees > 0 ? mech.bodyYaw : aim.yaw;
+  // While the kill replay plays it places everyone, your own mech too, from its recording; remotes.update then
+  // leaves them be. Recorded after, so the recording holds this frame as drawn.
+  if (killReplay.busy && progress.state !== "active") killReplay.cancel();
+  const replaying = killReplay.update(performance.now(), frameTime, remotes, ownModel, rig.camera, map.world);
   remotes.update(performance.now());
+  killReplay.record(performance.now(), net?.id ?? 0, ownModel, mech, health, remotes);
+  // Effects keep the replay's slow motion (tracers move on the sim step and stay at full speed).
+  const fxTime = frameTime * killReplay.timeScale;
 
   // Walking: your legs from your predicted speed, everyone else's from how they move on screen. Looks only.
-  fxDt = frameTime;
+  fxDt = fxTime;
   const ownStats = statsFor(mech.mech);
   const ownAbilityStats = abilityOf(mech.mech);
   gaitInput.vx = mech.vx; gaitInput.vz = mech.vz; gaitInput.yaw = mechGroup.rotation.y;
@@ -1025,13 +1099,18 @@ function frame(now: number): void {
   gaitInput.dashing = mech.dashTime > 0 || (mech.abilityTime > 0 && ownAbilityStats?.kind === "ram");
   gaitInput.braced = mech.abilityTime > 0 && ownAbilityStats?.kind === "barrage";
   gaitInput.walkSpeed = ownStats.walkSpeed; gaitInput.runSpeed = ownStats.runSpeed;
-  const ownFeet = walkMech(ownModel, gaitConfig, gaitInput, frameTime);
-  thrusters.tick(frameTime);
-  thrusters.drive(ownModel, mech.jetting && !health.dead, gaitInput.dashing, mech.grounded, mech.vy, frameTime);
-  if (ownFeet && !health.dead) footfalls(ownModel, ownFeet, true);
+  thrusters.tick(fxTime);
+  if (replaying) {
+    const o = killReplay.own; // your mech as it moved then
+    walkRemote(ownModel, mech.mech, o.vx, o.vy, o.vz, o.jetting, o.running, o.ability);
+  } else {
+    const ownFeet = walkMech(ownModel, gaitConfig, gaitInput, frameTime);
+    thrusters.drive(ownModel, mech.jetting && !health.dead, gaitInput.dashing, mech.grounded, mech.vy, frameTime);
+    if (ownFeet && !health.dead) footfalls(ownModel, ownFeet, true);
+  }
   remotes.forEachNear(mechGroup.position.x, mechGroup.position.z, gaitConfig.farMeters, walkRemote);
-  explosions.update(frameTime);
-  chunks.update(frameTime);
+  explosions.update(fxTime);
+  chunks.update(fxTime);
   water.update(frameTime);
   mortarWarnings.update(frameTime);
 
@@ -1042,7 +1121,12 @@ function frame(now: number): void {
   // A knocked out player (or someone who arrived mid match) watches a mech that is still standing.
   const spectating = net !== null && progress.state === "active" && health.dead;
   let viewX = x, viewY = y, viewZ = z;
-  if (spectating) {
+  if (replaying) {
+    viewX = killReplay.focus.x; viewY = killReplay.focus.y; viewZ = killReplay.focus.z;
+    input.takeClick();
+  } else if (killReplay.waiting) {
+    input.takeClick(); // your own wreck stays in view until the replay starts
+  } else if (spectating) {
     const alive = remotes.aliveIds();
     if (input.takeClick() && alive.length > 0) spectateId = alive[(Math.max(0, alive.indexOf(spectateId)) + 1) % alive.length]!;
     else if (!alive.includes(spectateId)) spectateId = alive[0] ?? 0;
@@ -1055,7 +1139,7 @@ function frame(now: number): void {
   mechGroup.visible = !(spectating && myPlace === null); // someone who never had a mech has nothing to show
   // The camera can ride a little of your walk's bob (camera.json walkBob, off by default).
   const bob = spectating ? 0 : (ownModel.gait?.bob ?? 0) * cameraStats.walkBob;
-  rig.update(viewX, viewY + cameraStats.pivotHeight + bob, viewZ, aim.yaw, aim.pitch, map.world, frameTime);
+  if (!replaying) rig.update(viewX, viewY + cameraStats.pivotHeight + bob, viewZ, aim.yaw, aim.pitch, map.world, frameTime);
   dressing.update(viewX, viewZ);
 
   const matchSeconds = progress.state === "active" ? progress.seconds + (performance.now() - progressAt) / 1000 : 0;
@@ -1114,8 +1198,10 @@ function frame(now: number): void {
   contactShadows.addObject(mechGroup);
   remotes.forEachModel(shadowUnder);
   contactShadows.endMoving();
-  fxSprites.update(frameTime, rig.camera.position);
+  deathFx.update(fxTime, rig.camera.position);
+  fxSprites.update(fxTime, rig.camera.position);
   hud.setLoadout(loadout, weaponSet.weapons, lootConfig.armorPlates, upgradeSet.upgrades);
+  hud.setReplay(killReplay.playing, killReplay.progress);
   setMechUpgrades(ownModel, loadout.upgrades, upgradeSet.upgrades);
   radar?.setRangeScale(upgradeScale(loadout, upgradeSet, "radarRange"));
   setMechGear(ownModel, weaponColors[loadout.slots[loadout.active]!] ?? weaponStats.color, loadout.armor);
@@ -1157,14 +1243,15 @@ function frame(now: number): void {
   } else {
     hud.setPrompt(tipNow);
   }
-  statusText.textContent = spectating
+  // While the kill replay is on, the knockout card and the REPLAY tag say what is going on, not "Watching X".
+  statusText.textContent = spectating && !killReplay.busy
     ? `${myPlace ? `You placed ${myPlace}. ` : ""}${spectateId ? `Watching ${name(spectateId)}. Click to switch.` : "Nobody left to watch."}`
     : health.dead && progress.state !== "active" ? `Destroyed. Back in ${Math.ceil(health.respawnIn)}...` : "";
   fuelBar.classList.toggle("locked", mech.fuel.locked);
   staminaBar.classList.toggle("locked", mech.stamina.locked);
   if (panel?.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection, net?.rttMs ?? 0, net ? remotes.viewDelayMs : 0);
 
-  shotFx.draw(rig.camera, frameTime);
+  shotFx.draw(rig.camera, fxTime);
   sunShadows.follow(rig.camera);
   if (dressing.cover) dressing.cover.group.visible = coverShown;
   gpuTimer.begin();
