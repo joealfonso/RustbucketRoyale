@@ -47,6 +47,11 @@
       "paint": "frame",
       "rusts": false
     },
+    "Jet_Glow": {
+      "zone": "torso",
+      "paint": "conduitGlow",
+      "glow": true
+    },
     "Leg_L": {
       "zone": "legs",
       "paint": "white"
@@ -111,6 +116,12 @@
     "Carbine": {
       "zone": "arms",
       "paint": "weapon"
+    },
+    "Carbine_Glow": {
+      "zone": "arms",
+      "paint": "bladeGlow",
+      "glow": true,
+      "noHit": true
     }
   }
 }

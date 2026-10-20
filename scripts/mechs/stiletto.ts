@@ -137,7 +137,18 @@ function makers(lod: Lod) {
   const bolts = (points: V3[], normal: V3, r = 0.04) =>
     near(...points.map((p) => cyl(sub(p, scale(normal, 0.015)), add(p, scale(normal, 0.03)), r, r, 6)));
 
-  return { lod, near, mid, run, bar, cyl, slab, block, bolts };
+  // A hydraulic ram from `a` to `b`: a fat cylinder most of the way, a thin rod out of it. `at` is where the rod
+  // leaves the cylinder, as a share of the length.
+  const ram = (a: V3, b: V3, r: number, at = 0.55) =>
+    merge(cyl(a, lerp(a, b, at + 0.05), r, r, 8, r * 0.25), cyl(lerp(a, b, at), b, r * 0.5, r * 0.5, 6));
+
+  // A pair of tendons from `a` to `b`, `apart` metres apart along `side`, each end on a cross pin `pin` long.
+  const tendons = (a: V3, b: V3, side: V3, apart: number, r: number, pin: number) => merge(
+    ...[-0.5, 0.5].map((k) => cyl(add(a, scale(side, k * apart)), add(b, scale(side, k * apart)), r, r, 6)),
+    ...[a, b].map((p) => cyl(sub(p, scale(side, pin / 2)), add(p, scale(side, pin / 2)), r * 1.5, r * 1.5, 8)),
+  );
+
+  return { lod, near, mid, run, bar, cyl, slab, block, bolts, ram, tendons };
 }
 
 // Leg joints, the same as the walk rig has always used (scripts/mechs/joints.ts), right side.
@@ -151,7 +162,7 @@ type Zone = "legs" | "arms" | "torso";
 interface Part { name: string; zone: Zone; paint: string; glow?: true; rusts?: false; noHit?: true; mesh: MeshData }
 
 function build(lod: Lod): Part[] {
-  const { near, mid, run, bar, cyl, slab, block, bolts } = makers(lod);
+  const { near, mid, run, bar, cyl, slab, block, bolts, ram, tendons } = makers(lod);
 
   // ---- Legs: thigh forward to the knee, shin back to the hock, a long foot forward to three talons and a back
   // spur. Built on the right, then mirrored. Camo alternates side to side: blue outer thigh plate and shin plate on
@@ -213,8 +224,23 @@ function build(lod: Lod): Part[] {
     talon([0.24, 0.06, -0.49], [0.39, 0.1, -0.17], [0.18, 0.012, -0.6]),
     talon([0.42, 0.065, 0.15], [0.42, 0.1, -0.08], [0.42, 0.012, 0.27]),
   );
+  // Toe knuckles part way down each forward talon, so the toes read as jointed fingers that close on the ground.
+  const knuckle = (start: V3, tip: V3) => {
+    const at = lerp(start, tip, 0.45), side = norm(cross(norm(sub(tip, start)), Y));
+    return cyl(sub(at, scale(side, 0.075)), add(at, scale(side, 0.075)), 0.075, 0.075, 8);
+  };
+  const knuckles = near(
+    knuckle([0.42, 0.1, -0.16], [0.42, 0.06, -0.6]), knuckle([0.45, 0.1, -0.17], [0.6, 0.06, -0.49]), knuckle([0.39, 0.1, -0.17], [0.24, 0.06, -0.49]),
+  );
+  // Exposed muscle. Two tendons down the back of the thigh pull it back from the hip, two along the top of the shin
+  // store a landing's energy and snap the hock straight, and a ram on the back of the foot pulls the spur claw down
+  // to grip. Each stays on its own bone, so the walk never stretches one across a joint.
+  const thighTendons = near(tendons(onThigh(0.1, scale(thighBack, 0.215)), onThigh(0.8, scale(thighBack, 0.17)), X, 0.18, 0.024, 0.26));
+  const shinTendons = mid(tendons(onShin(0.12, scale(shinBack, 0.135)), onShin(0.84, scale(shinBack, 0.105)), X, 0.09, 0.022, 0.16));
+  const footBack = scale(footTop, -1);
+  const spurRam = mid(ram(onFoot(0.12, scale(footBack, 0.11)), onFoot(0.64, scale(footBack, 0.095)), 0.04));
   const legFrameR = merge(
-    hipDrum, thighPlateBolts,
+    hipDrum, thighPlateBolts, knuckles, thighTendons, shinTendons, spurRam,
     cyl([0.28, KNEE[1], KNEE[2]], [0.56, KNEE[1], KNEE[2]], 0.12, 0.12, 10, 0.025),
     // The hock and ball pins sit inside the shell's outline, so far off they are left out.
     mid(cyl([0.31, HOCK[1], HOCK[2]], [0.53, HOCK[1], HOCK[2]], 0.11, 0.11, 10, 0.02)),
@@ -234,8 +260,27 @@ function build(lod: Lod): Part[] {
   const chestRing = (y: number, z: number, w: number, d: number) => ring([0, y, z], X, Z, w, d, 0.14);
   // The chest leans forward over the hips like a running bird's.
   const chestLower = loft([chestRing(2.3, 0.04, 0.5, 0.44), chestRing(2.6, -0.05, 0.94, 0.78)]);
-  const chestUpper = loft([chestRing(2.66, -0.08, 1.02, 0.82), chestRing(2.96, -0.12, 1.12, 0.8), chestRing(3.18, -0.08, 0.8, 0.56)]);
-  const chestCore = mid(loft([chestRing(2.48, -0.03, 0.8, 0.66), chestRing(2.8, -0.08, 0.98, 0.74)]));
+  // Up close the upper chest is two shells, the top one a step in, with a second seam where the frame shows: the
+  // breastplate and the collar armour come off separately. Far off it is one shell, as the seam would be a slit of sky.
+  const chestUpper = lod === 2
+    ? loft([chestRing(2.66, -0.08, 1.02, 0.82), chestRing(2.96, -0.12, 1.12, 0.8), chestRing(3.18, -0.08, 0.8, 0.56)])
+    : merge(
+      loft([chestRing(2.66, -0.08, 1.02, 0.82), chestRing(2.935, -0.116, 1.11, 0.8)]),
+      loft([chestRing(2.985, -0.115, 1.08, 0.77), chestRing(3.18, -0.08, 0.8, 0.56)]),
+    );
+  const chestCore = mid(loft([chestRing(2.48, -0.03, 0.8, 0.66), chestRing(2.8, -0.08, 0.98, 0.74), chestRing(3.0, -0.12, 1.0, 0.7)]));
+  // Air intakes either side of the keel, under the breastplate, that cool the power core: a dark mouth crossed by
+  // two white louvres, tipped back to lie on the sloping lower chest.
+  const intakeAt: V3 = [0.19, 2.47, -0.335];
+  const intakeR = turn(merge(
+    block(intakeAt, [0.15, 0.2, 0.07], 0.015),
+  ), [-0.714, 0, 0], intakeAt);
+  const louvresR = near(turn(merge(
+    ...[-0.045, 0.035].map((dy) => block(add(intakeAt, [0, dy, -0.04]), [0.17, 0.045, 0.03], 0)),
+  ), [-0.714, 0, 0], intakeAt));
+  // Rams from the front of the pelvis up into the chest: with the struts behind the spine they hold the chest's
+  // lean, and they show the waist is a machine, not a wasp's.
+  const waistRam = (x: number) => mid(ram([x, 1.84, -0.13], [x * 0.85, 2.32, -0.09], 0.04, 0.5));
   // Collar plates either side of the neck, so the chest top is not a flat lid. The right one is white, the left blue.
   const collarR = turn(block([0.28, 3.19, -0.1], [0.3, 0.1, 0.46], 0.03), [0, 0, -0.25], [0.28, 3.19, -0.1]);
   // The keel: a prow of armour down the breastbone, the chest's sharpest edge.
@@ -260,7 +305,8 @@ function build(lod: Lod): Part[] {
     mid(cyl([0, 1.95, 0.04], [0, 2.01, 0.04], 0.2, 0.2, 10), cyl([0, 2.11, 0.04], [0, 2.17, 0.04], 0.2, 0.2, 10)), // ribs
     cyl([0, 3.12, -0.02], [0, 3.38, -0.02], 0.1, 0.1, 8), // neck
     mid(cyl([0, 3.17, -0.02], [0, 3.23, -0.02], 0.15, 0.15, 10)), // the neck's turning ring
-    chestCore, waistStrut(0.13), waistStrut(-0.13),
+    chestCore, waistStrut(0.13), waistStrut(-0.13), waistRam(0.2), waistRam(-0.2),
+    mid(intakeR), mid(mirrorX(intakeR)),
   );
 
   // ---- Head: a raptor's skull, deepest just behind the eyes and running forward to a low beak. A chin plate under
@@ -273,6 +319,14 @@ function build(lod: Lod): Part[] {
   );
   const visor = loft([ring([0, 3.5, -0.06], X, Y, 0.43, 0.075, 0.015), ring([0, 3.455, -0.54], X, Y, 0.25, 0.065, 0.015)]);
   const fin = slab([0, 0, 0], Z, Y, [[-0.32, 3.6], [0.9, 4.2], [0.96, 4.13], [0.14, 3.52]], 0.09, 0.025);
+  // A sensor pod on each cheek behind the visor, looking sideways for flankers: a dark housing with a hood over a
+  // round green lens. The fin sits in a clamp along the crown, so it reads as bolted on, not grown.
+  const podR = mid(
+    cyl([0.14, 3.46, 0.05], [0.235, 3.46, 0.05], 0.085, 0.085, 10, 0.015),
+    near(block([0.2, 3.545, 0.04], [0.12, 0.03, 0.2], 0)),
+  );
+  const lensR = mid(cyl([0.235, 3.46, 0.05], [0.25, 3.46, 0.05], 0.05, 0.05, 10));
+  const finClamp = near(block([0, 3.625, 0.0], [0.15, 0.08, 0.28], 0.02));
 
   // ---- Jump pack: a white housing between the shoulders with an air intake on top, blue camo plates, two big
   // stabilizer fins canted out above the shoulders, and two flared nozzles under it on gimbals.
@@ -285,6 +339,17 @@ function build(lod: Lod): Part[] {
   const packFinR = turn(slab([0.28, 0, 0], Z, Y, [[0.34, 3.04], [0.82, 3.04], [1.34, 4.1], [1.2, 4.17]], 0.09, 0.025), [0, 0, -0.38], finPivot);
   // The fin's root block, where it is clamped to the pack.
   const finRootR = turn(block([0.28, 3.08, 0.6], [0.16, 0.12, 0.42], 0.02), [0, 0, -0.38], finPivot);
+  // A ram from the pack's top to each fin's inner face cants the fin to steer a jump.
+  const finRamR = mid(ram([0.12, 3.2, 0.84], [0.4, 3.49, 0.85], 0.035, 0.5));
+  // The fuel line down the pack's bare left side, from the tank to the nozzle bar, held by two clamps.
+  const fuelLine = near(
+    cyl([-0.375, 3.02, 0.68], [-0.375, 2.6, 0.7], 0.03, 0.03, 6),
+    cyl([-0.375, 2.6, 0.7], [-0.27, 2.47, 0.72], 0.03, 0.03, 6),
+    ...[2.92, 2.7].map((y) => block([-0.37, y, 0.69], [0.05, 0.05, 0.09], 0)),
+  );
+  // A hatch over the fuel cell on the pack's back, opposite the blue plate, with a dark grip to pull it by.
+  const hatch = near(block([0.15, 2.92, 0.79], [0.24, 0.26, 0.04], 0.015));
+  const hatchGrip = near(block([0.15, 2.84, 0.82], [0.12, 0.035, 0.03], 0));
   const packCamo = merge(
     packFinR, mirrorX(packFinR),
     block([0.36, 2.76, 0.56], [0.06, 0.52, 0.32], 0.015), // right side panel
@@ -292,10 +357,16 @@ function build(lod: Lod): Part[] {
   );
   // Nozzles flare wider at the exhaust, which is the bottom of the cone; a collar holds each to its gimbal.
   const nozzleTilt: V3 = [-0.3, 0, 0.2], nozzleTop: V3 = [0.22, 2.46, 0.66];
+  // Inside the bell's mouth a cone (the centre body that shapes the exhaust) hangs over a glowing throat, and two
+  // vanes across the flow tip the thrust fore and aft: the vector in vector thrust. A band stiffens the bell.
   const nozzleR = turn(merge(
     cyl([0.22, 2.46, 0.66], [0.22, 2.04, 0.66], 0.13, 0.21, 10, 0.02),
     mid(cyl([0.22, 2.53, 0.66], [0.22, 2.43, 0.66], 0.165, 0.165, 10)),
+    near(cyl([0.22, 2.24, 0.66], [0.22, 2.18, 0.66], 0.2, 0.2, 10)),
+    mid(cyl([0.22, 2.03, 0.66], [0.22, 1.86, 0.66], 0.09, 0.025, 10)),
+    mid(...[0.12, 0.32].map((x) => slab([x, 0, 0], Z, Y, [[0.5, 2.04], [0.82, 2.04], [0.78, 1.93], [0.54, 1.93]], 0.035, 0.012))),
   ), nozzleTilt, nozzleTop);
+  const throatR = turn(cyl([0.22, 2.045, 0.66], [0.22, 2.025, 0.66], 0.155, 0.155, 12), nozzleTilt, nozzleTop);
   const jets = merge(
     nozzleR, mirrorX(nozzleR),
     block([0, 2.48, 0.66], [0.52, 0.14, 0.26], 0.03), // the bar that carries both nozzles
@@ -306,6 +377,7 @@ function build(lod: Lod): Part[] {
     near(...[2.585, 2.62, 2.655].map((y) => block([0.14, y, 0.795], [0.26, 0.02, 0.025], 0))),
     near(block([0, 3.29, 0.5], [0.34, 0.02, 0.2], 0)), // the dark intake mouth under the slats
     bolts([[0.27, 3.12, 0.77], [-0.27, 3.12, 0.77], [0.27, 2.48, 0.77], [-0.27, 2.48, 0.77]], Z, 0.035), // back cover
+    finRamR, mirrorX(finRamR), fuelLine, hatchGrip,
   );
 
   // ---- Arms. Right: a slim arm with the blade emitter on the wrist. Left: the same shoulder with a burst carbine
@@ -319,6 +391,9 @@ function build(lod: Lod): Part[] {
     block([1.16, 2.86, 0.06], [0.07, 0.24, 0.52], 0.022), // the lip that hangs over the arm's top
   ), [0, 0, -0.32], pauldronPivot);
   const pauldronBoltsR = turn(bolts([[0.9, 3.12, -0.12], [0.9, 3.12, 0.24]], Y, 0.035), [0, 0, -0.32], pauldronPivot);
+  // The hinge plate the pauldron rides on, a dark layer showing at its front and back edges: the armour lifts on it
+  // as the arm rises.
+  const pauldronHingeR = near(turn(block([0.96, 2.92, 0.06], [0.3, 0.06, 0.72], 0.02), [0, 0, -0.32], pauldronPivot));
   const upperArmR = merge(
     bar(SHOULDER_R, ELBOW_R, Z, [0.22, 0.24], [0.17, 0.19], 0.03),
     mid(bar(onUpper(0.2, scale(upperOut, 0.1)), onUpper(0.75, scale(upperOut, 0.085)), upperOut, [0.05, 0.17], [0.05, 0.14], 0.015)), // outer plate
@@ -338,13 +413,24 @@ function build(lod: Lod): Part[] {
   const armFrameR = merge(
     cyl([0.64, SHOULDER_R[1], SHOULDER_R[2]], [0.9, SHOULDER_R[1], SHOULDER_R[2]], 0.16, 0.16, 10, 0.025),
     cyl([ELBOW_R[0] - 0.13, ELBOW_R[1], ELBOW_R[2]], [ELBOW_R[0] + 0.13, ELBOW_R[1], ELBOW_R[2]], 0.115, 0.115, 10, 0.02),
-    elbowPistonR, pauldronBoltsR,
+    elbowPistonR, pauldronBoltsR, pauldronHingeR,
   );
-  const armFrame = merge(armFrameR, mirrorX(armFrameR), cyl([WRIST_L[0] - 0.1, ...WRIST_L.slice(1)] as V3, [WRIST_L[0] + 0.1, ...WRIST_L.slice(1)] as V3, 0.09, 0.09, 10, 0.015));
+  // A ram along the inside of each forearm, from the elbow to the wrist, that turns the wrist so the weapon can
+  // sweep. The left forearm ends higher and shorter, so its ram follows it.
+  const wristRams = near(
+    ram([0.99, 2.53, -0.08], [1.08, 2.52, -0.6], 0.035),
+    ram([-0.99, 2.53, -0.04], [-1.06, 2.46, -0.38], 0.035),
+  );
+  const armFrame = merge(armFrameR, mirrorX(armFrameR), wristRams, cyl([WRIST_L[0] - 0.1, ...WRIST_L.slice(1)] as V3, [WRIST_L[0] + 0.1, ...WRIST_L.slice(1)] as V3, 0.09, 0.09, 10, 0.015));
   // Power to the weapons: a core in each elbow drum, fed by a line down the back of the upper arm.
   const armConduitsR = merge(
     cyl([ELBOW_R[0] + 0.125, ELBOW_R[1], ELBOW_R[2]], [ELBOW_R[0] + 0.155, ELBOW_R[1], ELBOW_R[2]], 0.06, 0.06, 10),
     mid(bar(onUpper(0.2, scale(upperFront, -0.12)), onUpper(0.8, scale(upperFront, -0.095)), upperOut, [0.045, 0.03], [0.045, 0.03], 0)),
+  );
+  // On from the elbow under each forearm, into the blade emitter on the right and the carbine's cell on the left.
+  const forearmConduits = near(
+    bar([1.13, 2.275, -0.02], [1.19, 2.285, -0.66], X, [0.05, 0.03], [0.05, 0.03], 0),
+    bar([-1.13, 2.275, -0.02], [-1.17, 2.29, -0.2], X, [0.05, 0.03], [0.05, 0.03], 0),
   );
   const emitter = merge(
     block([1.2, 2.42, -0.8], [0.26, 0.3, 0.24], 0.035),
@@ -352,6 +438,9 @@ function build(lod: Lod): Part[] {
     mid(cyl([1.2, 2.42, -0.66], [1.2, 2.42, -0.7], 0.135, 0.135, 10)), // collar clamping it to the wrist
     // Heat sinks on top that shed the blade's heat.
     near(...[-0.73, -0.8, -0.87].map((z) => block([1.2, 2.6, z], [0.22, 0.07, 0.04], 0))),
+    // Two guide prongs above and below the blade's root that hold its field in shape.
+    mid(bar([1.2, 2.56, -0.88], [1.2, 2.545, -1.13], X, [0.07, 0.05], [0.05, 0.04], 0.015)),
+    mid(bar([1.2, 2.285, -0.88], [1.2, 2.31, -1.08], X, [0.07, 0.05], [0.05, 0.04], 0.015)),
   );
   // The blade: a flat tapered plate held straight forward, longer than the forearm, its tip region round Mount_Gun.
   const blade = slab([1.2, 0, 0], Z, Y, [[-0.98, 2.5], [-0.98, 2.34], [-1.36, 2.37], [-1.86, 2.44], [-1.46, 2.52]], 0.08, 0.02);
@@ -361,20 +450,29 @@ function build(lod: Lod): Part[] {
     mid(block([-1.2, 2.34, -0.66], [0.1, 0.08, 0.26], 0)), // sight
     cyl([-1.2, 2.2, -0.84], [-1.2, 2.2, -1.07], 0.055, 0.055, 8), // barrel
     cyl([-1.2, 2.2, -1.06], [-1.2, 2.2, -1.2], 0.085, 0.085, 8, 0.015), // muzzle shroud
-    // Cooling rings that shed the barrel's heat between bursts.
-    near(...[-0.9, -0.96].map((z) => cyl([-1.2, 2.2, z - 0.015], [-1.2, 2.2, z + 0.015], 0.075, 0.075, 8))),
+    // Cooling rings that shed the barrel's heat between bursts, and fins on the receiver's top for the emitter in it.
+    near(...[-0.9, -0.95, -1.0].map((z) => cyl([-1.2, 2.2, z - 0.015], [-1.2, 2.2, z + 0.015], 0.075, 0.075, 8))),
+    near(...[-0.43, -0.36, -0.29].map((z) => block([-1.2, 2.32, z], [0.16, 0.05, 0.03], 0))),
+    // The outer cover over the receiver's works, a layer proud of it.
+    mid(block([-1.322, 2.18, -0.52], [0.035, 0.18, 0.5], 0.012)),
+  );
+  // The laser's lens in the muzzle shroud, and a window on the cell that shows it is charged.
+  const carbineGlow = merge(
+    cyl([-1.2, 2.2, -1.2], [-1.2, 2.2, -1.215], 0.05, 0.05, 10),
+    mid(block([-1.28, 1.98, -0.42], [0.02, 0.1, 0.12], 0)),
   );
 
   return [
-    { name: "Torso", zone: "torso", paint: "white", mesh: merge(chestLower, chestUpper, collarR, hipGuard) },
+    { name: "Torso", zone: "torso", paint: "white", mesh: merge(chestLower, chestUpper, collarR, hipGuard, louvresR, mirrorX(louvresR)) },
     { name: "Torso_Camo", zone: "torso", paint: "blue", mesh: merge(keel, chestPlate, flankPlate, mirrorX(collarR)) },
-    { name: "Frame", zone: "torso", paint: "frame", rusts: false, mesh: torsoFrame },
+    { name: "Frame", zone: "torso", paint: "frame", rusts: false, mesh: merge(torsoFrame, podR, mirrorX(podR), finClamp) },
     { name: "Sensor", zone: "torso", paint: "white", mesh: head },
     { name: "Fin", zone: "torso", paint: "blue", mesh: fin },
-    { name: "Visor", zone: "torso", paint: "visorGlow", glow: true, mesh: visor },
-    { name: "Pack", zone: "torso", paint: "white", mesh: merge(pack, finRootR, mirrorX(finRootR)) },
+    { name: "Visor", zone: "torso", paint: "visorGlow", glow: true, mesh: merge(visor, lensR, mirrorX(lensR)) },
+    { name: "Pack", zone: "torso", paint: "white", mesh: merge(pack, finRootR, mirrorX(finRootR), hatch) },
     { name: "Pack_Camo", zone: "torso", paint: "blue", mesh: packCamo },
     { name: "Jets", zone: "torso", paint: "frame", rusts: false, mesh: jets },
+    { name: "Jet_Glow", zone: "torso", paint: "conduitGlow", glow: true, mesh: merge(throatR, mirrorX(throatR)) },
     { name: "Leg_L", zone: "legs", paint: "white", mesh: mirrorX(merge(legShellR, thighPlate)) },
     { name: "Leg_R", zone: "legs", paint: "white", mesh: merge(legShellR, kneeCap) },
     { name: "Leg_Camo", zone: "legs", paint: "blue", mesh: merge(thighPlate, shinPlate, mirrorX(kneeCap), mirrorX(footGuard)) },
@@ -385,10 +483,12 @@ function build(lod: Lod): Part[] {
     { name: "Arm_R", zone: "arms", paint: "white", mesh: armR },
     { name: "Arm_Camo", zone: "arms", paint: "blue", noHit: true, mesh: armCamo },
     { name: "Arm_Frame", zone: "arms", paint: "frame", rusts: false, noHit: true, mesh: armFrame },
-    { name: "Arm_Conduits", zone: "arms", paint: "conduitGlow", glow: true, noHit: true, mesh: merge(armConduitsR, mirrorX(armConduitsR)) },
+    { name: "Arm_Conduits", zone: "arms", paint: "conduitGlow", glow: true, noHit: true, mesh: merge(armConduitsR, mirrorX(armConduitsR), forearmConduits) },
     { name: "Emitter", zone: "arms", paint: "frame", rusts: false, mesh: emitter },
     { name: "Blade", zone: "arms", paint: "bladeGlow", glow: true, mesh: blade },
     { name: "Carbine", zone: "arms", paint: "weapon", mesh: carbine },
+    // `noHit`: it lies inside the carbine's own box.
+    { name: "Carbine_Glow", zone: "arms", paint: "bladeGlow", glow: true, noHit: true, mesh: carbineGlow },
   ];
 }
 const scheme = { white: "#E8EAEE", blue: "#2F6FD0", frame: "#22303F", visorGlow: "#5CFF7A", conduitGlow: "#FF8A1F", bladeGlow: "#4FC3FF" };

@@ -149,7 +149,8 @@ function build(lod: Lod): Record<string, MeshData> {
   const drum = (c: V3, r: number, length: number, axis: "x" | "y" | "z", n = 8, end = r) => cylinder(c, r, length, axis, sides(n), end);
   const rod = (a: V3, b: V3, r: number, n = 6) => along(cylinder([0, 0, 0], r, dist(a, b), "z", sides(n)), a, b);
   // A hydraulic ram: a fat cylinder for the first part of its length, a thinner polished rod for the rest.
-  const ram = (a: V3, b: V3, r: number) => (!near ? rod(a, b, r * 0.8) : merge(rod(a, lerp(a, b, 0.56), r), rod(lerp(a, b, 0.5), b, r * 0.6)));
+  // Up close the cylinder ends in a gland collar, where the rod's seal sits.
+  const ram = (a: V3, b: V3, r: number) => (!near ? rod(a, b, r * 0.8) : merge(rod(a, lerp(a, b, 0.56), r), rod(lerp(a, b, 0.5), b, r * 0.6), rod(lerp(a, b, 0.53), lerp(a, b, 0.6), r * 1.3)));
   const nearOnly = (...m: MeshData[]) => (near ? merge(...m) : empty());
   const notFar = (...m: MeshData[]) => (lod < 2 ? merge(...m) : empty());
   // A bolt head, standing out of a surface along an axis. Bolts hold plates on, so they sit along plate edges.
@@ -172,6 +173,26 @@ function build(lod: Lod): Record<string, MeshData> {
   // ---- Hull (torso zone). The camouflage is plates in two paints: tan plates on the tan hull (Torso), rust brown
   // ones beside them (Hull_Camo), laid over the hull with a seam between each, so the pattern breaks up the mass.
   const skirtTop = (x: number) => [-0.34, 0, 0.34].map((z) => bolt([x, 2.31, z], "x")); // they hold the skirt on
+  // Spare shells for the mortar, in two crates strapped into a rack on each side of the rear deck, clear of the
+  // traverse ring. The rack's end frames and top rail are dark steel; the crates take the camouflage paints.
+  const crates = (s: number) => [0.56, 0.84].map((z) => block([s * 0.95, 2.585, z], [0.28, 0.2, 0.24], 0.025));
+  const rack = (s: number) => merge(
+    ...[0.4, 1.0].map((z) => box([s * 0.95, 2.58, z], [0.36, 0.2, 0.03])),
+    box([s * 1.12, 2.66, 0.7], [0.03, 0.04, 0.63]),
+    box([s * 0.95, 2.69, 0.7], [0.3, 0.012, 0.05]), // the strap over both crates
+  );
+  // The power plant breathes out of the housings on the hull back into a stack beside each, bent back at the top so
+  // the hot air blows away from the gun. A clamp ties each stack to the hull.
+  const tilt = 30 * deg;
+  const stackTip = (s: number, m: MeshData) => turn(m, [tilt, 0, 0], [s * 0.84, 2.7, 1.44]);
+  const stack = (s: number) => merge(
+    drum([s * 0.84, 2.31, 1.44], 0.12, 0.78, "y", 8),
+    stackTip(s, drum([s * 0.84, 2.77, 1.44], 0.12, 0.14, "y", 8)),
+    nearOnly(
+      drum([s * 0.76, 2.0, 1.38], 0.07, 0.2, "x", 6), // the pipe from the housing
+      drum([s * 0.84, 2.25, 1.44], 0.145, 0.06, "y", 8), box([s * 0.84, 2.25, 1.32], [0.08, 0.06, 0.1]), // clamp and its bracket
+    ),
+  );
   const torso = merge(
     slab(hullOutline, "x", -hullHalf, hullHalf, 0.08),
     // The flat plate on the hull front that carries the serial number (data/mechKits.json serials): nothing on it.
@@ -184,6 +205,7 @@ function build(lod: Lod): Record<string, MeshData> {
     block([1.23, 1.78, 0], [0.08, 0.38, 0.92], 0.03), // lower skirt, right
     // Exhaust housings on the hull back, for the power plant under the deck.
     notFar(...[-0.45, 0.45].map((x) => block([x, 2.06, 1.37], [0.4, 0.34, 0.14], 0.03))),
+    notFar(...crates(-1)),
   );
   const hullCamo = merge(
     bothSides(hullPlate(glacisTop, glacisFoot, 0.62, 0.34, 0.07, 0.04, 0.96)), // inner glacis plates beside the sensor
@@ -195,6 +217,7 @@ function build(lod: Lod): Record<string, MeshData> {
     block([-1.23, 1.78, 0], [0.08, 0.38, 0.92], 0.03), // lower skirt, left
     notFar(block([0, 2.12, 1.34], [0.4, 0.36, 0.08], 0.03)), // rear plate between the exhausts
     notFar(hullPlate([2.4, 1.05], [2.3, 1.3], 0, 1.4, 0.05, 0.1, 0.9)), // rear deck slope
+    notFar(...crates(1)),
   );
 
   // Heat scoring round the weapon mounts: on the deck in front of the traverse ring where the muzzle blast lands,
@@ -204,6 +227,7 @@ function build(lod: Lod): Record<string, MeshData> {
     scorchFront,
     notFar(bothSides(deckPatch(2.4, [[0.68, -0.4], [1.1, -0.42], [1.12, -0.68], [0.88, -0.7], [0.66, -0.56]]))), // round the laser pedestals
     notFar(bothSides(turn(prism([[-0.12, -0.2], [0.13, -0.18], [0.16, 0.12], [0.02, 0.22], [-0.14, 0.1]], "y", 0, 0.03), [glacisAngle, 0, 0], [0, 0, 0], onGlacis(0.97, -1.06, 0.07)))),
+    nearOnly(...[-1, 1].map((s) => stackTip(s, drum([s * 0.84, 2.835, 1.44], 0.09, 0.02, "y", 6)))), // the stacks' sooty mouths
   );
 
   // The hull's own joints, under the paint (frame): the belly the mech crawls on, the jump-jet nozzles under the
@@ -223,28 +247,45 @@ function build(lod: Lod): Record<string, MeshData> {
     notFar(...[-0.7, 0.7].map((x) => drum([x, 1.64, 1.2], 0.15, 0.2, "y", 8, 0.1))), // jump-jet nozzles
     // Exhaust louvres: the hot air leaves through slats across each housing.
     nearOnly(...[-0.45, 0.45].flatMap((x) => [1.96, 2.06, 2.16].map((y) => box([x, y, 1.455], [0.32, 0.045, 0.04])))),
+    notFar(stack(-1), stack(1)),
+    nearOnly(rack(-1), rack(1)),
+    // The upper skirts hang on a backing plate that shows a dark step round them: the armour is in layers.
+    nearOnly(...[-1, 1].map((s) => chamferBox([s * 1.17, 2.18, 0], [0.04, 0.46, 1.14], 0.015))),
   );
 
   // ---- Sensor turret (torso zone): a low armoured box set into the glacis, under a sloped hood that overhangs the
-  // lenses, with cheek plates either side of the lens slot.
+  // lenses. Cheek plates either side and a lip below box the lens slot in, so the lenses sit back in a recess where
+  // counter fire glances off the armour round them.
   const sensor = merge(
     block([0, 2.42, -0.9], [0.72, 0.3, 0.56], 0.05),
     slab([[2.5, -1.27], [2.5, -0.62], [2.7, -0.6], [2.72, -0.92]], "x", -0.42, 0.42, 0.04),
-    notFar(bothSides(block([0.37, 2.42, -1.05], [0.08, 0.22, 0.32], 0.02))),
+    notFar(bothSides(block([0.37, 2.42, -1.09], [0.08, 0.24, 0.42], 0.02))),
+    nearOnly(chamferBox([0, 2.285, -1.24], [0.66, 0.05, 0.12], 0.015)), // the lip under the slot
     nearOnly(...[-0.28, 0.28].map((x) => bolt([x, 2.72, -0.72], "y"))), // the hood's hinge bolts
   );
-  // A multi-lens array under the hood, facing forward: one big lens and four small.
-  const lens = (c: V3, r: number, n: number) => (near ? drum(c, r, 0.08, "z", n) : box(c, [r * 1.8, r * 1.8, 0.08]));
+  // The array in the slot, facing forward: a big ranging lens in a steel bezel, a pair of small lenses stacked on
+  // each side of it and a wide-angle lens at each end. The slot's back wall is dark steel (Frame).
+  const lens = (c: V3, r: number, n: number) => (near ? drum(c, r, 0.06, "z", n) : box(c, [r * 1.8, r * 1.8, 0.06]));
   const sensorLenses = lod === 2
     ? box([0, 2.41, -1.2], [0.6, 0.12, 0.08])
-    : merge(lens([0, 2.41, -1.2], 0.075, 8), ...[-1, 1].flatMap((s) => [lens([s * 0.15, 2.43, -1.2], 0.05, 6), lens([s * 0.26, 2.39, -1.2], 0.045, 6)]));
+    : merge(
+      lens([0, 2.4, -1.215], 0.085, 10),
+      ...[-1, 1].flatMap((s) => [lens([s * 0.15, 2.445, -1.21], 0.045, 8), lens([s * 0.15, 2.355, -1.21], 0.045, 8), lens([s * 0.265, 2.4, -1.21], 0.05, 8)]),
+    );
+  const sensorSlot = nearOnly(box([0, 2.4, -1.19], [0.62, 0.2, 0.02]), drum([0, 2.4, -1.2], 0.11, 0.03, "z", 10));
 
   // ---- Rail mortar (arms zone). The traverse ring sits in the middle of the deck; the turret block on it carries
   // cheek plates that hold the trunnion, and the twin barrels hinge there and rise toward -Z. The rust brown bustle
   // behind is the shell magazine, which also balances the long barrels.
   const turretRing = drum([0, 2.51, ringZ], 0.72, 0.22, "y", 16);
   const turretBand = drum([0, 2.53, ringZ], 0.76, 0.1, "y", 16); // the pilot's marking, a band round the ring
-  const turret = slab([[2.62, -0.3], [2.62, 1.05], [2.85, 1.05], [2.95, 0.9], [2.95, 0.05], [2.8, -0.3]], "x", -0.64, 0.64, 0.05);
+  // The turret breathes the gun's heat out through louvres low on each side, under the cheeks: tan slats over a
+  // soot-black opening, so the scorch round the mount has a source.
+  const ventSlats = nearOnly(...[-1, 1].flatMap((s) => [0.31, 0.43, 0.55, 0.67, 0.79].map((z) => box([s * 0.66, 2.76, z], [0.05, 0.15, 0.035]))));
+  const turret = merge(
+    slab([[2.62, -0.3], [2.62, 1.05], [2.85, 1.05], [2.95, 0.9], [2.95, 0.05], [2.8, -0.3]], "x", -0.64, 0.64, 0.05),
+    ventSlats,
+  );
   const cheek: [number, number][] = [[2.85, 0.12], [2.85, 0.98], [3.14, 0.86], [3.2, 0.5], [3.12, 0.22]];
   const turretCamo = merge(
     bothSides(slab(cheek, "x", 0.48, 0.66, 0.03)),
@@ -252,32 +293,52 @@ function build(lod: Lod): Record<string, MeshData> {
     nearOnly(...[-1, 1].flatMap((s) => [[2.92, 0.27], [3.05, 0.83]].map(([y, z]) => bolt([s * 0.67, y!, z!], "x")))), // round the trunnion
   );
   const turretFrontAngle = -Math.atan2(0.15, 0.35);
-  // Soot on the turret front under the barrels, on the lip below it, and a sooty band behind each muzzle brake.
+  // Soot on the turret front under the barrels, on the lip below it, in the vents, a sooty band behind each muzzle
+  // brake and the black bore in each muzzle.
   const turretScorch = merge(
     turn(box([0, 0, 0], [0.9, 0.06, 0.3]), [turretFrontAngle, 0, 0], [0, 0, 0], [0, 2.875 + 0.03 * Math.cos(turretFrontAngle), -0.125 + 0.03 * Math.sin(turretFrontAngle)]),
     notFar(box([0, 2.71, -0.33], [1.0, 0.14, 0.08])),
     notFar(raise(merge(...[-barrelX, barrelX].map((x) => drum(at(x, 0, -2.31), 0.135, 0.22, "z", 10))))),
+    nearOnly(...[-1, 1].map((s) => box([s * 0.645, 2.76, 0.55], [0.02, 0.16, 0.6]))),
+    nearOnly(raise(merge(...[-barrelX, barrelX].map((x) => drum(at(x, 0, -2.705), 0.07, 0.02, "z", 6))))),
   );
 
   const oneBarrel = (x: number) => merge(
     block(at(x, 0, 0.18), [0.4, 0.4, 0.74], 0.06), // breech
-    block(at(x, 0, -0.56), [0.32, 0.32, 0.74], 0.05), // jacket
+    nearOnly(chamferBox(at(x, 0, -0.2), [0.44, 0.44, 0.06], 0.02)), // the breech ring the barrel screws into
+    block(at(x, 0, -0.56), [0.32, 0.32, 0.74], 0.05), // jacket: the recoil housing the barrel slides back in
     notFar(...[-1.05, -1.6, -2.1].map((dz) => drum(at(x, 0, dz), 0.17, 0.14, "z", 8))), // recoil-sleeve collars
     nearOnly(box(at(x, -0.17, -1.6), [0.08, 0.12, 0.1])), // bracket from the collar to the recoil rod
   );
   const barrels = raise(merge(oneBarrel(-barrelX), oneBarrel(barrelX), notFar(block(at(0, 0, -1.6), [0.42, 0.15, 0.16], 0.03))));
   // The muzzle brakes are their own part, painted the colour of the weapon in hand: the mortar is the gun, and shots
   // leave the two muzzles in turn (Mount_Gun and Mount_Gun_2). Two baffles on a core, so the gas ports show.
+  // Near, each brake is a core tube between a top and a bottom plate with three baffles across, so the side ports
+  // show as gaps the blast leaves through; the front baffle is the heaviest, as it takes the most gas.
   const oneBrake = (x: number) => (near
-    ? merge(block(at(x, 0, -2.47), [0.36, 0.36, 0.1], 0.03), block(at(x, 0, -2.645), [0.36, 0.36, 0.11], 0.03), box(at(x, 0, -2.56), [0.24, 0.24, 0.28]))
+    ? merge(
+      drum(at(x, 0, -2.53), 0.12, 0.34, "z", 10),
+      ...[-1, 1].map((s) => chamferBox(at(x, s * 0.16, -2.535), [0.34, 0.05, 0.36], 0.015)),
+      box(at(x, 0, -2.4), [0.33, 0.27, 0.05]), box(at(x, 0, -2.535), [0.33, 0.27, 0.05]),
+      chamferBox(at(x, 0, -2.67), [0.36, 0.3, 0.07], 0.02),
+    )
+    : lod === 1
+    ? merge(box(at(x, 0, -2.53), [0.24, 0.24, 0.32]), ...[-1, 1].map((s) => box(at(x, s * 0.16, -2.535), [0.34, 0.05, 0.36])), box(at(x, 0, -2.67), [0.36, 0.3, 0.07]))
     : box(at(x, 0, -2.56), [0.34, 0.34, 0.28]));
   const muzzleBrakes = raise(merge(oneBrake(-barrelX), oneBrake(barrelX)));
   // The barrel tubes inside, the recoil sleeve between the first two collars and the recoil cylinder under each.
+  // On top of each jacket the recuperator, which pushes the barrel back out after recoil, and its rod on the breech;
+  // along the tube a fat bore evacuator that draws the fumes out of the barrel.
   const oneSleeve = (x: number) => merge(
     drum(at(x, 0, -1.7), 0.115, 1.6, "z", 10),
     notFar(drum(at(x, 0, -1.33), 0.15, 0.5, "z", 10)),
     notFar(drum(at(x, -0.2, -0.85), 0.06, 0.9, "z", 6)),
     nearOnly(drum(at(x, -0.2, -1.55), 0.035, 0.5, "z", 6)),
+    nearOnly(
+      drum(at(x, 0.22, -0.6), 0.065, 0.8, "z", 8), drum(at(x, 0.22, -1.02), 0.08, 0.05, "z", 8),
+      drum(at(x, 0.235, 0.12), 0.04, 0.5, "z", 6),
+      drum(at(x, 0, -1.85), 0.145, 0.26, "z", 10),
+    ),
   );
   const barrelSleeves = merge(
     raise(merge(oneSleeve(-barrelX), oneSleeve(barrelX))),
@@ -294,6 +355,7 @@ function build(lod: Lod): Record<string, MeshData> {
     notFar(slab([[pdY - 0.1, -0.8], [pdY + 0.12, -0.8], [pdY + 0.1, -0.88], [pdY - 0.06, -0.93]], "x", x - 0.15, x + 0.15, 0.02)), // sloped front
     drum([x, pdY, -1.0], 0.055, 0.22, "z", 8), // emitter barrel
     nearOnly(...[-0.1, 0, 0.1].map((dz) => box([x, pdY + 0.15, pdZ + dz], [0.28, 0.05, 0.04]))),
+    nearOnly(...[-0.96, -1.04].map((z) => drum([x, pdY, z], 0.085, 0.03, "z", 6))), // heat-sink rings round the emitter
   );
   const armR = merge(pdTurret(pdX), block([1.2, 2.4, -0.95], [0.26, 0.3, 0.5], 0.05));
   const armL = pdTurret(-pdX);
@@ -308,15 +370,25 @@ function build(lod: Lod): Record<string, MeshData> {
   // part at the joints by which bone a shape sits nearest (packages/client/src/legRig.ts), so every shape here sits
   // clearly on one bone: the knee guard's middle is on the thigh side of the knee, the rams lie along one bone each.
   const kneeGuardLength = 0.56;
+  // The foot: a broad hub under the ankle with three toes fanned toward the leg's own corner and a heel toward the
+  // hull, so each foot braces outward like an outrigger. A toe is built pointing along -z from the hub's middle and
+  // turned about y into place; `yaw` -45 degrees points it straight out of the corner.
+  const footAt: V3 = [ankle[0], 0, ankle[2]];
+  const toeOutline = (length: number): [number, number][] => [[0, -0.1], [0, -length + 0.06], [0.07, -length], [0.15, -length + 0.08], [0.2, -0.1]];
+  const toYaw = (m: MeshData, yaw: number) => turn(m, [0, yaw * deg, 0], [0, 0, 0], footAt);
+  const toe = (yaw: number, length: number) => toYaw(slab(toeOutline(length), "x", -0.09, 0.09, 0.02), yaw);
+  const toeYaws = [-85, -45, -5];
+  const octagon = (c: [number, number], r: number) => Array.from({ length: 8 }, (_, i) => [c[0] + r * Math.cos((i + 0.5) * Math.PI / 4), c[1] + r * Math.sin((i + 0.5) * Math.PI / 4)] as [number, number]);
   const thighArmour = lod === 2
     ? merge(beam(hip, thighAt(1.15), 0.5, 0.46), box([1.32, 0.13, -1.3], [0.74, 0.26, 0.74]))
     : merge(
       beam(hip, knee, 0.5, 0.46, 0.07),
       // The knee guard: a heavy block over the knee, standing above the deck, the leg's high point at range.
       along(block([0, 0.04, 0], [0.6, 0.54, kneeGuardLength], 0.08), thighAt(0.85 - kneeGuardLength / 2 / dist(hip, knee)), thighAt(0.85 + kneeGuardLength / 2 / dist(hip, knee))),
-      block([1.32, 0.13, -1.3], [0.74, 0.26, 0.74], 0.07), // foot pad
+      slab(octagon([ankle[2], ankle[0]], 0.31), "y", 0, 0.24, 0.03), // the foot's hub
       block([1.32, 0.38, -1.3], [0.42, 0.28, 0.48], 0.05), // ankle cowl
-      nearOnly(chamferBox([1.32, 0.29, -1.52], [0.6, 0.06, 0.26], 0.02)), // toe plate
+      ...toeYaws.map((yaw) => toe(yaw, 0.46)),
+      toe(135, 0.4), // heel
     );
   const shinArmour = lod === 2
     ? beam(shinAt(0.1, 0.03), shinAt(0.84, 0.03), 0.48, 0.42)
@@ -327,12 +399,28 @@ function build(lod: Lod): Record<string, MeshData> {
     );
   const kneeRamA = thighAt(0.2, 0.31), kneeRamB = thighAt(1.0, 0.31);
   const ankleRamA = shinAt(0.14, 0.31), ankleRamB = shinAt(0.9, 0.31);
+  // A hinge cheek: a flat plate across an axle running front to back, round about the axle and tapering toward the
+  // bone it is fixed to (`toward`, in x and y), standing between z0 and z1.
+  const hingePlate = (centre: V3, toward: V3, r: number, tail: number, half: number, z0: number, z1: number) => {
+    const back = unit([toward[0] - centre[0], toward[1] - centre[1], 0]), across = [-back[1], back[0]] as const;
+    const round = [-90, -45, 0, 45, 90].map((a) => [centre[0] + r * (-Math.cos(a * deg) * back[0] + Math.sin(a * deg) * across[0]), centre[1] + r * (-Math.cos(a * deg) * back[1] + Math.sin(a * deg) * across[1])] as [number, number]);
+    const end = (s: number) => [centre[0] + tail * back[0] + s * half * across[0], centre[1] + tail * back[1] + s * half * across[1]] as [number, number];
+    return prism([...round, end(1), end(-1)], "z", z0, z1);
+  };
+  // The knee is a real hinge, its axle pin through the knee drum and a cheek plate either side: the inner cheek
+  // belongs to the thigh and the outer to the shin, so the game, which hands each shape to its nearest bone, turns
+  // them against each other as the knee bends. The shin ends in a fork round the ankle pin.
+  const anklePin: V3 = [ankle[0], 0.55, ankle[2]];
+  const inward = Math.sign(hip[2] - knee[2]); // toward the hull, along the axle
   const hydraulics = merge(
     drum(hip, 0.28, 0.3, "x", 10), // hip drum
     lod === 2 ? empty() : drum(knee, 0.25, 0.6, "z", 10), // knee drum
-    nearOnly(drum(knee, 0.12, 0.7, "z", 6)), // the knee's axle pin
+    notFar(hingePlate(knee, hip, 0.2, 0.36, 0.15, knee[2] + inward * 0.31, knee[2] + inward * 0.37)),
+    notFar(hingePlate(knee, ankle, 0.2, 0.36, 0.15, knee[2] - inward * 0.31, knee[2] - inward * 0.37)),
+    nearOnly(drum(knee, 0.12, 0.84, "z", 6)), // the knee's axle pin
     beam(knee, ankle, 0.28, 0.28, 0.04), // shin core
-    notFar(drum([ankle[0], 0.55, ankle[2]], 0.17, 0.46, "z", 8)), // ankle
+    notFar(drum(anklePin, 0.17, 0.46, "z", 8)), // ankle
+    nearOnly(...[-1, 1].map((s) => hingePlate(anklePin, knee, 0.15, 0.26, 0.13, ankle[2] + s * 0.24, ankle[2] + s * 0.3))),
     // The knee ram, along the front of the thigh, bends the knee; the ankle ram, down the outside of the shin, works
     // the foot so the claws dig in. Each has a lug at both ends where it is pinned.
     notFar(ram(kneeRamA, kneeRamB, 0.085), ram(ankleRamA, ankleRamB, 0.08)),
@@ -342,7 +430,7 @@ function build(lod: Lod): Record<string, MeshData> {
   // The front feet's claws dig into the ground while the mortar fires.
   const claws = lod === 2
     ? prism([[0.2, -1.62], [0.04, -1.62], [0.0, -1.84]], "x", 1.08, 1.56)
-    : merge(...[1.1, 1.32, 1.54].map((x) => prism([[0.24, -1.62], [0.04, -1.62], [0.0, -1.86]], "x", x - 0.06, x + 0.06)));
+    : merge(...toeYaws.map((yaw) => toYaw(prism([[0.13, -0.41], [0.03, -0.41], [0, -0.54]], "x", -0.05, 0.05), yaw)));
 
   const legFR = { armour: thighArmour, shin: shinArmour, hydraulics: merge(hydraulics, claws) };
   const legFL = { armour: mirrorX(thighArmour), shin: mirrorX(shinArmour), hydraulics: mirrorX(legFR.hydraulics) };
@@ -351,7 +439,7 @@ function build(lod: Lod): Record<string, MeshData> {
   const leg = (name: string, l: typeof legFR) => ({ [name]: l.armour, [`${name}_Shin`]: l.shin, [`${name}_Hydraulics`]: l.hydraulics });
 
   return {
-    Torso: torso, Hull_Camo: hullCamo, Hull_Scorch: hullScorch, Frame: frame, Sensor: sensor, Sensor_Lenses: sensorLenses,
+    Torso: torso, Hull_Camo: hullCamo, Hull_Scorch: hullScorch, Frame: merge(frame, sensorSlot), Sensor: sensor, Sensor_Lenses: sensorLenses,
     Turret_Ring: turretRing, Turret_Band: turretBand, Turret: turret, Turret_Camo: turretCamo, Turret_Scorch: turretScorch,
     Barrels: barrels, Muzzle_Brakes: muzzleBrakes, Barrel_Sleeves: barrelSleeves,
     Arm_L: armL, Arm_R: armR, PD_Emitters: pdEmitters, Side_Gun: sideGun,

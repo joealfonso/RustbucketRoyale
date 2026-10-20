@@ -4,8 +4,13 @@
 // "the big round head and the ring of drones".
 // Detail pass (V7c): chamfered plates laid over the main shells with a visible seam, bolt rows where plates are held
 // on, and pistons that drive the knees, hocks and elbows. Big calm masses (the dome above all) stay plain.
+// Geometry pass (V8): the dome gets a frame ring, ribs over its seams and a window onto its sensor array; the drones
+// are flown by ducted fans and gripped by clamps on folding, ram-driven pylons with their tethers run along them;
+// armour is layered (lapped plates, lips, backing plates), with motors, rams, cables, vents and a dish where each one
+// has a job. The dome's skin itself still stays plain.
 // Three levels of detail, nearest first: the near one has everything; the middle one drops bolts, fins and piston
-// rods and rounds things with fewer sides; the far one is plain boxes and the same silhouette.
+// rods, keeps the big new pieces (fan ducts, frame ring, layered plates) and rounds things with fewer sides; the far
+// one is plain boxes and the same silhouette.
 // Writes the model and scripts/mechs/arbiter.kit.json, the paint and zone of every part.
 // Run: npx tsx scripts/mechs/arbiter.ts  →  assets/models/mechs/arbiter/Mech_Arbiter.glb
 // Metres, Y up, facing -Z, right side +X, feet at y = 0. Every part is built in place on the assembled mech.
@@ -109,6 +114,12 @@ function tube(a: V3, b: V3, r: number, sides: number, r2 = r): MeshData {
 // A hex bolt head at `at` on a surface facing `out`, standing a little proud of it.
 const bolt = (at: V3, out: V3, r = 0.024): MeshData => tube(add(at, scale(out, -0.01)), add(at, scale(out, 0.022)), r, 6);
 
+// A cable through a run of points, one rod per stretch, so it bends where it is clipped down.
+const cable = (points: V3[], r: number, sides = 5): MeshData => merge(...points.slice(1).map((p, i) => tube(points[i]!, p, r, sides)));
+
+// A ram from a to b: the fat sleeve at a, the thin rod sliding out of it to b.
+const ram = (a: V3, b: V3, r: number, sides: number): MeshData => merge(tube(a, lerp(a, b, 0.6), r, sides), tube(lerp(a, b, 0.5), b, r * 0.5, 6));
+
 // A round solid from latitude rings (degrees, bottom to top) closed by a point at the top. A first latitude of -90 closes
 // the bottom with a point too; anything higher leaves a flat bottom, which is where the dome sits in its collar.
 function ellipsoid(centre: V3, radii: V3, sides: number, lats: number[]): MeshData {
@@ -143,6 +154,16 @@ const outward: V3 = [1, 0, 0];
 
 // The radome: far bigger than a head needs to be, sitting low in a collar. It is the silhouette.
 const domeCentre: V3 = [0, 3.68, 0];
+const domeRadii: V3 = [0.68, 0.62, 0.68];
+// A point on the radome's skin, `out` metres proud of it, `round` degrees from straight ahead toward +x, at a latitude.
+const onDome = (round: number, lat: number, out = 0): V3 => [
+  Math.sin(round * deg) * Math.cos(lat * deg) * (domeRadii[0] + out),
+  domeCentre[1] + Math.sin(lat * deg) * (domeRadii[1] + out),
+  -Math.cos(round * deg) * Math.cos(lat * deg) * (domeRadii[2] + out),
+];
+// The sensor window looks out of the front of the dome above the ring, tilted up to its surface there.
+const windowLat = 24;
+const windowTilt = Math.atan2(Math.sin(windowLat * deg) / domeRadii[1], Math.cos(windowLat * deg) / domeRadii[2]);
 // Comms mast on the left shoulder, behind the dome, on a bracket off the yoke. The asymmetry has a job: the mast
 // relays the drones, and it sits on the side away from the gun so it stays out of the line of fire.
 const mastX = -0.68, mastZ = 0.42;
@@ -185,14 +206,19 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
   const legShellR = merge(
     bar(thighAt(-0.08), thighAt(0.92), [0.26, 0.34], c(0.05), [0.22, 0.25]), // thigh
     notFar(() => bar(thighAt(0.1, 0.18), thighAt(0.76, 0.13), [0.24, 0.07], c(0.025), [0.2, 0.07])), // thigh plate
+    // A second plate lapped over the lower half of the thigh plate, where shots from the front land most.
+    nearOnly(() => bar(thighAt(0.45, 0.19), thighAt(0.78, 0.165), [0.17, 0.035], c(0.012), [0.15, 0.035])),
     notFar(() => cylinder(add(hip, [0.155, 0, 0]), 0.17, 0.05, "x", round(10))), // hip cap over the drum
     // Knee guard, hung off the bottom of the thigh over the front of the knee.
     slab([[1.28, -0.27], [1.16, -0.4], [1.0, -0.39], [0.95, -0.31], [1.14, -0.21]], "x", legX - 0.11, legX + 0.11, c(0.03)),
     bar(shinAt(-0.04), shinAt(1), [0.2, 0.22], c(0.04), [0.17, 0.18]), // shin
     notFar(() => bar(shinAt(0.14, 0.12), shinAt(0.82, 0.1), [0.22, 0.06], c(0.02), [0.18, 0.06])), // shin guard
+    // Armour on the outside of the shin, the side that faces the enemy when the mech strafes.
+    notFar(() => bar(add(shinAt(0.2), [0.112, 0, 0]), add(shinAt(0.76), [0.098, 0, 0]), [0.035, 0.17], c(0.012), [0.035, 0.13])),
     notFar(() => merge(ramSleeve(calfRam), ramSleeve(thighRam))),
     bar(hock, add(ankle, [0, -0.02, -0.03]), [0.16, 0.16], c(0.03), [0.14, 0.14]), // hock to ankle
     box([legX, 0.12, -0.06], [0.4, 0.1, 0.58], c(0.035)), // foot
+    notFar(() => box([legX, 0.19, -0.18], [0.3, 0.05, 0.24], c(0.015))), // top plate over the lock's coils
     notFar(() => slab([[0.07, -0.33], [0.17, -0.33], [0.13, -0.47], [0.07, -0.47]], "x", legX - 0.19, legX + 0.19, c(0.025))), // toe
     notFar(() => bar([legX, 0.16, 0.16], [legX, 0.08, 0.32], [0.2, 0.1], c(0.03), [0.16, 0.08])), // heel spur
   );
@@ -211,6 +237,14 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
       ...[45, 135, 225, 315].map((a) => bolt(add(hip, [0.18, Math.sin(a * deg) * 0.11, Math.cos(a * deg) * 0.11]), outward)),
       ...[-0.07, 0.07].map((x) => bolt(add(thighAt(0.18, 0.215), [x, 0, 0]), thighFront)),
       ...[-0.07, 0.07].map((x) => bolt(add(shinAt(0.2, 0.15), [x, 0, 0]), shinFront)),
+      cylinder(add(hip, [0.205, 0, 0]), 0.075, 0.05, "x", 10), // the hip motor's end bell, inside the bolt ring
+      // Power to the knee motor, out of the back of the hip drum and down the back of the thigh.
+      cable([add(hip, [0.06, 0.05, 0.15]), add(thighAt(0.45, -0.165), [0.06, 0, 0]), add(thighAt(0.92, -0.13), [0.05, 0, 0])], 0.022),
+      // The toe lock: a short ram from the ankle bone presses the front of the foot down onto its pad.
+      ram(add(lerp(hock, ankle, 0.35), [0.1, 0, 0]), [legX + 0.165, 0.2, -0.2], 0.032, 6),
+      box([legX + 0.165, 0.185, -0.2], [0.04, 0.04, 0.07]), // its lug on the foot
+      // Housings for the magnetic coils, on both sides of the foot above the pad.
+      ...[-0.2, 0.08].flatMap((z) => [box([legX + 0.207, 0.12, z], [0.02, 0.06, 0.12]), box([legX - 0.207, 0.12, z], [0.02, 0.06, 0.12])]),
     )),
   );
   // A teal conduit down the front of each shin feeds the magnetic foot, and the lock glows along the pad when it holds.
@@ -229,6 +263,12 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
     onChest(chestBox),
     slab([[-0.56, 2.9], [0.56, 2.9], [0.56, 3.05], [0.38, 3.16], [-0.38, 3.16], [-0.56, 3.05]], "z", -0.22, 0.3, c(0.05)), // shoulder yoke
     box([0, 1.55, -0.2], [0.3, 0.2, 0.06], c(0.02)), // guard over the front of the hip drive
+    // The lip and slats of the intake under the chest, standing proud of its dark grille so the grille reads as sunk in.
+    nearOnly(() => merge(
+      ...[1.952, 2.088].map((y) => box([0, y, -0.29], [0.3, 0.025, 0.04])),
+      ...[-0.1375, 0.1375].map((x) => box([x, 2.02, -0.29], [0.025, 0.16, 0.04])),
+      ...[1.99, 2.02, 2.05].map((y) => box([0, y, -0.297], [0.25, 0.012, 0.02])),
+    )),
   );
   const torsoFrame = merge(
     box([0, 1.56, 0.02], [0.6, 0.26, 0.4], c(0.05)), // pelvis, between the hip drums
@@ -238,6 +278,17 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
     cylinder([0.66, 2.9, 0.02], 0.13, 0.24, "x", round(10)), // shoulder joints
     cylinder([-0.66, 2.9, 0.02], 0.13, 0.24, "x", round(10)),
     box([-0.26, 2.54, -0.295], [0.2, 0.68, 0.05], c(0.015)), // conduit channel up the left chest
+    // The chest plate sits on a dark backing a little bigger than itself, so its edge shows as a second layer.
+    notFar(() => onChest(box(add(chestPivot, [0, 0, 0.04]), [0.63, 0.69, 0.06], c(0.02)))),
+    notFar(() => box([0, 2.02, -0.282], [0.26, 0.12, 0.03])), // grille of the intake that cools the hip drive
+    nearOnly(() => merge(
+      // Vent slats on the flank panels: the hull's electronics breathe out of the sides.
+      ...[2.52, 2.6, 2.68].flatMap((y) => [box([0.462, y, 0], [0.015, 0.03, 0.24]), box([-0.432, y, 0], [0.015, 0.03, 0.24])]),
+      // The radome's data feed, two cables from the top of the electronics pack up behind the yoke into the collar.
+      ...[0.04, 0.14].map((x) => cable([[x, 2.84, 0.47], [x, 3.04, 0.4], [x - 0.02, 3.2, 0.34]], 0.028, 6)),
+      // And the mast's, across the back of the pack to the mast foot.
+      cable([[-0.22, 2.84, 0.5], [-0.45, 3.0, 0.5], [mastX + 0.05, 3.16, mastZ + 0.06]], 0.026, 6),
+    )),
     nearOnly(() => merge(
       // Heat sink fins under the pack cover: the electronics pack is what runs hot.
       ...[0, 1, 2].map((i) => box([0, 2.22 + i * 0.09, 0.575], [0.46, 0.035, 0.07])),
@@ -259,11 +310,31 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
 
   // ---- Radome head. Round in plan so the glowing ring round its middle stands proud by the same amount all the way
   // round. The collar is bolted on, the bolts in a ring round it.
-  const sensor = ellipsoid(domeCentre, [0.68, 0.62, 0.68], pick(20, 12, 8),
+  const sensor = ellipsoid(domeCentre, domeRadii, pick(20, 12, 8),
     pick([-50, -32, -15, 0, 18, 36, 54, 72], [-50, -20, 10, 40, 70], [-50, -10, 35, 70]));
-  const sensorRing = cylinder(domeCentre, 0.71, 0.08, "y", pick(20, 12, 8));
+  // The dome is opaque, so the sensor array inside it looks out through a window in the front: a row of lenses (one
+  // glowing strip from the middle level out) in a dark bezel, sunk into the skin.
+  const windowAt = onDome(0, windowLat, -0.02);
+  const onWindow = (m: MeshData) => turn(m, [windowTilt, 0, 0], windowAt);
+  const sensorRing = merge(
+    cylinder(domeCentre, pick(0.72, 0.72, 0.71), pick(0.06, 0.06, 0.08), "y", pick(20, 12, 8)), // the far level has no frame ring round it
+    nearOnly(() => merge(...[-0.12, 0, 0.12].map((x) => onWindow(cylinder(add(windowAt, [x, 0, -0.055]), 0.038, 0.03, "z", 8))))),
+    pick(empty(), onWindow(box(add(windowAt, [0, 0, -0.05]), [0.32, 0.05, 0.02])), empty()),
+  );
+  const ribLats = [6, 26, 44, 62, 80];
   const sensorFrame = merge(
     cylinder([0, 3.2, 0.02], 0.34, 0.18, "y", pick(16, 12, 8), 0.44), // collar, flaring up to cup the dome
+    // The dome turns on a bearing ring at the foot of the collar, so it can sweep without the chest turning.
+    notFar(() => cylinder([0, 3.13, 0.02], 0.385, 0.045, "y", pick(16, 12, 8))),
+    // The frame ring the two halves of the dome are clamped into; the glowing band runs in a channel round it.
+    notFar(() => cylinder(domeCentre, 0.705, 0.15, "y", pick(20, 12, 8))),
+    // Four ribs over the seams between the dome's panels, meeting at a hub on top. They miss the front, where the
+    // window looks out.
+    nearOnly(() => merge(...[45, 135, 225, 315].flatMap((round) => ribLats.slice(1).map((lat, i) =>
+      bar(onDome(round, ribLats[i]!, 0.008), onDome(round, lat, 0.008), [0.05, 0.04]))))),
+    notFar(() => cylinder([0, domeCentre[1] + domeRadii[1] - 0.01, 0], 0.13, 0.06, "y", pick(10, 8, 6))), // hub
+    nearOnly(() => cylinder([0, domeCentre[1] + domeRadii[1] + 0.035, 0], 0.05, 0.05, "y", 8, 0.035)), // its sun sensor
+    notFar(() => onWindow(box(windowAt, [0.42, 0.13, 0.1], c(0.02)))), // the window's bezel
     nearOnly(() => merge(...[0, 1, 2, 3, 4, 5].map((i) => {
       const a = (i / 6) * Math.PI * 2 + Math.PI / 6, out: V3 = [Math.sin(a), 0.4, Math.cos(a)];
       return bolt([Math.sin(a) * 0.4, 3.22, 0.02 + Math.cos(a) * 0.4], unit(out));
@@ -276,6 +347,12 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
     box([mastX, 3.98, mastZ], [0.36, 0.08, 0.08], c(0.02)), // antenna elements
     box([mastX, 4.18, mastZ], [0.26, 0.07, 0.07], c(0.02)),
     cylinder([mastX, 4.44, mastZ], 0.08, 0.08, "y", pick(8, 6, 4), 0.05), // beacon
+    // A dish on a short arm, turned out to the left: the long link back to the team, while the elements above talk
+    // to the drones.
+    notFar(() => merge(
+      bar([mastX, 3.62, mastZ], [mastX - 0.1, 3.62, mastZ], [0.04, 0.04]),
+      cylinder([mastX - 0.13, 3.62, mastZ], 0.15, 0.06, "x", pick(10, 6, 4), 0.04),
+    )),
     nearOnly(() => merge(bolt([mastX - 0.08, 3.26, mastZ - 0.08], [0, 1, 0], 0.02), bolt([mastX + 0.08, 3.26, mastZ + 0.08], [0, 1, 0], 0.02))),
   );
 
@@ -286,6 +363,8 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
     notFar(() => bar([1.115, 2.8, 0.02], [1.115, 2.42, 0.01], [0.05, 0.24], c(0.018))), // outer arm plate
     slab([[2.21, -0.06], [2.47, -0.06], [2.49, -0.6], [2.42, -0.76], [2.24, -0.76]], "x", 0.97, 1.19, c(0.035)), // forearm
     notFar(() => bar([1.2, 2.36, -0.14], [1.2, 2.36, -0.62], [0.04, 0.2], c(0.015))), // forearm side plate
+    // Two raised rails along the top of the forearm, so the conduit between them sits in a guarded channel.
+    nearOnly(() => merge(box([1.02, 2.5, -0.42], [0.05, 0.035, 0.46], c(0.01)), box([1.142, 2.5, -0.42], [0.05, 0.035, 0.46], c(0.01)))),
   );
   const armL = merge(
     bar([-1.0, 2.84, 0.02], [-1.0, 2.32, 0.0], [0.18, 0.2], c(0.04), [0.17, 0.19]),
@@ -297,26 +376,45 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
     nearOnly(() => tube([x, 2.66, -0.18], [x, 2.5, -0.3], 0.022, 6)),
   ));
   const pauldronTurn = (side: number): V3 => [0, 0, -0.15 * side];
+  // The arm is lifted by a ram from under the back of the yoke onto the back of the upper arm.
+  const liftRam = (side: number): MeshData => nearOnly(() => merge(
+    ram([0.5 * side, 2.88, 0.22], [0.97 * side, 2.64, 0.15], 0.035, 6),
+    box([0.97 * side, 2.64, 0.13], [0.06, 0.06, 0.05]),
+  ));
   const armFrameR = merge(
     cylinder([1.02, 2.3, 0], 0.115, 0.26, "x", round(10)), // elbow
     cylinder([1.2, 2.4, -0.77], 0.12, 0.06, "z", round(8)), // wrist collar the gun sits in
     elbowRam(1.0),
     nearOnly(() => merge(...[-0.14, 0, 0.14].map((z) =>
       turn(bolt([1.1, 2.94, 0.02 + z], [1, 0, 0]), pauldronTurn(1), [0.92, 2.98, 0.02])))),
+    liftRam(1),
+    nearOnly(() => merge(
+      box([1.293, 2.43, -1.0], [0.012, 0.06, 0.14]), // ejection port, on the side away from the body
+      // Cooling slots through the barrel shroud, between its clamps.
+      ...[-1.275, -1.325].flatMap((z) => [box([1.282, 2.4, z], [0.012, 0.05, 0.03]), box([1.118, 2.4, z], [0.012, 0.05, 0.03])]),
+      ...[1.142, 1.258].map((x) => box([x, 2.4, -1.615], [0.025, 0.05, 0.05])), // the brake's side ports
+      // Fire control, from under the forearm into the back of the receiver.
+      cable([[1.12, 2.2, -0.58], [1.13, 2.19, -0.78], [1.16, 2.3, -0.84]], 0.02),
+    )),
   );
   const armFrameL = merge(
     cylinder([-1.02, 2.3, 0], 0.105, 0.24, "x", round(10)),
     cylinder([-1.14, 2.37, -0.71], 0.1, 0.05, "z", round(8)),
     elbowRam(-1.0),
+    liftRam(-1),
   );
+  // A shell over the shoulder, a plate on top and a lip below that stands out past it, so the edge shows its layers.
   const pauldron = (side: number, centre: V3, size: V3) => merge(
     turn(box(centre, size, c(0.06)), pauldronTurn(side), centre),
     notFar(() => turn(box(add(centre, [-0.02 * side, size[1] / 2 + 0.03, 0]), [size[0] - 0.1, 0.06, size[2] - 0.1], c(0.02)), pauldronTurn(side), centre)),
+    notFar(() => turn(box(add(centre, [0.03 * side, -size[1] / 2 + 0.02, 0]), [size[0] + 0.02, 0.06, size[2] + 0.04], c(0.02)), pauldronTurn(side), centre)),
   );
   const gunR = merge(
-    box([1.2, 2.4, -0.98], [0.18, 0.2, 0.46], c(0.03)), // receiver
-    box([1.2, 2.23, -0.9], [0.1, 0.16, 0.12], c(0.02)), // magazine
+    // Receiver, its nose sloped down into the shroud.
+    slab([[2.3, -0.75], [2.5, -0.75], [2.5, -1.1], [2.46, -1.21], [2.3, -1.21]], "x", 1.11, 1.29, c(0.025)),
+    turn(box([1.2, 2.22, -0.92], [0.1, 0.18, 0.12], c(0.02)), [-12 * deg, 0, 0], [1.2, 2.3, -0.92]), // magazine, raked forward
     notFar(() => box([1.2, 2.52, -0.98], [0.06, 0.04, 0.28], c(0.012))), // sight rail
+    notFar(() => box([1.2, 2.575, -0.94], [0.08, 0.07, 0.17], c(0.012))), // sight, its lens to the pilot
     cylinder([1.2, 2.4, -1.3], 0.08, 0.2, "z", round(10)), // shroud
     nearOnly(() => merge(cylinder([1.2, 2.4, -1.24], 0.092, 0.03, "z", 10), cylinder([1.2, 2.4, -1.36], 0.092, 0.03, "z", 10))), // shroud clamps
     cylinder([1.2, 2.4, -1.48], 0.04, 0.2, "z", round(8)), // barrel
@@ -324,29 +422,59 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
   );
   const gunL = merge(
     box([-1.14, 2.37, -0.88], [0.14, 0.16, 0.36], c(0.03)),
+    nearOnly(() => box([-1.14, 2.24, -0.86], [0.08, 0.12, 0.1], c(0.012))), // magazine
     cylinder([-1.14, 2.37, -1.15], 0.035, 0.2, "z", round(8)),
     cylinder([-1.14, 2.37, -1.27], 0.05, 0.06, "z", round(8)), // its face at z = -1.3
   );
 
-  // ---- Drones (no hit boxes): small white pods with a glowing teal eye in a dark bezel and a repair emitter under
-  // the nose, each held out on a two-segment pylon from the shoulders or the back.
+  // ---- Drones (no hit boxes): small white pods, each flown by two ducted fans at its sides, with a glowing teal eye in
+  // a dark bezel and a repair emitter under the nose. Each is held out on a two-segment pylon from the shoulders or the
+  // back, its clamp gripping a docking ring on the hull, with the glowing tether that gives the drone its name run
+  // along the pylon. Far off the fans are too small to see, so the far level keeps the old flat fins in their place.
+  const fanAt = (side: number): V3 => [0.3 * side, 0, 0.05];
   const pod = merge(
     ellipsoid([0, 0, 0], [0.2, 0.15, 0.25], pick(10, 8, 6), pick([-90, -40, 0, 40, 70], [-90, -30, 30, 70], [-90, 0, 60])),
-    box([0, 0, 0.06], [0.52, 0.05, 0.14], c(0.015)), // stabiliser fins
+    pick(empty(), empty(), box([0, 0, 0.06], [0.52, 0.05, 0.14])), // stabiliser fins
+    notFar(() => merge(...[1, -1].map((s) => cylinder(fanAt(s), 0.11, 0.07, "y", pick(8, 6, 6))))), // fan ducts
+    // Two-bladed rotors over the dark fan faces, set at different angles so the pair does not look stamped.
+    nearOnly(() => merge(...[1, -1].map((s) => turn(box(add(fanAt(s), [0, 0.044, 0]), [0.19, 0.008, 0.032]), [0, (s > 0 ? 35 : -60) * deg, 0], fanAt(s))))),
   );
   const eye = merge(
     cylinder([0, 0, -0.215], 0.09, 0.08, "z", pick(10, 8, 6)),
     nearOnly(() => box([0, -0.14, -0.08], [0.08, 0.04, 0.1])), // repair emitter
   );
-  const bezel = cylinder([0, 0, -0.185], 0.115, 0.05, "z", pick(10, 8, 6));
-  const joint = (at: V3) => ellipsoid(at, [0.08, 0.08, 0.08], 6, [-90, 0]);
-  const pylon = (p: DronePlace) => merge(
-    nearOnly(() => merge(joint(p.mount), joint(p.elbow))),
-    notFar(() => placed(bezel, p)),
-    // Far off a pylon is under a pixel wide, so the far level draws it thicker to keep the ring of drones joined up.
-    bar(p.mount, p.elbow, pick<P2>([0.09, 0.09], [0.09, 0.09], [0.13, 0.13]), c(0.02)),
-    bar(p.elbow, p.at, pick<P2>([0.08, 0.08], [0.08, 0.08], [0.12, 0.12]), c(0.02)),
+  // The dark parts of a pod: the eye's bezel, and the fan faces inside the ducts, standing just past the duct rims.
+  const podDark = merge(
+    cylinder([0, 0, -0.185], 0.115, 0.05, "z", pick(10, 8, 6)),
+    ...[1, -1].map((s) => cylinder(fanAt(s), 0.088, 0.078, "y", pick(8, 6, 6))),
   );
+  const pylon = (p: DronePlace) => {
+    const along = unit(sub(p.elbow, p.mount)), fromPod = unit(sub(p.elbow, p.at));
+    const nearPod = (d: number) => add(p.at, scale(fromPod, d));
+    const hinge = unit(cross(sub(p.elbow, p.mount), sub(p.at, p.elbow))); // across the bend
+    const [u] = sideways(p.elbow, p.at);
+    return merge(
+      notFar(() => placed(podDark, p)),
+      // Far off a pylon is under a pixel wide, so the far level draws it thicker to keep the ring of drones joined up.
+      bar(p.mount, p.elbow, pick<P2>([0.09, 0.09], [0.09, 0.09], [0.13, 0.13]), c(0.02)),
+      bar(p.elbow, p.at, pick<P2>([0.08, 0.08], [0.08, 0.08], [0.12, 0.12]), c(0.02)),
+      notFar(() => tube(add(p.elbow, scale(hinge, -0.075)), add(p.elbow, scale(hinge, 0.075)), 0.065, pick(8, 6, 6))), // elbow hinge
+      nearOnly(() => merge(
+        tube(add(p.mount, scale(along, -0.05)), add(p.mount, scale(along, 0.03)), 0.09, 8), // the swivel the pylon turns on
+        // The ram that folds the pylon, beside it across the inside of the bend.
+        ram(add(lerp(p.mount, p.elbow, 0.45), scale(hinge, 0.07)), add(lerp(p.elbow, p.at, 0.4), scale(hinge, 0.06)), 0.028, 6),
+        tube(nearPod(0.17), nearPod(0.24), 0.075, 8), // docking ring on the hull
+        bar(nearPod(0.37), nearPod(0.3), [0.13, 0.13]), // the clamp's body, and its two jaws reaching onto the ring
+        ...[1, -1].map((s) => bar(add(nearPod(0.32), scale(u, 0.065 * s)), add(nearPod(0.2), scale(u, 0.085 * s)), [0.03, 0.06])),
+      )),
+    );
+  };
+  // The tether: a glowing line from the chassis along the far side of the pylon from the ram, into the docking ring.
+  const tether = (p: DronePlace) => {
+    const hinge = unit(cross(sub(p.elbow, p.mount), sub(p.at, p.elbow)));
+    const off = (q: V3, d: number) => add(q, scale(hinge, -d));
+    return nearOnly(() => cable([off(p.mount, 0.06), off(p.elbow, 0.075), off(add(p.at, scale(unit(sub(p.elbow, p.at)), 0.22)), 0.05)], 0.014, 4));
+  };
 
   const mirrorLeg = (m: MeshData) => merge(m, mirrorX(m));
   return {
@@ -359,7 +487,7 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
     Sensor_Frame: sensorFrame,
     Mast: mast,
     Drones: merge(...dronePlaces.map((p) => placed(pod, p))),
-    Drone_Eyes: merge(...dronePlaces.map((p) => placed(eye, p))),
+    Drone_Eyes: merge(...dronePlaces.map((p) => merge(placed(eye, p), tether(p)))),
     Drone_Pylons: merge(...dronePlaces.map(pylon)),
     Leg_L: mirrorX(legShellR),
     Leg_R: legShellR,
@@ -370,7 +498,7 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
     Arm_Frame_L: armFrameL,
     Arm_Frame_R: armFrameR,
     Arm_Glow_L: box([-1.06, 2.455, -0.26], [0.05, 0.04, 0.3]),
-    Arm_Glow_R: box([1.08, 2.5, -0.42], [0.06, 0.04, 0.42]),
+    Arm_Glow_R: merge(box([1.08, 2.5, -0.42], [0.06, 0.04, 0.42]), nearOnly(() => box([1.2, 2.58, -0.851], [0.05, 0.035, 0.012]))),
     Arm_Accent: box([-1.06, 2.33, -0.52], [0.24, 0.27, 0.1], c(0.02)), // the pilot's band round the left forearm
     Pauldron_L: pauldron(-1, [-0.9, 2.96, 0.02], [0.32, 0.22, 0.44]),
     Pauldron_R: pauldron(1, [0.92, 2.98, 0.02], [0.36, 0.26, 0.48]),
