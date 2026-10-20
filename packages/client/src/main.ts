@@ -29,7 +29,7 @@ import lookJson from "../../../data/look.json";
 import mechKitsJson from "../../../data/mechKits.json";
 import rosterJson from "../../../data/roster.json";
 import abilitiesJson from "../../../data/abilities.json";
-import { mechCards, savedMech } from "./mechPicker";
+import { savedMech } from "./mechPicker";
 import { rejoinQuery, serverQuery } from "./roomLinks";
 import gaitJson from "../../../data/gait.json";
 import { parseGait, type GaitInput } from "./gait";
@@ -200,13 +200,13 @@ let map = buildPlayMap(tier, seed, mechStats);
 const overview = params.has("overview");
 hint.innerHTML = hintHtml;
 crt.attachSwitch(document.getElementById("crtSwitch") as HTMLButtonElement);
-// Esc frees the mouse and shows the pause screen, where you can pick another mech. Online it swaps in the lobby
-// and waits for the next match once one is running; offline it swaps at once.
-const highlightMech = mechCards(document.getElementById("hintMechs")!, roster, picked ?? 0, (m) => {
-  picked = m;
-  if (net) net.sendMech(m);
-  else mech.mech = m;
-});
+// The mech is picked on the title screen only (gate 14a); the Menu button in the room bar goes back there.
+document.getElementById("menuButton")!.addEventListener("click", () => { location.href = location.pathname; });
+// Play from the title screen: the match starts the first time you click into the game, so it never counts down while
+// you are still reading the screen. Only on the page Play opened: a reload or an invite link waits for Enter as before.
+let autoStart = params.has("play");
+let clickedIn = false;
+hint.addEventListener("click", () => { clickedIn = true; });
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
@@ -843,7 +843,6 @@ function swapOwnMech(m: number): void {
   setMechDamage(ownModel, health.hp, health.dead);
   shownMech = m;
   shownNext = -2; // says the HUD line is out of date
-  if (picked === null) highlightMech(m);
 }
 
 function respawnOffline(): void {
@@ -883,6 +882,7 @@ function frame(now: number): void {
   if (net === null && input.wasPressed("KeyR")) respawnOffline();
   if (input.wasPressed("KeyM")) hud.feed(sound.toggleMute() ? "Sound off (M)" : "Sound on (M)");
   if (input.takeEnter() && net && hostId === net.id && progress.state === "lobby") net.sendStart();
+  if (autoStart && clickedIn && net && hostId === net.id && progress.state === "lobby") { autoStart = false; net.sendStart(); }
 
   // Look is applied every frame so the camera answers the mouse at once, not once per sim step.
   input.takeLook(look);

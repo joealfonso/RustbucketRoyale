@@ -1,12 +1,12 @@
 import { parseBotDifficulty, type Roster } from "@rustbucket/shared";
 import { Hangar } from "./hangar/hangar";
 import { mechCards } from "./mechPicker";
-import { createRoomSearch } from "./roomLinks";
+import { createRoomSearch, playSearch } from "./roomLinks";
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-// The title screen: pick a mech, then make a room (map, bots and how hard they are), join one by code, or practise
-// offline. Every button reloads the page with the choice in the address (see main.ts). Behind it the hangar runs,
+// The title screen: pick a mech, then Play (a small yard of bots, no choices), join a friend's room by code, make a
+// custom room (map, bots and how hard they are), or practise offline. The mech is chosen here and nowhere else. Every button reloads the page with the choice in the address (see main.ts). Behind it the hangar runs,
 // with the picked mech standing in the loading bay.
 export function showTitleScreen(roster: Roster, picked: number): void {
   byId("menu").style.display = "grid";
@@ -16,6 +16,7 @@ export function showTitleScreen(roster: Roster, picked: number): void {
   const code = byId<HTMLInputElement>("roomCode");
   const difficulty = () => parseBotDifficulty(document.querySelector<HTMLInputElement>('input[name="difficulty"]:checked')?.value);
 
+  byId("play").addEventListener("click", () => { location.search = playSearch(); });
   byId("createRoom").addEventListener("click", () => {
     location.search = createRoomSearch({ tier: tier.value, bots: bots.value, difficulty: difficulty() });
   });

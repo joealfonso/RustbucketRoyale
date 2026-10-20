@@ -189,6 +189,13 @@ body.titleScreen > :not(#menu, #game) { display: none !important; }
 #menu select { font-family: var(--hud-word); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
 #menu .row input { flex: 1; }
 #deploy > button { width: 100%; padding: 0.6rem 0.8rem; }
+#deploy #play { font-size: 1.7rem; letter-spacing: 0.2em; padding: 0.9rem 0.8rem; }
+#deploy #custom { display: flex; flex-direction: column; gap: 0.75rem; border-top: 1px solid var(--hud-amber-dim); padding-top: 0.9rem; }
+#deploy #custom[open] { gap: 0.75rem; }
+#deploy #custom > summary { cursor: pointer; font: 700 0.95rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.14em; color: var(--hud-amber); list-style: none; }
+#deploy #custom > summary::before { content: "+ "; }
+#deploy #custom[open] > summary::before { content: "\2212  "; }
+#deploy #custom > button { width: 100%; padding: 0.6rem 0.8rem; }
 #menu small { font: 400 0.95rem var(--hud-body); color: var(--hud-text); opacity: 0.8; }
 /* Bot difficulty: four radio buttons drawn as one strip of keys. The picked one is filled, so it reads without colour. */
 .segments { display: grid; grid-template-columns: repeat(4, 1fr); border: var(--hud-border) solid var(--hud-amber-dim); }

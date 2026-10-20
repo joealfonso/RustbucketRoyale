@@ -18,7 +18,7 @@
       <span id="timerText" class="num"></span>
       <div id="ringRow"><span id="ringLabel" class="label"></span><span id="ringText" class="num"></span></div>
     </div>
-    <div id="roomBar" class="panel"><span class="label">Room</span><span id="roomText" class="num"></span><span id="roomInfo"></span><button id="copyLink" class="ghost">Copy invite link</button><button id="startButton" class="hidden">Start match (Enter)</button></div>
+    <div id="roomBar" class="panel"><span class="label">Room</span><span id="roomText" class="num"></span><span id="roomInfo"></span><button id="copyLink" class="ghost">Copy invite link</button><button id="menuButton" class="ghost">Menu</button><button id="startButton" class="hidden">Start match (Enter)</button></div>
     <div id="feed"></div>
     <div id="warnings"></div>
     <div id="bigText"></div>
@@ -45,9 +45,14 @@
         <p id="maker"><svg viewBox="0 0 24 21" aria-hidden="true"><path d="M12 1 23 20H1Z M12 6.5 18.6 18H5.4Z M8.2 13.2h7.6v1.9H8.2Z" fill-rule="evenodd"/></svg><span>Aegis Dynamics</span><span class="where">Pilot loading bay</span></p>
         <h1>Rustbucket Royale</h1>
       </header>
-      <section id="deploy" class="panel" aria-labelledby="newRoomTitle">
-        <h2 id="newRoomTitle">New room</h2>
-        <label class="field"><span class="label">Map</span><select id="tierSelect"><option value="arena" selected>Arena (quick test)</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+      <section id="deploy" class="panel" aria-label="Play">
+        <button id="play">Play</button>
+        <small>A small yard full of bots. The match starts when you click in.</small>
+        <h2 id="joinTitle">Join a friend</h2>
+        <div class="row"><input id="roomCode" maxlength="4" placeholder="CODE" aria-labelledby="joinTitle" autocomplete="off" spellcheck="false" /><button id="joinRoom" class="ghost">Join room</button></div>
+        <details id="custom">
+        <summary>Custom room</summary>
+        <label class="field"><span class="label">Map</span><select id="tierSelect"><option value="small" selected>Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="arena">Arena (quick test)</option></select></label>
         <label class="field"><span class="label">Bots</span><select id="botSelect"><option value="" selected>Fill with bots</option><option value="0">No bots</option><option value="3">3 bots</option><option value="5">5 bots</option><option value="8">8 bots</option></select></label>
         <fieldset id="difficulty" class="field">
           <legend class="label">Bot difficulty</legend>
@@ -59,10 +64,9 @@
           </div>
         </fieldset>
         <button id="createRoom">Create room</button>
-        <h2 id="joinTitle">Join a friend</h2>
-        <div class="row"><input id="roomCode" maxlength="4" placeholder="CODE" aria-labelledby="joinTitle" autocomplete="off" spellcheck="false" /><button id="joinRoom" class="ghost">Join room</button></div>
-        <button id="playOffline" class="ghost">Practice offline</button>
         <small>Create a room, then share the invite link with friends.</small>
+        </details>
+        <button id="playOffline" class="ghost">Practice offline</button>
       </section>
       <section id="pick" aria-labelledby="pickTitle">
         <h2 id="pickTitle" class="label">Choose your mech</h2>
@@ -81,7 +85,6 @@
           <dt>M</dt><dd>Sound</dd><dt>F1</dt><dd>Tuning panel</dd>
           <dt>Esc</dt><dd>Free the mouse</dd><dt>R</dt><dd>Respawn</dd>
         </dl>
-        <div id="hintMechs" class="mechCards"></div>
         <button type="button" id="crtSwitch" role="switch" aria-checked="true">CRT effect <span class="state">On</span></button>
       </div>
     </div>
