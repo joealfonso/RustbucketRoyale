@@ -332,3 +332,6 @@ Plates, rivets, rust streaks, grime, chips, concrete pours and wood planks are p
 
 ## 2026-10-19: Ground cover as its own instanced layer near the camera (V7d)
 Grass, weeds, ferns, rubble and scrap are planted per 8 m cell from the map seed within 42 m of the camera, sorted by kind of ground (pads near buildings get rubble, the shore gets reeds, slopes and dry patches go yellow), in 7 draw calls rewritten only when the view moves 1.5 m. Cover never stands inside a box footprint, so it never hides what blocks you or a shot, and it receives shadows but casts none, since thousands of blades in the shadow pass would cost more than they show.
+
+## 2026-10-19: Fewer crates by swapping weight to junk, not by fewer props (12a)
+Joseph wanted fewer health boxes. Crates went from half the props to about a third, with junk piles taking the difference, because junk drops loot too: loot per map stays close and only a few more seeds re-roll for too little loot near a spawn. Cutting the prop count instead would have thinned loot and cover everywhere.
