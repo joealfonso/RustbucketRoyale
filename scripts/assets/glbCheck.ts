@@ -40,7 +40,8 @@ export function readGltfJson(bytes: Uint8Array): GltfJson {
 // any mesh that is not a level of detail at all.
 export function countTriangles(gltf: GltfJson): number {
   let total = 0;
-  const lodMeshes = new Set((gltf.nodes ?? []).filter((n) => /^LOD[1-9]/.test(n.name ?? "") && n.mesh !== undefined).map((n) => n.mesh!));
+  // Both namings are simpler levels: LOD1 (per-part files) and Torso_LOD1 (whole-mech files, packages/client/src/mechKit.ts).
+  const lodMeshes = new Set((gltf.nodes ?? []).filter((n) => /(^|_)LOD[1-9]$/.test(n.name ?? "") && n.mesh !== undefined).map((n) => n.mesh!));
   for (const [index, mesh] of (gltf.meshes ?? []).entries()) {
     if (lodMeshes.has(index)) continue;
     for (const p of mesh.primitives) {

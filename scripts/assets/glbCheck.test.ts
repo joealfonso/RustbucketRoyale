@@ -59,5 +59,15 @@ describe("asset checker", () => {
     };
     expect(checkModel("Mech_Torso_Intact", lods, rules)).toMatchObject({ problems: [], triangles: 9000 });
   });
+
+  it("counts only the nearest level of a whole-mech file, whose simpler levels are named Part_LOD1 and Part_LOD2", () => {
+    const whole: GltfJson = {
+      nodes: [{ name: "Torso", mesh: 0 }, { name: "Torso_LOD1", mesh: 1 }, { name: "Torso_LOD2", mesh: 1 }],
+      meshes: [{ primitives: [{ indices: 0, attributes: {} }] }, { primitives: [{ indices: 1, attributes: {} }] }],
+      accessors: [{ count: 9000 * 3 }, { count: 5000 * 3 }],
+      materials: [{ name: "MasterToon" }],
+    };
+    expect(checkModel("Mech_Clunker", whole, rules)).toMatchObject({ problems: [], triangles: 9000 });
+  });
 });
 
