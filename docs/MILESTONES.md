@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: M13 (big moments), 13a built, waiting for Joseph's playtest; 12c waiting for his laptop numbers (M10's friend test still open)
-Current visual milestone: none in progress (V7 done)
+Current visual milestone: V8 (more complex geometry) in progress
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -28,6 +28,7 @@ Update the two lines above when a gate passes. Claude Code reads this file first
 - V5 VFX pass.
 - V6 lighting, fog, and perf pass.
 - V7 quality pass, on Joseph's call ("improve the quality of the lighting, models, textures, mech, and environment"; richer toon, not painterly): V7a lighting (real toon sun shadows near range, baked ambient occlusion, sky and ground bounce, presets retuned), V7b textures (a script-generated painted 2048 atlas: brush strokes, seams, rivets, rust streaks, grime; a close-range ground detail texture), V7c mechs (detail pass on each roster mech's build script within 10k triangles), V7d environment (dense near ground cover, junk and building variety, a less repetitive edge wall). Gates: screenshots at 10, 50 and 150 m, and 60 fps on Joseph's laptop.
+- V8 more complex geometry, on Joseph's call ("use more complex geometry and models"): each roster mech's near level filled toward its 10k triangle budget with layered armour, pistons, cables and modelled weapons; the buildings given real structure (trusses, frames, stairs, broken edges, bracing) under a measured triangle budget. Gate: Joseph's playtest, and the F1 cost readout on his laptop.
 
 ## Gate log
 Record each gate here: date, what was played, who played, what felt bad.
@@ -148,4 +149,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-19: Gate 12a passed by Joseph's playtest ("12a passes"). 12b (timed power-ups) waits on whether matches still feel slow; 12c (the 60 fps check) not started.
 - 2026-10-19: Gate 12c built, waiting for Joseph's check. F1, Performance now shows GPU ms (median and worst), switches for sun shadows, painted marks and ground cover, and a "Measure feature costs" button that takes about 20 s and reports what each saves. On the M4 Mac, medium spawn: 6.1 ms all on; shadows 0.7, cover 0.7, paint 0.1 (docs/PERF.md). Check: press it on your laptop on medium and large, read the numbers to me, and say whether it holds 60 fps.
 - 2026-10-19: Gate 13a built, waiting for Joseph's playtest. Twice a match (small at 1:30 and 3:30, medium 2:00 and 5:00, large 2:30 and 5:30) a supply drop is announced 20 s ahead: "SUPPLY DROP INBOUND", a yellow diamond on the radar (held at its edge when far) and a tall yellow beam on the landing spot. For the last 6 s a striped crate falls burning and smoking; it lands as a blast (90 damage over 7 m: it flattens crates and hurts whoever is underneath), lies sealed and smoking for 5 s, then the lid blows off and two upgrades, a weapon, three armor plates and two grenades spill round it. The smoke column lingers 45 s. Bots within 350 m head for it once it is announced. Not online in offline practice (no match clock there). Also from Joseph mid-gate: less echo (tail 1.6 to 0.7 s, a third as loud) and audible bullet impacts. Check: a small match with bots, watch for the beam, race the bots to the crate, stand under one.
-
+- 2026-10-19: V8 started on Joseph's go, with five agents in parallel: one per roster mech (each owns only its build script, side file and model) and one for the buildings (owns the dressing builders; may only add to the shared shapes file the mech scripts use).
