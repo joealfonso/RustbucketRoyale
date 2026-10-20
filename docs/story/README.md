@@ -327,6 +327,20 @@ The 200 m Arena is now an island with a coastline drawn from its seed. The sea i
 
 The menus and HUD move now, quickly and never in the way of a click: panels and cards arrive in steps, buttons press down, the countdown slams in and the results count down to your place, all as fades for players who ask for less motion. On the way it fixed a GO and a supply-drop banner that had been vanishing a frame after they showed.
 
+## 45. Deaths worth watching
+*Passed 2026-10-20. Commit `cd77a78`.*
+
+![The roster blown apart on the style page: guns and limbs tumbling through black smoke, chunks across the ground, torsos going over](45-13b-14c-deaths-worth-watching.jpg)
+
+Getting knocked out used to be a mech going still. Now a card says who got you and how ("by Bot 12, Stiletto-B (bot): Pounce, then Scattergun"), your mech blows apart into a smoking wreck, and the last four seconds replay from over your killer's shoulder, slowing down for the kill, before you watch them. A click skips straight there. The match ends with a few fun numbers: the longest rail shot, the longest pounce, trees felled.
+
+## 46. Mechs that read
+*Passed 2026-10-20. Commit `0746d23`.*
+
+![The five roster mechs as flat black silhouettes at 150 m, each a different shape](46-v9-mech-quality.jpg)
+
+Joseph asked for better mechs again, and the answer was shape, not triangles. Six agents worked from art research: exaggerated silhouettes tested as black shapes side by side, paint schemes split light, mid and dark and kept clear of the ground, bolts moved into paint so the triangles could go to armour lips, guns, pistons and hoses, and a shared pass that cleaned the shading on every bevel, chips paint on worn edges and gives bare metal its glint.
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
