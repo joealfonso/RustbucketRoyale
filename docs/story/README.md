@@ -264,6 +264,13 @@ Pine woods grow in clumps on the hillsides, with a few dead rust-brown trees amo
 
 Four gates in one playtest, built by agents working side by side. The sun now throws flat toon shadows near you, and things darken where they meet the ground. A painted texture is generated at load with no download: plates, rivets, rust streaks and chips on the metal, pour lines on concrete, planks on crates, and grit and grass underfoot. All four roster mechs got a detail pass, with the Ironclad's hull a step lighter so it reads at range. Grass, weeds, rubble and scrap grow round you, and the buildings gained doors, vents, ladders, vines and torn sheets. Joseph's one note was to slow everything down a little more, so the mechs walk about 10% slower again.
 
+## 36. Turbo Legs
+*Passed 2026-10-19. Commit `69d8d14`.*
+
+![The Arbiter at the start of a small match, before it has found any upgrades: grass round its feet, crates and junk piles ahead, the junkyard wall behind](36-12a-turbo-legs.jpg)
+
+The mechs had been slowed twice, and Joseph wanted speed to come back as something you find. Turbo Legs is a fifth upgrade: a green booster bolted across the small of the back, and 20% faster walking and running. Your own client predicts it with the same rule as the server, so the extra speed never snaps you back. The same gate made health scarcer: armor plates drop half as often, and crates went from half the props to a third.
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
