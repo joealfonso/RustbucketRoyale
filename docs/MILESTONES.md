@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none in progress (M11 done; M10's friend test still open)
-Current visual milestone: V7 (quality pass), all four gates built, waiting for Joseph's playtest
+Current visual milestone: none in progress (V7 done)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -141,4 +141,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-19: M11 loose ends fixed on Joseph's call. Far boulders draw as faceted stones instead of grey cubes (2 draw calls for all of them). An Ironclad's own client now predicts its ram smashing trees with the same shared rule as the server (propsInReach), so a charge through a wood no longer snaps back at each trunk (test: within 5 cm of the server instead of stuck over 1 m back). Bots no longer stand for minutes at the end of routes that stop short, or on loot they cannot take (merged from its own session; knockouts a minute small 4.6 to 5.3, medium 4.6 to 5.8). Tests: default timeout 20 s and a loose clock for the in-suite soak, because a busy laptop timed out tests that were only slow; `npm run soak` keeps the 8 ms budget.
 - 2026-10-19: V7 started on Joseph's go: richer toon, all four gates in order. V7a (lighting) and V7b (textures) run as two agents in parallel; the lighting agent owns the master toon material, the textures agent builds its atlas and shader piece apart and wires it in after.
 - 2026-10-19: V7a to V7d built, waiting for Joseph's playtest (gauntlet passed on all four together). V7a lighting: the sun casts flat toon shadows near you, things darken where they meet the ground, warm bounce light from below, presets retuned. V7b textures: a painted atlas generated at load (no download) puts plates, rivets, rust streaks, grime and chips on metal, pour lines and cracks on concrete, planks on crates, grit and grass on the ground, all fading out by 40 m; mechs get clean plates and chips, plants and rocks none. V7c mechs: a detail pass on all four roster mechs (about 6.5k triangles each of 10k), Ironclad's hull a step lighter so it reads past 20 m. V7d environment: grass, weeds, ferns, rubble and scrap round you; doors, vents, ladders, vines and torn sheets on buildings; breaches and variety along the edge wall. Check: does the yard look richer and still read at a glance, do mechs stand out from the ground at 50 m, and does F1 Performance hold 60 fps on your laptop (not measured on it yet). Style page key 9 then P switches the paint off and on.
+- 2026-10-19: V7 passed by Joseph's playtest ("slow down the mechs in general and then advance"): all four gates at once. On his call all mechs walk and run about 10% slower again (walk 6.7, run 13.2 m/s), with the large ring's shrinks about 10% slower and its waits shorter to keep the match inside 8 minutes. Still unmeasured: 60 fps on his laptop.
 

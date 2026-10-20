@@ -257,6 +257,13 @@ The lowest ground of every map floods into shallow marshes, never deeper than a 
 
 Pine woods grow in clumps on the hillsides, with a few dead rust-brown trees among the green, and every tree can be brought down: shoot it, blast it, ram through a row of them with the Ironclad, or pounce onto one with the Stiletto, and it topples the way it was hit with a creak and a thump. Trunks are cover; crowns fade so a wood never blinds the camera. Boulders sit half-sunk in the slopes, bushes dot the open ground, and three rings of rocky mountains stand on the horizon. Bots weave between trunks on their own. With this the junkyard looks like Joseph's reference, in the game's own toon style: hills, water, woods and mountains in three gates over one day.
 
+## 35. The quality pass
+*Passed 2026-10-19. Commits `35e7fee`, `f84015f`. V7 is done.*
+
+![A medium map in afternoon sun: the Arbiter from behind in deep grass and weeds, painted containers and crates with toon shadows, pines on a ridge and mountains beyond](35-v7-quality-pass.jpg)
+
+Four gates in one playtest, built by agents working side by side. The sun now throws flat toon shadows near you, and things darken where they meet the ground. A painted texture is generated at load with no download: plates, rivets, rust streaks and chips on the metal, pour lines on concrete, planks on crates, and grit and grass underfoot. All four roster mechs got a detail pass, with the Ironclad's hull a step lighter so it reads at range. Grass, weeds, rubble and scrap grow round you, and the buildings gained doors, vents, ladders, vines and torn sheets. Joseph's one note was to slow everything down a little more, so the mechs walk about 10% slower again.
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
