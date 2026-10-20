@@ -65,6 +65,7 @@ export interface SelfState {
   fuel: number; fuelLocked: boolean; fuelTimer: number;
   stamina: number; staminaLocked: boolean; staminaTimer: number;
   fuelScale: number;
+  speedScale: number;
   mech: number; // which roster mech you are driving. Can change between matches.
 }
 

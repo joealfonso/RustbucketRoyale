@@ -741,6 +741,7 @@ export class Room {
     const abilityBefore = player.state.abilityTime, cooldownBefore = player.state.abilityCooldown;
     player.state.crawling = player.hp[ZONE_LEGS]! <= 0;
     player.state.fuelScale = upgradeScale(player.loadout, this.config.upgrades, "fuel");
+    player.state.speedScale = upgradeScale(player.loadout, this.config.upgrades, "speed");
     stepMech(player.state, input, this.statsFor(player.state.mech), dt, this.map.world, ability);
     if (ability) this.afterAbilityStep(player, input, ability, abilityBefore, cooldownBefore);
     player.steps += Math.round(dt / STEP);

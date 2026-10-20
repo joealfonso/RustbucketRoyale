@@ -24,7 +24,7 @@ export const isBinaryType = (first: number) => first === TYPE_SNAPSHOT || first 
 // stamina, the fuel scale, the facing while standing). A 3-byte mask says which are sent; one left out is the same
 // float as last time (0 for a fresh memory), so prediction replays from exactly the numbers the server has. Then one
 // byte of flags.
-const SELF_FLOATS = 20;
+const SELF_FLOATS = 21;
 const SELF_MASK_BYTES = 3;
 // Another mech: id, a byte saying what follows, its flags, its position, its yaw, then its details (hit points,
 // weapon, armour, upgrades). Once a client has been sent a mech, the position goes as the change since last time,
@@ -83,7 +83,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
   const noises = m.noises.slice(0, 255);
   const pickups = m.pickups?.slice(0, PICKUPS_UNCHANGED - 1) ?? [];
   const s = m.you;
-  const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale];
+  const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale, s.speedScale];
   let mask = 0, present = 0;
   selfNumbers.forEach((n, i) => { if (!Object.is(Math.fround(n), memory.self[i])) { mask |= 1 << i; present++; } });
 
@@ -196,10 +196,10 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
   const you: SelfState = {
     x: f(), y: f(), z: f(), vx: f(), vz: f(), vy: f(), bodyYaw: f(), dashTime: f(), dashCooldown: f(), dashX: f(), dashZ: f(),
     abilityTime: f(), abilityCooldown: f(), abilityX: f(), abilityZ: f(),
-    fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(), mech: 0,
+    fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(), speedScale: f(), mech: 0,
     grounded: false, running: false, jetting: false, crawling: false, fuelLocked: false, staminaLocked: false,
   };
-  const selfOrder = [you.x, you.y, you.z, you.vx, you.vz, you.vy, you.bodyYaw, you.dashTime, you.dashCooldown, you.dashX, you.dashZ, you.abilityTime, you.abilityCooldown, you.abilityX, you.abilityZ, you.fuel, you.fuelTimer, you.stamina, you.staminaTimer, you.fuelScale];
+  const selfOrder = [you.x, you.y, you.z, you.vx, you.vz, you.vy, you.bodyYaw, you.dashTime, you.dashCooldown, you.dashX, you.dashZ, you.abilityTime, you.abilityCooldown, you.abilityX, you.abilityZ, you.fuel, you.fuelTimer, you.stamina, you.staminaTimer, you.fuelScale, you.speedScale];
   const flags = v.getUint8(o); o += 1;
   you.grounded = (flags & 1) !== 0; you.running = (flags & 2) !== 0; you.jetting = (flags & 4) !== 0;
   you.fuelLocked = (flags & 8) !== 0; you.staminaLocked = (flags & 16) !== 0; you.crawling = (flags & 32) !== 0;

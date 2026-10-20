@@ -8,7 +8,7 @@
   "types": [
     {
       "id": "crate",
-      "weight": 5,
+      "weight": 3,
       "size": [
         2,
         2,
@@ -21,7 +21,7 @@
     },
     {
       "id": "junk",
-      "weight": 3,
+      "weight": 4,
       "size": [
         3,
         1.6,

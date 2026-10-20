@@ -10,7 +10,7 @@ const snapshot = (others: OtherState[]): Snapshot => ({
   t: "snapshot", tick: 123456, ack: 99, ackAgeMs: 12.4,
   you: {
     x: -321.123456, y: 4.5, z: 888.25, vx: 3.5, vz: -2.25, vy: 0.5, bodyYaw: 2.75, grounded: true, running: false, jetting: true, crawling: true,
-    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, abilityTime: 0.35, abilityCooldown: 5.5, abilityX: -0.8, abilityZ: 0.6, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0, fuelScale: 1.6, mech: 3,
+    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, abilityTime: 0.35, abilityCooldown: 5.5, abilityX: -0.8, abilityZ: 0.6, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0, fuelScale: 1.6, speedScale: 1.2, mech: 3,
   },
   health: { hp: [60, 12, 88], dead: false, respawnIn: 0 },
   match: { state: "active", seconds: 91.5, alive: 7, total: 24 },
@@ -40,6 +40,7 @@ describe("snapshot wire format", () => {
     expect(Math.abs(back.others[1]!.x - -999.9)).toBeLessThanOrEqual(0.05 + 1e-9);
     expect(back.others[0]).toMatchObject({ running: true, jetting: false, dead: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12], upgrades: [3, -1] });
     expect(back.you.fuelScale).toBeCloseTo(1.6, 5);
+    expect(back.you.speedScale).toBeCloseTo(1.2, 5);
     // The mech number rides in spare flag bits, next to flags that must not be disturbed.
     expect(back.you.mech).toBe(3);
     expect([back.others[0]!.mech, back.others[1]!.mech]).toEqual([7 % 4, 300 % 4]);
@@ -76,7 +77,7 @@ describe("snapshot wire format", () => {
 
   // Your own ability timers added 16 bytes (four float32s) and the ability byte one per other mech.
   it("is small: under 130 bytes with nobody else near, 21 bytes per extra mech, 9 per pickup", () => {
-    expect(encodeSnapshot(snapshot([])).length).toBe(snapshotSize(0, 0, 0, 19)); // staminaTimer is 0
+    expect(encodeSnapshot(snapshot([])).length).toBe(snapshotSize(0, 0, 0, 20)); // staminaTimer is 0
     expect(snapshotSize(0)).toBeLessThan(130);
     expect(snapshotSize(10) - snapshotSize(0)).toBe(210);
     expect(snapshotSize(0, 0, 10) - snapshotSize(0)).toBe(90);
@@ -87,10 +88,10 @@ describe("snapshot wire format", () => {
     Object.assign(s.you, { vy: 0, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0, abilityTime: 0, abilityCooldown: 0, abilityX: 0, abilityZ: 0, fuelTimer: 0 });
     s.you.vx = -0; // not +0, so it is sent: replaying from -0 must match the server
     const bytes = encodeSnapshot(s);
-    expect(bytes.length).toBe(snapshotSize(0, 0, 0, 9));
+    expect(bytes.length).toBe(snapshotSize(0, 0, 0, 10));
     const back = decodeSnapshot(bytes)!;
     expect(Object.is(back.you.vx, -0)).toBe(true);
-    for (const key of ["x", "y", "z", "vz", "vy", "bodyYaw", "dashTime", "dashCooldown", "dashX", "dashZ", "abilityTime", "abilityCooldown", "abilityX", "abilityZ", "fuel", "fuelTimer", "stamina", "staminaTimer", "fuelScale"] as const) {
+    for (const key of ["x", "y", "z", "vz", "vy", "bodyYaw", "dashTime", "dashCooldown", "dashX", "dashZ", "abilityTime", "abilityCooldown", "abilityX", "abilityZ", "fuel", "fuelTimer", "stamina", "staminaTimer", "fuelScale", "speedScale"] as const) {
       expect(back.you[key]).toBe(Math.fround(s.you[key]));
     }
     expect(back.you.mech).toBe(3);
@@ -110,7 +111,7 @@ describe("snapshot wire format", () => {
     const s = snapshot([]);
     s.pickups = null;
     expect(decodeSnapshot(encodeSnapshot(s))!.pickups).toBeNull();
-    expect(encodeSnapshot(s).length).toBe(snapshotSize(0, 0, 0, 19));
+    expect(encodeSnapshot(s).length).toBe(snapshotSize(0, 0, 0, 20));
     s.pickups = [];
     expect(decodeSnapshot(encodeSnapshot(s))!.pickups).toEqual([]);
   });

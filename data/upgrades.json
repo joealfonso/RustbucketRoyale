@@ -28,6 +28,13 @@
       "color": "#ff5a4a",
       "effects": { "fireRate": 1.25 },
       "model": null
+    },
+    {
+      "id": "turboLegs",
+      "name": "Turbo Legs",
+      "color": "#4fd18b",
+      "effects": { "speed": 1.2 },
+      "model": null
     }
   ]
 }

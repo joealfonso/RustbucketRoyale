@@ -11,6 +11,7 @@ const config = loadRoomConfig();
 const set = config.upgrades;
 const index = (id: string) => set.upgrades.findIndex((u) => u.id === id);
 const TANKS = index("bigTanks"), HANDS = index("quickHands"), EARS = index("bigEars"), CLOCK = index("overclock");
+const TURBO = index("turboLegs");
 
 const players = (room: Room) => (room as unknown as { players: Map<number, Player> }).players;
 const fit = (room: Room, c: Client, ...upgrades: number[]) => { players(room).get(c.id)!.loadout.upgrades = [upgrades[0] ?? -1, upgrades[1] ?? -1]; };
@@ -74,6 +75,22 @@ describe("upgrades in a room", () => {
     run(room, [a], () => idle(), 300); // the bigger tank fills up by the normal refill
     expect(a.last().you.fuelScale).toBeCloseTo(set.upgrades[TANKS]!.effects.fuel!, 5);
     expect(a.last().you.fuel).toBeCloseTo(c.mech.fuelMax * set.upgrades[TANKS]!.effects.fuel!, 0);
+  });
+
+  it("Turbo Legs: walks and runs faster, and your own prediction knows about it", () => {
+    const ran = (upgraded: boolean) => {
+      const { room, config: c } = makeRoom();
+      const a = new Client(room, c);
+      if (upgraded) fit(room, a, TURBO);
+      run(room, [a], () => idle(), 30); // land and get a first snapshot
+      const from = a.last().you;
+      run(room, [a], () => idle({ moveY: 1, run: true }), 120);
+      const to = a.last().you;
+      return { meters: Math.hypot(to.x - from.x, to.z - from.z), scale: to.speedScale };
+    };
+    const plain = ran(false), turbo = ran(true);
+    expect(turbo.scale).toBeCloseTo(set.upgrades[TURBO]!.effects.speed!, 5);
+    expect(turbo.meters).toBeGreaterThan(plain.meters * 1.15);
   });
 
   it("Overclock: more shots a second", () => {

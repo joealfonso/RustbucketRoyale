@@ -1,7 +1,7 @@
 import type { Loadout } from "./protocol";
 
 // What an upgrade can change. Each is a multiplier, 1 meaning no change.
-export const UPGRADE_EFFECTS = ["fuel", "repairSpeed", "lootSpeed", "hearing", "radarRange", "fireRate"] as const;
+export const UPGRADE_EFFECTS = ["fuel", "repairSpeed", "lootSpeed", "hearing", "radarRange", "fireRate", "speed"] as const;
 export type UpgradeEffect = (typeof UPGRADE_EFFECTS)[number];
 
 export interface UpgradeDef {

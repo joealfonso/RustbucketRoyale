@@ -364,6 +364,7 @@ const UPGRADE_MOUNTS: Record<string, { center: number[]; size: number[] }> = {
   quickHands: { center: [-1.15, 1.5, 0.1], size: [0.5, 0.45, 0.8] }, // toolbox on the hip
   bigEars: { center: [0.45, 3.75, 0.2], size: [0.12, 1.1, 0.12] }, // antenna on the shoulder
   overclock: { center: [1.2, 2.95, -0.6], size: [0.6, 0.35, 0.9] }, // coil on top of the gun arm
+  turboLegs: { center: [0, 1.7, 0.8], size: [1.0, 0.45, 0.45] }, // booster across the small of the back
 };
 const OTHER_MOUNT = { center: [0, 3.4, 0.4], size: [0.6, 0.4, 0.6] };
 

@@ -8,7 +8,7 @@ import { createMechState, stepMech } from "./mechStep";
 import { parseMechStats } from "./stats";
 import { Terrain } from "./terrain";
 import { TERRAIN_HIT, World, createRayHit } from "./world";
-import { generateMap, parseChunkSet, parseTiers } from "./generation";
+import { generateMap, parseChunkSet, parseTiers, validateMap } from "./generation";
 import { parsePropConfig } from "./props";
 
 const stats = parseMechStats(mechJson);
@@ -214,7 +214,8 @@ describe("woods and boulders", () => {
   it("leaves the trees out of the crate and barrel density checks", () => {
     const map = build(2, "large");
     expect(map.props.filter((p) => isTree(p.type)).length).toBeGreaterThan(1000);
-    expect(map.attempts).toBe(1);
+    // Over a thousand trees would blow the prop density limit if they counted.
+    expect(validateMap(map, tiers, mech, props).problems.filter((p) => p.includes("density"))).toEqual([]);
   });
 });
 

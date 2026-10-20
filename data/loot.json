@@ -22,7 +22,7 @@
       "chance": 0.8,
       "table": {
         "grenade": 3,
-        "armor": 3,
+        "armor": 1.5,
         "scattergun": 1,
         "spikeDriver": 1,
         "upgrade": 0.6
@@ -32,7 +32,7 @@
       "chance": 0.6,
       "table": {
         "grenade": 2,
-        "armor": 3,
+        "armor": 1.5,
         "scattergun": 1,
         "spikeDriver": 1,
         "upgrade": 0.5

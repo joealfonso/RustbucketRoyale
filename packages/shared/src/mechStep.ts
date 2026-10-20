@@ -25,6 +25,7 @@ export interface MechState {
   jetting: boolean;
   mech: number; // which roster mech this is (data/roster.json). The caller steps it with that mech's stats.
   fuelScale: number; // tank size from upgrades, 1 for the standard tank. Set by the server from the loadout.
+  speedScale: number; // walk and run speed from upgrades, 1 for standard legs. Set by the server from the loadout.
   crawling: boolean; // legs broken: slow, no sprint or dash, jets still work. Set by the server from hit points.
   dashTime: number; // seconds of dash left, above 0 while dashing
   dashCooldown: number;
@@ -39,7 +40,7 @@ export interface MechState {
 export function createMechState(stats: MechStats, x: number, y: number, z: number, yaw: number, mech = 0): MechState {
   return {
     x, y, z, vx: 0, vz: 0, vy: 0, bodyYaw: yaw, mech,
-    grounded: false, running: false, jetting: false, fuelScale: 1, crawling: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
+    grounded: false, running: false, jetting: false, fuelScale: 1, speedScale: 1, crawling: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
     abilityTime: 0, abilityCooldown: 0, abilityX: 0, abilityZ: 0,
     fuel: new Meter(stats.fuelMax), stamina: new Meter(stats.staminaMax),
   };
@@ -145,7 +146,7 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
     // Dash over: bleed the extra speed off so the mech slides out of it instead of keeping a 38 m/s run.
     if (s.dashTime <= 0) capToRunSpeed(s, stats);
   } else {
-    const legs = s.crawling ? stats.walkSpeed * stats.crawlSpeedMultiplier : s.running ? stats.runSpeed : stats.walkSpeed;
+    const legs = (s.crawling ? stats.walkSpeed * stats.crawlSpeedMultiplier : s.running ? stats.runSpeed : stats.walkSpeed) * s.speedScale;
     const topSpeed = world.terrain?.wading(s.x, s.y, s.z) ? legs * stats.waterSpeedMultiplier : legs;
     const rate = (moving ? stats.acceleration : stats.deceleration) * (s.grounded ? 1 : stats.airControl);
     const toX = wishX * topSpeed - s.vx;
@@ -189,10 +190,10 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
 }
 
 function capToRunSpeed(s: MechState, stats: MechStats): void {
-  const speed = Math.hypot(s.vx, s.vz);
-  if (speed > stats.runSpeed) {
-    s.vx *= stats.runSpeed / speed;
-    s.vz *= stats.runSpeed / speed;
+  const speed = Math.hypot(s.vx, s.vz), top = stats.runSpeed * s.speedScale;
+  if (speed > top) {
+    s.vx *= top / speed;
+    s.vz *= top / speed;
   }
 }
 
