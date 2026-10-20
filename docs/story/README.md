@@ -243,6 +243,13 @@ The game starts in the Aegis Dynamics hangar where pilots load up, built from Jo
 
 The flat yard became rolling hills, after Joseph showed a reference of hills, pines and mountains and chose hills in play, the toon look kept. The hills come from the map seed with integer math, so the server and every client build the same ones. Buildings sit on level pads that ease into the slopes, no slope is too steep to walk, and hills block shots and sight lines, so a ridge is cover. Bots route over them. The first cut dug quarry walls round every building; the aprons were softened before the playtest. Built with two agents in parallel, one for the server and one for the client. Water, forests and mountains come next (11b, 11c).
 
+## 33. Water that slows you and hides you
+*Passed 17:18. Commit `9a80275`.*
+
+![An Arbiter wading through a murky green marsh, half-sunk crates around it, the junkyard wall beyond](33-11b-water.jpg)
+
+The lowest ground of every map floods into shallow marshes, never deeper than a wade. Wading slows you to 70%, but your footsteps carry less than half as far on the radar, so a marsh is the sneaky way in. Bots go round ponds unless it is much shorter to wade, which leaves the water to the players. The water is murky toon green with a light shore and darker deeps, feet splash, shots splash, landings splash, and steps slosh. The soak caught the server walking on dry ground where clients waded, the same trap as the hills, before anyone played it.
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
