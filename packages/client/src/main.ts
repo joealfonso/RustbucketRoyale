@@ -44,6 +44,8 @@ import { DamageFx, parseDamageFx } from "./damageFx";
 import { setAimTarget } from "./aimTarget";
 import type { DebugPanel } from "./debugPanel";
 import { FrameTimes } from "./frameTimes";
+import { FeatureCost } from "./featureCost";
+import { GpuTimer } from "./gpuTimer";
 import { Crt, parseCrt } from "./crt";
 import crtJson from "../../../data/crt.json";
 import { Input } from "./input";
@@ -435,6 +437,16 @@ const applyLocally = (file: string, path: string, value: number) => {
 // Offline a change applies at once. Online it goes to the server, which sends it back to everyone, this client too.
 const frameMs = new FrameTimes(240);
 const workMs = new FrameTimes(240); // time spent on the frame before the GPU takes over: the headroom a locked 60 fps hides
+const gpuTimer = new GpuTimer(renderer.getContext() as WebGL2RenderingContext);
+// The V7 look features that cost the most, switchable from F1 to see what each costs on this machine (gate 12c).
+let coverShown = true;
+const lookFeatures = [
+  { name: "sun shadows", set: (on: boolean) => sunShadows.setEnabled(on) },
+  { name: "painted marks", set: (on: boolean) => toon.paint.setShown(on) },
+  { name: "ground cover", set: (on: boolean) => { coverShown = on; } },
+];
+const featureCost = new FeatureCost(lookFeatures, 2, 3);
+const gpuSummary = { median: 0, worst: 0 };
 // The panel and lil-gui load on the first F1, so they are not part of the start download.
 let panel: DebugPanel | null = null;
 let panelLoading = false;
@@ -445,6 +457,7 @@ async function loadPanel(): Promise<DebugPanel> {
   p.addGait(gaitConfig);
   p.addHud(crt.setting, (v) => crt.setIntensity(v));
   addVfxQualityControl(p.gui);
+  p.addFeatures(lookFeatures, featureCost, gpuTimer);
   if (serverTuning !== null) p.setServerTuning(serverTuning);
   return p;
 }
@@ -1074,10 +1087,14 @@ function frame(now: number): void {
 
   shotFx.draw(rig.camera, frameTime);
   sunShadows.follow(rig.camera);
+  if (dressing.cover) dressing.cover.group.visible = coverShown;
+  gpuTimer.begin();
   renderer.render(scene, rig.camera);
+  gpuTimer.end();
+  featureCost.tick(frameTime, gpuTimer.times, gpuSummary);
   frameMs.record(frameTime * 1000);
   workMs.record(performance.now() - workStarted);
-  if (panel?.visible) panel.updateRender(frameMs, workMs, renderer.info.render.calls, renderer.info.render.triangles);
+  if (panel?.visible) panel.updateRender(frameMs, workMs, renderer.info.render.calls, renderer.info.render.triangles, gpuTimer.times);
   requestAnimationFrame(frame);
 }
 // Effects sit in the scene from the start with nothing to draw, so their shaders build now rather than in the frame

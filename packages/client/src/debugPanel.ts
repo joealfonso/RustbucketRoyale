@@ -1,6 +1,8 @@
 import GUI from "lil-gui";
 import { TUNABLE_FILES, secondsToCross, type CameraStats, type MechStats, type TunableFile, type TuningRaws } from "@rustbucket/shared";
+import type { FeatureCost } from "./featureCost";
 import type { FrameTimes } from "./frameTimes";
+import type { GpuTimer } from "./gpuTimer";
 
 export interface Readouts {
   speed: number;
@@ -29,10 +31,12 @@ export class DebugPanel {
   readonly gui = new GUI({ title: "Tuning (F1)" });
   readonly readouts: Readouts = { speed: 0, grounded: false, fps: 0, players: 1, correction: 0, ping: 0, viewDelay: 0 };
   private crossReadout = { seconds: 0 };
-  private render = { frameMedian: 0, frameWorst: 0, workMedian: 0, workWorst: 0, drawCalls: 0, triangles: 0 };
+  private render = { frameMedian: 0, frameWorst: 0, workMedian: 0, workWorst: 0, gpuMedian: 0, gpuWorst: 0, drawCalls: 0, triangles: 0 };
+  private costs = { progress: "not run", result: "" };
   private frame = { median: 0, worst: 0 };
   private status = { note: "offline: changes apply at once" };
   private gameplay: GUI[] = [];
+  private perf: GUI;
 
   constructor(
     private mech: MechStats,
@@ -49,11 +53,13 @@ export class DebugPanel {
     info.add(this.readouts, "ping").name("Ping ms").listen().disable();
     info.add(this.readouts, "viewDelay").name("Others shown behind (ms)").listen().disable();
     info.add(this.crossReadout, "seconds").name(`Cross ${CROSS_METERS} m (s)`).listen().disable();
-    const perf = this.gui.addFolder("Performance");
+    const perf = (this.perf = this.gui.addFolder("Performance"));
     perf.add(this.render, "frameMedian").name("Frame ms, median (4 s)").listen().disable();
     perf.add(this.render, "frameWorst").name("Frame ms, worst (4 s)").listen().disable();
     perf.add(this.render, "workMedian").name("Work ms, median").listen().disable();
     perf.add(this.render, "workWorst").name("Work ms, worst").listen().disable();
+    perf.add(this.render, "gpuMedian").name("GPU ms, median").listen().disable();
+    perf.add(this.render, "gpuWorst").name("GPU ms, worst").listen().disable();
     perf.add(this.render, "drawCalls").name("Draw calls").listen().disable();
     perf.add(this.render, "triangles").name("Triangles").listen().disable();
     this.gui.add(this.status, "note").name("Tuning").disable();
@@ -127,13 +133,40 @@ export class DebugPanel {
     this.crossReadout.seconds = Math.round(secondsToCross(this.mech, CROSS_METERS));
   }
 
-  updateRender(frames: FrameTimes, work: FrameTimes, drawCalls: number, triangles: number): void {
+  // Switches for the costly look features, and a button that measures what each costs here. Without the GPU timer
+  // (some browsers do not offer it) the button says so instead.
+  addFeatures(features: { name: string; set(on: boolean): void }[], cost: FeatureCost, gpu: GpuTimer): void {
+    const f = this.perf.addFolder("Look features");
+    const state: Record<string, boolean> = {};
+    for (const feature of features) {
+      state[feature.name] = true;
+      f.add(state, feature.name).listen().onChange((on: boolean) => feature.set(on));
+    }
+    const measure = () => {
+      if (!gpu.available) { this.costs.progress = "no GPU timer in this browser"; return; }
+      cost.start();
+    };
+    f.add({ measure }, "measure").name("Measure feature costs (about 20 s)");
+    f.add(this.costs, "progress").name("Measuring").listen().disable();
+    f.add(this.costs, "result").name("GPU ms each saves").listen().disable();
+    this.featureCost = cost;
+  }
+  private featureCost: FeatureCost | null = null;
+
+  updateRender(frames: FrameTimes, work: FrameTimes, drawCalls: number, triangles: number, gpu: FrameTimes): void {
     frames.summary(this.frame);
     this.render.frameMedian = Math.round(this.frame.median * 10) / 10;
     this.render.frameWorst = Math.round(this.frame.worst * 10) / 10;
     work.summary(this.frame);
     this.render.workMedian = Math.round(this.frame.median * 10) / 10;
     this.render.workWorst = Math.round(this.frame.worst * 10) / 10;
+    gpu.summary(this.frame);
+    this.render.gpuMedian = Math.round(this.frame.median * 10) / 10;
+    this.render.gpuWorst = Math.round(this.frame.worst * 10) / 10;
+    if (this.featureCost) {
+      if (this.featureCost.running || this.costs.progress !== "no GPU timer in this browser") this.costs.progress = this.featureCost.progress;
+      this.costs.result = this.featureCost.summary();
+    }
     this.render.drawCalls = drawCalls;
     this.render.triangles = triangles;
   }

@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: M12 (pace), 12a passed, 12b only if matches still feel slow (M10's friend test still open)
+Current code milestone: M12 (pace), 12c built, waiting for Joseph's check; then M13 (big moments) on his go, 13a supply drops next (M10's friend test still open)
 Current visual milestone: none in progress (V7 done)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -145,4 +145,5 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-19: V7 passed by Joseph's playtest ("slow down the mechs in general and then advance"): all four gates at once. On his call all mechs walk and run about 10% slower again (walk 6.7, run 13.2 m/s), with the large ring's shrinks about 10% slower and its waits shorter to keep the match inside 8 minutes. Still unmeasured: 60 fps on his laptop.
 - 2026-10-19: Gate 12a built, waiting for Joseph's playtest. Turbo Legs, a fifth upgrade (green booster on the back): walk and run 20% faster, dash and jets unchanged, predicted exactly by your own client. Also on his call, fewer health boxes: armor plates drop half as often, and crates are about a third of the props instead of half (junk fills the gap, so loot stays close; a few more maps re-roll for loot near a spawn, 7 in 75 seeds against 1). Check: find Turbo Legs in a crate or junk pile and feel the difference; see whether armor is now scarce enough to matter.
 - 2026-10-19: Gate 12a passed by Joseph's playtest ("12a passes"). 12b (timed power-ups) waits on whether matches still feel slow; 12c (the 60 fps check) not started.
+- 2026-10-19: Gate 12c built, waiting for Joseph's check. F1, Performance now shows GPU ms (median and worst), switches for sun shadows, painted marks and ground cover, and a "Measure feature costs" button that takes about 20 s and reports what each saves. On the M4 Mac, medium spawn: 6.1 ms all on; shadows 0.7, cover 0.7, paint 0.1 (docs/PERF.md). Check: press it on your laptop on medium and large, read the numbers to me, and say whether it holds 60 fps.
 

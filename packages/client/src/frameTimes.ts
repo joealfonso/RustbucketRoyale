@@ -16,6 +16,16 @@ export class FrameTimes {
     this.filled = Math.min(this.filled + 1, this.times.length);
   }
 
+  // Forgets everything, so the next summary covers only what comes after.
+  clear(): void {
+    this.next = 0;
+    this.filled = 0;
+  }
+
+  get count(): number {
+    return this.filled;
+  }
+
   // Median and worst of what is recorded, in ms.
   summary(out: { median: number; worst: number }): void {
     const n = this.filled;

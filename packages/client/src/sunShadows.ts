@@ -113,6 +113,11 @@ export class SunShadows {
     camera.updateProjectionMatrix();
   }
 
+  // Off skips the shadow pass and shaders lose their shadow code, so the first frames after a switch recompile.
+  setEnabled(on: boolean): void {
+    this.sun.castShadow = on;
+  }
+
   // Each frame before rendering: moves the shadow map to follow the camera.
   follow(camera: THREE.Camera): void {
     camera.getWorldDirection(forward);
