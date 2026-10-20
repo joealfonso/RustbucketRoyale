@@ -1,6 +1,7 @@
 import type { BotDifficulty } from "./botDifficulty";
 import type { MatchState } from "./match";
 import type { MechInput } from "./MechInput";
+import type { SupplyDrop } from "./drops";
 import type { RingSchedule } from "./ring";
 
 // The fixed simulation step. Client and server both step the mech in these slices.
@@ -175,6 +176,7 @@ export type ServerMessage =
   | {
       t: "room"; code: string; tier: string; state: MatchState; seed: number; hostId: number;
       players: number; ring: RingSchedule | null; matchSeconds: number;
+      drops: SupplyDrop[] | null; // this match's supply drops, planned with the ring
       difficulty: BotDifficulty; // so someone who joined by code also sees how hard the bots are
     }
   | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number; left?: boolean } // left: their connection closed

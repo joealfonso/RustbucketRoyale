@@ -335,3 +335,6 @@ Grass, weeds, ferns, rubble and scrap are planted per 8 m cell from the map seed
 
 ## 2026-10-19: Fewer crates by swapping weight to junk, not by fewer props (12a)
 Joseph wanted fewer health boxes. Crates went from half the props to about a third, with junk piles taking the difference, because junk drops loot too: loot per map stays close and only a few more seeds re-roll for too little loot near a spawn. Cutting the prop count instead would have thinned loot and cover everywhere.
+
+## 2026-10-19: Supply drops planned with the ring and drawn from the match clock (13a)
+The server picks each drop's landing spot and time when the match starts and sends the list with the ring schedule, so clients draw the whole beacon, fall, smoke and lid pop from the match clock with no messages of their own. The landing is an ordinary ownerless blast and the loot ordinary pickups, so prediction, props and interest management need nothing new. Spots are on open, dry, level ground inside where the ring will be, so the crate never lands in a wall or a pond. The crate has no collision box: it is a few seconds of spectacle, then a husk, and adding a box to a running world would touch every client's prediction.

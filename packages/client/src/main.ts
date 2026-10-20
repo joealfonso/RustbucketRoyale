@@ -2,7 +2,7 @@ import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, applyLook, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
   parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
-  createRayHit, type AbilityMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
+  createRayHit, parseDropsConfig, type AbilityMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import audioJson from "../../../data/audio.json";
@@ -94,6 +94,8 @@ import { parseRadar } from "./radarData";
 import radarJson from "../../../data/radar.json";
 import { RemoteMechs } from "./remoteMechs";
 import { RingView } from "./ringView";
+import { DropView } from "./dropView";
+import dropsJson from "../../../data/drops.json";
 import { ShotFx } from "./shotFx";
 import { parseWeaponFx } from "./weaponFxData";
 import weaponFxJson from "../../../data/weaponFx.json";
@@ -286,6 +288,8 @@ const castMapShadows = () => {
 };
 castMapShadows();
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
+const dropView = new DropView(toon, fxSprites, parseDropsConfig(dropsJson));
+scene.add(dropView.group);
 // Soft dark patches under map boxes and mechs, so nothing floats over the ground (data/ground.json shadows).
 const shadowLook = parseShadowLook(groundJson.shadows);
 const contactShadows = new ContactShadows(scene, shadowLook, toon.color(shadowLook.color));
@@ -652,6 +656,7 @@ if (net) {
     hostId = r.hostId;
     if (r.seed !== map.seed || r.tier !== map.tier) swapMap(r.seed, r.tier);
     ringView.setSchedule(r.ring);
+    dropView.setDrops(r.drops);
     hud.setRoom(r, net.id);
     if (r.state === "countdown") { hud.hideResult(); myPlace = null; }
     if (r.state === "active" && wasCountdown) hud.flash("GO", 900);
@@ -994,6 +999,10 @@ function frame(now: number): void {
 
   const matchSeconds = progress.state === "active" ? progress.seconds + (performance.now() - progressAt) / 1000 : 0;
   const ring: RingNow | null = ringView.update(matchSeconds);
+  dropView.update(progress.state === "active" ? matchSeconds : null, frameTime);
+  if (dropView.news === "announced") { hud.flash("SUPPLY DROP INBOUND", 2500); hud.feed("Supply drop incoming: follow the yellow beam"); }
+  else if (dropView.news === "open") hud.feed("Supply drop open");
+  if (radar && progress.state === "active") dropView.forEachMarked(matchSeconds, (dx, dz) => radar.markDrop(dx, dz));
   const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);
   if (net) hud.setProgress(progress, ring);
 

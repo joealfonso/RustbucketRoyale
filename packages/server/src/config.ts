@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import {
   World, buildNavGrid, buildRange, generateMap, parseBotConfig, parseChunkSet, parseCombatStats, parseGrenadeStats, parseMatchConfig, parseMechStats,
-  parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseTiers, parseWeapons, parseLootConfig, parseUpgrades, parseZones, parseRoster, parseAbilities, TUNABLE_FILES, type Roster, type RangeData, type TuningRaws,
+  parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseDropsConfig, parseTiers, parseWeapons, parseLootConfig, parseUpgrades, parseZones, parseRoster, parseAbilities, TUNABLE_FILES, type Roster, type RangeData, type TuningRaws,
 } from "@rustbucket/shared";
 import { parseBotAbilities } from "./botAbilities";
 import type { MapForRoom, RoomConfig } from "./Room";
@@ -40,6 +40,7 @@ export function loadRoomConfig(options: ConfigOptions = {}): RoomConfig {
     combat: parseCombatStats(readJson("combat.json")),
     match: parseMatchConfig(readJson("match.json")),
     ring: parseRingConfig(readJson("ring.json")),
+    drops: parseDropsConfig(readJson("drops.json")),
     zones: parseZones(readJson("zones.json")),
     // Loaded with or without a roster: without one no mech has an ability, so the file is simply unused.
     abilities: parseAbilities(readJson("abilities.json")),

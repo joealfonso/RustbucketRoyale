@@ -8,6 +8,7 @@ import {
   takenWithE, itemUpgrade, upgradeItem, upgradeScale, applyTune, assignDeep, parseTunable, setNumberAt, TUNABLE_FILES, type TuningRaws, type UpgradeSet,
   makeZonesFor, makeMuzzlesFor, mechStatsFor, rosterIndex, abilityFor, barrageTarget, type Roster, type AbilitySet, type AbilityStats, type BarrageStats,
   type BotDifficulty, type DecoyStats, type PounceStats, type RamStats,
+  ITEM_ARMOR_FIRST, ITEM_GRENADE, type DropsConfig, type SupplyDrop,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
@@ -17,6 +18,7 @@ import { decoyAlong, spawnDecoys, stepDecoy, type Decoy } from "./decoys";
 import { Pathfinder } from "./Pathfinder";
 import { activeWeapon, collectSmall, freshLoadout, selectSlot, spillItems, takeUpgrade, takeWeapon, wantsItem } from "./loadout";
 import { Pickups } from "./Pickups";
+import { planDrops } from "./supplyDrops";
 import type { Player } from "./Player";
 
 const KILL_HEIGHT = -50;
@@ -63,6 +65,7 @@ export interface RoomConfig {
   net: NetStats;
   match: MatchConfig;
   ring: RingConfig;
+  drops: DropsConfig;
   zones: ZoneSet;
   abilities: AbilitySet;
   // Builds the map for a tier and seed. The room asks for a fresh one at the start of every match.
@@ -109,6 +112,9 @@ export class Room {
   private upcoming: { seed: number; map: MapForRoom | null; failed: boolean } | null = null; // with mapLater only
   private startWanted = false; // a countdown is owed as soon as the upcoming map arrives
   private ring: RingSchedule | null = null;
+  private drops: SupplyDrop[] = [];
+  private dropsLanded = 0; // how many of this match's drops have hit the ground
+  private dropsOpened = 0;
   private propHp: Float32Array = new Float32Array(0);
   private destroyedProps: number[] = [];
   private nearBoxes: number[] = []; // reused by propsTouching
@@ -477,6 +483,7 @@ export class Room {
     this.stepGrenades();
     this.setOffPendingBlasts();
     if (this.state === "active") this.applyRing();
+    if (this.state === "active") this.runDrops();
     if (this.tickCount % net.snapshotEvery === 0) this.broadcastSnapshots();
   }
 
@@ -538,8 +545,59 @@ export class Room {
     if (pickup) { goalX = pickup.x; goalZ = pickup.z; range = Math.hypot(pickup.x - x, pickup.z - z); found = true; }
     const wreck = this.nearestWreck(player, range);
     if (wreck) { goalX = wreck.state.x; goalZ = wreck.state.z; found = true; }
+    // Nothing lying about: a supply drop that has not opened yet pulls bots from a long way off.
+    const drop = found ? null : this.dropWaiting(x, z);
+    if (drop) { goalX = drop.x; goalZ = drop.z; found = true; }
     if (found) bot.setLootGoal(goalX, goalZ, wreck !== null);
     else bot.clearLootGoal();
+  }
+
+  // ---- supply drops
+
+  // Lands and opens this match's supply drops on the match clock, the same clock the clients draw them by.
+  private runDrops(): void {
+    const elapsed = this.elapsedSeconds();
+    const config = this.config.drops;
+    while (this.dropsLanded < this.drops.length && this.drops[this.dropsLanded]!.landAt <= elapsed) {
+      const d = this.drops[this.dropsLanded++]!;
+      // Landing is a blast nobody owns: it flattens props and hurts whoever stood underneath, and everyone near hears it.
+      this.blast(d.x, d.y, d.z, config.impact.damage, config.impact.radius, null);
+    }
+    while (this.dropsOpened < this.dropsLanded && this.drops[this.dropsOpened]!.landAt + config.openSeconds <= elapsed) {
+      this.openDrop(this.drops[this.dropsOpened++]!);
+    }
+  }
+
+  // The lid blows off and the best loot in the match lands in a ring round the crate.
+  private openDrop(d: SupplyDrop): void {
+    const { contents, spillMeters } = this.config.drops;
+    const weapons = this.config.weapons.weapons.length;
+    const start = this.config.weapons.start;
+    const turn = this.random() * Math.PI * 2;
+    contents.forEach((kind, i) => {
+      let item = ITEM_GRENADE;
+      if (kind === "upgrade") item = upgradeItem(Math.floor(this.random() * this.config.upgrades.upgrades.length));
+      else if (kind === "armor") item = ITEM_ARMOR_FIRST + Math.floor(this.random() * 3);
+      else if (kind === "weapon") item = weaponItem((start + 1 + Math.floor(this.random() * (weapons - 1))) % weapons);
+      const angle = turn + (i / contents.length) * Math.PI * 2;
+      const x = d.x + Math.cos(angle) * spillMeters, z = d.z + Math.sin(angle) * spillMeters;
+      this.pickups.add(item, x, this.surfaceBelow(x, z, d.y + 1) + PICKUP_LIFT, z);
+    });
+    this.makeNoise(null, "explosion", d.x, d.z);
+  }
+
+  // The nearest drop that has been announced and not yet opened, within the pull of bots, or null.
+  private dropWaiting(x: number, z: number): SupplyDrop | null {
+    const config = this.config.drops;
+    const elapsed = this.elapsedSeconds();
+    let best: SupplyDrop | null = null, bestDistance = config.botPullMeters;
+    for (let i = this.dropsOpened; i < this.drops.length; i++) {
+      const d = this.drops[i]!;
+      if (d.landAt - elapsed > config.announceSeconds) break;
+      const distance = Math.hypot(d.x - x, d.z - z);
+      if (distance < bestDistance) { best = d; bestDistance = distance; }
+    }
+    return best;
   }
 
   // The nearest wreck that still has something in it, within range of a mech, or null.
@@ -611,6 +669,9 @@ export class Room {
     for (const p of this.players.values()) p.bot?.setFinder(this.finder);
     this.fillBots();
     this.ring = makeRingSchedule(this.config.ring, this.tier, this.map.meters, this.random);
+    this.drops = planDrops(this.config.drops, this.tier, this.ring, this.map, this.random);
+    this.dropsLanded = 0;
+    this.dropsOpened = 0;
     this.grenades = [];
     this.pickups.clear();
     for (const player of [...this.players.values()]) if (player.gone) this.players.delete(player.id);
@@ -1292,6 +1353,7 @@ export class Room {
     const message: ServerMessage = {
       t: "room", code: this.code, tier: this.tier, state: this.state, seed: this.seed, hostId: this.hostId,
       players: this.humans().length, ring: this.state === "lobby" ? null : this.ring, matchSeconds: this.config.match.matchSeconds,
+      drops: this.state === "lobby" ? null : this.drops,
       difficulty: this.difficulty,
     };
     for (const p of this.players.values()) p.send(message);

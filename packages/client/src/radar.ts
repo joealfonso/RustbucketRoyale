@@ -42,6 +42,9 @@ export class Radar {
   private viewX = 0;
   private viewZ = 0;
   private viewYaw = 0;
+  // Supply drops to mark this frame, as x, z pairs (see `markDrop`). Kept, not remade, so drawing allocates nothing.
+  private drops: number[] = [];
+  private dropCount = 0;
   private drawMech = (wx: number, wz: number, _bot: boolean, dead: boolean): void => {
     if (dead || Math.hypot(wx - this.viewX, wz - this.viewZ) > this.detectMeters) return;
     const p = placeOnRadar(wx - this.viewX, wz - this.viewZ, this.viewYaw, this.scale, this.point);
@@ -103,6 +106,13 @@ export class Radar {
     p.bornMs = nowMs;
   }
 
+  // A supply drop's landing spot, for the next `draw` only. Shown as a diamond, held at the edge when out of range.
+  markDrop(x: number, z: number): void {
+    this.drops[this.dropCount * 2] = x;
+    this.drops[this.dropCount * 2 + 1] = z;
+    this.dropCount++;
+  }
+
   // `outside` turns the zone arrow red and makes it blink, so it never rests on colour alone.
   draw(x: number, z: number, yaw: number, remotes: RemoteMechs, ring: Circle | null, outside: boolean, nowMs: number): void {
     const ctx = this.ctx;
@@ -126,6 +136,7 @@ export class Radar {
 
     if (ring) this.drawZoneArrow(x, z, yaw, ring, outside, nowMs);
     this.drawPulses(x, z, yaw, nowMs);
+    this.drawDrops(x, z, yaw, nowMs);
 
     this.viewX = x;
     this.viewZ = z;
@@ -238,6 +249,30 @@ export class Radar {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+  }
+
+  private drawDrops(x: number, z: number, yaw: number, nowMs: number): void {
+    const ctx = this.ctx;
+    const mid = this.mid;
+    const size = 5 + (Math.floor(nowMs / 400) % 2); // a slow two-step throb, so it reads as live, not as a mech
+    for (let i = 0; i < this.dropCount; i++) {
+      const p = placeOnRadar(this.drops[i * 2]! - x, this.drops[i * 2 + 1]! - z, yaw, this.scale, this.point);
+      const reach = Math.hypot(p.x, p.y), edge = mid - 6;
+      const k = reach > edge ? edge / reach : 1;
+      const px = mid + p.x * k, py = mid + p.y * k;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = this.colours.amber;
+      ctx.strokeStyle = this.colours.soot;
+      ctx.beginPath();
+      ctx.moveTo(px, py - size);
+      ctx.lineTo(px + size, py);
+      ctx.lineTo(px, py + size);
+      ctx.lineTo(px - size, py);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    this.dropCount = 0;
   }
 
   private drawPulses(x: number, z: number, yaw: number, nowMs: number): void {

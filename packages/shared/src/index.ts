@@ -25,3 +25,4 @@ export * from "./roster";
 export * from "./muzzles";
 export * from "./abilities";
 export * from "./botDifficulty";
+export * from "./drops";

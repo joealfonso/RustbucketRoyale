@@ -1,0 +1,20 @@
+{
+  "landSeconds": {
+    "small": [90, 210],
+    "medium": [120, 300],
+    "large": [150, 330]
+  },
+  "announceSeconds": 20,
+  "fallSeconds": 6,
+  "fallHeight": 160,
+  "openSeconds": 5,
+  "impact": { "damage": 90, "radius": 7 },
+  "placeShareOfRing": 0.6,
+  "clearMeters": 4,
+  "contents": ["upgrade", "upgrade", "weapon", "armor", "armor", "armor", "grenade", "grenade"],
+  "spillMeters": 3.5,
+  "botPullMeters": 350,
+  "crate": { "size": [2.6, 2.2, 2.6], "paint": "sparkYellow", "trim": "soot", "model": null },
+  "smoke": { "everySeconds": 0.15, "lingerSeconds": 45, "fireEverySeconds": 0.05 },
+  "beacon": { "width": 3, "height": 260, "opacity": 0.42 }
+}
