@@ -1,6 +1,6 @@
 {
-  "walkSpeed": 7.4,
-  "runSpeed": 14.7,
+  "walkSpeed": 6.7,
+  "runSpeed": 13.2,
   "crawlSpeedMultiplier": 0.4,
   "waterSpeedMultiplier": 0.7,
   "acceleration": 40,
