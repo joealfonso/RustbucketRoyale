@@ -55,6 +55,25 @@ export interface MechMessage {
 
 export type ClientMessage = InputMessage | StartMessage | TuneMessage | MechMessage;
 
+// How a mech was knocked out, for the knockout card (gate 14c). `causes` are the last two different things that hurt
+// it, newest last, each an id the client turns into words: "weapon:<weapons.json id>", "ability:<abilities.json kind>"
+// (ram, pounce, barrage, decoy, rail), "grenade", "barrel", "ring" or "drop" (a supply drop landing).
+// `killerMech` is the killer's roster mech, -1 for none (the ring) or unknown.
+export interface KnockoutHow {
+  killerMech: number;
+  killerBot: boolean;
+  causes: string[];
+}
+
+// A fun number from the match for the results screen (gate 14c): who did the most of something. Only stats someone
+// actually scored are sent. `value` is a count, or metres for the distance ones.
+export type MatchStatKind = "treesFelled" | "barrelsSetOff" | "longestPounce" | "longestRailShot" | "propsSmashed" | "mostDamage";
+export interface MatchStat {
+  kind: MatchStatKind;
+  playerId: number;
+  value: number;
+}
+
 // The full state a client needs to rewind and replay its own mech.
 export interface SelfState {
   x: number; y: number; z: number;
@@ -179,8 +198,8 @@ export type ServerMessage =
       drops: SupplyDrop[] | null; // this match's supply drops, planned with the ring
       difficulty: BotDifficulty; // so someone who joined by code also sees how hard the bots are
     }
-  | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number; left?: boolean } // left: their connection closed
-  | { t: "result"; winnerId: number | null }
+  | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number; left?: boolean; how?: KnockoutHow } // left: their connection closed
+  | { t: "result"; winnerId: number | null; stats?: MatchStat[] }
   | { t: "refused"; reason: string; rejoinFailed?: boolean } // rejoinFailed: too late, join the room afresh
   | { t: "notice"; text: string } // a line for the feed from the server itself, such as a restart
   | { t: "prop"; id: number } // a prop was destroyed
