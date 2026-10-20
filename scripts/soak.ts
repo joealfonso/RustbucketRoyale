@@ -12,7 +12,7 @@ for (const tier of tiers) {
   console.log(
     `${verdict} ${tier} seed ${seed}: ${r.matchSeconds.toFixed(0)} s match, ${r.eliminations} knocked out, ` +
     `tick p99 ${r.tickP99Ms.toFixed(2)} ms (worst ${r.tickWorstMs.toFixed(1)}), ${r.kbpsPerPlayer.toFixed(0)} kbps per player, ` +
-    `worst correction ${(r.worstCorrection * 100).toFixed(2)} cm, took ${((Date.now() - started) / 1000).toFixed(1)} s`,
+    `worst correction ${(r.worstCorrection * 100).toFixed(2)} cm, ${r.propsBroken} props broken, took ${((Date.now() - started) / 1000).toFixed(1)} s`,
   );
   for (const p of r.problems) console.log(`    ${p}`);
   if (r.problems.length > 0) {

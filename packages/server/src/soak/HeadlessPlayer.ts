@@ -22,6 +22,7 @@ export class HeadlessPlayer {
   corrections = 0;
   places: number[] = []; // every place handed out by an elimination message
   winnerSeen = false;
+  propsBroken = 0; // prop messages received: with woods on the map, how much breaking goes on near a player
   private predictor: Predictor | null = null;
   private brain: Bot | null = null;
   private world: World | null = null;
@@ -37,6 +38,7 @@ export class HeadlessPlayer {
   private wasDead = false;
   private wasCrawling = false;
   private abilityOf: (mech: number) => AbilityStats | null;
+  private statsOf: (mech: number) => MechStats;
 
   constructor(
     private room: Room,
@@ -52,6 +54,7 @@ export class HeadlessPlayer {
     private botAbilities: BotAbilityStats | null = null,
   ) {
     this.abilityOf = abilities ? abilityFor(abilities, roster) : () => null;
+    this.statsOf = mechStatsFor(mech, roster);
     this.id = room.join((m) => this.receive(m)) ?? 0;
     room.receive(this.id, JSON.stringify({ t: "mech", mech: pick }));
   }
@@ -66,7 +69,7 @@ export class HeadlessPlayer {
     if (message.t === "room") { this.ring = message.ring; this.settleSnapshots = 3; }
     if (message.t === "snapshot") this.onSnapshot(message);
     // A destroyed prop leaves this player's world too, as in the browser, or prediction walks into walls that are gone.
-    if (message.t === "prop") this.breakProp(message.id);
+    if (message.t === "prop") { this.breakProp(message.id); this.propsBroken++; }
     if (message.t === "props") for (const id of message.destroyed) this.breakProp(id);
     if (message.t === "eliminated") this.places.push(message.place);
     if (message.t === "result") this.winnerSeen = true;
@@ -83,7 +86,7 @@ export class HeadlessPlayer {
     this.props = map.props;
     const finder = new Pathfinder(map.nav, this.bots.path);
     if (!this.predictor) {
-      this.predictor = new Predictor(mechStatsFor(this.mech, this.roster), map.world, ...map.spawns[0]!, Math.PI, this.abilityOf);
+      this.predictor = new Predictor(this.statsOf, map.world, ...map.spawns[0]!, Math.PI, this.abilityOf);
       this.brain = new Bot(this.bots.difficulties.normal!, this.random, this.bots.path, finder, 2, this.botAbilities);
     } else {
       this.predictor.setWorld(map.world);
@@ -122,6 +125,7 @@ export class HeadlessPlayer {
     const targets: BotTarget[] = snap.others.filter((o) => !o.dead).map((o) => ({ id: o.id, x: o.x, y: o.y, z: o.z }));
     const ring = this.ring && snap.match.state === "active" ? ringAt(this.ring, snap.match.seconds, this.ringNow) : null;
     this.brain.abilityKind = this.abilityOf(this.predictor.state.mech)?.kind ?? null;
+    this.brain.body = this.statsOf(this.predictor.state.mech);
     this.brain.think(this.predictor.state, targets, ring, this.world, STEP, input);
     // The same rules the browser applies before sending.
     if (snap.health.dead || snap.match.state === "countdown") {

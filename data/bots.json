@@ -83,7 +83,11 @@
     "goalMoveReplan": 15,
     "searchesPerTick": 1,
     "heuristicWeight": 1.5,
-    "waterCost": 2.5
+    "waterCost": 2.5,
+    "steerLookMeters": 4,
+    "steerClearanceMeters": 0.6,
+    "steerMaxSizeMeters": 5,
+    "steerKeepSideMeters": 0.5
   },
   "loot": {
     "searchMeters": 40,

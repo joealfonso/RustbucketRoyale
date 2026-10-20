@@ -111,6 +111,8 @@ export class Room {
   private ring: RingSchedule | null = null;
   private propHp: Float32Array = new Float32Array(0);
   private destroyedProps: number[] = [];
+  private nearBoxes: number[] = []; // reused by propsTouching
+  private nearProps: number[] = [];
   private pickups: Pickups;
   private pickupScratch: PickupState[] = [];
   private pendingBlasts: { x: number; y: number; z: number; tick: number; owner: Player | null; damage: number; radius: number }[] = [];
@@ -486,6 +488,7 @@ export class Room {
     const { lod } = this.config.bots;
     const bot = player.bot!;
     bot.abilityKind = this.abilityFor(player.state.mech)?.kind ?? null;
+    bot.body = this.statsFor(player.state.mech);
     let health = 0;
     for (let zone = 0; zone < ZONE_COUNT; zone++) health += player.hp[zone]! + player.loadout.armor[zone]!;
     bot.noteHealth(health);
@@ -924,9 +927,13 @@ export class Room {
       if (killed) this.eliminate(target, owner);
     }
 
-    for (const prop of this.map.props) {
-      if (this.propHp[prop.id]! <= 0) continue;
-      const distance = Math.hypot(prop.x - bx, prop.y - by, prop.z - bz);
+    // Measured to the nearest height on the prop, so a blast at the foot of a 12 m pine hits its trunk, not a point
+    // 6 m up. Looked up through the world's grid: a large map has thousands of trees.
+    const count = this.propsTouching(bx - radius, bz - radius, bx + radius, bz + radius);
+    for (let i = 0; i < count; i++) {
+      const prop = this.map.props[this.nearProps[i]!]!;
+      const box = this.map.world.boxes[prop.boxIndex]!;
+      const distance = Math.hypot(prop.x - bx, Math.max(box.minY, Math.min(by, box.maxY)) - by, prop.z - bz);
       if (distance < radius) this.damageProp(prop.id, damage * (1 - distance / radius), owner);
     }
 
@@ -985,17 +992,11 @@ export class Room {
     }
     this.popDecoysAround(s.x, s.y, s.z, ram.hitRadius, height, player);
 
-    for (const prop of this.map.props) {
-      if (this.propHp[prop.id]! <= 0) continue;
-      const box = this.map.world.boxes[prop.boxIndex]!;
-      if (box.maxY < s.y || box.minY > s.y + height) continue;
-      const nearX = Math.max(box.minX, Math.min(s.x, box.maxX)), nearZ = Math.max(box.minZ, Math.min(s.z, box.maxZ));
-      // All its remaining hit points: a ram goes through cover, it does not chip at it.
-      if (Math.hypot(nearX - s.x, nearZ - s.z) <= ram.hitRadius) this.damageProp(prop.id, this.propHp[prop.id]!, player);
-    }
+    this.smashProps(player, ram.hitRadius, height);
   }
 
-  // A pounce comes down blade first: everyone near the landing spot takes the slam.
+  // A pounce comes down blade first: everyone near the landing spot takes the slam, and what stands there breaks. A
+  // leap that ends against a trunk lands at its foot, so the tree goes down with it.
   private slam(player: Player, pounce: PounceStats): void {
     const s = player.state;
     const height = this.statsFor(s.mech).height;
@@ -1008,6 +1009,21 @@ export class Room {
       this.abilityDamage(player, target, pounce.damage);
     }
     this.popDecoysAround(s.x, s.y, s.z, pounce.slamRadius, height, player);
+    this.smashProps(player, pounce.slamRadius, height);
+  }
+
+  // Every prop within reach of a ram or a slam, at about the mech's height, is smashed outright with all its
+  // remaining hit points: a charge or a blade goes through cover, it does not chip at it. Trees too.
+  private smashProps(player: Player, radius: number, height: number): void {
+    const s = player.state;
+    const count = this.propsTouching(s.x - radius, s.z - radius, s.x + radius, s.z + radius);
+    for (let i = 0; i < count; i++) {
+      const id = this.nearProps[i]!;
+      const box = this.map.world.boxes[this.map.props[id]!.boxIndex]!;
+      if (box.maxY < s.y || box.minY > s.y + height) continue;
+      const nearX = Math.max(box.minX, Math.min(s.x, box.maxX)), nearZ = Math.max(box.minZ, Math.min(s.z, box.maxZ));
+      if (Math.hypot(nearX - s.x, nearZ - s.z) <= radius) this.damageProp(id, this.propHp[id]!, player);
+    }
   }
 
   // Mortar Strike. The warning goes up at the target at once, for whoever is near it and whoever is near the
@@ -1233,6 +1249,17 @@ export class Room {
       const { damage, radius } = this.config.props.barrelBlast;
       this.pendingBlasts.push({ x: prop.x, y: this.surfaceBelow(prop.x, prop.z, prop.y), z: prop.z, tick: this.tickCount + delay, owner: by, damage, radius });
     }
+  }
+
+  // The props still standing whose boxes touch a rectangle, into this.nearProps. Returns how many.
+  private propsTouching(minX: number, minZ: number, maxX: number, maxZ: number): number {
+    const boxes = this.map.world.query(minX, minZ, maxX, maxZ, this.nearBoxes);
+    let count = 0;
+    for (let i = 0; i < boxes; i++) {
+      const id = this.map.propOfBox[this.nearBoxes[i]!]!;
+      if (id >= 0 && this.propHp[id]! > 0) this.nearProps[count++] = id;
+    }
+    return count;
   }
 
   // Barrels go off a beat after they break, so a chain of them ripples rather than all going at once. Mortar shells

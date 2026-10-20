@@ -112,6 +112,11 @@ export interface BotPathStats {
   searchesPerTick: number; // route searches one room runs per tick, the rest wait a tick
   heuristicWeight: number; // above 1 a search heads for the goal more eagerly: far fewer cells, routes a little longer
   waterCost: number; // a step through water costs this many dry steps, so bots go round ponds unless wading is far shorter
+  // Stepping round small things right in front (trunks, crates, boulders; server steer.ts). Guesses, tuned in steer.test.ts.
+  steerLookMeters: number; // how far ahead it looks: more than a run covers in the far bots' 4 tick step
+  steerClearanceMeters: number; // the gap left between its side and the thing it passes
+  steerMaxSizeMeters: number; // anything wider or deeper than this is a wall, left to the route
+  steerKeepSideMeters: number; // keeps the side it picked unless the other way is shorter by more than this
 }
 
 export interface BotLootStats {
@@ -214,7 +219,7 @@ export const parseCombatStats = (raw: unknown) => parseNumbers<CombatStats>(raw,
 export const parseBotStats = (raw: unknown, name = "bots.json") => parseNumbers<BotStats>(raw, name, BOT_KEYS);
 
 const LOD_KEYS: (keyof BotLodStats & string)[] = ["fullRangeMeters", "cheapEveryTicks", "abstractFightRange", "abstractFightSeconds", "abstractLoserDamage", "abstractWinnerDamage"];
-const PATH_KEYS: (keyof BotPathStats & string)[] = ["cellMeters", "maxNodes", "replanSeconds", "waypointReach", "minPathDistance", "goalMoveReplan", "searchesPerTick", "heuristicWeight", "waterCost"];
+const PATH_KEYS: (keyof BotPathStats & string)[] = ["cellMeters", "maxNodes", "replanSeconds", "waypointReach", "minPathDistance", "goalMoveReplan", "searchesPerTick", "heuristicWeight", "waterCost", "steerLookMeters", "steerClearanceMeters", "steerMaxSizeMeters", "steerKeepSideMeters"];
 
 export function parseBotConfig(raw: unknown): BotConfig {
   const d = raw as Record<string, Record<string, unknown>>;

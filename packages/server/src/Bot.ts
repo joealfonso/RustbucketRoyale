@@ -1,6 +1,7 @@
 import { createRayHit, type AbilityStats, type BotPathStats, type BotStats, type MechInput, type MechState, type RingNow, type World } from "@rustbucket/shared";
 import type { BotAbilityStats } from "./botAbilities";
 import type { Pathfinder } from "./Pathfinder";
+import { createSteerMemory, steerRound, type SteerBody } from "./steer";
 
 const DEG = Math.PI / 180;
 const EYE_HEIGHT = 2.4;
@@ -53,6 +54,11 @@ export class Bot {
   private heardFor = 0;
   needsRepair = false; // set by the room: a part is bad enough that the bot stops to fix it when nobody is in sight
   abilityKind: AbilityStats["kind"] | null = null; // set by the room: the Q ability of the mech this bot drives
+  // Set by the room: the size of the mech this bot drives, for stepping round trunks and crates in its way. Null
+  // steers round nothing, which the tests of aim and routes rely on.
+  body: SteerBody | null = null;
+  private steering = createSteerMemory();
+  private steered = { x: 0, z: 0 };
   private healthMark = Infinity;
   private hurtFor = 0; // seconds left of feeling under fire since the last hit
   private hasLoot = false;
@@ -115,6 +121,7 @@ export class Bot {
     let targetDistance = Infinity;
     let wantX = 0, wantZ = 0; // the direction to travel, in the world
     let run = false;
+    let steerWithin = Infinity; // how far off the spot it walks straight to is, when it is close
 
     if (target) {
       if (target.id !== this.lastTargetId) { this.spottedFor = 0; this.lastTargetId = target.id; }
@@ -165,13 +172,19 @@ export class Bot {
         const dx = goal.x - self.x, dz = goal.z - self.z;
         const distance = Math.hypot(dx, dz);
         if (distance <= LOOT_REACH) { wantX = 0; wantZ = 0; out.interact = true; }
-        else if (distance < LOOT_DIRECT) { wantX = dx / distance; wantZ = dz / distance; }
+        else if (distance < LOOT_DIRECT) { wantX = dx / distance; wantZ = dz / distance; steerWithin = distance; }
       }
       // Look where it is going.
       this.turnToward(self, self.x + heading.x * 10, self.y + EYE_HEIGHT, self.z + heading.z * 10, dt);
     }
 
     if (this.abilityKind === "decoy" && this.abilities) this.dropDecoys(targetDistance, dt, out);
+
+    // Routes go straight through woods, so whatever it wants, it steps round a trunk or crate right in front of it.
+    if (this.body && (wantX !== 0 || wantZ !== 0)) {
+      steerRound(world, self.x, self.y, self.z, wantX, wantZ, this.body, this.pathStats, this.steering, this.steered, steerWithin);
+      wantX = this.steered.x; wantZ = this.steered.z;
+    }
 
     // Stuck: it means to move but is not getting anywhere, so hop and slide sideways for a moment.
     this.watchIn -= dt;

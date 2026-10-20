@@ -30,6 +30,7 @@ export interface SoakReport {
   aloneFraction: number;
   firstContactSeconds: number;
   knockoutsPerMinute: number;
+  propsBroken: number; // props (crates, barrels, trees) broken in the match, as one player was told of them
 }
 
 const CONTACT_METERS = 150; // the radar's range: anything closer can be seen or heard to matter
@@ -134,6 +135,6 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
     firstContactSeconds: contacts[Math.floor(contacts.length / 2)] ?? 0,
     knockoutsPerMinute: places.length / matchMinutes,
     tier, seed, problems, matchSeconds: activeTicks * STEP, players: fakePlayers, eliminations: places.length,
-    tickP99Ms, tickWorstMs: times.at(-1) ?? 0, kbpsPerPlayer, worstCorrection,
+    tickP99Ms, tickWorstMs: times.at(-1) ?? 0, kbpsPerPlayer, worstCorrection, propsBroken: players[0]!.propsBroken,
   };
 }
