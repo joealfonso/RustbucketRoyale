@@ -140,6 +140,28 @@ function markCaster(o: THREE.Object3D): void {
   if (!mesh.isMesh) return;
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   mesh.castShadow = materials.some(castsShadow);
+  if (mesh.castShadow) mesh.customDepthMaterial = depthFor(mesh);
+}
+
+// One depth material per kind of caster: instanced or not, coloured instances or not, and which side it shows. Left
+// alone, three draws every caster's shadow with one shared depth material, and each switch between an instanced and
+// a plain mesh re-decides its shader program: about seven times a frame, and most of the garbage the frame loop made
+// (docs/PERF.md, optimization pass). A mesh with a texture or a cut-out keeps three's own copy, which it needs.
+const depthMaterials = new Map<string, THREE.MeshDepthMaterial>();
+
+export function depthFor(mesh: THREE.Mesh): THREE.MeshDepthMaterial | undefined {
+  const m = mesh.material;
+  if (Array.isArray(m) || m.alphaTest > 0 || m.alphaToCoverage || (m as THREE.MeshStandardMaterial).map || (m as THREE.MeshStandardMaterial).alphaMap
+    || (m as THREE.MeshStandardMaterial).displacementMap || (m.clippingPlanes?.length ?? 0) > 0) return undefined;
+  const instanced = (mesh as THREE.InstancedMesh).isInstancedMesh === true;
+  const coloured = instanced && (mesh as THREE.InstancedMesh).instanceColor !== null;
+  const key = `${instanced}-${coloured}-${m.side}-${m.shadowSide}`;
+  let depth = depthMaterials.get(key);
+  if (!depth) {
+    depth = new THREE.MeshDepthMaterial();
+    depthMaterials.set(key, depth);
+  }
+  return depth;
 }
 
 export function castsShadow(material: THREE.Material | undefined): boolean {

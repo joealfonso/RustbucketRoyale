@@ -98,8 +98,11 @@ export class Dressing {
     return [clamp(x), clamp(z)];
   }
 
+  // Called every frame, so it works the cell out in place rather than through cellAt's pair.
   private keyAt(x: number, z: number): number {
-    const [cx, cz] = this.cellAt(x, z);
+    const half = this.map.meters / 2, size = this.config.chunkMeters, last = this.perChunk - 1;
+    const cx = Math.min(last, Math.max(0, Math.floor((x + half) / size)));
+    const cz = Math.min(last, Math.max(0, Math.floor((z + half) / size)));
     return cz * this.perChunk + cx;
   }
 

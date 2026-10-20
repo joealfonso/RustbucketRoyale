@@ -64,6 +64,9 @@ if (onTick) {
 const server = await startServer(manager, port, defaultBots, onTick, { site, origins: production ? (allowedOrigins?.length ? allowedOrigins : "same-host") : null, simLag });
 // Stopping (a deploy, Ctrl+C): tell everyone first. Their pages keep trying to reconnect, and once the server is
 // back they land in a room with the same code.
+// A log line must never stop the server: when whatever reads its output has gone (a closed pipe, a host restarting its
+// log collector), writing to it fails, and unhandled that failure ended the process mid-shutdown.
+for (const out of [process.stdout, process.stderr]) out.on("error", (e: NodeJS.ErrnoException) => { if (e.code !== "EPIPE") throw e; });
 let stopping = false;
 const stop = () => {
   if (stopping) process.exit(0); // a second Ctrl+C means now

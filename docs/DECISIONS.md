@@ -341,3 +341,6 @@ The server picks each drop's landing spot and time when the match starts and sen
 
 ## 2026-10-19: A bigger building budget, paid for by building each chunk's arrays once (V8)
 The dressing's triangle budget is now one setting (data/dressing.json triangleBudget: 60 per cubic metre, 4,500 a box at most, was 40 and 2,500 in code), so buildings can have trusses, framed windows and rebar. The cost that mattered was not drawing (about +10% triangles in view, a few more draw calls) but re-merging every nearby chunk on each chunk change; each chunk's arrays and outline normals are now made once when it is built and only copied after, which took the worst sprinting frame from 69 to under 10 ms.
+
+## 2026-10-19: One shadow depth material per kind of caster (optimization pass)
+three draws every shadow caster with one shared depth material, and each switch between an instanced mesh, a plain one or a coloured instanced one re-decides its shader program, which made most of the frame loop's garbage. Each kind (instanced or not, coloured or not, which side) now gets its own shared depth material as castShadows marks it; meshes with a texture or cut-out keep three's own per-material copy, which they need.

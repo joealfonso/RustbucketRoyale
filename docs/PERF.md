@@ -437,3 +437,22 @@ Building and merging got cheaper rather than dearer, measured in Node (`scripts/
 | Sprinting corner to corner, p99 / worst frame | 5.3 / 69 ms | 4.8 / 9.8 ms |
 | Spectator cuts, every frame p99 / worst | 10.1 / 57 ms | 8.3 / 11.2 ms |
 | Edge wall alone, worst frame | 25.5 ms | 6.1 ms |
+
+### Optimization evaluation after V7, V8 and 13a (2026-10-19, MacBook Air M4, Node 25.6, Chrome 155 headless)
+Method as in the earlier performance pass: production build served by `vite preview`, headless Chrome at 1600 x 900 with vsync and the frame cap off, F1 readouts (frame, work, GPU ms from the timer query, draw calls, triangles) at the spawn of small 123, medium 11, large 7; allocation from DevTools heap metrics and the sampling heap profiler over 10 s of an idle offline match; server numbers from measure-generation, measure-bandwidth, measure-rooms and load-test. The Air is fanless and slowed over the session (the same build measured 3.6 then 4.6 to 5.0 GPU ms on medium twenty minutes apart), so before and after were compared by alternating two builds back to back, not by run order.
+
+| What | Measured | Budget | Verdict |
+| :- | :- | :- | :- |
+| Client frame, uncapped (small / medium / large) | 3.3 / 3.6 / 4.3 ms; GPU 3.5 / 3.6 / 4.7 ms (cool machine) | 16.7 ms on a mid-range laptop | fine here; the laptop is unmeasured, press F1 > Measure there |
+| Draw calls / triangles | 176 / 0.59M, 210 / 0.98M, 204 / 1.7M | none set | fine |
+| Look features, medium (GPU ms saved by switching off) | shadows 1.0 to 1.4, ground cover 0.6 to 1.6, paint 0 to 0.2 | | the first two to offer on a low setting if the laptop struggles |
+| JS heap at spawn (small / medium / large) | 56 / 121 / 223 MB | none set | large is big but stable; not a frame cost |
+| Garbage made per second, idle medium, uncapped | 22.8 MB/s, 7 to 9 collections in 10 s | "no allocations in the frame loop" | over: fixed below |
+| Download, whole build | 3.2 MB raw, 898 kB gz, 650 kB br (mechs 1.77 MB raw, 248 kB br as served) | 15 MB | fine; V8 doubled the mech files, the server's brotli keeps them small |
+| Map generation (median / worst) | small 6 / 7, medium 60 / 123, large 230 / 472 ms | 3 s | fine |
+| Bandwidth per person (small / medium / large) | 21 / 13 / 11 kbps | 64 kbps | fine |
+| Server tick, real clients | 40 small rooms 2.1 ms mean, 4.0 p99; 40 medium 3.7 ms mean, 5.3 p99 | 8 ms | fine; memory 283 MB for 40 small, 717 MB for 40 medium |
+
+Where the garbage came from: three.js re-deciding shader programs every frame (getParameters, the program cache key strings), because one material was shared by objects that need different programs. Seven a frame were the shadow pass, where three draws every caster with one shared depth material and every switch between an instanced and a plain mesh re-decides it; two were the trees' white fill, shared by trunks (no instance colour) and crowns (instance colour). Fixed by one depth material per kind of caster (sunShadows.ts depthFor) and a trunk material of its own: re-decisions 9 a frame to 0, garbage 22.8 to 13.3 MB/s uncapped (about 3 MB/s at 60 fps). GPU time: within noise of before when the two builds alternated (with 4.8, 5.0, 4.6; without 4.6, 4.4, 4.6 ms). What is left is inside three's uniform upload (its value caches box numbers as V8 stores them), short lived and collected in well under a millisecond every few seconds; not worth patching three for. Two small ones of ours went too: the dressing worked out the camera's chunk through a closure and a pair every frame, and the supply drop's radar hook made a closure every frame.
+
+Also fixed: a server whose log output closes (a load test ending, a host restarting its log collector) crashed with EPIPE on its next line; it now ignores that.

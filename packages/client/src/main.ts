@@ -289,6 +289,8 @@ const castMapShadows = () => {
 castMapShadows();
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
 const dropView = new DropView(toon, fxSprites, parseDropsConfig(dropsJson));
+// Made once: a closure made in the frame loop would be garbage every frame.
+const markDrop = (x: number, z: number): void => radar?.markDrop(x, z);
 scene.add(dropView.group);
 // Soft dark patches under map boxes and mechs, so nothing floats over the ground (data/ground.json shadows).
 const shadowLook = parseShadowLook(groundJson.shadows);
@@ -1002,7 +1004,7 @@ function frame(now: number): void {
   dropView.update(progress.state === "active" ? matchSeconds : null, frameTime);
   if (dropView.news === "announced") { hud.flash("SUPPLY DROP INBOUND", 2500); hud.feed("Supply drop incoming: follow the yellow beam"); }
   else if (dropView.news === "open") hud.feed("Supply drop open");
-  if (radar && progress.state === "active") dropView.forEachMarked(matchSeconds, (dx, dz) => radar.markDrop(dx, dz));
+  if (radar && progress.state === "active") dropView.forEachMarked(matchSeconds, markDrop);
   const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);
   if (net) hud.setProgress(progress, ring);
 

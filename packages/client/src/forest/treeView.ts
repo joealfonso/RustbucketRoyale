@@ -241,6 +241,10 @@ export class TreeView {
     const color = (name: string) => toon.color(name);
     const fill = toon.ownMaterial("#ffffff");
     fill.vertexColors = true;
+    // Trunks and stumps take no colour from their instance, crowns do: sharing one material between them made three
+    // re-decide its shader program at every switch, each frame.
+    const woodFill = toon.ownMaterial("#ffffff");
+    woodFill.vertexColors = true;
     const fillFading = fading(fill);
     // White outlines, darkened like every outline and then tinted by each tree's colour in its instance.
     const outline = toon.instanced(toon.shellOutline("#ffffff"));
@@ -253,18 +257,18 @@ export class TreeView {
       const perShape = this.shapes.filter((x) => x === s).length;
       if (perShape === 0) { this.near.push(new TreeLayer(0, [], false, "pine")); return; }
       this.near.push(new TreeLayer(perShape, [
-        { geometry: partsGeometry(m.wood, color), fill, outline: woodOutline, colored: false },
+        { geometry: partsGeometry(m.wood, color), fill: woodFill, outline: woodOutline, colored: false },
         { geometry: partsGeometry(m.crown, color), fill: fillFading, outline: outlineFading, colored: true },
       ], true, "pine"));
     });
     // No outline far away: past 140 m the outline is a fifth of a pixel wide, and drawing it doubled the far trees'
     // cost for nothing that shows.
     this.far = new TreeLayer(this.count, [{ geometry: partsGeometry(farPine(look), color), fill, outline: null, colored: true }], false, "far pine");
-    this.stumps = new TreeLayer(this.count, [{ geometry: partsGeometry(stump(look), color), fill, outline: woodOutline, colored: false }], false, "pine stump");
+    this.stumps = new TreeLayer(this.count, [{ geometry: partsGeometry(stump(look), color), fill: woodFill, outline: woodOutline, colored: false }], false, "pine stump");
     const pool = Math.min(forest.fall.maxFalling, this.count);
     models.forEach((m) => {
       this.falling.push(new TreeLayer(pool, [
-        { geometry: partsGeometry(m.wood, color), fill, outline: woodOutline, colored: false },
+        { geometry: partsGeometry(m.wood, color), fill: woodFill, outline: woodOutline, colored: false },
         { geometry: partsGeometry(m.crown, color), fill, outline, colored: true },
       ], false, "falling pine"));
     });
