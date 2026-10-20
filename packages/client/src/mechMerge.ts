@@ -98,8 +98,9 @@ function levelsOf(levels: number, sourcesAt: (level: number) => Source[], normal
 
 const cornersOf = (g: THREE.BufferGeometry) => (g.index ? g.index.count : g.attributes.position?.count ?? 0);
 
-// One geometry from several, as plain triangles: position, the one normal its material uses, and each source's colour
-// on every corner when it has one. A single uncoloured source is used as it is, so it is not copied.
+// One geometry from several, as plain triangles: position, the one normal its material uses, each source's colour
+// on every corner when it has one, and for fills the corners' `finish` (edge wear and finish, mechKit.ts). A single
+// uncoloured source is used as it is, so it is not copied.
 export function joined(sources: Source[], normal: "normal" | "outlineNormal"): THREE.BufferGeometry | null {
   if (sources.length === 0) return null;
   if (sources.length === 1 && !sources[0]!.color) return sources[0]!.geometry;
@@ -107,22 +108,26 @@ export function joined(sources: Source[], normal: "normal" | "outlineNormal"): T
   const position = new Float32Array(corners * 3);
   const normals = new Float32Array(corners * 3);
   const colors = sources[0]!.color ? new Float32Array(corners * 3) : null;
+  const finishes = normal === "normal" ? new Float32Array(corners * 2) : null;
   let at = 0;
   for (const { geometry, color } of sources) {
     const p = geometry.attributes.position!;
     // A model without its own outline normals pushes its shell out along the face normals, as the shader would.
     const n = geometry.attributes[normal] ?? geometry.attributes.normal!;
     const index = geometry.index;
+    const finish = geometry.attributes.finish;
     for (let c = 0, count = cornersOf(geometry); c < count; c++, at += 3) {
       const v = index ? index.getX(c) : c;
       position[at] = p.getX(v); position[at + 1] = p.getY(v); position[at + 2] = p.getZ(v);
       normals[at] = n.getX(v); normals[at + 1] = n.getY(v); normals[at + 2] = n.getZ(v);
       if (colors && color) { colors[at] = color.r; colors[at + 1] = color.g; colors[at + 2] = color.b; }
+      if (finishes && finish) { finishes[(at / 3) * 2] = finish.getX(v); finishes[(at / 3) * 2 + 1] = finish.getY(v); }
     }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.BufferAttribute(position, 3));
   g.setAttribute(normal, new THREE.BufferAttribute(normals, 3));
   if (colors) g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  if (finishes) g.setAttribute("finish", new THREE.BufferAttribute(finishes, 2));
   return g;
 }

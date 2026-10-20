@@ -10,12 +10,13 @@ On 18 October Joseph decided these designs win over the older rules: `DESIGN.md`
 Maximum armor and frontline presence: a bulky, imposing silhouette.
 
 - **Head:** small, heavily recessed, protected inside the main torso block. A single red optical sensor, which says durability over awareness.
-- **Torso and armor:** massive, square shouldered chassis with thick, angular compound armor plating. Dark grey hull, with yellow and black industrial hazard stripes on the shoulders and shins, marking it as heavy machinery. Serial number **01** on the chest and on a leg.
+- **Torso and armor:** massive, square shouldered chassis with thick, angular compound armor plating, narrowing to the waist. Dark grey hull, with yellow and black industrial hazard stripes on the shoulders and shins, marking it as heavy machinery. Serial number **01** on the chest and on a leg.
+- **Paint values (gate V9):** dark, mid and light kept well apart, and the dark hull below the moss and dirt of the ground: dark grey hull (#4A5258) and near-black frame, feet and hoses; bare steel (#7C858C) on the pistons, the pile driver and the shield's ramming edge; hazard yellow (#FFC93C) on the stripes and the shield's caps and middle band.
 - **Right arm (weapon):** a multi-barrel rotary autocannon (Gatling style) built into the forearm, for sustained suppressing fire.
-- **Left arm (defense):** a massive reinforced siege shield with a sharpened ramming edge. A hydraulic pile driver is visibly mounted on the back of the shield fist, for close range demolition.
+- **Left arm (defense):** a massive reinforced siege shield with a sharpened ramming edge, hung low from the fist, capped top and bottom and banded round the middle in hazard yellow. A hydraulic pile driver is visibly mounted on the back of the shield fist, for close range demolition.
 - **Legs:** stocky, hydraulic, reverse-articulated legs built for torque and stability, not speed. Exposed pistons and thick ankle plating soak up the weapon's recoil.
 - **Shoulders:** two boxy micro-missile pods set into the upper torso armor blocks.
-- **Silhouette at 150 m:** the slab shield on the left and the wide, square shoulders.
+- **Silhouette at 150 m:** the slab shield on the left with its yellow caps and band, and the wide, square shoulders standing higher than the head.
 
 ## 2. Recon / striker class: "Stiletto-B" (agile skirmisher)
 Sleek and bird-like, built for speed, flanking and vertical movement.
@@ -26,17 +27,18 @@ Sleek and bird-like, built for speed, flanking and vertical movement.
 - **Left arm (weapon):** a rapid fire burst laser carbine in the lower forearm.
 - **Legs:** digitigrade (backward bending) legs with spring loaded joints, made for jumping, quiet running and rough ground.
 - **Back:** a large vector-thrust jump pack between the shoulders, with big thruster nozzles and stabilizer fins.
-- **Silhouette at 150 m:** the raptor head fin and the jump pack fins above the shoulders.
+- **Paint values (gate V9):** white the light, a light azure blue (#55B4FF) the middle, a dark navy frame the dark, and all of the shell lighter than the moss and rust ground. The old deep blue sat at the ground's brightness, so in greyscale the camo plates and fins sank into the field. The blade glows paler than the armour blue.
+- **Silhouette at 150 m:** the raptor head fin and the jump pack fins above the shoulders. The pack fins are toed out, so from in front they open into a V with the head fin between them, over broad pauldrons swept back to a point.
 
 ## 3. Artillery / fire support class: "Cataclysm" (long-range siege)
 A hulking four legged platform that trades mobility for overwhelming firepower.
 
 - **Head:** a low, heavily armored sensor turret set into the central hull, with a multi-lens array behind sloped plating.
-- **Torso and armor:** a squat, reinforced central chassis built to take counter fire. Weathered desert camouflage (tan and rust brown) with heat scoring around the weapon mounts. Serial number **03** on the front of the hull.
+- **Torso and armor:** a squat, reinforced central chassis built to take counter fire. Weathered desert camouflage (tan and rust brown) with heat scoring around the weapon mounts. Serial number **03** on the front of the hull. Since gate V9 the camouflage is three values a step apart: light tan main armour (every thigh, knee cap and foot), a mid umber brown greyer than rust for the camouflage plates, barrels and two shins, and a near black frame, so a fresh Cataclysm stands apart from moss and rust and never reads as already rusted.
 - **Main weapon (turret):** a massive twin-barrel long-range rail mortar on a central traverse ring. The barrels are very long, with complex recoil dampening sleeves.
 - **Legs:** four heavy, complex hydraulic legs that act as stabilizing anchors. The front feet have claws that dig into the ground while firing, to take the recoil.
 - **Defense:** small automatic point-defense laser turrets on the front corners of the chassis, against infantry and missiles.
-- **Silhouette at 150 m:** four legs and the two long barrels.
+- **Silhouette at 150 m:** four legs and the two long barrels: four knee caps peaking over the deck, feet planted out past the hull's corners, and twin barrels long and low over the front.
 
 ## 4. Electronic warfare / command class: "Arbiter" (tactical support)
 Slender and asymmetrical, built for battlefield control and electronic warfare.
@@ -47,17 +49,19 @@ Slender and asymmetrical, built for battlefield control and electronic warfare.
 - **Weapons:** minimal: light personal-defense submachine guns in the wrists, for emergencies only.
 - **Legs:** slender digitigrade legs with magnetic locking feet, for grip on rooftops or ship decks.
 - **Silhouette at 150 m:** the big round head and the ring of drones.
+- **Values (gate V9):** white armour is the light value, the teal trim a light mid a step above the ground, and the dark slate frame, the rubber hoses and a deep cobalt glossy dome the dark, a step below it. So the dome reads as a dark round head on a light body against moss, dirt or rust. The serial **04** is in the dark frame colour on the white chest plate.
 
 ## 5. Marksman class: "Longshot" (sniper)
 Tall and thin, built to stand still at range and make one shot count. Added after the four above, with its Rail Shot at gate 15b and this model at gate 15c (20 October 2026).
 
-- **Head:** a narrow sensor housing with a long main optic, crossed at the brow by a rangefinder bar as wide as the shoulders, with a red lens at each end: two eyes a metre apart judge range.
-- **Torso and armor:** a narrow armoured chest on a bare spine. Slate violet (no other mech wears it, and it stands out against moss and rust) with a bone breastplate and bone splinter plates on the right pauldron, the left forearm, the right thigh and the left shin. Red optics: the scope glows the colour of the Rail Shot's laser. Serial number **05** in bone on a slate plate on the right of the chest.
-- **Main weapon:** a rail rifle nearly as long as the mech is tall, held at the right of the chest and steadied by the left hand reaching across the body. Bone stock and receiver, two dark rails with a pale armature between them, coil collars along the barrel, a capacitor bank on the receiver, a long scope. Shots and the Rail Shot leave its muzzle.
+- **Head:** a narrow sensor housing with a long main optic, crossed at the brow by a rangefinder bar as wide as the shoulders, with a big red lens housing at each end: two eyes 1.4 m apart judge range.
+- **Torso and armor:** a narrow armoured chest on a bare spine, flaring to a broad breastplate and broad lipped pauldrons over a narrow waist. Slate violet (no other mech wears it) with a bone breastplate and bone splinter plates on the right pauldron, the left forearm, the right thigh and the left shin. Red optics: the scope glows the colour of the Rail Shot's laser. Serial number **05** in bone on a slate plate on the right of the chest.
+- **Values (gate V9):** a deep slate violet main armour a step darker than moss, dirt and rust, bone a step lighter, and bare gunmetal joints and pistons between them; black for the rifle's rails and the rubber hoses and soles.
+- **Main weapon:** a rail rifle nearly as long as the mech is tall, held at the right of the chest and steadied by the left hand reaching across the body. Bone stock and receiver, two black rails with a pale armature between them, heavy coil collars along the barrel, a big blunt muzzle, a capacitor bank on the receiver, a long scope. Shots and the Rail Shot leave its muzzle.
 - **Legs:** long straight legs whose knees bend forward like a person's (the Stiletto and the Arbiter stand on bird legs, the Ironclad's knees bend back), on long flat two-toed feet.
 - **Back:** a capacitor pack that charges the rail, a drum of cells on each side and two jet nozzles under it, and a bone ballast block hung below that balances the barrel.
 - **Stabilizers:** a spade behind each heel that bites the ground when it braces for Rail Shot.
-- **Silhouette at 150 m:** the long rifle and the T of the rangefinder head on a tall, thin body.
+- **Silhouette at 150 m:** the long rifle with its blunt muzzle, and the wide T of the rangefinder head on a tall, thin body.
 
 ---
 

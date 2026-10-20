@@ -1,31 +1,37 @@
 {
   "scheme": {
-    "slate": "#4B4660",
-    "bone": "#D9CFB4",
-    "frame": "#1C2023",
+    "slate": "#3A3058",
+    "bone": "#E2D8BC",
+    "frame": "#5A6168",
+    "black": "#202226",
     "lensGlow": "#FF4D3D"
   },
   "parts": {
     "Torso": {
       "zone": "torso",
-      "paint": "slate"
+      "paint": "slate",
+      "finish": "paint"
     },
     "Torso_Camo": {
       "zone": "torso",
-      "paint": "bone"
+      "paint": "bone",
+      "finish": "paint"
     },
     "Frame": {
       "zone": "torso",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
     },
     "Sensor": {
       "zone": "torso",
-      "paint": "slate"
+      "paint": "slate",
+      "finish": "paint"
     },
     "Rangefinder": {
       "zone": "torso",
-      "paint": "bone"
+      "paint": "bone",
+      "finish": "paint"
     },
     "Sensor_Glow": {
       "zone": "torso",
@@ -34,76 +40,113 @@
     },
     "Pack": {
       "zone": "torso",
-      "paint": "slate"
+      "paint": "slate",
+      "finish": "paint"
     },
     "Ballast": {
       "zone": "torso",
-      "paint": "bone"
+      "paint": "bone",
+      "finish": "paint"
     },
     "Jets": {
       "zone": "torso",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
+    },
+    "Hoses": {
+      "zone": "torso",
+      "paint": "black",
+      "finish": "rubber",
+      "rusts": false,
+      "noHit": true
     },
     "Leg_L": {
       "zone": "legs",
-      "paint": "slate"
+      "paint": "slate",
+      "finish": "paint"
     },
     "Leg_R": {
       "zone": "legs",
-      "paint": "slate"
+      "paint": "slate",
+      "finish": "paint"
     },
     "Leg_Camo": {
       "zone": "legs",
-      "paint": "bone"
+      "paint": "bone",
+      "finish": "paint"
     },
     "Leg_Frame": {
       "zone": "legs",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
+    },
+    "Leg_Rubber": {
+      "zone": "legs",
+      "paint": "black",
+      "finish": "rubber",
+      "rusts": false,
+      "noHit": true
     },
     "Arm_L": {
       "zone": "arms",
-      "paint": "slate"
+      "paint": "slate",
+      "finish": "paint"
     },
     "Arm_R": {
       "zone": "arms",
-      "paint": "slate"
+      "paint": "slate",
+      "finish": "paint"
     },
     "Arm_Camo": {
       "zone": "arms",
       "paint": "bone",
+      "finish": "paint",
       "noHit": true
     },
     "Arm_Frame": {
       "zone": "arms",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false,
       "noHit": true
     },
     "Arm_Band": {
       "zone": "arms",
       "paint": "accent",
+      "finish": "paint",
+      "noHit": true
+    },
+    "Arm_Rubber": {
+      "zone": "arms",
+      "paint": "black",
+      "finish": "rubber",
+      "rusts": false,
       "noHit": true
     },
     "Rifle": {
       "zone": "arms",
-      "paint": "bone"
+      "paint": "bone",
+      "finish": "paint"
     },
     "Rifle_Rails": {
       "zone": "arms",
-      "paint": "frame",
+      "paint": "black",
+      "finish": "metal",
       "rusts": false
     },
     "Rifle_Frame": {
       "zone": "arms",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false,
       "noHit": true
     },
     "Rifle_Weapon": {
       "zone": "arms",
       "paint": "weapon",
+      "finish": "paint",
       "noHit": true
     },
     "Rifle_Glow": {

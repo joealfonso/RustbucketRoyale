@@ -1,34 +1,46 @@
 {
   "scheme": {
-    "white": "#F0F0EE",
-    "teal": "#1FB8B0",
+    "white": "#F2F2EE",
+    "teal": "#5EDED2",
     "frame": "#2C3640",
-    "dome": "#3F8FE0",
+    "dome": "#2050C0",
+    "hose": "#1E2226",
     "tealGlow": "#3FF0E0",
     "domeGlow": "#9FD8FF"
   },
   "parts": {
     "Torso": {
       "zone": "torso",
-      "paint": "white"
+      "paint": "white",
+      "finish": "paint"
     },
     "Torso_Frame": {
       "zone": "torso",
       "paint": "frame",
+      "finish": "paint",
       "rusts": false
     },
     "Torso_Trim": {
       "zone": "torso",
-      "paint": "teal"
+      "paint": "teal",
+      "finish": "paint"
     },
     "Torso_Glow": {
       "zone": "torso",
       "paint": "tealGlow",
       "glow": true
     },
+    "Torso_Hoses": {
+      "zone": "torso",
+      "paint": "hose",
+      "finish": "rubber",
+      "rusts": false,
+      "noHit": true
+    },
     "Sensor": {
       "zone": "torso",
       "paint": "dome",
+      "finish": "metal",
       "rusts": false
     },
     "Sensor_Ring": {
@@ -40,16 +52,19 @@
     "Sensor_Frame": {
       "zone": "torso",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
     },
     "Mast": {
       "zone": "torso",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
     },
     "Drones": {
       "zone": "torso",
       "paint": "white",
+      "finish": "paint",
       "noHit": true
     },
     "Drone_Eyes": {
@@ -61,20 +76,24 @@
     "Drone_Pylons": {
       "zone": "torso",
       "paint": "frame",
+      "finish": "paint",
       "rusts": false,
       "noHit": true
     },
     "Leg_L": {
       "zone": "legs",
-      "paint": "white"
+      "paint": "white",
+      "finish": "paint"
     },
     "Leg_R": {
       "zone": "legs",
-      "paint": "white"
+      "paint": "white",
+      "finish": "paint"
     },
     "Leg_Frame": {
       "zone": "legs",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
     },
     "Leg_Glow": {
@@ -82,23 +101,41 @@
       "paint": "tealGlow",
       "glow": true
     },
+    "Leg_Hoses": {
+      "zone": "legs",
+      "paint": "hose",
+      "finish": "rubber",
+      "rusts": false,
+      "noHit": true
+    },
     "Arm_L": {
       "zone": "arms",
-      "paint": "white"
+      "paint": "white",
+      "finish": "paint"
     },
     "Arm_R": {
       "zone": "arms",
-      "paint": "white"
+      "paint": "white",
+      "finish": "paint"
     },
     "Arm_Frame_L": {
       "zone": "arms",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
     },
     "Arm_Frame_R": {
       "zone": "arms",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
+    },
+    "Arm_Hoses": {
+      "zone": "arms",
+      "paint": "hose",
+      "finish": "rubber",
+      "rusts": false,
+      "noHit": true
     },
     "Arm_Glow_L": {
       "zone": "arms",
@@ -112,23 +149,34 @@
     },
     "Arm_Accent": {
       "zone": "arms",
-      "paint": "accent"
+      "paint": "accent",
+      "finish": "paint"
     },
     "Pauldron_L": {
       "zone": "arms",
-      "paint": "teal"
+      "paint": "teal",
+      "finish": "paint"
     },
     "Pauldron_R": {
       "zone": "arms",
-      "paint": "teal"
+      "paint": "teal",
+      "finish": "paint"
     },
     "Gun_R": {
       "zone": "arms",
-      "paint": "weapon"
+      "paint": "weapon",
+      "finish": "paint"
     },
     "Gun_L": {
       "zone": "arms",
-      "paint": "weapon"
+      "paint": "weapon",
+      "finish": "paint"
+    },
+    "Gun_Barrels": {
+      "zone": "arms",
+      "paint": "frame",
+      "finish": "metal",
+      "rusts": false
     }
   }
 }

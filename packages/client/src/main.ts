@@ -46,6 +46,7 @@ import { setAimTarget } from "./aimTarget";
 import type { DebugPanel } from "./debugPanel";
 import { FrameTimes } from "./frameTimes";
 import { FeatureCost } from "./featureCost";
+import { CreasePass } from "./creasePass";
 import { GpuTimer } from "./gpuTimer";
 import { Crt, parseCrt } from "./crt";
 import crtJson from "../../../data/crt.json";
@@ -517,10 +518,12 @@ const workMs = new FrameTimes(240); // time spent on the frame before the GPU ta
 const gpuTimer = new GpuTimer(renderer.getContext() as WebGL2RenderingContext);
 // The V7 look features that cost the most, switchable from F1 to see what each costs on this machine (gate 12c).
 let coverShown = true;
+const crease = new CreasePass(lookConfig.crease);
 const lookFeatures = [
   { name: "sun shadows", set: (on: boolean) => sunShadows.setEnabled(on) },
   { name: "painted marks", set: (on: boolean) => toon.paint.setShown(on) },
   { name: "ground cover", set: (on: boolean) => { coverShown = on; } },
+  { name: "crease lines", on: crease.enabled, set: (on: boolean) => { crease.enabled = on; } },
 ];
 const featureCost = new FeatureCost(lookFeatures, 2, 3);
 const gpuSummary = { median: 0, worst: 0 };
@@ -1255,7 +1258,7 @@ function frame(now: number): void {
   sunShadows.follow(rig.camera);
   if (dressing.cover) dressing.cover.group.visible = coverShown;
   gpuTimer.begin();
-  renderer.render(scene, rig.camera);
+  crease.render(renderer, scene, rig.camera);
   gpuTimer.end();
   featureCost.tick(frameTime, gpuTimer.times, gpuSummary);
   frameMs.record(frameTime * 1000);

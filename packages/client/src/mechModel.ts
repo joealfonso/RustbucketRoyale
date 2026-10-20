@@ -117,16 +117,17 @@ export function createMechModel(
     return mesh;
   };
   const legMeshes: THREE.Mesh[] = [];
-  // The weapon in hand's colour: on a kit's own gun parts, or on the plain barrel added below.
-  const gunMaterial = toon ? toon.ownMaterial("#d9731a", false, "mech") : new THREE.MeshStandardMaterial({ color: "#d9731a", roughness: 0.6 });
-  let hasModelledGun = false;
+  // The weapon in hand's colour: on a kit's own gun parts, or on the plain barrel added below. Only a kit's own gun
+  // reads the parts' finishes (a plain barrel has none to read).
+  const hasModelledGun = !!(kit && toon && kit.parts.some((p) => p.paint === "weapon"));
+  const gunMaterial = toon ? toon.ownMaterial("#d9731a", false, "mech", hasModelledGun) : new THREE.MeshStandardMaterial({ color: "#d9731a", roughness: 0.6 });
   const paints: MechModel["paints"] = [];
   const glows: MechModel["glows"] = [];
   // One rusting material per zone for the merged paint, whose colours are on its corners, and one for the accent.
   const paintFor = (zone: number, color: string, cornerColors: boolean): THREE.MeshToonMaterial => {
     const found = paints.find((p) => p.zone === zone && p.material.vertexColors === cornerColors);
     if (found) return found.material;
-    const material = toon!.ownMaterial(color, true, "mech");
+    const material = toon!.ownMaterial(color, true, "mech", true);
     material.vertexColors = cornerColors;
     paints.push({ zone, material, base: new THREE.Color(color) });
     return material;
@@ -170,7 +171,6 @@ export function createMechModel(
       legs.push({ side: j.side, hip, knee, ankle, restHip: j.hip.clone(), restKnee: j.knee.clone(), restAnkle: j.ankle.clone(), reach });
     }
     for (const p of kit.parts) {
-      if (p.paint === "weapon") hasModelledGun = true;
       const intact = p.states[0]!; // the loader guarantees every part has its intact version
       if (intact.fx && !fxAnchors[p.zone]) {
         const anchor = new THREE.Object3D();
@@ -278,12 +278,12 @@ export function createMechModel(
 }
 
 // The materials that take their colour from a merged piece's corners and are the same on every kit mech: plain paint
-// that never rusts, and the outline. Copies of the toon ones, so things drawn in white or outlined in it are untouched.
+// that never rusts (with the parts' finishes, which only kit geometry carries), and the outline. Copies of the toon ones, so things drawn in white or outlined in it are untouched.
 const cornerColoredByToon = new WeakMap<Toon, { plain: THREE.MeshToonMaterial; shell: THREE.MeshBasicMaterial }>();
 function cornerColored(toon: Toon): { plain: THREE.MeshToonMaterial; shell: THREE.MeshBasicMaterial } {
   let found = cornerColoredByToon.get(toon);
   if (!found) {
-    const plain = toon.ownMaterial("#ffffff", false, "mech");
+    const plain = toon.ownMaterial("#ffffff", false, "mech", true);
     plain.vertexColors = true;
     const source = toon.shellOutline("#ffffff");
     const shell = source.clone();

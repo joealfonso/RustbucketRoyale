@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { countTriangles, readGltfJson } from "./glbCheck";
 import { boxMesh, quantizePositions, writeGlb } from "./glbWrite";
+import { box } from "../../packages/client/src/dressing/shapes";
 
 describe("glb writer", () => {
   it("writes a file the checker reads back, with its nodes, material and triangle count", () => {
@@ -34,5 +35,16 @@ describe("glb writer", () => {
     [0.7, 2.275, -0.4].forEach((t, i) => expect(gltf.nodes[0]!.translation![i]).toBeCloseTo(t, 9));
     for (const s of gltf.nodes[0]!.scale!) expect(s).toBeCloseTo(1.175, 9); // half the longest side, 2.35 m along y
     expect(countTriangles(gltf)).toBe(6 * 3 * 3 * 2);
+  });
+
+  it("writes the edge wear beside the normals, one byte a vertex when quantised, and none when asked not to", () => {
+    type Prim = { attributes: Record<string, number> };
+    type Gltf = { meshes: { primitives: Prim[] }[]; accessors: { componentType: number; normalized?: boolean; type: string; count: number }[] };
+    const mesh = box([0, 0, 0], [1, 0.5, 0.5], 0.03);
+    const q = readGltfJson(writeGlb([{ name: "Torso", mesh }], { quantize: true })) as unknown as Gltf;
+    const wear = q.accessors[q.meshes[0]!.primitives[0]!.attributes._WEAR!]!;
+    expect(wear).toMatchObject({ componentType: 5121, normalized: true, type: "SCALAR", count: mesh.positions.length / 3 });
+    const plain = readGltfJson(writeGlb([{ name: "Torso", mesh }], { hardSurface: false })) as unknown as Gltf;
+    expect(plain.meshes[0]!.primitives[0]!.attributes._WEAR).toBeUndefined();
   });
 });

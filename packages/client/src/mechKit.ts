@@ -25,13 +25,19 @@ const ZONE_INDEX: Record<string, number> = { legs: 0, arms: 1, torso: 2 };
 // (sensors, visors, energy accents): they never rust and go dark when the torso breaks.
 type Paint = string;
 
+// What a part's surface is made of (gate V9), which changes how it takes the light: painted plate (the default; its
+// edges chip), bare metal (one hard highlight), or rubber (hoses and tyres: no rim, darker flatter light). Glowing
+// parts keep `glow` instead.
+export const FINISHES = ["paint", "metal", "rubber"] as const;
+export type Finish = (typeof FINISHES)[number];
+
 export interface KitsData {
   lodDistances: number[]; // metres at which the second and then the third level of detail take over
   roster?: string[]; // the roster mechs' kits, in the order of data/roster.json
   // `noHit` parts (floating drones) get no hit box; `hitboxes` is written by scripts/make-hitboxes.ts.
   kits: Record<string, {
     file?: string; folder?: string; name?: string; scheme?: Record<string, string>;
-    parts: Record<string, { zone: string; paint: Paint; noHit?: boolean; glow?: boolean; rusts?: boolean }>;
+    parts: Record<string, { zone: string; paint: Paint; noHit?: boolean; glow?: boolean; rusts?: boolean; finish?: Finish }>;
     hitboxes?: Record<string, { center: number[]; size: number[] }[]>;
     serials?: SerialData[];
   }>;
@@ -72,6 +78,7 @@ export function parseKits(raw: unknown): KitsData {
     for (const [part, p] of Object.entries(kit.parts)) {
       if (!(p.zone in ZONE_INDEX)) throw new Error(`mechKits.json: ${id} ${part} has unknown zone "${p.zone}"`);
       if (!["body", "accent", "trim", "weapon"].includes(p.paint) && !kit.scheme?.[p.paint]) throw new Error(`mechKits.json: ${id} ${part} has paint "${p.paint}", which is not in its scheme`);
+      if (p.finish !== undefined && !FINISHES.includes(p.finish)) throw new Error(`mechKits.json: ${id} ${part} has finish "${p.finish}", not one of ${FINISHES.join(", ")}`);
     }
     for (const s of kit.serials ?? []) {
       const ok = typeof s?.text === "string" && s.text.length > 0 && FACINGS.includes(s.facing) && Array.isArray(s.at) && s.at.length === 2
@@ -91,8 +98,9 @@ function floatsOf(a: THREE.BufferAttribute | THREE.InterleavedBufferAttribute): 
   return new THREE.BufferAttribute(out, 3);
 }
 
-// The geometry of an object and everything under it, in the model's own frame, as one mesh. Only position and
-// normal are kept, which is all the toon look uses, so meshes from any exporter merge cleanly. Runs once per kit.
+// The geometry of an object and everything under it, in the model's own frame, as one mesh. Kept: position, normal
+// and `finish` (x: the edge wear the model script marked, as _WEAR, else 0; y: the part's finish, set by `setFinish`),
+// which is all the toon look uses, so meshes from any exporter merge cleanly. Runs once per kit.
 function geometryOf(node: THREE.Object3D): THREE.BufferGeometry | null {
   const pieces: THREE.BufferGeometry[] = [];
   node.traverse((child) => {
@@ -103,10 +111,26 @@ function geometryOf(node: THREE.Object3D): THREE.BufferGeometry | null {
     if (source.index) g.setIndex(source.index.clone());
     if (source.attributes.normal) g.setAttribute("normal", floatsOf(source.attributes.normal));
     else g.computeVertexNormals();
+    const wear = source.attributes._wear;
+    const finish = new Float32Array(g.attributes.position!.count * 2);
+    if (wear) for (let i = 0; i < wear.count; i++) finish[i * 2] = wear.getX(i);
+    g.setAttribute("finish", new THREE.BufferAttribute(finish, 2));
     pieces.push(g.applyMatrix4(child.matrixWorld));
   });
   if (pieces.length === 0) return null;
-  return addOutlineNormals(pieces.length === 1 ? pieces[0]! : mergeGeometries(pieces.map((g) => (g.index ? g.toNonIndexed() : g))));
+  // Outlines from the faces themselves, not the normals: the model's shading normals bend over its chamfers
+  // (scripts/assets/hardSurface.ts), and the shell must swell exactly as it did with flat normals to stay closed.
+  return addOutlineNormals(pieces.length === 1 ? pieces[0]! : mergeGeometries(pieces.map((g) => (g.index ? g.toNonIndexed() : g))), true);
+}
+
+// The finish code the toon material reads from each corner: 0 paint, 1 metal, 2 rubber.
+export function setFinish(state: KitState | null, finish: Finish | undefined): void {
+  const code = FINISHES.indexOf(finish ?? "paint");
+  for (const g of state?.lods ?? []) {
+    const a = g.attributes.finish as THREE.BufferAttribute | undefined;
+    if (!a) continue;
+    for (let i = 0; i < a.count; i++) a.setY(i, code);
+  }
 }
 
 const pointOf = (scene: THREE.Object3D, name: string): THREE.Vector3 | null => {
@@ -145,7 +169,9 @@ export async function loadKit(id: string, data: KitsData, base = "/"): Promise<L
         const file = `${kit.folder}/Mech_${kit.name}_${name}_${state}.glb`;
         // Only the intact part has to exist; a missing damaged or broken file falls back.
         const scene = i === 0 ? await load(file) : await load(file).catch(() => null);
-        return scene ? readPartFile(scene) : null;
+        const read = scene ? readPartFile(scene) : null;
+        setFinish(read, p.finish);
+        return read;
       })),
     })));
     const missing = parts.filter((p) => !p.states[0]).map((p) => p.name);
@@ -162,7 +188,11 @@ export async function loadKit(id: string, data: KitsData, base = "/"): Promise<L
 export function kitFromScene(id: string, data: KitsData, scene: THREE.Object3D): LoadedKit {
   const kit = data.kits[id]!;
   const legs = readLegJoints(scene);
-  const parts: KitPart[] = Object.entries(kit.parts).map(([name, p]) => ({ name, ...partLook(kit.scheme, p), states: readOneFileStates(scene, name) }));
+  const parts: KitPart[] = Object.entries(kit.parts).map(([name, p]) => {
+    const states = readOneFileStates(scene, name);
+    for (const state of states) setFinish(state, p.finish);
+    return { name, ...partLook(kit.scheme, p), states };
+  });
   const missing = parts.filter((p) => !p.states[0]).map((p) => p.name);
   if (missing.length > 0) throw new Error(`no intact ${missing.join(", ")}`);
   if (legs.length > 0) for (const part of parts) if (part.zone === ZONE_INDEX.legs) for (const state of part.states) if (state) state.pieces = cutLegs(state.lods, legs);

@@ -136,11 +136,11 @@ export class DebugPanel {
 
   // Switches for the costly look features, and a button that measures what each costs here. Without the GPU timer
   // (some browsers do not offer it) the button says so instead.
-  addFeatures(features: { name: string; set(on: boolean): void }[], cost: FeatureCost, gpu: GpuTimer): void {
+  addFeatures(features: { name: string; on?: boolean; set(on: boolean): void }[], cost: FeatureCost, gpu: GpuTimer): void {
     const f = this.perf.addFolder("Look features");
     const state: Record<string, boolean> = {};
     for (const feature of features) {
-      state[feature.name] = true;
+      state[feature.name] = feature.on ?? true;
       f.add(state, feature.name).listen().onChange((on: boolean) => feature.set(on));
     }
     const measure = () => {

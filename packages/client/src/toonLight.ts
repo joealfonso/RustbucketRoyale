@@ -12,6 +12,9 @@ import * as THREE from "three";
 // - The shadow map follows the camera (sunShadows.ts), so toward its rim the shadows fade out (`fadeFrom`, a share
 //   of its radius) and its edge never shows as a line on the ground.
 // Other lights (an explosion's flash) light the bands as before. Materials other than toon keep Three's own code.
+// - Finishes (gate V9, toonMaterial.ts): a material may set `toonFlatten` before the lights to pull the lit bands
+//   toward the shadow band (rubber), and `toonGlintSize` to have the sun leave one hard highlight in `toonGlint`
+//   where the surface mirrors it toward the eye (bare metal). Both are 0 everywhere else and cost nothing there.
 
 export interface ToonLightLook {
   edge: number; // half the width of the band edge, in shadow-test units: 0 is a hard step, 0.5 the whole filter
@@ -34,6 +37,9 @@ export function toonParsChunk(look: ToonLightLook, original: string = THREE.Shad
   const helpers = `
 float toonSun = 0.0;
 float toonSunLit = 1.0;
+float toonFlatten = 0.0;
+float toonGlintSize = 0.0;
+vec3 toonGlint = vec3( 0.0 );
 float toonBand( float coord ) {
 	#ifdef USE_GRADIENTMAP
 		return texture2D( gradientMap, vec2( coord, 0.0 ) ).r;
@@ -56,6 +62,8 @@ float toonShadow( sampler2DShadow map, float intensity, float bias, vec4 coord )
 		float band = toonBand( dot( geometryNormal, directLight.direction ) * 0.5 + 0.5 );
 		float darkest = toonBand( 0.0 );
 		float lit = toonSunLit * step( darkest + 0.001, band );
+		band = mix( band, darkest, toonFlatten );
+		if ( toonGlintSize > 0.0 ) toonGlint += directLight.color * lit * step( 1.0 - toonGlintSize, dot( geometryNormal, normalize( directLight.direction + geometryViewDir ) ) );
 		vec3 shade = directLight.color;
 		#if NUM_HEMI_LIGHTS > 0
 			vec3 sky = hemisphereLights[ 0 ].skyColor;

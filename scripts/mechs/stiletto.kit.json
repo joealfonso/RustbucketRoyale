@@ -1,11 +1,11 @@
 {
   "scheme": {
     "white": "#E8EAEE",
-    "blue": "#2F6FD0",
-    "frame": "#22303F",
+    "blue": "#55B4FF",
+    "frame": "#1C2632",
     "visorGlow": "#5CFF7A",
     "conduitGlow": "#FF8A1F",
-    "bladeGlow": "#4FC3FF"
+    "bladeGlow": "#8FE3FF"
   },
   "parts": {
     "Torso": {
@@ -19,6 +19,7 @@
     "Frame": {
       "zone": "torso",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
     },
     "Sensor": {
@@ -45,7 +46,15 @@
     "Jets": {
       "zone": "torso",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
+    },
+    "Pack_Hose": {
+      "zone": "torso",
+      "paint": "frame",
+      "finish": "rubber",
+      "rusts": false,
+      "noHit": true
     },
     "Jet_Glow": {
       "zone": "torso",
@@ -67,7 +76,22 @@
     "Leg_Frame": {
       "zone": "legs",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
+    },
+    "Leg_Pistons": {
+      "zone": "legs",
+      "paint": "frame",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Leg_Tendons": {
+      "zone": "legs",
+      "paint": "frame",
+      "finish": "rubber",
+      "rusts": false,
+      "noHit": true
     },
     "Leg_Conduits": {
       "zone": "legs",
@@ -94,6 +118,21 @@
     "Arm_Frame": {
       "zone": "arms",
       "paint": "frame",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Arm_Pistons": {
+      "zone": "arms",
+      "paint": "frame",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
+    },
+    "Arm_Hoses": {
+      "zone": "arms",
+      "paint": "frame",
+      "finish": "rubber",
       "rusts": false,
       "noHit": true
     },
@@ -106,6 +145,7 @@
     "Emitter": {
       "zone": "arms",
       "paint": "frame",
+      "finish": "metal",
       "rusts": false
     },
     "Blade": {
@@ -116,6 +156,13 @@
     "Carbine": {
       "zone": "arms",
       "paint": "weapon"
+    },
+    "Carbine_Barrel": {
+      "zone": "arms",
+      "paint": "frame",
+      "finish": "metal",
+      "rusts": false,
+      "noHit": true
     },
     "Carbine_Glow": {
       "zone": "arms",

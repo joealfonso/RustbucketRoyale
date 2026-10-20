@@ -27,12 +27,13 @@ describe("frontRects", () => {
     for (const zone of [ZONE_LEGS, ZONE_ARMS, ZONE_TORSO]) expect(rects.some((r) => r.zone === zone)).toBe(true);
   });
 
-  it.each(sets)("draws %s with legs under the torso and arms out to the sides", (_, set) => {
+  it.each(sets)("draws %s with legs under the torso and arms out to the sides", (name, set) => {
     const rects = frontRects(set.boxes, set.boxZone, config);
     const lowest = (zone: number) => Math.max(...rects.filter((r) => r.zone === zone).map((r) => r.y + r.h));
     const highest = (zone: number) => Math.min(...rects.filter((r) => r.zone === zone).map((r) => r.y));
     expect(lowest(ZONE_LEGS)).toBeGreaterThan(lowest(ZONE_TORSO));
-    expect(highest(ZONE_TORSO)).toBeLessThan(highest(ZONE_LEGS));
+    // The Cataclysm's knees peak over its deck on purpose (gate V9, its spider outline), so only it may have legs on top.
+    if (name !== "cataclysm") expect(highest(ZONE_TORSO)).toBeLessThan(highest(ZONE_LEGS));
     const arms = rects.filter((r) => r.zone === ZONE_ARMS);
     expect(Math.min(...arms.map((r) => r.x))).toBeLessThan(config.widthPx / 2);
     expect(Math.max(...arms.map((r) => r.x + r.w))).toBeGreaterThan(config.widthPx / 2);

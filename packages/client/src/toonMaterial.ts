@@ -10,6 +10,7 @@ import { parseLight, presetColors, presetForSeed, presetNamed, type LightConfig,
 import { Sky, parseSky, type SkyConfig } from "./sky";
 import { parseSunShadowLook, type SunShadowLook } from "./sunShadows";
 import { installToonLight } from "./toonLight";
+import { parseCrease, type CreaseLook } from "./creasePass";
 
 // The look of the game, from data/look.json and data/palette.json: one master toon material for everything (three
 // flat bands of light plus a hard rim), a dark outline round every box, and one warm key light (the sun, casting
@@ -51,6 +52,24 @@ export interface LookConfig {
   // How fast the haze thins with height, per metre (see haze.ts). The haze colour and distances are per preset.
   haze: { heightFalloff: number };
   sky: SkyConfig;
+  mech: MechSurfaceLook;
+  crease: CreaseLook; // the crease line pass, creasePass.ts
+}
+
+// How the roster mechs' surfaces take paint and light (gate V9). `normals` is read by the model scripts when they
+// write a mech (scripts/assets/hardSurface.ts), so a change there needs the mechs rebuilt; the rest is the master
+// toon material's and applies at once.
+export interface MechSurfaceLook {
+  normals: { smoothAngleDegrees: number; bigShare: number; wearWidthMeters: number };
+  // Paint chipped to bare steel along the edges the model marks: `cover` is the share of an edge that chips, in
+  // patches `scale` per metre; rust starts on edges, `rustFirst` ahead of the rest. Gone between the fade distances,
+  // where a chamfer is a pixel wide and chips would only flicker.
+  edgeWear: { color: string; cover: number; scale: number; rustFirst: number; fade: { startMeters: number; endMeters: number } };
+  // Bare metal parts: one hard highlight from the sun, `glint` strong, where the surface is within `size` (1 minus
+  // the cosine) of mirroring it toward the eye.
+  metal: { glint: number; size: number; color: string };
+  // Rubber parts: no rim, the lit bands pulled `flatten` of the way toward the shadow band, the colour times `darken`.
+  rubber: { flatten: number; darken: number };
 }
 
 export function parsePalette(raw: unknown): Palette {
@@ -70,7 +89,25 @@ export function parseLook(raw: unknown): LookConfig {
   parseSunShadowLook(l.shadows, Object.keys(vfxConfig.levels));
   const ao = l.ao;
   if (!(ao?.heightMeters > 0 && ao.strength >= 0 && ao.strength <= 1 && Number.isInteger(ao.steps) && ao.steps >= 1 && ao.ragged >= 0 && ao.directShare >= 0 && ao.directShare <= 1)) throw new Error("look.json: ao needs heightMeters above 0, strength and directShare 0 to 1, whole steps of 1 or more, ragged 0 or more");
+  parseMechSurface(l.mech);
+  parseCrease(l.crease);
   return l;
+}
+
+const share = (n: unknown) => typeof n === "number" && n >= 0 && n <= 1;
+
+function parseMechSurface(m: MechSurfaceLook): void {
+  if (!m?.normals || !m.edgeWear || !m.metal || !m.rubber) throw new Error("look.json: mech needs normals, edgeWear, metal and rubber");
+  const { smoothAngleDegrees, bigShare, wearWidthMeters } = m.normals;
+  if (!(smoothAngleDegrees > 0 && smoothAngleDegrees < 90 && bigShare > 0 && bigShare <= 1 && wearWidthMeters >= 0)) {
+    throw new Error("look.json: mech.normals needs smoothAngleDegrees between 0 and 90, bigShare above 0 to 1 and wearWidthMeters 0 or more");
+  }
+  const w = m.edgeWear;
+  if (!(typeof w.color === "string" && share(w.cover) && w.scale > 0 && share(w.rustFirst) && w.fade?.startMeters >= 0 && w.fade.endMeters > w.fade.startMeters)) {
+    throw new Error("look.json: mech.edgeWear needs a color, cover and rustFirst 0 to 1, scale above 0, and a fade that ends after it starts");
+  }
+  if (!(share(m.metal.glint) && m.metal.size > 0 && m.metal.size < 1 && typeof m.metal.color === "string")) throw new Error("look.json: mech.metal needs glint 0 to 1, size between 0 and 1 and a color");
+  if (!(share(m.rubber.flatten) && share(m.rubber.darken))) throw new Error("look.json: mech.rubber needs flatten and darken 0 to 1");
 }
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
@@ -196,8 +233,11 @@ export class Toon {
 
   // A material of its own, for something whose colour changes on its own (a mech zone darkening with damage).
   // With `rusts`, `setRust` eats its paint away to rust (see DESIGN.md, "Rust").
-  ownMaterial(name: string, rusts = false, kind: SurfaceKind | null = null): THREE.MeshToonMaterial {
-    return this.make(this.color(name), rusts, false, kind ? this.paint.surface(kind) : null);
+  // With `finishes`, it reads each corner's `finish` attribute (kit mechs only, mechKit.ts): paint chips along the
+  // edges the model marks, bare metal glints, rubber takes the light flat (look.json mech). Every geometry drawn with
+  // it must have that attribute.
+  ownMaterial(name: string, rusts = false, kind: SurfaceKind | null = null, finishes = false): THREE.MeshToonMaterial {
+    return this.make(this.color(name), rusts, false, kind ? this.paint.surface(kind) : null, finishes);
   }
 
   // How much of a rusting material's paint is gone: 0 for clean paint, 1 for a part at zero hit points.
@@ -228,11 +268,12 @@ export class Toon {
   }
 
   // `paint`: the painted marks for this kind of surface (paint/paintChunk.ts), laid on after rust and weathering.
-  private make(hex: string, rusts = false, weathered = false, paint: PaintSurface | null = null): THREE.MeshToonMaterial {
+  private make(hex: string, rusts = false, weathered = false, paint: PaintSurface | null = null, finishes = false): THREE.MeshToonMaterial {
     const m = new THREE.MeshToonMaterial({ color: hex, gradientMap: this.ramp });
     const { strength, width } = this.look.rim;
     const rim = this.rimColor;
     const rust = this.look.rust;
+    const mech = this.look.mech;
     const rustCover = { value: 0 };
     if (rusts) m.userData.rustCover = rustCover;
     // Everything in the master material casts sun shadows (sunShadows.ts); the ground and outlines do not.
@@ -272,7 +313,7 @@ export class Toon {
           #include <aomap_fragment>`)
         .replace("#include <opaque_fragment>", `
           float facing = max(dot(normalize(normal), normalize(vViewPosition)), 0.0);
-          outgoingLight += rimColor * ${strength.toFixed(3)} * step(1.0 - ${width.toFixed(3)}, 1.0 - facing) * diffuseColor.rgb;
+          outgoingLight += rimColor * ${strength.toFixed(3)} * step(1.0 - ${width.toFixed(3)}, 1.0 - facing) * diffuseColor.rgb${finishes ? " * (1.0 - toonRubber)" : ""};
           #include <opaque_fragment>`);
       if (rusts) {
         shader.uniforms.rustCover = rustCover;
@@ -288,7 +329,8 @@ export class Toon {
             if (rustCover > 0.0) {
               vec3 rp = vRustPos * ${rust.scale.toFixed(3)};
               float n = rustNoise(rp) * 0.65 + rustNoise(rp * 2.7 + 17.0) * 0.35;
-              if (n < rustCover) diffuseColor.rgb = n > rustCover - ${rust.rim.toFixed(3)} ? rustDark : rustColor;
+              float cover = rustCover${finishes ? ` + vFinish.x * ${mech.edgeWear.rustFirst.toFixed(3)}` : ""};
+              if (n < cover${finishes ? " && toonRubber < 0.5" : ""}) diffuseColor.rgb = n > cover - ${rust.rim.toFixed(3)} ? rustDark : rustColor;
             }`);
       }
       if (weathered) {
@@ -318,10 +360,35 @@ export class Toon {
               if (toonAbove < ${grime.height.toFixed(3)}) diffuseColor.rgb = mix(diffuseColor.rgb, grimeColor, ${grime.strength.toFixed(3)});
             }`);
       }
+      if (finishes) {
+        const { edgeWear, metal, rubber } = mech;
+        shader.uniforms.wearColor = { value: new THREE.Color(this.color(edgeWear.color)) };
+        shader.uniforms.glintColor = { value: new THREE.Color(this.color(metal.color)) };
+        shader.vertexShader = shader.vertexShader
+          .replace("void main() {", "attribute vec2 finish;\nvarying vec2 vFinish;\nvarying vec3 vFinishPos;\nvoid main() {")
+          .replace("#include <begin_vertex>", `#include <begin_vertex>
+            vFinish = finish;
+            vFinishPos = position * vec3(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz), length(modelMatrix[2].xyz));`);
+        // Inserted after the rust's lines at the same place, so it runs first: rust covers chipped edges, not the
+        // other way round. The finish is the same on every corner of a triangle, so the tests below never blend.
+        fragment = fragment
+          .replace("void main() {", "varying vec2 vFinish;\nvarying vec3 vFinishPos;\nuniform vec3 wearColor;\nuniform vec3 glintColor;\nvoid main() {")
+          .replace("#include <color_fragment>", `#include <color_fragment>
+            float toonMetal = step(0.5, vFinish.y) * step(vFinish.y, 1.5);
+            float toonRubber = step(1.5, vFinish.y);
+            float toonChip = vFinish.x * step(vFinish.y, 0.5) * (1.0 - smoothstep(${edgeWear.fade.startMeters.toFixed(2)}, ${edgeWear.fade.endMeters.toFixed(2)}, length(vViewPosition)));
+            if (toonChip > 0.0 && rustNoise(vFinishPos * ${edgeWear.scale.toFixed(3)} + 41.0) < ${edgeWear.cover.toFixed(3)} * toonChip) diffuseColor.rgb = wearColor;
+            diffuseColor.rgb *= mix(1.0, ${rubber.darken.toFixed(3)}, toonRubber);`)
+          .replace("#include <lights_fragment_begin>", `toonFlatten = toonRubber * ${rubber.flatten.toFixed(3)};
+            toonGlintSize = toonMetal * ${metal.size.toFixed(4)};
+            #include <lights_fragment_begin>`)
+          .replace("#include <opaque_fragment>", `outgoingLight += toonGlint * glintColor * ${metal.glint.toFixed(3)};
+            #include <opaque_fragment>`);
+      }
       shader.fragmentShader = fragment;
       if (paint) addPaint(shader, paint);
     };
-    m.customProgramCacheKey = () => `toon-rim-${strength}-${width}${rusts ? "-rust" : ""}${weathered ? "-world" : ""}${paint ? `-${paintCacheKey(paint)}` : ""}`;
+    m.customProgramCacheKey = () => `toon-rim-${strength}-${width}${rusts ? "-rust" : ""}${weathered ? "-world" : ""}${paint ? `-${paintCacheKey(paint)}` : ""}${finishes ? "-finish" : ""}`;
     return m;
   }
 

@@ -2,8 +2,12 @@
 // Every mesh uses one material, MasterToon, the only one the asset rules allow.
 // With `quantize` (the roster mechs), meshes are stored small with KHR_mesh_quantization, which three's GLTFLoader
 // reads with no decoder: positions as 16-bit integers, normals as 8-bit, about half the bytes of 32-bit floats.
+// Every mesh is written with hard-surface normals and an edge wear mask (hardSurface.ts, gate V9), the mask as the
+// custom attribute _WEAR, which three's loader names `_wear`.
 
+import { readFileSync } from "node:fs";
 import type { MeshData } from "../../packages/client/src/dressing/shapes";
+import { hardSurface, parseHardSurfaceLook, type HardSurfaceLook } from "./hardSurface";
 export type { MeshData };
 
 export interface NodeData {
@@ -14,6 +18,7 @@ export interface NodeData {
 
 const FLOAT = 5126;
 const BYTE = 5120;
+const UNSIGNED_BYTE = 5121;
 const SHORT = 5122;
 const UNSIGNED_SHORT = 5123;
 const ARRAY_BUFFER = 34962;
@@ -21,6 +26,15 @@ const ELEMENT_ARRAY_BUFFER = 34963;
 
 export interface GlbOptions {
   quantize?: boolean;
+  // The normals and wear numbers; data/look.json's mech.normals when left out, false to keep the given normals and
+  // write no wear.
+  hardSurface?: HardSurfaceLook | false;
+}
+
+let lookNormals: HardSurfaceLook | null = null;
+function mechNormals(): HardSurfaceLook {
+  lookNormals ??= parseHardSurfaceLook(JSON.parse(readFileSync(new URL("../../data/look.json", import.meta.url), "utf8")).mech?.normals);
+  return lookNormals;
 }
 
 // A mesh's positions as normalized 16-bit integers, -1 to 1 across its largest side, with the offset and the scale
@@ -49,6 +63,7 @@ function quantizeNormals(normals: number[]): Int8Array {
 }
 
 export function writeGlb(nodes: NodeData[], options: GlbOptions = {}): Uint8Array {
+  const surfaceLook = options.hardSurface === false ? null : (options.hardSurface ?? mechNormals());
   const chunks: Uint8Array[] = [];
   let byteLength = 0;
   const bufferViews: object[] = [];
@@ -69,7 +84,9 @@ export function writeGlb(nodes: NodeData[], options: GlbOptions = {}): Uint8Arra
     const node: Record<string, unknown> = { name: n.name };
     if (n.translation) node.translation = n.translation;
     if (n.mesh) {
-      const { positions, normals, indices } = n.mesh;
+      const { positions, indices } = n.mesh;
+      const surface = surfaceLook ? hardSurface(n.mesh, surfaceLook) : null;
+      const normals = surface ? surface.normals : n.mesh.normals;
       const count = positions.length / 3;
       if (options.quantize) {
         const q = quantizePositions(positions);
@@ -88,8 +105,20 @@ export function writeGlb(nodes: NodeData[], options: GlbOptions = {}): Uint8Arra
         accessors.push({ bufferView: addView(new Uint8Array(new Float32Array(normals).buffer), ARRAY_BUFFER), componentType: FLOAT, count, type: "VEC3" });
       }
       const position = accessors.length - 2, normal = accessors.length - 1;
+      const attributes: Record<string, number> = { POSITION: position, NORMAL: normal };
+      if (surface) {
+        // One byte a vertex in four (the rest padding, which compresses to almost nothing) when quantised.
+        if (options.quantize) {
+          const bytes = new Uint8Array(count * 4);
+          surface.wear.forEach((w, v) => { bytes[v * 4] = Math.round(w * 255); });
+          accessors.push({ bufferView: addView(bytes, ARRAY_BUFFER, 4), componentType: UNSIGNED_BYTE, normalized: true, count, type: "SCALAR" });
+        } else {
+          accessors.push({ bufferView: addView(new Uint8Array(new Float32Array(surface.wear).buffer), ARRAY_BUFFER), componentType: FLOAT, count, type: "SCALAR" });
+        }
+        attributes._WEAR = accessors.length - 1;
+      }
       accessors.push({ bufferView: addView(new Uint8Array(new Uint16Array(indices).buffer), ELEMENT_ARRAY_BUFFER), componentType: UNSIGNED_SHORT, count: indices.length, type: "SCALAR" });
-      meshes.push({ name: n.name, primitives: [{ attributes: { POSITION: position, NORMAL: normal }, indices: accessors.length - 1, material: 0 }] });
+      meshes.push({ name: n.name, primitives: [{ attributes, indices: accessors.length - 1, material: 0 }] });
       node.mesh = meshes.length - 1;
     }
     return node;

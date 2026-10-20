@@ -473,3 +473,17 @@ Map building, `npx tsx scripts/measure-generation.ts` (10 seeds, median / worst 
 
 ### Retina pixels and dynamic resolution (2026-10-20, Joseph: "noticeable mouse lag and the performance is poor")
 The game drew at the screen's full pixel ratio, 2 on Joseph's MacBook Air (Retina, 2560 x 1664): nearly three times the pixels of the 1600 x 900 at ratio 1 every earlier row was measured at, and the toon, paint and shadow shaders cost per pixel. Headless Chrome as a Retina screen (1440 x 900 at ratio 1.5, frame cap off, machine also running a model agent at load 10): small and medium about 12 GPU ms a frame, shadows 3.1 ms of it, against 3.3 to 5 ms at ratio 1; ratio 2 is about 1.8 times ratio 1.5, past 16.7 ms, which queues frames and is felt as mouse lag. Now the ratio is chosen as frames go (renderScale.ts, data/render.json): it starts at 1.25, steps down by 0.25 to 1.0 while the median frame is over 18 ms, and steps up toward the screen's own after 4 s under 8 GPU ms. F1 > Performance shows the current ratio. Also found and stopped: a headless Chrome left running by an earlier agent run had been playing the game in the background for 16 hours, competing for the same GPU.
+
+### Mech surfaces and crease lines (2026-10-20, gate V9)
+What changed: the roster's shading normals (bent over chamfers at build time, no runtime cost), an edge wear byte per vertex (`_WEAR`), and in the master toon material for kit mechs one more noise read for paint chips, the metal glint and the rubber band (look.json `mech`). Download: the committed Ironclad rebuilt with them is 417,304 to 525,620 bytes raw, 99.8 to 108.0 kB gzipped, 54.9 to 57.7 kB brotli (the wear byte sits in four for alignment; the padding compresses away). Build time per mech unchanged to the eye (under 0.5 s).
+
+Method: headless Chrome over CDP at 1600 x 900, ratio 1, vsync and frame cap off, M4 MacBook (ANGLE Metal), other agents rebuilding mechs on the same machine. Before is HEAD (cd77a78) served from a worktree on its own dev server, after the working tree with the mech agents' models in progress, measured alternately. Style page: GPU time from a timer query around each animation frame, 5 s per view. Medium seed 11 at the spawn: the F1 readouts and "Measure feature costs".
+
+| View | GPU ms median, before (two rounds) | after (two rounds) |
+| :- | :- | :- |
+| Style page, 10 m | 2.32, 2.04 | 1.94, 1.94 |
+| Style page, roster (key 4) | 2.34, 2.45 | 2.11, 2.16 |
+| Style page, 50 m | 1.88, 2.15 | 2.17, 1.84 |
+| Medium 11, spawn (210 draw calls, 1.31M triangles) | 3.7, 3.7 | 3.7 to 3.8, 3.8 |
+
+The surface changes cost nothing measurable here (within the run-to-run swing). Crease lines (creasePass.ts, off by default, F1 > Look features): 1.3 ms on medium in both runs (all on 5.0 to 5.1 ms), about a third of the frame, from drawing the scene into a 4x multisampled half-float target and one full-screen pass of five depth reads; at Joseph's ratio 1.25 to 2 it scales with pixels. Not nearly free, so it stays a proposal. Joseph's laptop: not measured; F1 > Measure feature costs there gives the number, crease lines included.

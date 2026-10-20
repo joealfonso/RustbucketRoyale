@@ -198,5 +198,12 @@
         "seed": 73
       }
     ]
-  }
+  },
+  "mech": {
+    "normals": { "smoothAngleDegrees": 50, "bigShare": 0.4, "wearWidthMeters": 0.09 },
+    "edgeWear": { "color": "#8E979A", "cover": 0.4, "scale": 14, "rustFirst": 0.3, "fade": { "startMeters": 14, "endMeters": 35 } },
+    "metal": { "glint": 0.55, "size": 0.05, "color": "warmLight" },
+    "rubber": { "flatten": 0.55, "darken": 0.8 }
+  },
+  "crease": { "enabled": false, "darken": 0.45, "threshold": 0.6, "fade": { "startMeters": 25, "endMeters": 60 } }
 }

@@ -60,7 +60,6 @@ export function segmentOf(p: THREE.Vector3, legs: readonly LegJoints[]): number 
 export function splitBySegment(geometry: THREE.BufferGeometry, legs: readonly LegJoints[]): Map<number, THREE.BufferGeometry> {
   const flat = geometry.index ? geometry.toNonIndexed() : geometry;
   const position = flat.attributes.position!;
-  const normal = flat.attributes.normal!;
   const count = position.count;
 
   // Union-find over corners, joined by triangle and by position (to the millimetre).
@@ -97,14 +96,16 @@ export function splitBySegment(geometry: THREE.BufferGeometry, legs: readonly Le
   const out = new Map<number, THREE.BufferGeometry>();
   for (const [piece, list] of corners) {
     const g = new THREE.BufferGeometry();
-    const pos = new Float32Array(list.length * 3), nor = new Float32Array(list.length * 3);
-    list.forEach((corner, j) => {
-      pos.set([position.getX(corner), position.getY(corner), position.getZ(corner)], j * 3);
-      nor.set([normal.getX(corner), normal.getY(corner), normal.getZ(corner)], j * 3);
-    });
-    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
-    out.set(piece, addOutlineNormals(g));
+    // Every attribute the part has (position, normal, the toon look's finish), but the outline normals, which are
+    // worked out again for the piece alone.
+    for (const [name, attribute] of Object.entries(flat.attributes)) {
+      if (name === "outlineNormal") continue;
+      const size = attribute.itemSize;
+      const values = new Float32Array(list.length * size);
+      list.forEach((corner, j) => { for (let k = 0; k < size; k++) values[j * size + k] = attribute.getComponent(corner, k); });
+      g.setAttribute(name, new THREE.BufferAttribute(values, size));
+    }
+    out.set(piece, addOutlineNormals(g, true));
   }
   return out;
 }
