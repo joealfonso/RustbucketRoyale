@@ -94,6 +94,10 @@
     "searchMeters": 40,
     "refreshTicks": 15
   },
+  "hunt": {
+    "searchMeters": 250,
+    "personDistanceScale": 1.6
+  },
   "abilities": {
     "ramChancePerSecond": 0.6,
     "ramMaxAngleDegrees": 20,

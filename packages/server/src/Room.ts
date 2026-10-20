@@ -531,6 +531,7 @@ export class Room {
 
     if ((this.tickCount + player.slot) % this.config.bots.loot.refreshTicks === 0) {
       this.aimBotAtLoot(player);
+      this.aimBotAtPrey(player);
       bot.needsRepair = partToRepair(player.hp, this.config.zones) >= 0;
     }
 
@@ -550,7 +551,7 @@ export class Room {
     this.botTargets.length = 0;
     for (const other of this.players.values()) {
       if (other === player || !other.participant || other.dead) continue;
-      this.botTargets.push({ id: other.id, x: other.state.x, y: other.state.y, z: other.state.z });
+      this.botTargets.push({ id: other.id, x: other.state.x, y: other.state.y, z: other.state.z, person: other.bot === null });
     }
     // Decoys look like any mech to a bot, so it chases and shoots them. Its own are not worth fooling itself with.
     for (const d of this.decoys) if (d.ownerId !== player.id) this.botTargets.push({ id: d.id, x: d.state.x, y: d.state.y, z: d.state.z });
@@ -598,6 +599,22 @@ export class Room {
     if (drop) { goalX = drop.x; goalZ = drop.z; found = true; }
     if (found) bot.setLootGoal(goalX, goalZ, wreck !== null);
     else bot.clearLootGoal();
+  }
+
+  // The nearest other living mech within the hunting range, bot or person, seen or not.
+  private aimBotAtPrey(player: Player): void {
+    const { x, z } = player.state;
+    let best: Player | null = null;
+    let bestDistance = this.config.bots.hunt.searchMeters;
+    for (const other of this.players.values()) {
+      if (other === player || !other.participant || other.dead) continue;
+      const distance = Math.hypot(other.state.x - x, other.state.z - z);
+      if (distance < bestDistance) { best = other; bestDistance = distance; }
+    }
+    const bot = player.bot!;
+    bot.personDistanceScale = this.config.bots.hunt.personDistanceScale;
+    if (best) bot.setHuntGoal(best.state.x, best.state.z);
+    else bot.clearHuntGoal();
   }
 
   // ---- supply drops

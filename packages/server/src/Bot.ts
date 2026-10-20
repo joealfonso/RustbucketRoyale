@@ -12,12 +12,13 @@ const LOOT_REACH = 1.2;
 const LOOT_DIRECT = 6; // nearer than this a bot walks straight at loot, not along a route that stops short
 const SAME_LOOT = 0.5; // loot offered this near the last is the same thing; things spilled from a wreck lie further apart
 
-type GoalKind = "ring" | "loot" | "heard" | "wander";
+type GoalKind = "ring" | "loot" | "heard" | "hunt" | "wander";
 
 export interface BotTarget {
   id: number;
   x: number; y: number; z: number; // feet position
   aimHeight?: number; // how far above the feet to aim, when not a mech's chest (the Junk Titan)
+  person?: boolean; // a person playing: judged further away than they are (bots.json hunt.personDistanceScale)
 }
 
 // A deliberately simple bot. It sees whoever is close and unobstructed, aims a little badly, backs off or closes in
@@ -73,6 +74,10 @@ export class Bot {
   private dodgeZ = 0;
   private dodgeDash = false; // dash once as the dodge starts
   private laserSeen = -1; // the last laser this bot decided about, so it rolls once per laser, not every tick
+  personDistanceScale = 1; // set by the room from bots.json hunt
+  private hasHunt = false;
+  private huntX = 0;
+  private huntZ = 0;
   private hasLoot = false;
   private lootX = 0;
   private lootZ = 0;
@@ -124,6 +129,18 @@ export class Bot {
 
   clearLootGoal(): void {
     this.hasLoot = false;
+  }
+
+  // The nearest other mech, set by the room whether or not it can be seen. With nothing better to do the bot goes
+  // looking for it, so bots meet and fight each other instead of wandering a big map alone.
+  setHuntGoal(x: number, z: number): void {
+    this.hasHunt = true;
+    this.huntX = x;
+    this.huntZ = z;
+  }
+
+  clearHuntGoal(): void {
+    this.hasHunt = false;
   }
 
   // Set by the room every tick: somewhere it must not stand, the Junk Titan's stomp. Radius 0 for nowhere.
@@ -418,11 +435,13 @@ export class Bot {
     for (const t of targets) {
       const dx = t.x - self.x, dy = t.y + (t.aimHeight ?? CHEST_HEIGHT) - (self.y + EYE_HEIGHT), dz = t.z - self.z;
       const distance = Math.hypot(dx, dy, dz);
-      if (distance >= bestDistance) continue;
+      // People count as further off, so bots near a person turn on each other more often than all on the person.
+      const judged = t.person ? distance * this.personDistanceScale : distance;
+      if (judged >= bestDistance) continue;
       // Anything solid in between hides them.
       if (world.raycast(self.x, self.y + EYE_HEIGHT, self.z, dx / distance, dy / distance, dz / distance, distance - 1, this.hit)) continue;
       best = t;
-      bestDistance = distance;
+      bestDistance = judged;
     }
     return best;
   }
@@ -462,6 +481,10 @@ export class Bot {
     if (this.heardFor > 0) {
       const inside = !ring || Math.hypot(this.heardX - ring.cx, this.heardZ - ring.cz) < ring.radius - this.stats.ringMargin;
       if (inside && Math.hypot(this.heardX - self.x, this.heardZ - self.z) > 6) return { x: this.heardX, z: this.heardZ, urgent: false, kind: "heard" };
+    }
+    if (this.hasHunt) {
+      const inside = !ring || Math.hypot(this.huntX - ring.cx, this.huntZ - ring.cz) < ring.radius - this.stats.ringMargin;
+      if (inside) return { x: this.huntX, z: this.huntZ, urgent: false, kind: "hunt" };
     }
     if (this.wanderIn <= 0) {
       const range = ring ? Math.max(10, ring.radius - this.stats.ringMargin) : 60;

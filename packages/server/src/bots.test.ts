@@ -39,6 +39,20 @@ describe("Bot", () => {
     expect(spotted(30).input.targetZ).toBeLessThan(0);
   });
 
+  it("picks a bot over a person a little nearer, but not over one much nearer", () => {
+    const aimAt = (personDistance: number) => {
+      const bot = new Bot(stats, random, botConfig.path, null);
+      bot.personDistanceScale = botConfig.hunt.personDistanceScale;
+      const self = createMechState(config.mech, 0, 0, 0, 0);
+      const input = createMechInput();
+      const targets = [{ id: 2, x: 0, y: 0, z: -personDistance, person: true }, { id: 3, x: 30, y: 0, z: 0 }];
+      for (let i = 0; i < 60; i++) bot.think(self, targets, null, flat, DT, input);
+      return input.targetX > 15 ? "bot" : "person";
+    };
+    expect(aimAt(25)).toBe("bot");
+    expect(aimAt(10)).toBe("person");
+  });
+
   it("does not shoot at someone behind a wall, or beyond sight range", () => {
     const wall = new World([boxFromData({ name: "g", center: [0, -0.5, 0], size: [1000, 1, 1000], color: "" }), boxFromData({ name: "w", center: [0, 5, -15], size: [40, 10, 1], color: "" })]);
     expect(spotted(30, wall).input.fire).toBe(false);

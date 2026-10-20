@@ -380,3 +380,6 @@ Measured at 0.33 ms more GPU on the M4 for every 141k extra triangles. 15k keeps
 ## 2026-10-20: Round forms near, outlines kept, bores in dark cups (V10)
 The extra near triangles went to round forms (12 to 36 sides), real thickness and layered plates; the middle level only changed where an outline had to match across 25 m. The 6 cm outline shell draws dark spokes across any hole narrower than about 12 cm, so bores are left open at the mouth in their own paint with a dark cup inside, and no recess is narrower than the outline. The Arbiter's dome uses shared smooth normals so its gloss is one round highlight.
 
+## 2026-10-20: Bots hunt the nearest mech and see people as further off
+Joseph: "bots also need to fight each other". They already shot any mech in sight, but on medium few met where a person could see. Now a bot with nothing in sight, no loot near and nothing heard heads for the nearest mech within 250 m, and when choosing whom to shoot it judges people 1.6 times further off, so bots near a person turn on each other instead of all on the person. Both numbers are in bots.json hunt. A bigger lever, not taken yet: far bots walking toward people instead of fighting on paper out of sight.
+

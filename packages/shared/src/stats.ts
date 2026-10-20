@@ -127,12 +127,18 @@ export interface BotLootStats {
   refreshTicks: number; // how often it looks again for the nearest thing worth having
 }
 
+export interface BotHuntStats {
+  searchMeters: number; // with nobody in sight and nothing to loot or check, a bot heads for the nearest mech this close
+  personDistanceScale: number; // a person looks this many times further off to a bot choosing whom to shoot
+}
+
 export interface BotConfig {
   mix: Record<string, number>; // share of each difficulty when bots are added
   fill: Record<string, number>; // total players (people plus bots) a room tops up to, by tier
   difficulties: Record<string, BotStats>;
   lod: BotLodStats;
   path: BotPathStats;
+  hunt: BotHuntStats;
   loot: BotLootStats;
 }
 
@@ -242,6 +248,7 @@ export function parseBotConfig(raw: unknown): BotConfig {
     lod: parseNumbers<BotLodStats>(d?.lod, "bots.json lod", LOD_KEYS),
     path: parseNumbers<BotPathStats>(d?.path, "bots.json path", PATH_KEYS),
     loot: parseNumbers<BotLootStats>(d?.loot, "bots.json loot", ["searchMeters", "refreshTicks"]),
+    hunt: parseNumbers<BotHuntStats>(d?.hunt, "bots.json hunt", ["searchMeters", "personDistanceScale"]),
   };
 }
 export const parseHudStats = (raw: unknown) => parseNumbers<HudStats>(raw, "hud.json", ["radarRangeMeters", "detectRangeMeters", "knockoutCardSeconds"]);
