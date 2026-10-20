@@ -117,6 +117,9 @@ export interface BotPathStats {
   steerClearanceMeters: number; // the gap left between its side and the thing it passes
   steerMaxSizeMeters: number; // anything wider or deeper than this is a wall, left to the route
   steerKeepSideMeters: number; // keeps the side it picked unless the other way is shorter by more than this
+  // How long a bot keeps at a goal it is getting nowhere with before it gives up on it: standing at the end of a route
+  // that stops short of the goal, or holding E on loot that never comes.
+  giveUpSeconds: number;
 }
 
 export interface BotLootStats {
@@ -219,7 +222,7 @@ export const parseCombatStats = (raw: unknown) => parseNumbers<CombatStats>(raw,
 export const parseBotStats = (raw: unknown, name = "bots.json") => parseNumbers<BotStats>(raw, name, BOT_KEYS);
 
 const LOD_KEYS: (keyof BotLodStats & string)[] = ["fullRangeMeters", "cheapEveryTicks", "abstractFightRange", "abstractFightSeconds", "abstractLoserDamage", "abstractWinnerDamage"];
-const PATH_KEYS: (keyof BotPathStats & string)[] = ["cellMeters", "maxNodes", "replanSeconds", "waypointReach", "minPathDistance", "goalMoveReplan", "searchesPerTick", "heuristicWeight", "waterCost", "steerLookMeters", "steerClearanceMeters", "steerMaxSizeMeters", "steerKeepSideMeters"];
+const PATH_KEYS: (keyof BotPathStats & string)[] = ["cellMeters", "maxNodes", "replanSeconds", "waypointReach", "minPathDistance", "goalMoveReplan", "searchesPerTick", "heuristicWeight", "waterCost", "steerLookMeters", "steerClearanceMeters", "steerMaxSizeMeters", "steerKeepSideMeters", "giveUpSeconds"];
 
 export function parseBotConfig(raw: unknown): BotConfig {
   const d = raw as Record<string, Record<string, unknown>>;

@@ -11,6 +11,16 @@ const pathStats = parseBotConfig(botsJson).path;
 const mech = parseMechStats(mechJson);
 const box = (minX: number, minZ: number, maxX: number, maxZ: number, maxY = 5): Box => ({ minX, minZ, maxX, maxZ, minY: 0, maxY });
 
+// Thin posts, one in each of the eight 8 m route cells round the one centred on (x, z), 2 m off the middle of each so
+// a mech can walk straight out between them. Cells on the 200 m test square run from -100 in steps of 8.
+function clearingPosts(x: number, z: number): Box[] {
+  const posts: Box[] = [];
+  for (let dz = -1; dz <= 1; dz++) {
+    for (let dx = -1; dx <= 1; dx++) if (dx !== 0 || dz !== 0) posts.push(box(x + dx * 8 + 2, z + dz * 8 + 2, x + dx * 8 + 2.5, z + dz * 8 + 2.5));
+  }
+  return posts;
+}
+
 // A 200 m square of open ground, with whatever walls the test adds.
 function finder(walls: Box[], meters = 200) {
   const nav = buildNavGrid(walls, meters, 0, 0, { cellMeters: 2, stepHeight: mech.stepHeight, mechHeight: mech.height });
@@ -196,6 +206,18 @@ describe("Pathfinder", () => {
     const short = new Pathfinder(buildNavGrid([wall], 200, 0, 0, { cellMeters: 2, stepHeight: mech.stepHeight, mechHeight: mech.height }), { ...pathStats, maxNodes: 20 });
     expect(short.findPath(-50, 0, 50, 0, path)).toBe(true);
     expect(short.reachedGoal).toBe(false);
+  });
+
+  it("does not say a route goes all the way when the goal is cut off and it only goes as near as it can", () => {
+    // A thin post in each of the eight coarse cells round the one centred on (8, 8): on the route grid that cell is
+    // sealed in, though a mech walks out between the posts.
+    const posts = clearingPosts(8, 8);
+    const path: number[] = [];
+    const f = finder(posts);
+    f.findPath(8, 8, 8, 90, path); // from inside the clearing out
+    expect(f.reachedGoal).toBe(false);
+    f.findPath(8, 90, 8, 8, path); // from outside in
+    expect(f.reachedGoal).toBe(false);
   });
 
   it("tells whether a straight walk is clear, ignoring the cell the walk starts in", () => {

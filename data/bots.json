@@ -87,7 +87,8 @@
     "steerLookMeters": 4,
     "steerClearanceMeters": 0.6,
     "steerMaxSizeMeters": 5,
-    "steerKeepSideMeters": 0.5
+    "steerKeepSideMeters": 0.5,
+    "giveUpSeconds": 4
   },
   "loot": {
     "searchMeters": 40,

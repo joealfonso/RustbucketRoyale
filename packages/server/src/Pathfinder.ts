@@ -32,8 +32,9 @@ export class Pathfinder {
   private points: number[] = [];
   private wetBefore: number[] = []; // for each route point, how many wet cells the route has crossed to reach it
   private searchesLeft: number;
-  // Whether the last route found goes all the way, rather than stopping where the search ran out of cells. A whole
-  // route stays good on a map that never changes, so a bot only needs a new one when it strays from it.
+  // Whether the last route found goes all the way, rather than stopping where the search ran out of cells or as near
+  // as it gets to a goal it cannot reach. A whole route stays good on a map that never changes, so a bot only needs a
+  // new one when it strays from it.
   reachedGoal = false;
   // Cells the last search looked at: its cost, the same on any computer however busy.
   cellsSearched = 0;
@@ -193,16 +194,18 @@ export class Pathfinder {
     // A goal that cannot be reached from here: go to the nearest spot that can.
     const exact = this.region[goal] === this.region[start];
     if (!exact) goal = this.nearestInRegion(goal, this.region[start]!);
+    // A route to the nearest reachable spot does not reach the goal, however well the search went. Saying it did kept
+    // bots standing for minutes in clearings the grid sees as sealed in, sure they had arrived.
     if (start === goal) {
       out.push(exact ? goalX : this.centreX(goal), exact ? goalZ : this.centreZ(goal));
-      this.reachedGoal = true;
+      this.reachedGoal = exact;
       return true;
     }
 
     const reached = this.search(start, goal);
     const end = reached ? goal : this.best;
     if (end === start) return false;
-    this.reachedGoal = reached;
+    this.reachedGoal = reached && exact;
     const cells = this.cells;
     cells.length = 0;
     for (let c = end; c !== -1; c = this.parent[c]!) cells.push(c);

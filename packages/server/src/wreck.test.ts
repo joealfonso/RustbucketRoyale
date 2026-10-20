@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ITEM_GRENADE, NOISE_KINDS, ZONE_TORSO, itemWeapon, type MechInput } from "@rustbucket/shared";
+import { ITEM_GRENADE, NOISE_KINDS, ZONE_TORSO, itemWeapon, upgradeItem, type MechInput } from "@rustbucket/shared";
 import { Client, idle, makeRoom, startMatch } from "./testClient";
 import type { Player } from "./Player";
 import type { Room, RoomConfig } from "./Room";
@@ -123,6 +123,17 @@ describe("bots and loot", () => {
     expect(bot.loadout.grenades).toBe(before + 1);
     expect(pickups.count).toBe(0);
     expect(config.bots.loot.searchMeters).toBeGreaterThan(13);
+  });
+
+  it("take two things lying together, pressing E for each rather than holding it down after the first", () => {
+    const { room } = makeRoom(undefined, "small", 1);
+    room.tick();
+    const bot = [...players(room).values()].find((p) => p.bot)!;
+    const pickups = (room as unknown as { pickups: { add(i: number, x: number, y: number, z: number): void } }).pickups;
+    pickups.add(upgradeItem(0), bot.state.x + 8, 0.5, bot.state.z + 3);
+    pickups.add(upgradeItem(1), bot.state.x + 8.1, 0.5, bot.state.z + 3);
+    for (let i = 0; i < 60 * 15 && bot.loadout.upgrades.includes(-1); i++) room.tick();
+    expect([...bot.loadout.upgrades].sort()).toEqual([0, 1]);
   });
 
   it("loot a wreck they find", () => {
