@@ -17,7 +17,7 @@ export interface Names {
   selfId: number | null; // your own id, for an own goal
 }
 
-const OTHER_CAUSES: Record<string, string> = { grenade: "Grenade", barrel: "Exploding barrel", ring: "The zone", drop: "Supply drop" };
+const OTHER_CAUSES: Record<string, string> = { grenade: "Grenade", barrel: "Exploding barrel", ring: "The zone", drop: "Supply drop", "titan:stomp": "the Junk Titan's stomp", "titan:car": "a car the Junk Titan threw" };
 
 export function causeName(cause: string, names: Names): string {
   if (cause.startsWith("weapon:")) return names.weapons.weapons.find((w) => w.id === cause.slice(7))?.name ?? "Gunfire";
@@ -47,6 +47,7 @@ const STAT_WORDS: Record<MatchStat["kind"], (v: number) => string> = {
   barrelsSetOff: (v) => `Barrels set off: ${v}`,
   propsSmashed: (v) => `Junk smashed: ${v}`,
   mostDamage: (v) => `Most damage: ${Math.round(v)}`,
+  titanDamage: (v) => `Most damage to the Junk Titan: ${Math.round(v)}`,
 };
 
 // One line a stat: "Longest pounce: 31 m, Bot 4".

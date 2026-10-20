@@ -11,7 +11,7 @@ const DISTANCES: ReadonlySet<MatchStatKind> = new Set(["longestRailShot", "longe
 const MAX_STATS = 3;
 
 export function createTally(): Tally {
-  return { longestRailShot: 0, longestPounce: 0, treesFelled: 0, barrelsSetOff: 0, propsSmashed: 0, mostDamage: 0 };
+  return { longestRailShot: 0, longestPounce: 0, treesFelled: 0, barrelsSetOff: 0, propsSmashed: 0, mostDamage: 0, titanDamage: 0 };
 }
 
 export function clearTally(tally: Tally): void {

@@ -57,7 +57,8 @@ export type ClientMessage = InputMessage | StartMessage | TuneMessage | MechMess
 
 // How a mech was knocked out, for the knockout card (gate 14c). `causes` are the last two different things that hurt
 // it, newest last, each an id the client turns into words: "weapon:<weapons.json id>", "ability:<abilities.json kind>"
-// (ram, pounce, barrage, decoy, rail), "grenade", "barrel", "ring" or "drop" (a supply drop landing).
+// (ram, pounce, barrage, decoy, rail), "grenade", "barrel", "ring", "drop" (a supply drop landing), or "titan:stomp" /
+// "titan:car" (the Junk Titan, gate 13c; killerMech -1).
 // `killerMech` is the killer's roster mech, -1 for none (the ring) or unknown.
 export interface KnockoutHow {
   killerMech: number;
@@ -65,9 +66,31 @@ export interface KnockoutHow {
   causes: string[];
 }
 
+// The Junk Titan (gate 13c), the roaming scrap boss on medium and large maps, as far as a client near it needs to draw
+// it: where it stands and faces, how much of it is left (0 to 1 of its full hit points) and what it is doing, with how
+// far into that it is, so the stomp and throw animations line up with the server's.
+export type TitanAction = "walk" | "stomp" | "throw" | "roar" | "down";
+export interface TitanState {
+  x: number; y: number; z: number;
+  yaw: number;
+  hp: number; // share of full, 0 to 1
+  action: TitanAction;
+  actionSeconds: number;
+}
+
+// A Titan moment worth an effect, sent to everyone near it: a stomp landing (radius), a car thrown (from x, y, z at
+// vx, vy, vz; the server and every client fly it the same way, like a grenade), a thrown car landing, the Titan falling.
+export interface TitanMessage {
+  t: "titan";
+  event: "stomp" | "throw" | "land" | "fall";
+  x: number; y: number; z: number;
+  vx?: number; vy?: number; vz?: number;
+  radius?: number;
+}
+
 // A fun number from the match for the results screen (gate 14c): who did the most of something. Only stats someone
 // actually scored are sent. `value` is a count, or metres for the distance ones.
-export type MatchStatKind = "treesFelled" | "barrelsSetOff" | "longestPounce" | "longestRailShot" | "propsSmashed" | "mostDamage";
+export type MatchStatKind = "treesFelled" | "barrelsSetOff" | "longestPounce" | "longestRailShot" | "propsSmashed" | "mostDamage" | "titanDamage";
 export interface MatchStat {
   kind: MatchStatKind;
   playerId: number;
@@ -200,11 +223,12 @@ export type ServerMessage =
     }
   | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number; left?: boolean; how?: KnockoutHow } // left: their connection closed
   | { t: "result"; winnerId: number | null; stats?: MatchStat[] }
+  | TitanMessage
   | { t: "refused"; reason: string; rejoinFailed?: boolean } // rejoinFailed: too late, join the room afresh
   | { t: "notice"; text: string } // a line for the feed from the server itself, such as a restart
   | { t: "prop"; id: number } // a prop was destroyed
   | { t: "props"; destroyed: number[] } // every prop destroyed so far, sent to someone arriving mid way
-  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; looting: number; repairing: number; pickups: PickupState[] | null } // pickups null: unchanged since the last snapshot
+  | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; looting: number; repairing: number; pickups: PickupState[] | null; titan?: TitanState | null } // pickups null: unchanged since the last snapshot; titan null: none near you
   | ShotMessage
   | HitMessage
   | GrenadeMessage
