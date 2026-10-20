@@ -12,6 +12,9 @@
 // Bolts, rivets, slats and louvres are not modelled: they are too small to read past 20 m, and the painted "mech"
 // surface draws plates, rivets and chips on every part up close. The triangles go to the outline instead: broad
 // pauldrons, thick toed-out fins, fuller legs and feet, a bigger carbine and blade, pistons and hoses at the joints.
+// The 15k near budget (gate V10) went to big forms that read from 5 to 25 m: hollow nozzle bells, aerofoil fins, a
+// rounder skull and a curved sensor fin, coil springs on the hock dampers, field rings on the blade emitter, and more
+// sides on every drum, bell and sleeve.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeGlb, type MeshData, type NodeData } from "../assets/glbWrite";
@@ -87,11 +90,101 @@ function inset(outline: [number, number][], e: number): [number, number][] {
   });
 }
 
+// Faces all wound the same way round as one closed solid, each flat-shaded. Unlike `convex`, the solid may be hollow
+// or bent (a nozzle bell, a curved fin, a coil): the winding decides which way each face looks, and the sign of the
+// solid's volume turns the whole lot outward.
+function solid(faces: V3[][]): MeshData {
+  let volume = 0;
+  for (const f of faces) for (let i = 1; i < f.length - 1; i++) volume += dot(f[0]!, cross(f[i]!, f[i + 1]!));
+  const out = empty();
+  for (const face of faces) {
+    const pts = (volume < 0 ? [...face].reverse() : face).filter((p, i, all) => length(sub(p, all[(i + 1) % all.length]!)) > 1e-6);
+    if (pts.length < 3) continue;
+    let n: V3 = [0, 0, 0];
+    pts.forEach((a, i) => {
+      const b = pts[(i + 1) % pts.length]!;
+      n = add(n, [(a[1] - b[1]) * (a[2] + b[2]), (a[2] - b[2]) * (a[0] + b[0]), (a[0] - b[0]) * (a[1] + b[1])]);
+    });
+    if (length(n) < 1e-12) continue;
+    n = norm(n);
+    const base = out.positions.length / 3;
+    for (const p of pts) { out.positions.push(...p); out.normals.push(...n); }
+    for (let i = 1; i < pts.length - 1; i++) out.indices.push(base, base + i, base + i + 1);
+  }
+  return out;
+}
+
+// A solid through matching cross-sections in order, capped at both ends. Each section must be convex (its cap is a
+// fan), but the run through them may bend. Side quads are split in two, as in `loft`.
+function sweep(sections: V3[][]): MeshData {
+  const faces: V3[][] = [[...sections[0]!].reverse(), sections.at(-1)!];
+  for (let r = 0; r < sections.length - 1; r++) {
+    const a = sections[r]!, b = sections[r + 1]!;
+    for (let i = 0; i < a.length; i++) {
+      const j = (i + 1) % a.length;
+      faces.push([a[i]!, a[j]!, b[j]!], [a[i]!, b[j]!, b[i]!]);
+    }
+  }
+  return solid(faces);
+}
+
+// A flat-sided aerofoil for the fins: sections from leading edge to trailing edge along each station's chord, in the
+// plane spanned by the chord, thickest a third of the way back and blunt at both edges so neither is knife thin.
+// `stations` are [leading edge, trailing edge, thickness], the thickness along `side`; `foil` is [share of the chord,
+// share of the thickness] from the leading edge back.
+function sweepFin(stations: [V3, V3, number][], foil: [number, number][], side: V3 = X): MeshData {
+  return sweep(stations.map(([le, te, t]) => [
+    ...foil.map(([c, k]) => add(lerp(le, te, c), scale(side, (k * t) / 2))),
+    ...[...foil].reverse().map(([c, k]) => add(lerp(le, te, c), scale(side, (-k * t) / 2))),
+  ]));
+}
+const FOIL_NEAR: [number, number][] = [[0, 0.5], [0.08, 0.85], [0.3, 1], [0.65, 0.8], [1, 0.4]];
+const FOIL_FAR: [number, number][] = [[0, 0.55], [0.3, 1], [1, 0.45]];
+
 // The shape makers for one level of detail. Bevels and fine round shapes only on the nearest level; `near` keeps a
 // shape on the nearest level only, `mid` on the nearest two.
 function makers(lod: Lod) {
   const near = (...m: MeshData[]) => (lod === 0 ? merge(...m) : empty());
   const mid = (...m: MeshData[]) => (lod <= 1 ? merge(...m) : empty());
+  // Sides of a round shape on this level, from its count on the old nearest level: the 15k budget (V10) rounds the
+  // near level's drums, bells, sleeves and hoses off with 1.6 times as many, which is what reads as machined from 5 to
+  // 25 m. Rods and tendons thinner than 5 cm keep theirs: their facets do not show. The simpler levels keep their
+  // counts.
+  const roundSides = (sides: number, r = 1) => lod === 0 ? (r < 0.05 ? sides : 2 * Math.round(sides * 0.8)) : lod === 1 ? Math.max(6, Math.round(sides * 0.6)) : Math.max(4, Math.round(sides / 2));
+
+  // A solid of revolution round the line from `base` along `axis`: `profile` is a closed loop of [radius, height]
+  // points, so a hollow bell is its outside down, its lip, and its inside back up. Points on the axis close it.
+  function lathe(base: V3, axis: V3, profile: [number, number][], sides = 10): MeshData {
+    const n = roundSides(sides), dir = norm(axis), [u, v] = across(dir, Math.abs(dir[1]) < 0.9 ? Y : X);
+    const at = ([r, h]: [number, number], i: number): V3 => {
+      const t = ((i + 0.5) / n) * Math.PI * 2;
+      return add(base, add(scale(dir, h), add(scale(u, Math.cos(t) * r), scale(v, Math.sin(t) * r))));
+    };
+    const faces: V3[][] = [];
+    profile.forEach((p, k) => {
+      const q = profile[(k + 1) % profile.length]!;
+      if (p[0] === 0 && q[0] === 0) return;
+      for (let i = 0; i < n; i++) faces.push([at(p, i), at(p, i + 1), at(q, i + 1), at(q, i)]);
+    });
+    return solid(faces);
+  }
+
+  // A coil spring of round wire from `a` to `b`, `turns` times round, `r` to the wire's middle: the tube follows the
+  // helix with its section turned square to it at every step.
+  function coil(a: V3, b: V3, r: number, wire: number, turns: number): MeshData {
+    const d = sub(b, a), dir = norm(d), [u, v] = across(dir, X), steps = Math.round(turns * 8), sides = 6;
+    const sections = Array.from({ length: steps + 1 }, (_, j) => {
+      const t = j / steps, phi = t * turns * Math.PI * 2;
+      const out = add(scale(u, Math.cos(phi)), scale(v, Math.sin(phi)));
+      const tangent = norm(add(d, scale(add(scale(u, -Math.sin(phi)), scale(v, Math.cos(phi))), turns * Math.PI * 2 * r)));
+      const side = cross(tangent, out), c = add(lerp(a, b, t), scale(out, r));
+      return Array.from({ length: sides }, (_, k) => {
+        const psi = (k / sides) * Math.PI * 2;
+        return add(c, scale(add(scale(out, Math.cos(psi)), scale(side, Math.sin(psi))), wire));
+      });
+    });
+    return sweep(sections);
+  }
 
   // A bevelled bar through stations (each a point and a [w, h] size), `w` measured along the axis nearest `side`.
   // The stations must lie on one line and make a convex shape. Its ends and long edges are bevelled by `bevel` on
@@ -111,7 +204,7 @@ function makers(lod: Lod) {
 
   // A round shaft from a to b (a cone with two radii), its end rims bevelled on the nearest level.
   function cyl(a: V3, b: V3, r0: number, r1 = r0, sides = 12, bevel = 0): MeshData {
-    const n = lod === 0 ? sides : lod === 1 ? Math.max(6, Math.round(sides * 0.6)) : Math.max(4, Math.round(sides / 2));
+    const n = roundSides(sides, Math.max(r0, r1));
     const dir = norm(sub(b, a)), [u, v] = across(dir, Math.abs(dir[1]) < 0.9 ? Y : X);
     const circle = (c: V3, r: number) => Array.from({ length: n }, (_, i) => {
       const t = ((i + 0.5) / n) * Math.PI * 2;
@@ -157,7 +250,7 @@ function makers(lod: Lod) {
     ...[a, b].map((p) => cyl(sub(p, scale(side, pin / 2)), add(p, scale(side, pin / 2)), r * 1.5, r * 1.5, 8)),
   );
 
-  return { lod, near, mid, run, bar, cyl, slab, block, hose, ram, tendons };
+  return { lod, near, mid, run, bar, cyl, slab, block, hose, ram, tendons, lathe, coil };
 }
 
 // Leg joints, the same as the walk rig has always used (scripts/mechs/joints.ts), right side.
@@ -185,7 +278,7 @@ interface Part { name: string; zone: Zone; paint: string; finish?: "metal" | "ru
 const turnPoint = (p: V3, angles: V3, pivot: V3): V3 => turn({ positions: [...p], normals: [0, 1, 0], indices: [] }, angles, pivot).positions as V3;
 
 function build(lod: Lod): Part[] {
-  const { near, mid, run, bar, cyl, slab, block, hose, ram, tendons } = makers(lod);
+  const { near, mid, run, bar, cyl, slab, block, hose, ram, tendons, lathe, coil } = makers(lod);
 
   // ---- Legs: thigh forward to the knee, shin back to the hock, a long foot forward to three talons and a back
   // spur. Built on the right, then mirrored. Camo alternates side to side: blue outer thigh plate and shin plate on
@@ -234,7 +327,10 @@ function build(lod: Lod): Part[] {
   const hockStrut = merge(
     mid(cyl(onShin(0.14, strutOut(0.14)), onShin(0.46, strutOut(0.46)), 0.055, 0.055, 8, 0.012)), // damper body
     mid(cyl(onShin(0.22, strutOut(0.22)), HOCK_ROD, 0.03, 0.03, 6)), // rod into the hock
-    near(...[0.54, 0.65, 0.76].map((t) => cyl(onShin(t - 0.025, strutOut(t)), onShin(t + 0.025, strutOut(t)), 0.08, 0.08, 8))), // the coil
+    // The spring: a coil round the rod from the damper body down to a seat near the rod's end, which carries the
+    // mech's weight between landings. It rides the rod (all of it lies past the piston's halfway mark).
+    near(coil(onShin(0.47, strutOut(0.47)), onShin(0.8, strutOut(0.8)), 0.066, 0.015, 4)),
+    near(cyl(onShin(0.8, strutOut(0.8)), onShin(0.835, strutOut(0.835)), 0.088, 0.088, 8, 0.008)), // its seat
     // Lugs that hold the strut to the shin at both ends.
     near(bar(onShin(0.16, [0.08, 0, 0]), onShin(0.16, strutOut(0.16)), shinDir, [0.05, 0.07], [0.05, 0.07], 0), bar(onShin(0.86, [0.07, 0, 0]), onShin(0.86, strutOut(0.86)), shinDir, [0.05, 0.06], [0.05, 0.06], 0)),
   );
@@ -335,13 +431,34 @@ function build(lod: Lod): Part[] {
   // it, one big fin sweeping up and back off the crown, and the visor a thin band round the front a little wider
   // than the skull.
   const headRing = (z: number, y: number, w: number, h: number) => ring([0, y, z], X, Y, w, h, 0.06);
+  // Up close the skull is round in section (a squared ellipse) through seven stations, so it swells behind the eyes
+  // and runs down to the beak in a curve; past 25 m the same stations are cut octagons, and past 80 m four of them.
+  const skull = (z: number, y: number, w: number, h: number): V3[] => Array.from({ length: 16 }, (_, i) => {
+    const t = ((i + 0.5) / 16) * Math.PI * 2, c = Math.cos(t), s = Math.sin(t);
+    return [Math.sign(c) * Math.abs(c) ** 0.75 * (w / 2), y + Math.sign(s) * Math.abs(s) ** 0.75 * (h / 2), z];
+  });
+  const headStations: [number, number, number, number][] = [
+    [0.14, 3.45, 0.26, 0.22], [0.06, 3.47, 0.35, 0.28], [-0.08, 3.48, 0.4, 0.32], [-0.24, 3.475, 0.37, 0.305],
+    [-0.4, 3.455, 0.3, 0.26], [-0.6, 3.43, 0.2, 0.17], [-0.8, 3.405, 0.08, 0.07],
+  ];
   const head = merge(
-    loft([headRing(0.14, 3.45, 0.26, 0.22), headRing(-0.08, 3.48, 0.4, 0.32), headRing(-0.4, 3.44, 0.3, 0.22), headRing(-0.8, 3.37, 0.08, 0.07)]),
+    lod === 0 ? loft(headStations.map((st) => skull(...st)))
+      : lod === 1 ? loft(headStations.map((st) => headRing(...st)))
+      : loft([headRing(0.14, 3.45, 0.26, 0.22), headRing(-0.08, 3.48, 0.4, 0.32), headRing(-0.4, 3.455, 0.3, 0.26), headRing(-0.8, 3.405, 0.08, 0.07)]),
     bar([0, 3.31, -0.02], [0, 3.34, -0.56], X, [0.26, 0.08], [0.12, 0.06], 0.02), // chin plate
   );
-  const visor = loft([ring([0, 3.5, -0.06], X, Y, 0.43, 0.075, 0.015), ring([0, 3.455, -0.54], X, Y, 0.25, 0.065, 0.015)]);
-  // Thick enough to stay a solid line from the front, where a thin fin is edge-on and gone past 50 m.
-  const fin = slab([0, 0, 0], Z, Y, [[-0.34, 3.6], [0.98, 4.27], [1.05, 4.18], [0.14, 3.51]], 0.13, 0.025);
+  // The visor follows the skull's curve round the front, standing a little proud of it all the way.
+  const visor = loft(([[-0.06, 3.5, 0.43], [-0.22, 3.5, 0.41], [-0.38, 3.48, 0.345], [-0.54, 3.455, 0.265]] as V3[]).map(([z, y, w]) => ring([0, y, z], X, Y, w, 0.075 + (0.06 + z) * 0.02, 0.015)));
+  // The sensor fin sweeps up and back in a curve, its middle bowed down behind the skull like a raptor's crest, and
+  // thins toward the tip. Thick enough at the root to stay a solid line from the front, where a thin fin is edge-on
+  // and gone past 50 m.
+  const finStation = (s: number): [V3, V3, number] => {
+    const bow = scale([0, -0.857, 0.515], Math.sin(Math.PI * s) * 0.07);
+    return [add(lerp([0, 3.6, -0.34], [0, 4.27, 0.98], s), bow), add(lerp([0, 3.51, 0.14], [0, 4.18, 1.05], s), bow), 0.14 - s * 0.045];
+  };
+  const fin = lod === 0
+    ? sweepFin([0, 0.25, 0.5, 0.75, 1].map(finStation), FOIL_NEAR)
+    : sweepFin((lod === 1 ? [0, 0.25, 0.5, 0.75, 1] : [0, 0.5, 1]).map(finStation), FOIL_FAR);
   // A sensor pod on each cheek behind the visor, looking sideways for flankers: a dark housing with a hood over a
   // round green lens. The fin sits in a clamp along the crown, so it reads as bolted on, not grown.
   const podR = mid(
@@ -360,7 +477,8 @@ function build(lod: Lod): Part[] {
   // The stabilizer fins, the Stiletto's mark at 150 m. Canted out over the shoulders and toed out at the back, so
   // from in front they open into a broad V instead of two edge-on slivers, and thick enough to stay solid there.
   const finPivot: V3 = [0.28, 3.04, 0.56], finTurn: V3 = [0, 0.42, -0.44];
-  const packFinR = turn(slab([0.28, 0, 0], Z, Y, [[0.3, 3.0], [0.86, 3.0], [1.38, 4.14], [1.22, 4.22]], 0.13, 0.03), finTurn, finPivot);
+  // Each fin is an aerofoil that thins from its root to its tip, 0.16 to 0.09 m.
+  const packFinR = turn(sweepFin([[[0.28, 3.0, 0.3], [0.28, 3.0, 0.86], 0.16], [[0.28, 4.22, 1.22], [0.28, 4.14, 1.38], 0.09]], lod === 0 ? FOIL_NEAR : FOIL_FAR), finTurn, finPivot);
   // The fin's root block, where it is clamped to the pack.
   const finRootR = turn(block([0.28, 3.08, 0.6], [0.2, 0.14, 0.48], 0.02), finTurn, finPivot);
   // A ram from the pack's top to each fin's inner face cants the fin to steer a jump.
@@ -377,16 +495,49 @@ function build(lod: Lod): Part[] {
   );
   // Nozzles flare wider at the exhaust, which is the bottom of the cone; a collar holds each to its gimbal.
   const nozzleTilt: V3 = [-0.3, 0, 0.2], nozzleTop: V3 = [0.22, 2.46, 0.66];
-  // Inside the bell's mouth a cone (the centre body that shapes the exhaust) hangs over a glowing throat, and two
-  // vanes across the flow tip the thrust fore and aft: the vector in vector thrust. A band stiffens the bell.
+  // Up close each nozzle is a real bell: a thin wall that flares out in a curve to a rolled lip, hollow up to the
+  // throat, with a centre body (the cone that shapes the exhaust) hung down its middle. Two vanes across the mouth
+  // tip the thrust fore and aft: the vector in vector thrust. A band stiffens the bell. Past 25 m the bell is solid,
+  // with the same outline, and the glow a disc in its mouth, as the hollow would be a few dark pixels.
+  const bellAxis: V3 = [0.22, 0, 0.66];
+  const bellR = (y: number) => 0.14 + 0.09 * ((2.46 - y) / 0.42) ** 1.6; // the outside's radius at a height
+  const THROAT_Y = 2.36;
+  const bell = lod === 0
+    ? lathe(bellAxis, Y, [
+      [0, 2.46], [0.13, 2.46], [0.14, 2.45],
+      ...[2.36, 2.24, 2.13].map((y): [number, number] => [bellR(y), y]),
+      [0.226, 2.065], [0.238, 2.05], [0.238, 2.03], [0.226, 2.02], [0.2, 2.02], [0.196, 2.035], // the rolled lip
+      ...[2.13, 2.24].map((y): [number, number] => [bellR(y) - 0.026, y]),
+      [bellR(THROAT_Y) - 0.03, THROAT_Y], [0, THROAT_Y],
+    ], 10)
+    : lathe(bellAxis, Y, [[0, 2.46], [0.14, 2.46], [bellR(2.25), 2.25], [0.23, 2.04], [0, 2.04]], 10);
   const nozzleR = turn(merge(
-    cyl([0.22, 2.46, 0.66], [0.22, 2.04, 0.66], 0.14, 0.23, 10, 0.02),
+    bell,
     mid(cyl([0.22, 2.53, 0.66], [0.22, 2.43, 0.66], 0.165, 0.165, 10)),
-    near(cyl([0.22, 2.24, 0.66], [0.22, 2.18, 0.66], 0.215, 0.215, 10)),
-    mid(cyl([0.22, 2.03, 0.66], [0.22, 1.86, 0.66], 0.09, 0.025, 10)),
+    // The band is a ring on the wall, not a disc, so it never shows inside the bell.
+    near(lathe(bellAxis, Y, [[bellR(2.225) - 0.01, 2.225], [bellR(2.225) + 0.008, 2.225], [bellR(2.175) + 0.012, 2.205], [bellR(2.175) + 0.012, 2.175], [bellR(2.225) - 0.01, 2.175]], 10)),
+    // The centre body: hung from the throat down through the bell, its tip just out of the mouth.
+    lod === 0
+      ? lathe(bellAxis, Y, [[0, THROAT_Y], [0.03, THROAT_Y], [0.04, 2.2], [0.036, 2.06], [0.012, 1.9], [0, 1.88]], 10)
+      : mid(cyl([0.22, 2.03, 0.66], [0.22, 1.86, 0.66], 0.09, 0.025, 10)),
     mid(...[0.12, 0.32].map((x) => slab([x, 0, 0], Z, Y, [[0.5, 2.04], [0.82, 2.04], [0.78, 1.93], [0.54, 1.93]], 0.035, 0.012))),
   ), nozzleTilt, nozzleTop);
-  const throatR = turn(cyl([0.22, 2.045, 0.66], [0.22, 2.025, 0.66], 0.17, 0.17, 12), nozzleTilt, nozzleTop);
+  // Up close the glow lines the bell's inside from the throat nearly to the lip, so it shows from any angle that sees
+  // into the bell: the 6 cm outlines of whatever hangs in the bell (centre body, vanes) would hide a glow only at the
+  // throat. Past 25 m it is a disc in the mouth.
+  const wall: [number, number][] = [[0.196, 2.035], [bellR(2.13) - 0.026, 2.13], [bellR(2.24) - 0.026, 2.24], [bellR(THROAT_Y) - 0.03, THROAT_Y]];
+  const wallAt = (y: number) => {
+    const i = Math.max(1, wall.findIndex(([, h]) => h >= y));
+    const [r0, h0] = wall[i - 1]!, [r1, h1] = wall[i]!;
+    return r0 + ((y - h0) / (h1 - h0)) * (r1 - r0);
+  };
+  const lining = [THROAT_Y, 2.24, 2.13, 2.08];
+  const throatR = turn(lod === 0
+    ? lathe(bellAxis, Y, [
+      [0, THROAT_Y - 0.003], ...lining.map((y): [number, number] => [wallAt(y) - 0.005, y === THROAT_Y ? y - 0.003 : y]),
+      ...[...lining].reverse().map((y): [number, number] => [wallAt(y) - 0.011, y === THROAT_Y ? y - 0.009 : y]), [0, THROAT_Y - 0.009],
+    ], 8) // fewer sides than the bell, so it sits 5 mm in from the wall to stay clear of the bell's flats
+    : cyl([0.22, 2.045, 0.66], [0.22, 2.025, 0.66], 0.17, 0.17, 12), nozzleTilt, nozzleTop);
   const jets = merge(
     nozzleR, mirrorX(nozzleR),
     block([0, 2.48, 0.66], [0.52, 0.14, 0.26], 0.03), // the bar that carries both nozzles
@@ -459,6 +610,9 @@ function build(lod: Lod): Part[] {
   const emitter = merge(
     block([1.2, 2.42, -0.8], [0.3, 0.34, 0.26], 0.035),
     cyl([1.2, 2.42, -0.9], [1.2, 2.42, -1.0], 0.095, 0.095, 10, 0.012), // the nozzle the blade comes out of
+    // Three field rings round the blade's root, clamped on the guide prongs, that hold the plasma in its shape. Rings,
+    // not discs, so the blade runs through them.
+    near(...[-1.02, -1.07, -1.12].map((z) => lathe([1.2, 2.42, z], Z, [[0.128, -0.016], [0.15, -0.016], [0.15, 0.016], [0.128, 0.016]], 10))),
     mid(cyl([1.2, 2.42, -0.66], [1.2, 2.42, -0.7], 0.15, 0.15, 10)), // collar clamping it to the wrist
     // A heat sink on top that sheds the blade's heat; its fins are left to the paint.
     mid(block([1.2, 2.61, -0.8], [0.24, 0.06, 0.2], 0.012)),

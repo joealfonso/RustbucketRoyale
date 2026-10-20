@@ -377,3 +377,6 @@ The asset checker takes an asset's kind from the first word of its file name, so
 ## 2026-10-20: Mech near level budget 15k, not 20k
 Measured at 0.33 ms more GPU on the M4 for every 141k extra triangles. 15k keeps a nine-mech brawl within about 0.3 ms here and an estimated 1 to 1.5 ms on a mid-range laptop; 20k would double that, and dynamic resolution cannot win triangle cost back. Only the near level (inside 25 m) grows. V9 showed shape beats triangle count, so the extra 5k should go to silhouette and big forms first.
 
+## 2026-10-20: Round forms near, outlines kept, bores in dark cups (V10)
+The extra near triangles went to round forms (12 to 36 sides), real thickness and layered plates; the middle level only changed where an outline had to match across 25 m. The 6 cm outline shell draws dark spokes across any hole narrower than about 12 cm, so bores are left open at the mouth in their own paint with a dark cup inside, and no recess is narrower than the outline. The Arbiter's dome uses shared smooth normals so its gloss is one round highlight.
+

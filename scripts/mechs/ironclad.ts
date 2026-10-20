@@ -22,6 +22,15 @@
 // bolts, rivets, slats and fins that were gone by 20 m came out: the painted atlas draws rivets and plate seams on every
 // mech up close. The shield's caps and middle band are hazard yellow, so the slab reads as the Ironclad's from far off.
 //
+// Gate V10 (near budget 10k to 15k): the extra triangles went into big round forms and real depth that read at 5 to
+// 25 m, not detail. The autocannon's barrels are round, with muzzle collars, bores and a stepped clamp ring, under a
+// shroud that is a curved plate; the pods' launch tubes stand in a recess behind a raised frame, with bores; the eye
+// is a lens standing out of a collared housing; the jet nozzles are bells with throats; the shield is built in steps (a lipped back
+// plate, layered appliques, ribbed caps and band, a bevelled steel blade); the leg rams are thicker, turned, with
+// collars; the ankle armour is layered; and the joints, drums and hoses have more sides. The middle level keeps the
+// same outline: the barrels' drum reaches the new muzzle, the shield's yellow is cut back the same way and its ribs
+// and back plate are there as plain blocks.
+//
 // Levels of detail: the same build runs three times. The nearest keeps the bevels, bolts, hoses and rivets; the middle
 // (past 25 m, data/mechKits.json lodDistances) keeps the new plates, rams and the pile driver's housing as plain shapes
 // but drops the small parts and turns the gun's six barrels into one drum; the far one (past 80 m) keeps only plain
@@ -79,6 +88,17 @@ function inset(outline: UV[], c: number): UV[] {
     const prev = lines[(i - 1 + lines.length) % lines.length]!;
     const t = ((line.p[0] - prev.p[0]) * line.d[1] - (line.p[1] - prev.p[1]) * line.d[0]) / (prev.d[0] * line.d[1] - prev.d[1] * line.d[0]);
     return [prev.p[0] + prev.d[0] * t, prev.p[1] + prev.d[1] * t];
+  });
+}
+
+// The outline with its two points farthest along -z (the blade's front corners) each cut off by `c` along both edges.
+function bevelTip(outline: UV[], c: number): UV[] {
+  const tips = outline.map((p, i) => [p[0], i] as const).sort((a, b) => a[0] - b[0]).slice(0, 2).map(([, i]) => i);
+  return outline.flatMap((p, i) => {
+    if (!tips.includes(i)) return [p];
+    const prev = outline[(i - 1 + outline.length) % outline.length]!, next = outline[(i + 1) % outline.length]!;
+    const toward = (q: UV): UV => { const l = Math.hypot(q[0] - p[0], q[1] - p[1]); return [p[0] + ((q[0] - p[0]) / l) * c, p[1] + ((q[1] - p[1]) / l) * c]; };
+    return [toward(prev), toward(next)];
   });
 }
 
@@ -163,6 +183,65 @@ function hose(points: V3[], r: number, sides: number): MeshData {
   }));
 }
 
+// A round solid turned about the line from `a` to `b`, from its profile: [metres from `a`, radius] pairs walked from
+// the `a` end along the outside. A collar or a step is one more pair, and a profile that turns back inward at the far
+// end (a smaller radius, then a few centimetres back toward `a`) leaves a real bore with a floor, so a barrel, a tube
+// or a nozzle has a mouth with depth instead of a painted disc. It is not convex, so it is wound by hand: each band
+// faces out of the profile, the cap at `a` faces back along the axis and the last ring's cap (the end, or the bore's
+// floor) faces forward. `caps` leaves either end open.
+function lathe(a: V3, b: V3, profile: [number, number][], sides: number, caps: [boolean, boolean] = [true, true]): MeshData {
+  const d = norm(sub(b, a));
+  const u = norm(cross(d, Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]));
+  const v = cross(d, u);
+  const rings = profile.map(([s, r]) => Array.from({ length: sides }, (_, k) => {
+    const t = ((k + 0.5) / sides) * Math.PI * 2;
+    return along(along(along(a, d, s), u, Math.cos(t) * r), v, Math.sin(t) * r);
+  }));
+  const faces: V3[][] = [];
+  if (caps[0] && profile[0]![1] > 0) faces.push([...rings[0]!].reverse());
+  for (let i = 0; i + 1 < rings.length; i++) {
+    const p = rings[i]!, q = rings[i + 1]!;
+    for (let k = 0; k < sides; k++) { const j = (k + 1) % sides; faces.push([p[k]!, p[j]!, q[j]!, q[k]!]); }
+  }
+  if (caps[1] && profile[profile.length - 1]![1] > 0) faces.push(rings[rings.length - 1]!);
+  return wound(faces);
+}
+
+// A solid from faces already wound counter-clockwise as seen from outside, each a flat convex polygon. `convex` turns
+// faces away from the middle, which would turn a bore's walls inside out.
+function wound(faces: V3[][]): MeshData {
+  const out = empty();
+  for (const face of faces) {
+    const n = norm(cross(sub(face[1]!, face[0]!), sub(face[2]!, face[0]!)));
+    const base = out.positions.length / 3;
+    for (const p of face) { out.positions.push(...p); out.normals.push(...n); }
+    for (let i = 1; i < face.length - 1; i++) out.indices.push(base, base + i, base + i + 1);
+  }
+  return out;
+}
+
+// A curved plate: the part of a thick ring round the z axis at (`cx`, `cy`) from angle `a0` to `a1` (radians, from
+// +x toward +y), radii `ri` to `ro`, from z0 to z1 (z0 < z1). The autocannon's shroud is one, so it has a real
+// thickness and an open underside.
+function arcShell(cx: number, cy: number, ri: number, ro: number, a0: number, a1: number, z0: number, z1: number, segments: number): MeshData {
+  const at = (r: number, t: number, z: number): V3 => [cx + Math.cos(t) * r, cy + Math.sin(t) * r, z];
+  const ts = Array.from({ length: segments + 1 }, (_, i) => a0 + ((a1 - a0) * i) / segments);
+  const faces: V3[][] = [];
+  for (let i = 0; i < segments; i++) {
+    const [t0, t1] = [ts[i]!, ts[i + 1]!];
+    faces.push([at(ro, t0, z0), at(ro, t1, z0), at(ro, t1, z1), at(ro, t0, z1)]); // outside
+    faces.push([at(ri, t0, z0), at(ri, t0, z1), at(ri, t1, z1), at(ri, t1, z0)]); // inside, facing the axis
+    faces.push([at(ri, t0, z0), at(ri, t1, z0), at(ro, t1, z0), at(ro, t0, z0)]); // the end at z0
+    faces.push([at(ri, t0, z1), at(ro, t0, z1), at(ro, t1, z1), at(ri, t1, z1)]); // the end at z1
+  }
+  faces.push([at(ri, a0, z0), at(ro, a0, z0), at(ro, a0, z1), at(ri, a0, z1)]);
+  faces.push([at(ri, a1, z0), at(ri, a1, z1), at(ro, a1, z1), at(ro, a1, z0)]);
+  // Which way round each face is wound depends on the direction the arc runs; flip the lot if the outside faces in.
+  const m = wound(faces);
+  const n0: V3 = [m.normals[0]!, m.normals[1]!, m.normals[2]!], mid = (a0 + a0 + (a1 - a0) / segments) / 2;
+  return dot(n0, [Math.cos(mid), Math.sin(mid), 0]) > 0 ? m : wound(faces.map((f) => [...f].reverse()));
+}
+
 // A mesh built flat in a face's own frame (x along the face, y up it, z out of it) and laid onto that face at
 // `origin`. The shield's fronts are slanted, so their applique plates are made square and then turned onto them.
 function onFace(mesh: MeshData, origin: V3, u: V3, v: V3, n: V3): MeshData {
@@ -212,8 +291,9 @@ function hazardPanel(axis: Axis, at: number, out: number, u: [number, number], v
 
 // ---- Fixed points the game reads: the gun's muzzle and the leg joints. They are the same at every level of detail.
 // Shots leave from the muzzle (scripts/make-hitboxes.ts copies Mount_Gun into data/mechKits.json). Gate V9 moved it
-// 0.25 m forward from -1.65: longer barrels, so the gun reads past the forearm in the side view.
-const GUN: V3 = [1.2, 2.4, -1.9];
+// 0.25 m forward from -1.65: longer barrels, so the gun reads past the forearm in the side view. Gate V10 set the
+// clamp ring back and gave each barrel a muzzle collar standing 6 cm past where the ring was, which is where it is now.
+const GUN: V3 = [1.2, 2.4, -1.96];
 // The hip, a knee that sits well back, and an ankle forward of it, so the knee bends backward and the side view shows
 // it. Right side.
 const LX = 0.57;
@@ -237,10 +317,10 @@ function build(lv: Level): Record<string, MeshData> {
   const notFar = (make: () => MeshData) => (far ? empty() : make());
   const bev = (b: number) => (near ? b : 0); // bevels and chamfers are a pixel or two past 25 m
   const sides = (n: number) => [n, Math.min(n, 6), 4][lv]!;
-  // A hose: round near, four-sided past 25 m, and past 80 m one straight three-sided run from end to end. The hoses
+  // A hose: round near (ten-sided), four-sided past 25 m, and past 80 m one straight three-sided run from end to end. The hoses
   // are parts of their own (rubber, not painted metal), and a part needs some mesh at every level, so the far one is
   // the cheapest that is still there.
-  const line = (points: V3[], r: number) => (far ? rod(points[0]!, points[points.length - 1]!, r, 3) : hose(points, r, near ? 6 : 4));
+  const line = (points: V3[], r: number) => (far ? rod(points[0]!, points[points.length - 1]!, r, 3) : hose(points, r, near ? 10 : 4));
 
   // ---- Torso: a core hull wrapped in plates, each its own block so the seams between them show. Two big upper
   // armour blocks at the corners hold the missile pods; the head sits between them, behind a chin guard and under a
@@ -256,7 +336,8 @@ function build(lv: Level): Record<string, MeshData> {
     // serial number, so nothing stands on it.
     pair(block(cut(0.02, 0.9, 2.2, 2.74, [0, 0.16, 0.06, 0]), "z", -0.64, -0.4, bev(0.03))),
     block(cut(2.7, 2.96, -0.7, -0.4, [0, 0.1, 0, 0]), "x", -0.36, 0.36, bev(0.03)), // chin guard, sloped on top
-    block(cut(3.1, 3.26, -0.66, 0.04, [0.06, 0.04, 0, 0]), "x", -0.38, 0.38, bev(0.02)), // brow hood
+    // Brow hood. Gate V10 brought it 6 cm forward, deepening the recess the head looks out of.
+    block(cut(3.1, 3.26, -0.72, 0.04, [0.06, 0.04, 0, 0]), "x", -0.38, 0.38, bev(0.02)),
     pair(block(cut(2.08, 2.6, -0.46, 0.42, far ? 0 : 0.04), "x", 0.79, 0.93, bev(0.02))), // flank plates
     pair(slab([0.33, 2.55, -0.63], [0.95, 3.1, 0.52], bev(0.08))), // upper armour blocks
     pair(slab([0.36, 3.0, 0.08], [0.94, 3.3, 0.5], bev(0.06))), // rear cowl behind each pod
@@ -269,43 +350,62 @@ function build(lv: Level): Record<string, MeshData> {
     notFar(() => block(cut(-0.26, 0.26, 1.5, 1.76, [0.08, 0.08, 0, 0]), "z", -0.5, -0.42, bev(0.02))),
   );
 
-  // Head: small and dark, a full 0.2 m behind the armour fronts. The eye looks out through the slit from a socket.
+  // Head: small and dark, sunk a full 0.28 m behind the brow. Near, the eye is a lens with a bevelled face standing just out of a
+  // collared housing, and the walls of the slot the head sits in are lined in the same dark, so the recess reads deep
+  // rather than as a grey gap. The housing is solid round the lens rather than a tube the lens sits down inside: the
+  // game's outline pushes every face 6 cm out (data/look.json), and the walls of a bore that narrow would draw their
+  // outline over the eye.
   const head = merge(
     slab([-0.26, 2.8, -0.44], [0.26, 3.14, 0.12], bev(0.05)),
-    only(() => cylinder([0, 3.02, -0.46], 0.11, 0.04, "z", 8)),
+    only(() => lathe([0, 3.02, -0.42], [0, 3.02, -0.52], [[0, 0.1], [0.07, 0.1], [0.07, 0.115], [0.1, 0.115]], 16)),
+    only(() => pair(slab([0.305, 2.9, -0.62], [0.33, 3.1, -0.2]))),
   );
-  const sensor = cylinder([0, 3.02, -0.48], 0.07, 0.1, "z", sides(8));
+  const sensor = near
+    ? lathe([0, 3.02, -0.43], [0, 3.02, -0.53], [[0, 0.07], [0.08, 0.07], [0.1, 0.06]], 16)
+    : cylinder([0, 3.02, -0.48], 0.07, 0.1, "z", sides(16));
 
   // Missile pods: one box per side, sunk into the top of its armour block and standing out of its front, with the
-  // hatch that closes over the launch cells lying on top, and near, a rim round the mouth of each of the six tubes.
-  const cellX = [0.51, 0.65, 0.79], cellY = [3.06, 3.24];
+  // hatch that closes over the launch cells lying on top. Near, the box's front is a raised frame round a recessed
+  // launch face, and six launch tubes stand in that recess, their mouths 2 cm inside the frame. The tubes are open
+  // at the mouth; their bores are dark cups in the frame below (the same split as the gun's barrels and bores).
+  const cellX = [0.52, 0.65, 0.78], cellY = [3.06, 3.24];
+  const tubeMouth = -0.7, tubeBore = 0.044, tubeDepth = 0.07;
   const pods = pair(merge(
-    slab([0.4, 2.92, -0.7], [0.9, 3.38, 0.05], bev(0.05)),
+    near ? merge(
+      slab([0.4, 2.92, -0.6], [0.9, 3.38, 0.05], 0.05),
+      // The frame round the launch face: top and bottom rails the full width, side rails between them.
+      slab([0.4, 3.305, -0.72], [0.9, 3.38, -0.55], 0.02),
+      slab([0.4, 2.92, -0.72], [0.9, 2.995, -0.55], 0.02),
+      ...[[0.4, 0.455], [0.845, 0.9]].map(([x0, x1]) => slab([x0!, 2.98, -0.72], [x1!, 3.32, -0.55], 0.015)),
+      ...cellX.flatMap((x) => cellY.map((y) => lathe([x, y, -0.6], [x, y, tubeMouth], [[0, 0.058], [0.1, 0.058], [0.1, tubeBore]], 10, [true, false]))),
+    ) : slab([0.4, 2.92, -0.72], [0.9, 3.38, 0.05]),
     notFar(() => block(cut(-0.62, 0.0, 0.44, 0.86, 0), "y", 3.37, 3.42, bev(0.015))), // hatch
-    ...(near ? cellX.flatMap((x) => cellY.map((y) => cylinder([x, y, -0.725], 0.064, 0.05, "z", 8))) : []),
   ));
   // The pilot's marking: one band round the right pod.
   // It stands just above the pod's hatch, so the hatch never hides the marking.
   const accentBand = slab([0.38, 2.96, -0.42], [0.92, 3.44, -0.3], bev(0.02));
 
   // Frame: waist, hip bar, the pods' launch cells and the jet nozzles, the dark mechanical bits of the torso.
-  // Near, the launch face is one dark plate behind the tube rims with a dark bore in each; farther, a dark cell per tube.
+  // Near, the launch face is a dark plate at the back of the pod's recess and each tube's bore is a dark cup 7 cm deep;
+  // farther, a dark cell per tube.
   const podCells: MeshData[] = [];
-  if (far) podCells.push(slab([0.455, 2.995, -0.74], [0.845, 3.305, -0.66]));
-  else if (!near) for (const x of cellX) for (const y of cellY) podCells.push(slab([x - 0.055, y - 0.065, -0.74], [x + 0.055, y + 0.065, -0.66]));
+  if (far) podCells.push(slab([0.455, 2.995, -0.75], [0.845, 3.305, -0.68]));
+  else if (!near) for (const x of cellX) for (const y of cellY) podCells.push(slab([x - 0.055, y - 0.065, -0.75], [x + 0.055, y + 0.065, -0.68]));
   else {
-    podCells.push(slab([0.44, 2.98, -0.715], [0.86, 3.32, -0.69]));
-    for (const x of cellX) for (const y of cellY) podCells.push(cylinder([x, y, -0.752], 0.04, 0.012, "z", 6));
+    podCells.push(slab([0.457, 2.997, -0.62], [0.843, 3.303, -0.598]));
+    for (const x of cellX) for (const y of cellY) podCells.push(lathe([x, y, tubeMouth + tubeDepth], [x, y, tubeMouth], [[tubeDepth + 0.001, tubeBore - 0.001], [0, tubeBore - 0.001]], 10, [false, true]));
   }
   const nozzle: V3 = [0.41, 1.82, 0.72];
   const frame = merge(
     slab([-0.45, 1.4, -0.3], [0.45, 1.8, 0.3], bev(0.04)), // waist
-    notFar(() => cylinder([0, 1.74, 0], 0.5, 0.1, "y", sides(12))), // slewing ring the torso sits on
-    cylinder([0, 1.48, 0], 0.17, 0.62, "x", sides(10)), // hip bar
+    notFar(() => cylinder([0, 1.74, 0], 0.5, 0.1, "y", sides(24))), // slewing ring the torso sits on
+    cylinder([0, 1.48, 0], 0.17, 0.62, "x", sides(16)), // hip bar
     pair(merge(...podCells)),
-    pair(cylinder(nozzle, 0.2, 0.2, "y", sides(10), 0.15)), // jet nozzles, flared at the bottom
-    only(() => pair(cylinder([nozzle[0], 1.91, nozzle[2]], 0.18, 0.04, "y", 10))), // nozzle collars, under the housings
-    only(() => pair(cylinder([nozzle[0], 1.725, nozzle[2]], 0.215, 0.03, "y", 10))), // a lip round each nozzle's mouth
+    // Jet nozzles, flared at the bottom. Near, each is a bell with a lip round its mouth and a throat 14 cm deep.
+    near
+      ? pair(lathe([nozzle[0], 1.92, nozzle[2]], [nozzle[0], 1.71, nozzle[2]], [[0, 0.15], [0.18, 0.195], [0.18, 0.215], [0.21, 0.215], [0.21, 0.17], [0.07, 0.125]], 16))
+      : pair(cylinder(nozzle, 0.2, 0.2, "y", sides(10), 0.15)),
+    only(() => pair(cylinder([nozzle[0], 1.91, nozzle[2]], 0.18, 0.04, "y", 20))), // nozzle collars, under the housings
   );
 
   // ---- Arms. Each has a big square pauldron with its top edges sloped off, a shoulder wall on its outer face that
@@ -334,31 +434,42 @@ function build(lv: Level): Record<string, MeshData> {
     slab([0.96, 2.1, -1.0], [1.46, 2.62, -0.1], bev(0.06)), // forearm housing
     notFar(() => block(cut(0.98, 1.44, 2.6, 2.7, [0, 0, 0.04, 0.04]), "z", -0.96, -0.16, bev(0.02))), // top plate
     notFar(() => block(cut(0.98, 1.44, 2.12, 2.6, 0), "z", -1.04, -0.99, bev(0.015))), // face plate round the gun's hub
-    cylinder([1.58, 2.36, -0.5], 0.28, 0.24, "x", sides(16)), // ammo drum, big enough to read as a disc from the side
-    only(() => cylinder([1.71, 2.36, -0.5], 0.19, 0.04, "x", 12)), // drum lid
+    cylinder([1.58, 2.36, -0.5], 0.28, 0.24, "x", sides(24)), // ammo drum, big enough to read as a disc from the side
+    only(() => cylinder([1.71, 2.36, -0.5], 0.19, 0.04, "x", 24)), // drum lid
   );
 
   // Rotary autocannon: a hub at the front of the forearm, a rotor ring that turns the barrels, six barrels round a
-  // spindle under a shroud that keeps the heat off the forearm, a muzzle ring, and the spin motor under the hub. The
-  // barrels end at the gun mount. Past 25 m the barrels are one drum: six bars that thin are lost there anyway.
-  const breechZ = -1.0;
+  // spindle under a shroud that keeps the heat off the forearm, a clamp ring at the shroud's mouth holding the barrels
+  // together, and the spin motor under the hub. Near, each barrel is round, ends in a muzzle collar at the gun mount
+  // and has a bore 6 cm deep. Past 25 m the barrels are one drum: six bars that thin are lost there anyway.
+  const breechZ = -1.0, barrelLength = breechZ - GUN[2], boreDepth = 0.06, boreRadius = 0.034;
+  const shroudFront = -1.7, clampZ = -1.76;
   const barrelAt = Array.from({ length: 6 }, (_, i) => [GUN[0] + Math.cos((i / 6) * Math.PI * 2) * 0.15, GUN[1] + Math.sin((i / 6) * Math.PI * 2) * 0.15] as const);
   const barrels: MeshData[] = [];
   if (near) {
-    for (const [x, y] of barrelAt) barrels.push(cylinder([x, y, (GUN[2] + breechZ) / 2], 0.055, breechZ - GUN[2], "z", 8));
-    barrels.push(cylinder([GUN[0], GUN[1], (GUN[2] + breechZ) / 2 + 0.04], 0.065, breechZ - GUN[2] - 0.08, "z", 8)); // spindle
-  } else barrels.push(cylinder([GUN[0], GUN[1], (GUN[2] + breechZ) / 2], 0.21, breechZ - GUN[2], "z", sides(8)));
-  // The shroud: an arc over the top two thirds of the barrels, open underneath so the lower barrels show.
+    const L = barrelLength;
+    // Open at the mouth: the bore's walls are a dark cup in Autocannon_Bores. The game's outline pushes every face 6 cm
+    // out (data/look.json), so walls facing into a bore this narrow cross over inside it; in the barrel's own part they
+    // would drag its orange mouth's outline in with them as dark spokes, in the dark part they are lost in the dark.
+    for (const [x, y] of barrelAt) barrels.push(lathe([x, y, breechZ], [x, y, GUN[2]], [[0, 0.055], [L - 0.075, 0.055], [L - 0.075, 0.07], [L, 0.07], [L, boreRadius]], 16, [true, false]));
+    barrels.push(lathe([GUN[0], GUN[1], breechZ], [GUN[0], GUN[1], GUN[2]], [[0, 0.065], [L - 0.14, 0.065], [L - 0.1, 0.035], [L - 0.1, 0]], 12)); // spindle, its nose inside the barrels
+  } else barrels.push(cylinder([GUN[0], GUN[1], (GUN[2] + breechZ) / 2], 0.21, barrelLength, "z", sides(8)));
+  // The shroud: an arc over the top two thirds of the barrels, open underneath so the lower barrels show. Near it is
+  // a curved plate 3.5 cm thick, so the barrels show inside it; farther, a solid of the same outline.
+  const [shroudFrom, shroudTo] = [-0.15 * Math.PI, 1.15 * Math.PI];
   const shroud: UV[] = Array.from({ length: 7 }, (_, i) => {
-    const a = (-0.15 + (i / 6) * 1.3) * Math.PI;
+    const a = shroudFrom + ((shroudTo - shroudFrom) * i) / 6;
     return [GUN[0] + Math.cos(a) * 0.25, GUN[1] + Math.sin(a) * 0.25];
   });
   const autocannon = merge(
-    cylinder([GUN[0], GUN[1], -1.08], 0.27, 0.18, "z", sides(16)), // hub
-    notFar(() => cylinder([GUN[0], GUN[1], -1.2], 0.22, 0.06, "z", sides(14))), // rotor ring
-    notFar(() => block(shroud, "z", GUN[2] + 0.2, -1.24, bev(0.02))),
-    cylinder([GUN[0], GUN[1], GUN[2] + 0.07], 0.22, 0.1, "z", sides(14)), // muzzle ring
-    only(() => cylinder([GUN[0], 2.13, -1.08], 0.09, 0.18, "z", 8)), // spin motor
+    cylinder([GUN[0], GUN[1], -1.08], 0.27, 0.18, "z", sides(24)), // hub
+    notFar(() => cylinder([GUN[0], GUN[1], -1.2], 0.22, 0.06, "z", sides(24))), // rotor ring
+    near ? arcShell(GUN[0], GUN[1], 0.215, 0.25, shroudFrom, shroudTo, shroudFront, -1.24, 14) : notFar(() => block(shroud, "z", shroudFront, -1.24)),
+    // Clamp ring, its edges stepped in so it reads as a band rather than a disc.
+    near
+      ? lathe([GUN[0], GUN[1], clampZ + 0.05], [GUN[0], GUN[1], clampZ - 0.05], [[0, 0.21], [0.02, 0.235], [0.08, 0.235], [0.1, 0.21]], 24)
+      : cylinder([GUN[0], GUN[1], clampZ], 0.235, 0.1, "z", sides(14)),
+    only(() => cylinder([GUN[0], 2.13, -1.08], 0.09, 0.18, "z", 16)), // spin motor
     ...barrels,
   );
 
@@ -377,30 +488,46 @@ function build(lv: Level): Record<string, MeshData> {
   // edge). It is capped top and bottom and banded round the middle, the caps standing proud of the slab; the ramming
   // edge is a hardened strip of its own that runs past the caps, the fronts between the bands are faced with applique
   // plates, and two ribs stiffen the back. The caps and band are hazard yellow, a ladder that says Ironclad at 150 m.
-// It hangs low, from the fist, so the shoulder wall stands clear above it in the outline.
+  // It hangs low, from the fist, so the shoulder wall stands clear above it in the outline.
+  // Gate V10: the slab is built in steps, the way a thick plate is. A back plate 3 cm wider than the slab makes a lip
+  // down each side, each applique plate carries a smaller one, the caps and the band each carry a raised rib, and the
+  // ramming edge is a steel blade standing 8 cm out of the slab's tip with its front corners bevelled, the yellow cut
+  // back flat just behind the tip so the blade runs past it unbroken while the yellow still wraps both fronts.
   // Outlines are (z, x), swept up the y axis.
   const chevron: UV[] = [[-0.8, -2.0], [-0.8, -0.86], [-1.0, -0.86], [-1.22, SHIELD_EDGE_X + 0.04], [-1.22, SHIELD_EDGE_X - 0.04], [-1.0, -2.0]];
-  const capOutline = inset(chevron, -0.06), bandOutline = inset(chevron, -0.04);
-  // An applique plate on front face `edge` between two bands, kept clear of the ramming strip at the tip end.
+  const behindBlade = ([z]: UV) => z + 1.21; // the yellow stops here, so the blade runs past it unbroken
+  const yellow = (out: number) => clip(inset(chevron, -out), behindBlade);
+  // An applique plate on front face `edge` between two bands, kept clear of the ramming blade at the tip end, with a
+  // smaller plate on it.
   const applique = (edge: 2 | 4, y0: number, y1: number) => {
     const p = chevron[edge]!, q = chevron[(edge + 1) % chevron.length]!;
     const run = Math.hypot(q[0] - p[0], q[1] - p[1]);
     const [nz, nx] = edgeOut(chevron, edge);
-    const [from, to] = edge === 2 ? [0.08, run - 0.17] : [0.17, run - 0.08];
-    const plate = block(cut(from, to, y0, y1, 0), "z", 0, 0.03, bev(0.012));
+    const [from, to] = edge === 2 ? [0.08, run - 0.2] : [0.2, run - 0.08];
+    const plate = merge(
+      block(cut(from, to, y0, y1, 0), "z", 0, 0.04, bev(0.012)),
+      only(() => block(cut(from + 0.05, to - 0.05, y0 + 0.08, y1 - 0.08, 0.03), "z", 0.035, 0.06, 0.01)),
+    );
     return onFace(plate, [p[1], 0, p[0]], norm([q[1] - p[1], 0, q[0] - p[0]]), UP, [nx, 0, nz]);
   };
   const shield = merge(
     block(chevron, "y", 1.14, 3.26, bev(0.05)),
+    // The back plate, 3 cm wider each side than the slab: the lip that shows down both sides.
+    notFar(() => slab([-2.03, 1.3, -0.9], [-0.83, 3.1, -0.79], bev(0.015))),
     ...(far ? [] : ([2, 4] as const).flatMap((edge) => [[1.34, 2.06], [2.34, 3.06]].map(([y0, y1]) => applique(edge, y0!, y1!)))),
-    notFar(() => merge(...[-1.9, -1.68].map((x) => block(cut(-0.8, -0.7, x - 0.03, x + 0.03, [0, 0.025, 0.025, 0]), "y", 1.2, 3.2, bev(0.012))))), // back ribs
+    notFar(() => merge(...[-1.9, -1.68].map((x) => block(cut(-0.8, -0.68, x - 0.04, x + 0.04, [0, 0.03, 0.03, 0]), "y", 1.2, 3.2, bev(0.012))))), // back ribs
   );
   const shieldBands = merge(
-    block(capOutline, "y", 1.1, 1.3, bev(0.02)),
-    block(bandOutline, "y", 2.1, 2.3, bev(0.02)),
-    block(capOutline, "y", 3.1, 3.3, bev(0.02)),
+    block(yellow(0.06), "y", 1.1, 1.3, bev(0.02)),
+    block(yellow(0.04), "y", 2.1, 2.3, bev(0.02)),
+    block(yellow(0.06), "y", 3.1, 3.3, bev(0.02)),
+    // The raised ribs round the caps and the band.
+    notFar(() => merge(...([[1.14, 1.26, 0.085], [2.15, 2.25, 0.065], [3.14, 3.26, 0.085]] as const).map(([y0, y1, out]) => block(yellow(out), "y", y0, y1, bev(0.015))))),
   );
-  const ramEdge = block(clip(inset(chevron, -0.03), ([z]) => -1.17 - z), "y", 1.07, 3.33, bev(0.02));
+  // The blade: narrow, set into the slab's tip and standing 8 cm out of it, its two front corners bevelled near.
+  const X = SHIELD_EDGE_X;
+  const bladeOutline: UV[] = [[-1.1, X - 0.14], [-1.2, X - 0.1], [-1.3, X - 0.03], [-1.3, X + 0.03], [-1.2, X + 0.1], [-1.1, X + 0.14]];
+  const ramEdge = block(near ? bevelTip(bladeOutline, 0.02) : bladeOutline, "y", 1.07, 3.33, bev(0.02));
 
   // Pile driver: a ram cylinder clamped along the top of the fist, its rod cocked out the back, and the spike standing
   // out of the shield's ramming edge through a bushing. A pressure bottle rides on the ram to give each blow its
@@ -408,23 +535,29 @@ function build(lv: Level): Record<string, MeshData> {
   const [px, py] = PILE;
   const bottleY = py + 0.235;
   const pileDriver = merge(
-    cylinder([px, py, -0.36], 0.16, 0.86, "z", sides(14)), // ram housing
-    cylinder([px, py, -0.72], 0.2, 0.1, "z", sides(12)), // front collar
-    cylinder([px, py, 0.02], 0.2, 0.1, "z", sides(12)), // rear collar
-    notFar(() => merge(...[-0.48, -0.22].map((z) => cylinder([px, py, z], 0.18, 0.05, "z", sides(10))))), // clamps to the saddle
-    cylinder([px, py, 0.28], 0.075, 0.44, "z", sides(8)), // cocked rod
+    // Ram housing with its front and rear collars; near, one turned shape with a step down into the rod's gland.
+    ...(near
+      ? [lathe([px, py, 0.07], [px, py, -0.79], [[0, 0.2], [0.1, 0.2], [0.1, 0.16], [0.74, 0.16], [0.74, 0.2], [0.84, 0.2], [0.84, 0.16], [0.86, 0.16]], 20)]
+      : [
+        cylinder([px, py, -0.36], 0.16, 0.86, "z", sides(14)),
+        cylinder([px, py, -0.72], 0.2, 0.1, "z", sides(12)),
+        cylinder([px, py, 0.02], 0.2, 0.1, "z", sides(12)),
+      ]),
+    notFar(() => merge(...[-0.48, -0.22].map((z) => cylinder([px, py, z], 0.18, 0.05, "z", sides(20))))), // clamps to the saddle
+    cylinder([px, py, 0.28], 0.075, 0.44, "z", sides(16)), // cocked rod
     near ? block(cut(px - 0.17, px + 0.17, py - 0.07, py + 0.07, 0.03), "z", 0.49, 0.57, 0.012) // crosshead
       : notFar(() => cylinder([px, py, 0.53], 0.12, 0.08, "z", sides(8))), // rod cap
-    notFar(() => cylinder([px + 0.19, py - 0.12, -0.4], 0.05, 0.6, "z", 6)), // outer hydraulic line
-    notFar(() => cylinder([px, bottleY, -0.34], 0.075, 0.36, "z", sides(8))), // pressure bottle
-    cylinder([px, py, -1.32], 0.13, 0.4, "z", sides(10), 0.04), // spike
-    notFar(() => cylinder([px, py, -1.27], 0.16, 0.06, "z", sides(12))), // spike bushing in the ramming edge
+    notFar(() => cylinder([px + 0.19, py - 0.12, -0.4], 0.05, 0.6, "z", near ? 10 : 6)), // outer hydraulic line
+    // Pressure bottle; near, one turned shape with domed ends.
+    near
+      ? lathe([px, bottleY, -0.6], [px, bottleY, -0.08], [[0, 0.03], [0.03, 0.06], [0.07, 0.075], [0.45, 0.075], [0.49, 0.06], [0.52, 0.03]], 16)
+      : notFar(() => cylinder([px, bottleY, -0.34], 0.075, 0.36, "z", sides(8))),
+    cylinder([px, py, -1.32], 0.13, 0.4, "z", sides(16), 0.04), // spike
+    notFar(() => cylinder([px, py, -1.31], 0.16, 0.06, "z", sides(20))), // spike bushing on the ramming blade
     slab([-1.5, 2.3, -0.7], [-1.3, 2.38, 0.0]), // saddle on the fist
     only(() => merge(
-      cylinder([px, bottleY, -0.56], 0.03, 0.08, "z", 8, 0.075), // the bottle's domed ends
-      cylinder([px, bottleY, -0.12], 0.075, 0.08, "z", 8, 0.03),
-      ...[-0.13, 0.13].map((dx) => rod([px + dx, py, 0.06], [px + dx, py, 0.5], 0.025, 6)), // guide rods
-      cylinder([px - 0.19, py - 0.12, -0.4], 0.05, 0.6, "z", 6), // inner hydraulic line
+      ...[-0.13, 0.13].map((dx) => rod([px + dx, py, 0.06], [px + dx, py, 0.5], 0.025, 8)), // guide rods
+      cylinder([px - 0.19, py - 0.12, -0.4], 0.05, 0.6, "z", 10), // inner hydraulic line
     )),
   );
 
@@ -434,20 +567,20 @@ function build(lv: Level): Record<string, MeshData> {
     ? merge(...[-0.76, -0.81, -0.86, -0.91, -0.96].map((z) => block(cut(2.3, 2.46, z - 0.022, z + 0.022, 0.012), "x", 1.43, 1.57, 0.01))) // belt chute, in links
     : slab([1.43, 2.3, -0.98], [1.57, 2.46, -0.74]);
   const armFrame = merge(
-    pair(cylinder([0.97, 2.84, 0], 0.22, 0.24, "x", sides(12))), // shoulder joints
-    cylinder([1.2, 2.4, 0.02], 0.17, 0.5, "x", sides(10)), // right elbow
-    cylinder([-1.2, 2.2, 0.1], 0.17, 0.5, "x", sides(10)), // left elbow
+    pair(cylinder([0.97, 2.84, 0], 0.22, 0.24, "x", sides(20))), // shoulder joints
+    cylinder([1.2, 2.4, 0.02], 0.17, 0.5, "x", sides(16)), // right elbow
+    cylinder([-1.2, 2.2, 0.1], 0.17, 0.5, "x", sides(16)), // left elbow
     feed,
     // The shield arm's lifting ram, from under the pauldron to the forearm, in front of the upper arm.
-    notFar(() => rod([-1.21, 2.64, -0.3], [-1.21, 2.47, -0.34], 0.06, sides(8))),
-    notFar(() => rod([-1.21, 2.49, -0.34], [-1.21, 2.36, -0.38], 0.035, 6)),
+    notFar(() => rod([-1.21, 2.64, -0.3], [-1.21, 2.47, -0.34], 0.06, sides(12))),
+    notFar(() => rod([-1.21, 2.49, -0.34], [-1.21, 2.36, -0.38], 0.035, near ? 10 : 6)),
     only(() => merge(
       pair(merge(
-        rod([1.21, 2.64, 0.28], [1.21, 2.45, 0.27], 0.06, 8), // forearm piston sleeve, under the pauldron
-        rod([1.21, 2.47, 0.27], [1.21, 2.28, 0.24], 0.035, 6), // its rod, down to the forearm
+        rod([1.21, 2.64, 0.28], [1.21, 2.45, 0.27], 0.06, 12), // forearm piston sleeve, under the pauldron
+        rod([1.21, 2.47, 0.27], [1.21, 2.28, 0.24], 0.035, 10), // its rod, down to the forearm
       )),
-      cylinder([1.465, 2.4, 0.02], 0.1, 0.04, "x", 8), // elbow hub caps
-      cylinder([-1.465, 2.2, 0.1], 0.1, 0.04, "x", 8),
+      cylinder([1.465, 2.4, 0.02], 0.1, 0.04, "x", 16), // elbow hub caps
+      cylinder([-1.465, 2.2, 0.1], 0.1, 0.04, "x", 16),
     )),
   );
 
@@ -457,7 +590,7 @@ function build(lv: Level): Record<string, MeshData> {
     line([[0.9, 2.3, 0.3], [1.0, 2.18, 0.34], [1.1, 2.08, 0.18], [1.12, 2.1, -0.16]], 0.04), // gun power line
     line([[0.9, 2.22, 0.36], [1.04, 2.12, 0.38], [1.18, 2.03, 0.2], [1.2, 2.06, -0.16]], 0.04), // gun coolant line
     line([[-1.12, 2.36, -0.12], [-1.13, 2.48, -0.03], [-1.19, 2.56, 0.04], [-1.26, 2.57, 0.05]], 0.04), // pressure hose
-    notFar(() => hose([[px, bottleY, -0.09], [px, bottleY + 0.03, -0.03], [px, py + 0.19, 0.03]], 0.03, near ? 6 : 4)), // bottle line
+    notFar(() => hose([[px, bottleY, -0.09], [px, bottleY + 0.03, -0.03], [px, py + 0.19, 0.03]], 0.03, near ? 10 : 4)), // bottle line
   );
 
   // ---- Legs, right side, then mirrored. Leg pieces are cut apart at the joints by which bone each shape sits nearest
@@ -471,6 +604,7 @@ function build(lv: Level): Record<string, MeshData> {
   const g = shinLength / 2 - 0.12;
   const kneeGuard: UV[] = [[g - 0.2, -0.04], [g - 0.2, 0.2], [g - 0.02, 0.36], [g + 0.12, 0.22], [g + 0.12, -0.04]];
 
+  const ankleArmour = cut(0.06, 0.52, ANKLE[2] - 0.36, ANKLE[2] + 0.32, [0.04, 0.15, 0.08, 0.04]); // (y, z)
   const legR = merge(
     slab([0.3, 1.28, -0.4], [0.86, 1.64, 0.26], bev(0.07)), // hip armour; Leg_L's carries the serial on its front
     notFar(() => block(cut(1.32, 1.6, -0.34, 0.18, 0), "x", 0.85, 0.91, bev(0.015))), // a plate over its outside
@@ -482,8 +616,12 @@ function build(lv: Level): Record<string, MeshData> {
     onShin(block(kneeGuard, "x", LX - 0.24, LX + 0.24, bev(0.04))),
     // A plate on the outside of the shin's back half; the front half is where the outer knee ram's rod runs.
     notFar(() => onShin(block(cut(-shinLength / 2 + 0.14, shinLength / 2 - 0.2, -0.02, 0.17, 0), "x", LX + 0.24, LX + 0.29, bev(0.012)))),
-    // Ankle armour, thick to take the gun's recoil, its front sloped. It rides with the foot.
-    block(cut(0.06, 0.52, ANKLE[2] - 0.36, ANKLE[2] + 0.32, [0.04, 0.15, 0.08, 0.04]), "x", 0.25, 0.89, bev(0.04)),
+    // Ankle armour, thick to take the gun's recoil, its front sloped. It rides with the foot. Gate V10 layered it: a
+    // plate over its front, narrower than the block so its edges step, and a plate on its outside. Both stay below the
+    // ankle, so the leg rig hangs them on the foot with the block (each is a shape of its own, placed by its middle).
+    block(ankleArmour, "x", 0.25, 0.89, bev(0.04)),
+    notFar(() => block(cut(0.1, 0.34, ANKLE[2] - 0.395, ANKLE[2] - 0.35, [0.02, 0.03, 0, 0]), "x", 0.31, 0.83, bev(0.012))),
+    notFar(() => block(cut(0.06, 0.36, ANKLE[2] - 0.3, ANKLE[2] + 0.26, [0.03, 0.1, 0.06, 0.03]), "x", 0.885, 0.93, bev(0.012))),
   );
 
   // Feet: a heel block and two long toes with a gap between them, planted wide for stability, and a heel spur. Each
@@ -506,24 +644,29 @@ function build(lv: Level): Record<string, MeshData> {
   // A joint round its own bone sits exactly between two bones, so which piece it lands in would be a coin toss that
   // could differ between levels of detail; 2 cm up its bone settles it (the knee rides the thigh, the ankle the shin).
   const kneeAt = toward(KNEE, HIP, 0.02), ankleAt = toward(ANKLE, KNEE, 0.02);
-  // A knee ram at `x` across; thick, since the rams are what the side view shows of the hydraulics. The rod runs deep
-  // into the sleeve, out of sight, so it never pulls out of it as the knee bends (gate V9b: the game slides it).
-  const kneeRam = (x: number, r: number) => {
-    const a: V3 = [x, ramTop[1], ramTop[2]], b: V3 = [x, ramFoot[1], ramFoot[2]];
-    return merge(rod(a, toward(a, b, 0.42), r, sides(8)), rod(toward(a, b, 0.15), b, r * 0.6, sides(6)));
-  };
+  // A ram from `a` to `b`, its sleeve `sleeve` long and `r` thick. Near, the sleeve is turned: a collar at its mount and
+  // a gland collar where the rod comes out (both inside the motion entry's radius, so the game still lifts the whole
+  // sleeve). The rod runs deep into the sleeve, out of sight, so it never pulls out of it as the joint bends (gate V9b:
+  // the game slides it).
+  const ram = (a: V3, b: V3, sleeve: number, rodFrom: number, r: number, round: number) => merge(
+    near
+      ? lathe(a, toward(a, b, sleeve), [[0, r + 0.015], [0.05, r + 0.015], [0.05, r], [sleeve - 0.08, r], [sleeve - 0.08, r + 0.02], [sleeve, r + 0.02]], round)
+      : rod(a, toward(a, b, sleeve), r, sides(8)),
+    rod(toward(a, b, rodFrom), b, r * 0.6, sides(round - 4)),
+  );
+  // A knee ram at `x` across; thick, since the rams are what the side view shows of the hydraulics.
+  const kneeRam = (x: number, r: number, round: number) => ram([x, ramTop[1], ramTop[2]], [x, ramFoot[1], ramFoot[2]], 0.42, 0.15, r, round);
   const pistonsR = merge(
-    cylinder([0.36, HIP[1], HIP[2]], 0.21, 0.2, "x", sides(10)), // hip joint
-    cylinder([LX, kneeAt[1], kneeAt[2]], 0.24, 0.62, "x", sides(14)), // knee joint
-    notFar(() => cylinder([0.9, kneeAt[1], kneeAt[2]], 0.13, 0.06, "x", sides(10))), // knee hub cap
-    cylinder([LX, ankleAt[1], ankleAt[2]], 0.19, 0.62, "x", sides(10)), // ankle joint
-    kneeRam(0.89, 0.11), // outer
-    notFar(() => kneeRam(0.24, 0.1)), // inner
-    notFar(() => rod(calfTop, toward(calfTop, calfFoot, 0.3), 0.09, sides(8))), // calf sleeve
-    notFar(() => rod(toward(calfTop, calfFoot, 0.1), calfFoot, 0.055, sides(6))), // calf rod
+    cylinder([0.36, HIP[1], HIP[2]], 0.21, 0.2, "x", sides(16)), // hip joint
+    cylinder([LX, kneeAt[1], kneeAt[2]], 0.24, 0.62, "x", sides(24)), // knee joint
+    notFar(() => cylinder([0.9, kneeAt[1], kneeAt[2]], 0.13, 0.06, "x", sides(20))), // knee hub cap
+    cylinder([LX, ankleAt[1], ankleAt[2]], 0.19, 0.62, "x", sides(16)), // ankle joint
+    kneeRam(0.89, 0.125, 16), // outer, the one the side view shows
+    notFar(() => kneeRam(0.24, 0.115, 12)), // inner
+    notFar(() => ram(calfTop, calfFoot, 0.3, 0.1, 0.1, 12)), // calf ram
     only(() => merge(
-      cylinder([0.89, ramTop[1] + 0.01, ramTop[2]], 0.075, 0.1, "x", 8), // pin at the outer sleeve's top
-      cylinder([0.89, ramFoot[1], ramFoot[2]], 0.07, 0.1, "x", 8), // pin at the outer rod's foot
+      cylinder([0.89, ramTop[1] + 0.01, ramTop[2]], 0.075, 0.1, "x", 12), // pin at the outer sleeve's top
+      cylinder([0.89, ramFoot[1], ramFoot[2]], 0.07, 0.1, "x", 12), // pin at the outer rod's foot
     )),
   );
   // Hydraulic hoses down to each knee ram's sleeve: the outer one from the hip armour, the inner one from the waist.
@@ -543,9 +686,10 @@ function build(lv: Level): Record<string, MeshData> {
     Arm_R: armR,
     Autocannon: autocannon,
     // The barrels' dark bores, a part of their own so they kick back with the gun (data/recoil.json). Past 25 m the
-    // barrels are one drum, and the drum's mouth gets one dark bore.
+    // barrels are one drum, and the drum's mouth gets one dark bore. Near, each is the wall and floor of its barrel's
+    // bore, a cup open at the muzzle, its lip a millimetre inside and ahead of the barrel's mouth so no gap shows.
     Autocannon_Bores: near
-      ? merge(...barrelAt.map(([x, y]) => cylinder([x, y, GUN[2] - 0.002], 0.032, 0.012, "z", 6)))
+      ? merge(...barrelAt.map(([x, y]) => lathe([x, y, GUN[2] + boreDepth], [x, y, GUN[2]], [[boreDepth + 0.001, boreRadius - 0.001], [0, boreRadius - 0.001]], 12, [false, true])))
       : cylinder([GUN[0], GUN[1], GUN[2] - 0.002], 0.12, 0.012, "z", sides(8)),
     Arm_L: armL,
     Shield: shield,

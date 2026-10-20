@@ -13,6 +13,10 @@
 // because the painted atlas already draws plates, rivets and chips at close range. Their triangles went into hoses
 // at the hips, elbows and radome feed, an armoured brow on each drone and chunkier forearms. Every part names its
 // finish: painted armour, bare metal (joints, rams, barrels, the dome's glossy skin) or rubber (the hoses).
+// Near level pass (V10, budget 15k): the dome, the drone pods and the round joints turn smooth with more sides, so
+// the dome's highlight is one curve; the pods get open fan ducts, a ring round their girth and an eye down a housing;
+// the pylons' joints are rounder, with pin heads at the elbow; both wrist guns are modelled (sleeved shroud, barrel,
+// bored brake) and the mast dish is a real bowl. The simpler levels keep their shapes and sizes.
 // Three levels of detail, nearest first: the near one has everything; the middle one drops bolts, fins and piston
 // rods, keeps the big new pieces (fan ducts, frame ring, layered plates) and rounds things with fewer sides; the far
 // one is plain boxes and the same silhouette.
@@ -144,6 +148,157 @@ function ellipsoid(centre: V3, radii: V3, sides: number, lats: number[]): MeshDa
   return convex(faces);
 }
 
+// Turns every triangle to face the way its corners' normals point. The smooth shapes below are built without minding
+// winding, and `along` can mirror one.
+function faceOut(mesh: MeshData): MeshData {
+  const p = mesh.positions, n = mesh.normals, ix = mesh.indices;
+  const at = (i: number): V3 => [p[i * 3]!, p[i * 3 + 1]!, p[i * 3 + 2]!];
+  const nAt = (i: number): V3 => [n[i * 3]!, n[i * 3 + 1]!, n[i * 3 + 2]!];
+  for (let t = 0; t < ix.length; t += 3) {
+    const [a, b, c] = [ix[t]!, ix[t + 1]!, ix[t + 2]!];
+    const face = cross(sub(at(b), at(a)), sub(at(c), at(a)));
+    const want = add(add(nAt(a), nAt(b)), nAt(c));
+    if (face[0] * want[0] + face[1] * want[1] + face[2] * want[2] < 0) { ix[t + 1] = c; ix[t + 2] = b; }
+  }
+  return mesh;
+}
+
+// A round solid turned from a profile of [radius, height] points about an axis through `centre` (axes as in
+// `cylinder`), `sides` round. Gate V10: smooth all the way round, so the toon bands and the metal highlight sweep
+// round it as one curve instead of stepping facet by facet. The writer leaves corners like these as they are
+// (scripts/assets/hardSurface.ts). Along the profile, stretches turned less than `smooth` degrees apart share their
+// corners too (a dome's skin); sharper turns (a rim, a cap) stay hard edges. The profile runs with the solid on its
+// left: up the outside, then in across the top. `closed` joins the last point back to the first (a hollow ring), and
+// `stretch` squeezes the second radial axis, for an oval. A point on the axis is one corner (a cap's middle, a pole).
+function lathe(profile: P2[], centre: V3, axis: Axis, sides: number, o: { closed?: boolean; smooth?: number; stretch?: number } = {}): MeshData {
+  const s = o.stretch ?? 1, n = profile.length;
+  const at = (u: number, v: number, w: number): V3 => (axis === "x" ? [w, u, v] : axis === "y" ? [v, w, u] : [u, v, w]);
+  const [cu, cv, cw] = axis === "x" ? [centre[1], centre[2], centre[0]] : axis === "y" ? [centre[2], centre[0], centre[1]] : [centre[0], centre[1], centre[2]];
+  const segs = Array.from({ length: o.closed ? n : n - 1 }, (_, i) => [i, (i + 1) % n] as const);
+  const segNormal = segs.map(([i, j]) => {
+    const [r1, h1] = profile[i]!, [r2, h2] = profile[j]!;
+    const l = Math.hypot(r2 - r1, h2 - h1) || 1;
+    return [(h2 - h1) / l, -(r2 - r1) / l] as P2;
+  });
+  const cosSmooth = Math.cos((o.smooth ?? 0) * deg);
+  const out: MeshData = { positions: [], normals: [], indices: [] };
+  // One ring of corners per profile point and normal; a point on the axis gets a single corner.
+  const ring = (point: P2, normal: P2): number[] => {
+    const [r, h] = point, base = out.positions.length / 3;
+    const count = Math.abs(r) < 1e-9 ? 1 : sides;
+    for (let k = 0; k < count; k++) {
+      const a = (k / sides) * Math.PI * 2;
+      out.positions.push(...at(cu + Math.cos(a) * r, cv + Math.sin(a) * r * s, cw + h));
+      const nn = count === 1 ? ([0, 0, Math.sign(normal[1]) || 1] as V3) : unit([normal[0] * Math.cos(a), (normal[0] * Math.sin(a)) / s, normal[1]]);
+      out.normals.push(...at(nn[0], nn[1], nn[2]));
+    }
+    return Array.from({ length: sides }, (_, k) => base + (count === 1 ? 0 : k));
+  };
+  // Where two stretches meet smoothly they share one ring with their averaged normal.
+  const rings: [number[], number[]][] = segs.map(() => [[], []]);
+  segs.forEach(([i, j], g) => {
+    const prev = g > 0 ? g - 1 : o.closed ? segs.length - 1 : -1;
+    const next = g < segs.length - 1 ? g + 1 : o.closed ? 0 : -1;
+    const smoothWith = (h: number) => h >= 0 && segNormal[g]![0] * segNormal[h]![0] + segNormal[g]![1] * segNormal[h]![1] > cosSmooth;
+    rings[g]![0] = smoothWith(prev) && rings[prev]![1].length ? rings[prev]![1] : ring(profile[i]!, smoothWith(prev) ? unitP(segNormal[g]!, segNormal[prev]!) : segNormal[g]!);
+    rings[g]![1] = smoothWith(next) && next === 0 && rings[0]![0].length ? rings[0]![0] : ring(profile[j]!, smoothWith(next) ? unitP(segNormal[g]!, segNormal[next]!) : segNormal[g]!);
+  });
+  for (const [a, b] of rings) {
+    for (let k = 0; k < sides; k++) {
+      const l = (k + 1) % sides;
+      for (const tri of [[a[k]!, a[l]!, b[l]!], [a[k]!, b[l]!, b[k]!]]) if (new Set(tri).size === 3) out.indices.push(...tri);
+    }
+  }
+  return faceOut(out);
+}
+const unitP = (a: P2, b: P2): P2 => { const x = a[0] + b[0], y = a[1] + b[1], l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
+
+// A mesh built along +z from the origin, laid along the line from a to b.
+function along(mesh: MeshData, a: V3, b: V3): MeshData {
+  const [u, v] = sideways(a, b), d = unit(sub(b, a));
+  const move = (x: number, y: number, z: number): V3 => add(add(scale(u, x), scale(v, y)), scale(d, z));
+  const out: MeshData = { positions: [], normals: [], indices: [...mesh.indices] };
+  for (let i = 0; i < mesh.positions.length; i += 3) {
+    out.positions.push(...add(a, move(mesh.positions[i]!, mesh.positions[i + 1]!, mesh.positions[i + 2]!)));
+    out.normals.push(...move(mesh.normals[i]!, mesh.normals[i + 1]!, mesh.normals[i + 2]!));
+  }
+  return faceOut(out);
+}
+
+// A smooth round hose through a run of points, one skin bent at each point (its ring there faces halfway between the
+// stretches either side), capped flat at both ends.
+function sweep(points: V3[], r: number, sides: number): MeshData {
+  const dirs = points.slice(1).map((p, i) => unit(sub(p, points[i]!)));
+  const out: MeshData = { positions: [], normals: [], indices: [] };
+  const [u0] = sideways(points[0]!, points[1]!);
+  let u = u0;
+  const rings = points.map((p, i) => {
+    const d = unit(add(dirs[Math.max(0, i - 1)]!, dirs[Math.min(dirs.length - 1, i)]!));
+    // Carry the side direction along so the hose does not twist, and stretch the ring across a bend so it stays round.
+    u = unit(sub(u, scale(d, u[0] * d[0] + u[1] * d[1] + u[2] * d[2])));
+    const v = cross(d, u);
+    const inDir = dirs[Math.max(0, i - 1)]!;
+    const stretch = 1 / Math.max(0.5, inDir[0] * d[0] + inDir[1] * d[1] + inDir[2] * d[2]);
+    const base = out.positions.length / 3;
+    for (let k = 0; k < sides; k++) {
+      const a = (k / sides) * Math.PI * 2;
+      const n = add(scale(u, Math.cos(a)), scale(v, Math.sin(a)));
+      // Only the part of the ring across the bend is stretched: that is the part the mitre cuts at a slant.
+      const bendAxis = unit(sub(inDir, scale(d, inDir[0] * d[0] + inDir[1] * d[1] + inDir[2] * d[2])));
+      const across = Number.isFinite(bendAxis[0]) ? n[0] * bendAxis[0] + n[1] * bendAxis[1] + n[2] * bendAxis[2] : 0;
+      out.positions.push(...add(p, add(scale(n, r), scale(bendAxis, across * r * (stretch - 1) || 0))));
+      out.normals.push(...n);
+    }
+    return base;
+  });
+  for (let i = 0; i + 1 < rings.length; i++) {
+    for (let k = 0; k < sides; k++) {
+      const l = (k + 1) % sides, a = rings[i]!, b = rings[i + 1]!;
+      out.indices.push(a + k, a + l, b + l, a + k, b + l, b + k);
+    }
+  }
+  // Flat caps, with corners of their own so their edge stays sharp.
+  [[0, -1], [rings.length - 1, 1]].forEach(([i, sign]) => {
+    const d = scale(dirs[sign! < 0 ? 0 : dirs.length - 1]!, sign!), base = out.positions.length / 3, ring = rings[i!]!;
+    for (let k = 0; k < sides; k++) { out.positions.push(...out.positions.slice((ring + k) * 3, (ring + k) * 3 + 3)); out.normals.push(...d); }
+    for (let k = 1; k + 1 < sides; k++) out.indices.push(base, base + k, base + k + 1);
+  });
+  return faceOut(out);
+}
+
+// A bent bar through a run of matching cross-sections (each a convex ring of points, the same count), one skin with
+// flat faces and a cap at each end. Unlike bars laid end to end, nothing pokes out at the bends.
+function bent(rings: V3[][]): MeshData {
+  const out: MeshData = { positions: [], normals: [], indices: [] };
+  const middle = (r: V3[]) => scale(r.reduce((s, p) => add(s, p), [0, 0, 0] as V3), 1 / r.length);
+  const face = (points: V3[], away: V3) => {
+    let n = unit(cross(sub(points[1]!, points[0]!), sub(points[2]!, points[0]!)));
+    if (n[0] * away[0] + n[1] * away[1] + n[2] * away[2] < 0) { n = scale(n, -1); points = [...points].reverse(); }
+    const base = out.positions.length / 3;
+    for (const p of points) { out.positions.push(...p); out.normals.push(...n); }
+    for (let i = 1; i + 1 < points.length; i++) out.indices.push(base, base + i, base + i + 1);
+  };
+  for (let r = 0; r + 1 < rings.length; r++) {
+    const a = rings[r]!, b = rings[r + 1]!, mid = scale(add(middle(a), middle(b)), 0.5);
+    for (let i = 0; i < a.length; i++) {
+      const j = (i + 1) % a.length, quad = [a[i]!, a[j]!, b[j]!, b[i]!];
+      face(quad, sub(middle(quad), mid));
+    }
+  }
+  face(rings[0]!, sub(middle(rings[0]!), middle(rings[1]!)));
+  face(rings[rings.length - 1]!, sub(middle(rings[rings.length - 1]!), middle(rings[rings.length - 2]!)));
+  return out;
+}
+
+// Profiles for `lathe`: a solid cylinder (or cone, from r to r2) and a hollow ring, `length` long about the middle.
+const solidProfile = (r: number, length: number, r2 = r): P2[] => [[0, -length / 2], [r, -length / 2], [r2, length / 2], [0, length / 2]];
+const ringProfile = (outer: number, inner: number, length: number): P2[] => [[outer, -length / 2], [outer, length / 2], [inner, length / 2], [inner, -length / 2]];
+// A hollow ring about an axis: a duct, a lens housing, a muzzle. Its depth shows as a shaded inside wall. The game's
+// outline shell swells every face out by 6 cm (data/look.json), so an inside wall closer than that to the axis would
+// swell right through it and show as a dark stick in the hole: keep `inner` at 6.1 cm or more.
+const hollow = (centre: V3, outer: number, inner: number, length: number, axis: Axis, sides: number, stretch = 1) =>
+  lathe(ringProfile(outer, inner, length), centre, axis, sides, { closed: true, stretch });
+
 // ---- Leg joints. Digitigrade: the thigh runs down and forward to the knee, the shin back to a raised hock, a short
 // bone forward to the ankle, then a broad flat magnetic foot. The game cuts each leg at these points by which bone
 // each shape sits nearest (packages/client/src/legRig.ts), so every shape below is placed clearly on one bone.
@@ -171,6 +326,7 @@ const onDome = (round: number, lat: number, out = 0): V3 => [
 ];
 // The sensor window looks out of the front of the dome above the ring, tilted up to its surface there.
 const windowLat = 24;
+const lensXs = [-0.14, 0, 0.14];
 const windowTilt = Math.atan2(Math.sin(windowLat * deg) / domeRadii[1], Math.cos(windowLat * deg) / domeRadii[2]);
 // Comms mast on the left shoulder, behind the dome, on a bracket off the yoke. The asymmetry has a job: the mast
 // relays the drones, and it sits on the side away from the gun so it stays out of the line of fire. It stands clear
@@ -191,7 +347,11 @@ const dronePlaces: DronePlace[] = [
 ];
 // A pod is built at the origin facing -Z, then turned so its eye looks out from the chassis, leaning forward so the
 // eyes show from the front.
-const placed = (mesh: MeshData, p: DronePlace) => turn(mesh, [0, Math.atan2(-p.at[0], -(p.at[2] - 1.0)), 0], [0, 0, 0], p.at);
+const facing = (p: DronePlace) => Math.atan2(-p.at[0], -(p.at[2] - 1.0));
+const placed = (mesh: MeshData, p: DronePlace) => turn(mesh, [0, facing(p), 0], [0, 0, 0], p.at);
+// The front of a pod's eye housing, where its sway path ends, so the eye and brow sway with the pod (gate V10: the
+// path stopped at the pod's middle, which left them behind).
+const eyeOf = (p: DronePlace): V3 => add(p.at, scale([-Math.sin(facing(p)), 0, -Math.cos(facing(p))], 0.385));
 // A mesh built round the origin, made bigger. The far level draws the pods a size up: past 80 m a pod is two or
 // three pixels, and the ring of drones is the read, so it is worth exaggerating where the growth cannot be seen to pop.
 const grown = (mesh: MeshData, s: number): MeshData => ({ ...mesh, positions: mesh.positions.map((v) => v * s) });
@@ -204,6 +364,18 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
   // Chamfer size. From the middle level out a chamfer is under a pixel wide, so only the nearest has them.
   const c = (near: number) => pick(near, 0, 0);
   const round = (near: number) => pick(near, Math.max(6, near - 4), 6);
+  // Gate V10: the near level turns its drums, collars and rods smooth with more sides (`lathe`); the simpler levels
+  // keep the flat ones they had, with `sides` [near, middle, far], so their size does not change.
+  const drum = (centre: V3, r: number, length: number, axis: Axis, sides: [number, number, number], r2 = r): MeshData =>
+    lod === 0 ? lathe(solidProfile(r, length, r2), centre, axis, sides[0]) : cylinder(centre, r, length, axis, sides[lod], r2);
+  const rod = (a: V3, b: V3, r: number, sides: [number, number, number], r2 = r): MeshData =>
+    lod === 0 ? along(lathe([[0, 0], [r, 0], [r2, Math.hypot(...sub(b, a))], [0, Math.hypot(...sub(b, a))]], [0, 0, 0], "z", sides[0]), a, b) : tube(a, b, r, sides[lod], r2);
+  // A hose through a run of points, bent where it is clipped down: one smooth skin near, one rod per stretch further out.
+  const hoseRun = (points: V3[], r: number, sides: [number, number, number]): MeshData =>
+    lod === 0 ? sweep(points, r, sides[0]) : cable(points, r, sides[lod]);
+  // A ram from a to b: the fat sleeve at a, the thin rod sliding out of it to b.
+  const ramLod = (a: V3, b: V3, r: number, sides: [number, number, number]): MeshData =>
+    merge(rod(a, lerp(a, b, 0.6), r, sides), rod(lerp(a, b, 0.5), b, r * 0.5, [Math.max(6, sides[0] - 2), 6, 6]));
 
   // ---- Right leg, mirrored for the left. White shells and plates (Leg_R), the dark joints and rams (Leg_Frame), a
   // rubber hose (Leg_Hoses). Thick enough to read as legs, not stilts, at 50 m.
@@ -211,15 +383,15 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
   const shinAt = (t: number, front = 0) => add(lerp(knee, hock, t), scale(shinFront, front));
   // The rod runs deep into the sleeve, out of sight, so it never pulls out as the joint bends (gate V9b: the game
   // slides it, the thigh ram's rod with the shin and the calf ram's with the foot).
-  const ramSleeve = ([a, b]: [V3, V3]) => tube(a, lerp(a, b, 0.58), 0.055, round(8));
-  const ramRod = ([a, b]: [V3, V3]) => tube(lerp(a, b, 0.2), b, 0.03, 6);
+  const ramSleeve = ([a, b]: [V3, V3]) => rod(a, lerp(a, b, 0.58), 0.055, [12, 6, 6]);
+  const ramRod = ([a, b]: [V3, V3]) => rod(lerp(a, b, 0.2), b, 0.03, [8, 6, 6]);
 
   const legShellR = merge(
     bar(thighAt(-0.08), thighAt(0.92), [0.3, 0.38], c(0.05), [0.25, 0.28]), // thigh
     notFar(() => bar(thighAt(0.1, 0.2), thighAt(0.76, 0.15), [0.28, 0.08], c(0.025), [0.23, 0.08])), // thigh plate
     // A second plate lapped over the lower half of the thigh plate, where shots from the front land most.
     nearOnly(() => bar(thighAt(0.45, 0.215), thighAt(0.78, 0.19), [0.2, 0.04], c(0.012), [0.17, 0.04])),
-    notFar(() => cylinder(add(hip, [0.17, 0, 0]), 0.19, 0.06, "x", round(10))), // hip cap over the drum
+    notFar(() => drum(add(hip, [0.17, 0, 0]), 0.19, 0.06, "x", [16, 6, 6])), // hip cap over the drum
     // Knee guard, hung off the bottom of the thigh and jutting well past the knee: the lip that reads from the side.
     slab([[1.3, -0.27], [1.17, -0.45], [0.98, -0.44], [0.92, -0.33], [1.14, -0.21]], "x", legX - 0.13, legX + 0.13, c(0.03)),
     bar(shinAt(-0.04), shinAt(1), [0.24, 0.26], c(0.04), [0.2, 0.21]), // shin
@@ -235,23 +407,26 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
     notFar(() => bar([legX, 0.17, 0.2], [legX, 0.08, 0.38], [0.24, 0.12], c(0.03), [0.2, 0.09])), // heel spur
   );
   const legFrameR = merge(
-    cylinder(hip, 0.15, 0.32, "x", round(10)),
-    cylinder(knee, 0.13, 0.3, "x", round(10)),
-    notFar(() => merge(cylinder(hock, 0.11, 0.26, "x", round(8)), cylinder(ankle, 0.095, 0.24, "x", round(8)))),
+    drum(hip, 0.15, 0.32, "x", [16, 6, 6]),
+    drum(knee, 0.13, 0.3, "x", [16, 6, 6]),
+    notFar(() => merge(drum(hock, 0.11, 0.26, "x", [12, 6, 6]), drum(ankle, 0.095, 0.24, "x", [12, 6, 6]))),
+    // The knee's bearing caps stand out of the drum on both sides, a step down in size, so the joint reads as a
+    // pin through a housing rather than a plain can.
+    nearOnly(() => merge(...[-1, 1].map((s) => drum(add(knee, [0.164 * s, 0, 0]), 0.085, 0.03, "x", [12, 6, 6])))),
     // The magnetic pad is a little wider than the foot, so the locking plate shows as a dark rim at ground level.
     box([legX, 0.035, -0.08], [0.58, 0.07, 0.8], c(0.02)),
     notFar(() => merge(ramRod(thighRam), ramRod(calfRam))),
     nearOnly(() => merge(
-      cylinder(thighRam[1], 0.05, 0.06, "x", 6), // rod lug on the knee drum
+      drum(thighRam[1], 0.05, 0.06, "x", [10, 6, 6]), // rod lug on the knee drum
       bar(shinAt(0.1, -0.07), calfRam[0], [0.07, 0.08]), // sleeve lug off the back of the shin
       bar(shinAt(0.86, -0.05), calfRam[1], [0.07, 0.08]), // rod lug above the hock
       // The toe lock: a short ram from the ankle bone presses the front of the foot down onto its pad.
-      ram(add(lerp(hock, ankle, 0.35), [0.11, 0, 0]), [legX + 0.2, 0.22, -0.28], 0.036, 6),
+      ramLod(add(lerp(hock, ankle, 0.35), [0.11, 0, 0]), [legX + 0.2, 0.22, -0.28], 0.036, [10, 6, 6]),
       box([legX + 0.2, 0.205, -0.28], [0.05, 0.04, 0.08]), // its lug on the foot
     )),
   );
   // Power to the knee motor: a hose out of the back of the hip drum, down the back of the thigh to the knee.
-  const legHoseR = notFar(() => cable([add(hip, [0.07, 0.06, 0.17]), add(thighAt(0.45, -0.2), [0.07, 0, 0]), add(thighAt(0.9, -0.15), [0.06, 0, 0])], 0.035, pick(6, 5, 4)));
+  const legHoseR = notFar(() => hoseRun([add(hip, [0.07, 0.06, 0.17]), add(thighAt(0.45, -0.2), [0.07, 0, 0]), add(thighAt(0.9, -0.15), [0.06, 0, 0])], 0.035, [8, 5, 4]));
   // A teal conduit down the front of each shin feeds the magnetic foot, and the lock glows along the pad when it holds.
   const legGlowR = merge(
     bar(shinAt(0.28, 0.185), shinAt(0.72, 0.165), [0.07, 0.03]),
@@ -279,8 +454,8 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
     box([0, 1.73, 0.02], [0.34, 0.12, 0.3], c(0.03)), // waist segments, so the chest can turn
     box([0, 1.85, 0.02], [0.4, 0.12, 0.34], c(0.03)),
     box([0, 2.5, 0.42], [0.6, 0.72, 0.26], c(0.05)), // electronics pack
-    cylinder([0.66, 2.9, 0.02], 0.13, 0.24, "x", round(10)), // shoulder joints
-    cylinder([-0.66, 2.9, 0.02], 0.13, 0.24, "x", round(10)),
+    drum([0.66, 2.9, 0.02], 0.13, 0.24, "x", [16, 6, 6]), // shoulder joints
+    drum([-0.66, 2.9, 0.02], 0.13, 0.24, "x", [16, 6, 6]),
     box([-0.26, 2.54, -0.295], [0.2, 0.68, 0.05], c(0.015)), // conduit channel up the left chest
     // The chest plate sits on a dark backing a little bigger than itself, so its edge shows as a second layer.
     notFar(() => onChest(box(add(chestPivot, [0, 0, 0.04]), [0.63, 0.69, 0.06], c(0.02)))),
@@ -289,8 +464,8 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
   // The radome's data feed, two hoses from the top of the electronics pack up behind the yoke into the collar, and
   // the mast's, across the back of the pack to the mast foot. Thick enough to show from behind at mid range.
   const torsoHoses = notFar(() => merge(
-    ...[0.03, 0.15].map((x) => cable([[x, 2.84, 0.5], [x, 3.06, 0.42], [x - 0.02, 3.22, 0.35]], 0.038, pick(6, 5, 4))),
-    cable([[-0.22, 2.84, 0.53], [-0.48, 3.0, 0.55], [mastX + 0.06, 3.16, mastZ + 0.07]], 0.034, pick(6, 5, 4)),
+    ...[0.03, 0.15].map((x) => hoseRun([[x, 2.84, 0.5], [x, 3.06, 0.42], [x - 0.02, 3.22, 0.35]], 0.038, [8, 5, 4])),
+    hoseRun([[-0.22, 2.84, 0.53], [-0.48, 3.0, 0.55], [mastX + 0.06, 3.16, mastZ + 0.07]], 0.034, [8, 5, 4]),
   ));
   const torsoTrim = merge(
     box([0.425, 2.62, 0], [0.07, 0.42, 0.36], c(0.025)), // flank panels
@@ -306,44 +481,64 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
 
   // ---- Radome head. Round in plan so the glowing ring round its middle stands proud by the same amount all the way
   // round. The collar's bolts are painted on (the atlas's rivets), not modelled.
-  // The dome is the silhouette, so it gets the most sides: its outline stays round even close up.
-  const sensor = ellipsoid(domeCentre, domeRadii, pick(24, 14, 8),
-    pick([-50, -34, -18, -4, 10, 25, 40, 55, 70, 82], [-50, -20, 10, 40, 70], [-50, -10, 35, 70]));
+  // The dome is the silhouette, so it gets the most sides: its outline stays round even close up. Near and middle it
+  // is smooth (gate V10), so its glossy highlight is one soft-edged curve rather than a lit facet; the middle level
+  // keeps its old number of sides, so the outline does not jump at the switch. Far off it is a plain flat ball.
+  const domeSkin = (sides: number, lats: number[], smooth: number) => lathe([
+    [0, Math.sin(lats[0]! * deg) * domeRadii[1]], // the flat bottom it sits on in the collar
+    ...lats.map((lat): P2 => [Math.cos(lat * deg) * domeRadii[0], Math.sin(lat * deg) * domeRadii[1]]),
+  ], domeCentre, "y", sides, { smooth });
+  const sensor = pick(
+    domeSkin(36, [-50, -40, -30, -20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90], 20),
+    domeSkin(14, [-50, -20, 10, 40, 70, 90], 35),
+    ellipsoid(domeCentre, domeRadii, 8, [-50, -10, 35, 70]),
+  );
   // The dome is opaque, so the sensor array inside it looks out through a window in the front: a row of lenses (one
   // glowing strip from the middle level out) in a dark bezel, sunk into the skin.
   const windowAt = onDome(0, windowLat, -0.02);
   const onWindow = (m: MeshData) => turn(m, [windowTilt, 0, 0], windowAt);
   const sensorRing = merge(
-    cylinder(domeCentre, pick(0.8, 0.8, 0.79), pick(0.065, 0.065, 0.09), "y", pick(24, 14, 8)), // the far level has no frame ring round it
-    nearOnly(() => merge(...[-0.14, 0, 0.14].map((x) => onWindow(cylinder(add(windowAt, [x, 0, -0.055]), 0.045, 0.03, "z", 8))))),
+    drum(domeCentre, pick(0.8, 0.8, 0.79), pick(0.065, 0.065, 0.09), "y", [36, 14, 8]), // the far level has no frame ring round it
+    // Each lens is the face of a barrel standing out of the bezel (Sensor_Frame). Not sunk into it: the outline
+    // shell would swell out of a hole that small.
+    nearOnly(() => merge(...lensXs.map((x) => onWindow(drum(add(windowAt, [x, 0, -0.105]), 0.05, 0.012, "z", [14, 8, 8]))))),
     pick(empty(), onWindow(box(add(windowAt, [0, 0, -0.05]), [0.38, 0.06, 0.02])), empty()),
   );
-  const ribLats = [6, 26, 44, 62, 80];
+  // The ribs follow the dome's curve in short stretches, so they lie on the smooth skin all the way up.
+  const ribLats = [6, 15, 24, 33, 42, 51, 60, 70, 80];
   const sensorFrame = merge(
-    cylinder([0, 3.2, 0.02], 0.38, 0.18, "y", pick(16, 12, 8), 0.5), // collar, flaring up to cup the dome
+    drum([0, 3.2, 0.02], 0.38, 0.18, "y", [32, 12, 8], 0.5), // collar, flaring up to cup the dome
     // The dome turns on a bearing ring at the foot of the collar, so it can sweep without the chest turning.
-    notFar(() => cylinder([0, 3.13, 0.02], 0.43, 0.05, "y", pick(16, 12, 8))),
+    notFar(() => drum([0, 3.13, 0.02], 0.43, 0.05, "y", [32, 12, 8])),
     // The frame ring the two halves of the dome are clamped into; the glowing band runs in a channel round it.
-    notFar(() => cylinder(domeCentre, 0.785, 0.16, "y", pick(24, 14, 8))),
+    notFar(() => drum(domeCentre, 0.785, 0.16, "y", [36, 14, 8])),
     // Four ribs over the seams between the dome's panels, meeting at a hub on top. They miss the front, where the
     // window looks out.
-    nearOnly(() => merge(...[45, 135, 225, 315].flatMap((round) => ribLats.slice(1).map((lat, i) =>
-      bar(onDome(round, ribLats[i]!, 0.008), onDome(round, lat, 0.008), [0.055, 0.045]))))),
-    notFar(() => cylinder([0, domeCentre[1] + domeRadii[1] - 0.01, 0], 0.15, 0.07, "y", pick(10, 8, 6))), // hub
+    nearOnly(() => merge(...[45, 135, 225, 315].map((round) => bent(ribLats.map((lat) => {
+      // Square to the skin: its foot sunk a centimetre in, its top 3.5 cm proud, 5.5 cm wide.
+      const side = scale(unit([Math.cos(round * deg), 0, Math.sin(round * deg)]), 0.0275);
+      const foot = onDome(round, lat, -0.01), top = onDome(round, lat, 0.035);
+      return [add(foot, side), add(top, side), sub(top, side), sub(foot, side)];
+    }))))),
+    notFar(() => drum([0, domeCentre[1] + domeRadii[1] - 0.01, 0], 0.15, 0.07, "y", [20, 8, 6])), // hub
     notFar(() => onWindow(box(windowAt, [0.5, 0.15, 0.1], c(0.02)))), // the window's bezel
+    // The lens barrels, standing five centimetres out of the bezel, so the sensor array has depth seen from the side.
+    nearOnly(() => merge(...lensXs.map((x) => onWindow(drum(add(windowAt, [x, 0, -0.075]), 0.066, 0.05, "z", [14, 8, 8]))))),
   );
   const mast = merge(
     bar([-0.42, 3.06, 0.24], [mastX, 3.16, mastZ], [0.13, 0.11], c(0.03)), // bracket off the yoke
     notFar(() => box([mastX, 3.2, mastZ], [0.26, 0.13, 0.26], c(0.03))),
-    cylinder([mastX, 3.95, mastZ], 0.07, 1.5, "y", pick(8, 6, 4), 0.05),
+    drum([mastX, 3.95, mastZ], 0.07, 1.5, "y", [12, 6, 4], 0.05),
     box([mastX, 4.12, mastZ], [0.42, 0.09, 0.09], c(0.02)), // antenna elements
     box([mastX, 4.36, mastZ], [0.3, 0.08, 0.08], c(0.02)),
-    cylinder([mastX, 4.72, mastZ], 0.09, 0.09, "y", pick(8, 6, 4), 0.055), // beacon
+    drum([mastX, 4.72, mastZ], 0.09, 0.09, "y", [12, 6, 4], 0.055), // beacon
     // A dish on a short arm, turned out to the left: the long link back to the team, while the elements above talk
     // to the drones.
     notFar(() => merge(
       bar([mastX, 3.72, mastZ], [mastX - 0.11, 3.72, mastZ], [0.045, 0.045]),
-      cylinder([mastX - 0.145, 3.72, mastZ], 0.17, 0.065, "x", pick(10, 6, 4), 0.045),
+      // Near (gate V10) the dish is a real bowl: a shallow dished face inside a rim, on a cone back to its arm.
+      pick(lathe([[0, -0.006], [0.06, -0.01], [0.12, -0.022], [0.17, -0.0325], [0.17, -0.02], [0.045, 0.0325], [0, 0.0325]], [mastX - 0.145, 3.72, mastZ], "x", 16, { smooth: 25 }),
+        cylinder([mastX - 0.145, 3.72, mastZ], 0.17, 0.065, "x", 6, 0.045), cylinder([mastX - 0.145, 3.72, mastZ], 0.17, 0.065, "x", 4, 0.045)),
     )),
   );
 
@@ -362,32 +557,32 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
   );
   // The elbow actuator runs down the front of the upper arm onto the top of the forearm.
   const elbowRam = (x: number): MeshData => notFar(() => merge(
-    tube([x, 2.78, -0.13], [x, 2.62, -0.21], 0.045, round(8)),
-    nearOnly(() => tube([x, 2.66, -0.19], [x, 2.5, -0.31], 0.025, 6)),
+    rod([x, 2.78, -0.13], [x, 2.62, -0.21], 0.045, [14, 6, 6]),
+    nearOnly(() => rod([x, 2.66, -0.19], [x, 2.5, -0.31], 0.025, [10, 6, 6])),
   ));
   const pauldronTurn = (side: number): V3 => [0, 0, -0.15 * side];
   // The arm is lifted by a ram from under the back of the yoke onto the back of the upper arm.
   const liftRam = (side: number): MeshData => nearOnly(() => merge(
-    ram([0.5 * side, 2.88, 0.22], [0.97 * side, 2.64, 0.15], 0.035, 6),
+    ramLod([0.5 * side, 2.88, 0.22], [0.97 * side, 2.64, 0.15], 0.035, [12, 6, 6]),
     box([0.97 * side, 2.64, 0.13], [0.06, 0.06, 0.05]),
   ));
   const armFrameR = merge(
-    cylinder([1.02, 2.3, 0], 0.13, 0.28, "x", round(10)), // elbow
-    cylinder([1.2, 2.4, -0.81], 0.14, 0.07, "z", round(8)), // wrist collar the gun sits in
+    drum([1.02, 2.3, 0], 0.13, 0.28, "x", [16, 6, 6]), // elbow
+    drum([1.2, 2.4, -0.81], 0.14, 0.07, "z", [16, 6, 6]), // wrist collar the gun sits in
     elbowRam(1.0),
     liftRam(1),
   );
   const armFrameL = merge(
-    cylinder([-1.02, 2.3, 0], 0.12, 0.26, "x", round(10)),
-    cylinder([-1.14, 2.37, -0.75], 0.12, 0.06, "z", round(8)),
+    drum([-1.02, 2.3, 0], 0.12, 0.26, "x", [16, 6, 6]),
+    drum([-1.14, 2.37, -0.75], 0.12, 0.06, "z", [16, 6, 6]),
     elbowRam(-1.0),
     liftRam(-1),
   );
   // Power to the elbow motors, a hose from behind each shoulder joint down the back of the upper arm, and on the
   // right the fire control line from under the forearm into the back of the receiver.
   const armHoses = merge(
-    ...[1, -1].map((s) => notFar(() => cable([[0.74 * s, 3.0, 0.12], [1.05 * s, 2.7, 0.17], [1.04 * s, 2.42, 0.11]], 0.032, pick(6, 5, 4)))),
-    nearOnly(() => cable([[1.12, 2.18, -0.6], [1.13, 2.17, -0.8], [1.16, 2.28, -0.86]], 0.026, 5)),
+    ...[1, -1].map((s) => notFar(() => hoseRun([[0.74 * s, 3.0, 0.12], [1.05 * s, 2.7, 0.17], [1.04 * s, 2.42, 0.11]], 0.032, [8, 5, 4]))),
+    nearOnly(() => hoseRun([[1.12, 2.18, -0.6], [1.13, 2.17, -0.8], [1.16, 2.28, -0.86]], 0.026, [8, 5, 5])),
   );
   // A shell over the shoulder, a plate on top and a lip below that stands out past it, so the edge shows its layers.
   const pauldron = (side: number, centre: V3, size: V3) => merge(
@@ -402,17 +597,25 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
     notFar(() => box([1.2, 2.54, -0.98], [0.06, 0.04, 0.28], c(0.012))), // sight rail
     notFar(() => box([1.2, 2.595, -0.94], [0.08, 0.07, 0.17], c(0.012))), // sight, its lens to the pilot
   );
+  // The backup is the same submachine gun cut down: a shorter receiver sloped into its shroud, a magazine raked
+  // forward, no sight (it is fired off the right one's).
   const gunL = merge(
-    box([-1.14, 2.37, -0.88], [0.16, 0.18, 0.36], c(0.03)),
-    nearOnly(() => box([-1.14, 2.23, -0.86], [0.09, 0.13, 0.11], c(0.012))), // magazine
+    slab([[2.28, -0.7], [2.46, -0.7], [2.46, -0.98], [2.42, -1.06], [2.28, -1.06]], "x", -1.22, -1.06, c(0.025)),
+    nearOnly(() => turn(box([-1.14, 2.215, -0.86], [0.09, 0.13, 0.11], c(0.012)), [-12 * deg, 0, 0], [-1.14, 2.28, -0.86])), // magazine
   );
-  // The bare steel of both guns: the right one's shroud, barrel and brake, and the left one's barrel and face.
+  // The bare steel of both guns: shroud, barrel and muzzle brake. Near (gate V10) the shroud is a sleeve with the
+  // barrel showing inside its mouth, and the brake a collar round the barrel's end, which stops a few centimetres
+  // inside it, so the muzzle reads as a hole. The muzzle mounts (Mount_Gun, Mount_Gun_2) sit on the brakes' faces,
+  // where shots leave.
   const gunBarrels = merge(
-    cylinder([1.2, 2.4, -1.3], 0.095, 0.2, "z", round(10)), // shroud
-    cylinder([1.2, 2.4, -1.48], 0.045, 0.2, "z", round(8)), // barrel
-    notFar(() => cylinder([1.2, 2.4, -1.615], 0.065, 0.07, "z", round(8))), // muzzle brake, its face at z = -1.65
-    cylinder([-1.14, 2.37, -1.15], 0.04, 0.2, "z", round(8)),
-    cylinder([-1.14, 2.37, -1.27], 0.06, 0.06, "z", round(8)), // its face at z = -1.3
+    pick(hollow([1.2, 2.4, -1.3], 0.095, 0.062, 0.2, "z", 16), cylinder([1.2, 2.4, -1.3], 0.095, 0.2, "z", 6), cylinder([1.2, 2.4, -1.3], 0.095, 0.2, "z", 6)), // shroud
+    pick(drum([1.2, 2.4, -1.45], 0.045, 0.34, "z", [12, 6, 6]), cylinder([1.2, 2.4, -1.48], 0.045, 0.2, "z", 6), cylinder([1.2, 2.4, -1.48], 0.045, 0.2, "z", 6)), // barrel
+    // The muzzle brake, its face at z = -1.65.
+    pick(hollow([1.2, 2.4, -1.615], 0.078, 0.061, 0.07, "z", 12), cylinder([1.2, 2.4, -1.615], 0.065, 0.07, "z", 6), empty()),
+    pick(hollow([-1.14, 2.37, -1.1], 0.07, 0.045, 0.14, "z", 12), empty(), empty()), // the backup's shroud
+    pick(drum([-1.14, 2.37, -1.175], 0.034, 0.22, "z", [12, 6, 6]), cylinder([-1.14, 2.37, -1.15], 0.04, 0.2, "z", 6), cylinder([-1.14, 2.37, -1.15], 0.04, 0.2, "z", 6)),
+    // Its brake, its face at z = -1.3.
+    pick(hollow([-1.14, 2.37, -1.2825], 0.068, 0.061, 0.035, "z", 12), cylinder([-1.14, 2.37, -1.27], 0.06, 0.06, "z", 6), cylinder([-1.14, 2.37, -1.27], 0.06, 0.06, "z", 6)),
   );
 
   // ---- Drones (no hit boxes): white pods, each flown by two ducted fans at its sides, with a glowing teal eye in a
@@ -420,25 +623,42 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
   // 150 m. Each is held out on a two-segment pylon from the shoulders or the back, its clamp gripping a docking ring
   // on the hull, with the glowing tether that gives the drone its name run along the pylon. Far off the fans are too
   // small to see, so the far level keeps flat fins in their place.
+  // Gate V10: near and middle the pod is a smooth oval, near its fans sit inside open ducts and its eye down a
+  // housing, so both show real depth; a ring round its middle carries the two ducts. The middle level keeps solid
+  // ducts and a flush eye, the same outline.
   const fanAt = (side: number): V3 => [0.4 * side, 0, 0.07];
+  const podRadii: V3 = [0.27, 0.2, 0.34];
+  const podSkin = (sides: number, lats: number[], smooth: number) =>
+    lathe(lats.map((lat): P2 => [Math.cos(lat * deg) * podRadii[2], Math.sin(lat * deg) * podRadii[1]]), [0, 0, 0], "y", sides, { smooth, stretch: podRadii[0] / podRadii[2] });
   const pod = merge(
-    ellipsoid([0, 0, 0], [0.27, 0.2, 0.34], pick(12, 8, 6), pick([-90, -40, 0, 40, 70], [-90, -30, 30, 70], [-90, 0, 60])),
+    pick(podSkin(12, [-90, -67.5, -45, -22.5, 0, 22.5, 45, 67.5, 90], 30), podSkin(8, [-90, -30, 30, 70, 90], 70), ellipsoid([0, 0, 0], podRadii, 6, [-90, 0, 60])),
     pick(empty(), empty(), box([0, 0, 0.08], [0.72, 0.07, 0.18])), // stabiliser fins
-    notFar(() => merge(...[1, -1].map((s) => cylinder(fanAt(s), 0.15, 0.09, "y", pick(10, 8, 6))))), // fan ducts
+    pick(
+      merge(...[1, -1].map((s) => hollow(fanAt(s), 0.15, 0.125, 0.09, "y", 12))), // fan ducts
+      merge(...[1, -1].map((s) => cylinder(fanAt(s), 0.15, 0.09, "y", 8))),
+      empty(),
+    ),
+    // The ring round the pod's girth the ducts hang off: the pod's frame, and the part the clamp lifts it by.
+    nearOnly(() => hollow([0, 0, fanAt(1)[2]], 0.295, 0.24, 0.07, "z", 12, 0.74)),
     // The brow juts out over the eye, so the pod has a face, and a direction, even as a silhouette.
     notFar(() => box([0, 0.15, -0.24], [0.3, 0.06, 0.26], c(0.02))),
   );
   const eye = merge(
-    cylinder([0, 0, -0.3], 0.12, 0.1, "z", pick(10, 8, 6)),
+    pick(drum([0, 0, -0.36], 0.114, 0.02, "z", [12, 8, 6]), cylinder([0, 0, -0.3], 0.12, 0.1, "z", 8), cylinder([0, 0, -0.3], 0.12, 0.1, "z", 6)),
     nearOnly(() => box([0, -0.19, -0.11], [0.1, 0.05, 0.13])), // repair emitter
   );
-  // The dark parts of a pod: the eye's bezel, and the fan faces inside the ducts, standing just past the duct rims.
-  const podDark = merge(
-    cylinder([0, 0, -0.265], 0.15, 0.06, "z", pick(10, 8, 6)),
-    ...[1, -1].map((s) => cylinder(fanAt(s), 0.12, 0.1, "y", pick(10, 8, 6))),
+  // The dark parts of a pod: the eye's housing, and the fans inside the ducts (near, a disc halfway down the duct;
+  // further out a dark face standing just past the duct rims).
+  const podDark = pick(
+    merge(
+      hollow([0, 0, -0.2925], 0.15, 0.115, 0.185, "z", 12),
+      ...[1, -1].map((s) => drum(fanAt(s), 0.124, 0.015, "y", [10, 8, 6])),
+    ),
+    merge(cylinder([0, 0, -0.265], 0.15, 0.06, "z", 8), ...[1, -1].map((s) => cylinder(fanAt(s), 0.12, 0.1, "y", 8))),
+    empty(),
   );
   const pylon = (p: DronePlace) => {
-    const along = unit(sub(p.elbow, p.mount)), fromPod = unit(sub(p.elbow, p.at));
+    const out = unit(sub(p.elbow, p.mount)), fromPod = unit(sub(p.elbow, p.at));
     const nearPod = (d: number) => add(p.at, scale(fromPod, d));
     const hinge = unit(cross(sub(p.elbow, p.mount), sub(p.at, p.elbow))); // across the bend
     const [u] = sideways(p.elbow, p.at);
@@ -447,12 +667,14 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
       // Far off a pylon is under a pixel wide, so the far level draws it thicker to keep the ring of drones joined up.
       bar(p.mount, p.elbow, pick<P2>([0.12, 0.12], [0.12, 0.12], [0.16, 0.16]), c(0.025)),
       bar(p.elbow, p.at, pick<P2>([0.1, 0.1], [0.1, 0.1], [0.14, 0.14]), c(0.02)),
-      notFar(() => tube(add(p.elbow, scale(hinge, -0.09)), add(p.elbow, scale(hinge, 0.09)), 0.08, pick(8, 6, 6))), // elbow hinge
+      notFar(() => rod(add(p.elbow, scale(hinge, -0.09)), add(p.elbow, scale(hinge, 0.09)), 0.08, [14, 6, 6])), // elbow hinge
       nearOnly(() => merge(
-        tube(add(p.mount, scale(along, -0.05)), add(p.mount, scale(along, 0.03)), 0.11, 8), // the swivel the pylon turns on
+        // The hinge pin's heads, standing out of the knuckle on both sides, so the elbow reads as a joint.
+        ...[1, -1].map((s) => rod(add(p.elbow, scale(hinge, 0.088 * s)), add(p.elbow, scale(hinge, 0.115 * s)), 0.05, [8, 6, 6])),
+        rod(add(p.mount, scale(out, -0.05)), add(p.mount, scale(out, 0.03)), 0.11, [12, 6, 6]), // the swivel the pylon turns on
         // The ram that folds the pylon, beside it across the inside of the bend.
-        ram(add(lerp(p.mount, p.elbow, 0.45), scale(hinge, 0.085)), add(lerp(p.elbow, p.at, 0.4), scale(hinge, 0.075)), 0.032, 6),
-        tube(nearPod(0.22), nearPod(0.31), 0.095, 8), // docking ring on the hull
+        ramLod(add(lerp(p.mount, p.elbow, 0.45), scale(hinge, 0.085)), add(lerp(p.elbow, p.at, 0.4), scale(hinge, 0.075)), 0.032, [8, 6, 6]),
+        rod(nearPod(0.22), nearPod(0.31), 0.095, [12, 6, 6]), // docking ring on the hull
         bar(nearPod(0.48), nearPod(0.39), [0.16, 0.16]), // the clamp's body, and its two jaws reaching onto the ring
         ...[1, -1].map((s) => bar(add(nearPod(0.42), scale(u, 0.08 * s)), add(nearPod(0.26), scale(u, 0.105 * s)), [0.035, 0.07])),
       )),
@@ -462,7 +684,7 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
   const tether = (p: DronePlace) => {
     const hinge = unit(cross(sub(p.elbow, p.mount), sub(p.at, p.elbow)));
     const off = (q: V3, d: number) => add(q, scale(hinge, -d));
-    return nearOnly(() => cable([off(p.mount, 0.075), off(p.elbow, 0.095), off(add(p.at, scale(unit(sub(p.elbow, p.at)), 0.29)), 0.065)], 0.018, 4));
+    return nearOnly(() => sweep([off(p.mount, 0.075), off(p.elbow, 0.095), off(add(p.at, scale(unit(sub(p.elbow, p.at)), 0.29)), 0.065)], 0.018, 6));
   };
 
   const mirrorLeg = (m: MeshData) => merge(m, mirrorX(m));
@@ -576,7 +798,7 @@ const motionR = [
 const motion = [
   ...motionR, ...motionR.map(leftOf),
   sway("Mast", ["Mast"], "body", [[mastX, 3.27, mastZ], [mastX, 4.8, mastZ]], 0.3, "mast"),
-  ...dronePlaces.map((p, i) => sway(`Drone_${i + 1}`, ["Drones", "Drone_Eyes", "Drone_Pylons"], "body", [p.mount, p.elbow, p.at], 0.62, "drone")),
+  ...dronePlaces.map((p, i) => sway(`Drone_${i + 1}`, ["Drones", "Drone_Eyes", "Drone_Pylons"], "body", [p.mount, p.elbow, p.at, eyeOf(p)], 0.62, "drone")),
 ];
 writeFileSync(join(root, "scripts/mechs/arbiter.kit.json"), `${JSON.stringify({ scheme, parts: looks, motion }, null, 2)}\n`);
 const count = (lod: number) => Object.values(levels[lod]!).reduce((s, m) => s + triangles(m), 0);

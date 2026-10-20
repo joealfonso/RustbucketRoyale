@@ -10,11 +10,14 @@
 // Writes the model and scripts/mechs/longshot.kit.json, the paint and zone of every part.
 // Run: npx tsx scripts/mechs/longshot.ts  →  assets/models/mechs/longshot/Mech_Longshot.glb
 //
-// Levels of detail: the same build runs three times. The nearest has bevels and rounder joints; the middle (past
-// 25 m, data/mechKits.json lodDistances) drops the bevels and keeps the pistons, hoses and seams; the far one (past
-// 80 m) keeps only what makes the silhouette: the long legs, the chest, the pauldrons, the head's crossbar, the pack
-// and the rifle. Bolts, slats, vents and fins are not modelled at all: the painted atlas draws plates, rivets and
-// chips up close, and modelled ones under the 6 cm outline only turned into ink blots.
+// Levels of detail: the same build runs three times. The nearest has bevels, rounder joints and the big turned forms
+// a player sees within 25 m (the rifle's flanged coil collars, its muzzle brake and deep scope hood, the ribbed cell
+// drums, hollow jet bells, the lenses sunk in their barrels, the heel spades built of plates); the middle (past 25 m,
+// data/mechKits.json lodDistances) drops the bevels, keeps the pistons, hoses and seams, and fills each of those forms
+// in solid with the same outline, so nothing jumps at the switch; the far one (past 80 m) keeps only what makes the
+// silhouette: the long legs, the chest, the pauldrons, the head's crossbar, the pack and the rifle. Bolts, slats,
+// vents and fins are not modelled at all: the painted atlas draws plates, rivets and chips up close, and modelled ones
+// under the 6 cm outline only turned into ink blots.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeGlb, type MeshData, type NodeData } from "../assets/glbWrite";
@@ -37,6 +40,9 @@ const X: V3 = [1, 0, 0], Y: V3 = [0, 1, 0], Z: V3 = [0, 0, 1];
 
 type Lod = 0 | 1 | 2;
 type Size = [number, number];
+// How many sides a round shape has: one count, which the simpler levels cut down by rule, or one count per level, so a
+// shape can be rounder up close and keep exactly the sides it had before on the middle and far levels.
+type Sides = number | [number, number, number];
 
 // A rectangle round `centre`, `w` along `ex` and `h` along `ey`, its corners cut by `c` metres (an octagon); with no
 // cut, four corners.
@@ -111,17 +117,55 @@ function makers(lod: Lod) {
   }
   const bar = (a: V3, b: V3, side: V3, s0: Size, s1: Size = s0, bevel = 0.03, corner?: number) => run([[a, s0], [b, s1]], side, bevel, corner);
 
-  // A round shaft from a to b (a cone with two radii), its end rims bevelled on the nearest level.
-  function cyl(a: V3, b: V3, r0: number, r1 = r0, sides = 12, bevel = 0): MeshData {
-    const n = lod === 0 ? sides : lod === 1 ? Math.max(6, Math.round(sides * 0.6)) : Math.max(4, Math.round(sides / 2));
+  const count = (sides: Sides) => typeof sides !== "number" ? sides[lod]
+    : lod === 0 ? sides : lod === 1 ? Math.max(6, Math.round(sides * 0.6)) : Math.max(4, Math.round(sides / 2));
+  // Rings of `n` points round the line through a and b, all set the same way round so they line up face to face.
+  const rings = (a: V3, b: V3, n: number) => {
     const dir = norm(sub(b, a)), [u, v] = across(dir, Math.abs(dir[1]) < 0.9 ? Y : X);
     const circle = (c: V3, r: number) => Array.from({ length: n }, (_, i) => {
       const t = ((i + 0.5) / n) * Math.PI * 2;
       return add(c, add(scale(u, Math.cos(t) * r), scale(v, Math.sin(t) * r)));
     });
+    return { dir, u, v, circle };
+  };
+
+  // A round shaft from a to b (a cone with two radii), its end rims bevelled on the nearest level.
+  function cyl(a: V3, b: V3, r0: number, r1 = r0, sides: Sides = 12, bevel = 0): MeshData {
+    const { dir, circle } = rings(a, b, count(sides));
     const e = lod === 0 ? Math.min(bevel, r0 * 0.4, r1 * 0.4, length(sub(b, a)) * 0.3) : 0;
     if (e <= 0) return loft([circle(a, r0), circle(b, r1)]);
     return loft([circle(a, r0 - e), circle(add(a, scale(dir, e)), r0), circle(sub(b, scale(dir, e)), r1), circle(b, r1 - e)]);
+  }
+
+  // A solid turned about the line from a toward b, through `profile`: [metres along from a, radius] pairs, every
+  // radius above 0, capped flat at both ends. Unlike `loft` it may step in and out (ribs, flanges) and run back on
+  // itself (the inner wall of a hood or a nozzle's bell, ending on the floor inside), so it cannot lean on `convex` to
+  // turn its faces out. The profile runs round the outside of the solid's half section, so each face's outside follows
+  // from the way the profile runs there: a step forward faces out from the axis, a step outward faces back toward a,
+  // a step inward faces on toward b, and a step back faces in toward the axis.
+  function lathe(a: V3, b: V3, profile: [number, number][], sides: Sides): MeshData {
+    const n = count(sides), { dir, u, v, circle } = rings(a, b, n);
+    const out = empty();
+    const face = (points: V3[], outward: V3) => {
+      let normal = norm(cross(sub(points[1]!, points[0]!), sub(points[2]!, points[0]!)));
+      if (dot(normal, outward) < 0) { normal = scale(normal, -1); points = [...points].reverse(); }
+      const base = out.positions.length / 3;
+      for (const p of points) { out.positions.push(...p); out.normals.push(...normal); }
+      for (let i = 1; i < points.length - 1; i++) out.indices.push(base, base + i, base + i + 1);
+    };
+    const at = profile.map(([t, r]) => circle(add(a, scale(dir, t)), r));
+    face(at[0]!, scale(dir, -1));
+    face(at.at(-1)!, dir);
+    for (let k = 0; k + 1 < profile.length; k++) {
+      const [t0, r0] = profile[k]!, [t1, r1] = profile[k + 1]!;
+      if (Math.abs(t1 - t0) < 1e-6 && Math.abs(r1 - r0) < 1e-6) continue;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n, mid = ((i + 1) / n) * Math.PI * 2;
+        const away = add(scale(u, Math.cos(mid)), scale(v, Math.sin(mid)));
+        face([at[k]![i]!, at[k]![j]!, at[k + 1]![j]!, at[k + 1]![i]!], add(scale(dir, -(r1 - r0)), scale(away, t1 - t0)));
+      }
+    }
+    return out;
   }
 
   // A flat plate cut to a convex outline, laid on the plane through `origin` spanned by `u` and `v` (outline points
@@ -143,12 +187,12 @@ function makers(lod: Lod) {
   // leaves the cylinder, as a share of the length. The rod runs on deep inside the cylinder, out of sight, so it never
   // pulls out when the game slides it (gate V9b).
   const ram = (a: V3, b: V3, r: number, at = 0.55) =>
-    merge(cyl(a, lerp(a, b, at + 0.05), r, r, 8, r * 0.25), cyl(lerp(a, b, Math.min(at, 0.2)), b, r * 0.5, r * 0.5, 6));
+    merge(cyl(a, lerp(a, b, at + 0.05), r, r, [12, 6, 4], r * 0.25), cyl(lerp(a, b, Math.min(at, 0.2)), b, r * 0.5, r * 0.5, [10, 6, 4]));
 
   // A cable through a run of points, one rod per stretch, so it bends where it is clipped down.
-  const cable = (points: V3[], r: number) => merge(...points.slice(1).map((p, i) => cyl(points[i]!, p, r, r, 6)));
+  const cable = (points: V3[], r: number) => merge(...points.slice(1).map((p, i) => cyl(points[i]!, p, r, r, [10, 6, 4])));
 
-  return { lod, mid, run, bar, cyl, slab, block, ram, cable };
+  return { lod, mid, run, bar, cyl, lathe, slab, block, ram, cable };
 }
 
 // Leg joints (scripts/mechs/joints.ts), right side. A long straight leg: the knee a little ahead of the line from hip
@@ -186,7 +230,7 @@ type Finish = "paint" | "metal" | "rubber";
 interface Part { name: string; zone: Zone; paint: string; finish?: Finish; glow?: true; rusts?: false; noHit?: true; mesh: MeshData }
 
 function build(lod: Lod): Part[] {
-  const { mid, run, bar, cyl, slab, block, ram, cable } = makers(lod);
+  const { mid, run, bar, cyl, lathe, slab, block, ram, cable } = makers(lod);
 
   // ---- Legs. Built on the right, then mirrored. Camo alternates side to side: a bone thigh plate on the right, a
   // bone shin guard on the left, so the two legs never read as copies.
@@ -224,18 +268,28 @@ function build(lod: Lod): Part[] {
     run([[add(ANKLE, [0, -0.24, 0.1]), [0.32, 0.16]], [add(TOE, [0, 0.04, 0.14]), [0.32, 0.12]]], X, 0.03),
     ...[-0.085, 0.085].map((dx) => mid(bar(add(TOE, [dx, 0.04, 0.18]), add(TOE, [dx, 0.03, -0.06]), X, [0.145, 0.12], [0.125, 0.08], 0.02))),
   );
-  const hipDrum = cyl([0.2, HIP[1], HIP[2]], [0.54, HIP[1], HIP[2]], 0.16, 0.16, 16, 0.03);
+  const hipDrum = cyl([0.2, HIP[1], HIP[2]], [0.54, HIP[1], HIP[2]], 0.16, 0.16, [20, 10, 8], 0.03);
   // Drives: a piston on the front of the thigh straightens the knee, a ram down the back of the shin (the calf)
   // works the ankle. Each stays on its own bone, so the walk never stretches one across a joint.
   const kneePiston = mid(ram(KNEE_PISTON[0], KNEE_PISTON[1], 0.05, 0.5));
   const calfRam = mid(ram(CALF_RAM[0], CALF_RAM[1], 0.05, 0.5));
-  // The heel spade, the stabiliser that plants it for Rail Shot: a plate on a hinge behind the heel, angled down so
-  // its edge bites into the ground when the mech leans back into the recoil. A short ram off the foot holds it. The
-  // middles of both must stay nearer the foot's bone than the shin's, or the walk hangs them on the shin: the spade
-  // grows upward, not backward, and the ram starts well along the foot.
-  const spade = slab([LX, 0, 0], Z, Y, [[0.04, 0.2], [0.24, 0.02], [0.3, 0.0], [0.31, 0.07], [0.13, 0.24]], 0.24, 0.02);
-  const spadeHinge = cyl([LX - 0.12, 0.17, 0.08], [LX + 0.12, 0.17, 0.08], 0.055, 0.055, 8);
-  const spadeRam = mid(ram(onFoot(0.3, scale(footTop, 0.08)), [LX, 0.15, 0.2], 0.035, 0.5));
+  // The heel spade, the stabiliser that plants it for Rail Shot: a pointed blade on a hinge behind the heel, angled
+  // down so its point bites into the ground when the mech leans back into the recoil, braced by a cheek plate down
+  // each side, and held by a short ram off the foot. Up close it is those plates, each with real thickness, open
+  // underneath; past 25 m one solid wedge of the same outline. Behind the heel the foot's bone and the shin's are all
+  // but equally near, so the middle of every piece must lie on the toe side of the line through the ankle square to
+  // the foot, or the walk hangs it on the shin (legRig.ts): the spade sits low, its point at the ground, and the ram
+  // starts well along the foot.
+  const spadeSide: [number, number][] = [[0.04, 0.2], [0.21, 0.015], [0.31, 0.0], [0.15, 0.2]]; // [z, y], from the side
+  const bladeTop: V3 = [LX, 0.2, 0.15], bladeDir = norm([0, -0.2, 0.16]), bladeIn = norm([0, -0.16, -0.2]);
+  const bladeLength = 0.256;
+  const spade = lod > 0 ? slab([LX, 0, 0], Z, Y, spadeSide, 0.24, 0.02) : merge(
+    // The blade along the back edge, its corners cut back to the point that digs in.
+    slab(add(bladeTop, scale(bladeIn, 0.025)), bladeDir, X, [[0, -0.125], [bladeLength - 0.045, -0.125], [bladeLength, -0.05], [bladeLength, 0.05], [bladeLength - 0.045, 0.125], [0, 0.125]], 0.05, 0.015),
+    ...[1, -1].map((s) => slab([LX + s * 0.105, 0, 0], Z, Y, spadeSide, 0.035, 0.01)),
+  );
+  const spadeHinge = cyl([LX - 0.13, 0.165, 0.1], [LX + 0.13, 0.165, 0.1], 0.05, 0.05, [16, 6, 4], 0.012);
+  const spadeRam = mid(ram(onFoot(0.3, scale(footTop, 0.08)), add(add(bladeTop, scale(bladeDir, 0.06)), scale(bladeIn, 0.05)), 0.035, 0.5));
   // Under the sole a rubber pad a little wider than the foot, so the foot shows a dark rim at ground level.
   const sole = block(lerp(add(ANKLE, [0, -0.36, 0.06]), add(TOE, [0, -0.03, 0.02]), 0.5), [0.35, 0.05, 0.76], 0.012);
   // Hoses to the knee and ankle motors, each kept on one bone so the walk never stretches one: out of the hip drum and
@@ -246,11 +300,11 @@ function build(lod: Lod): Part[] {
     cable([onShin(0.1, add(scale(shinBack, 0.15), [0.1, 0, 0])), onShin(0.5, add(scale(shinBack, 0.21), [0.1, 0, 0])), onShin(0.92, add(scale(shinBack, 0.1), [0.08, 0, 0]))], 0.03),
   );
   // The hip actuator's two drive rods, from the drum down the outside of the thigh to where the shell is deepest.
-  const driveRods = mid(...[0.07, -0.07].map((s) => cyl(add(HIP, [0.19, -0.1, s]), onThigh(0.42, add([0.185, 0, 0], scale(thighFront, s))), 0.03, 0.03, 6)));
+  const driveRods = mid(...[0.07, -0.07].map((s) => cyl(add(HIP, [0.19, -0.1, s]), onThigh(0.42, add([0.185, 0, 0], scale(thighFront, s))), 0.03, 0.03, [10, 6, 4])));
   const legFrameR = merge(
     hipDrum, driveRods, kneePiston, calfRam, spadeHinge, spadeRam,
-    cyl([0.2, KNEE[1], KNEE[2]], [0.48, KNEE[1], KNEE[2]], 0.13, 0.13, 14, 0.025),
-    mid(cyl([0.24, ANKLE[1], ANKLE[2]], [0.44, ANKLE[1], ANKLE[2]], 0.11, 0.11, 12, 0.02)),
+    cyl([0.2, KNEE[1], KNEE[2]], [0.48, KNEE[1], KNEE[2]], 0.13, 0.13, [18, 8, 7], 0.025),
+    mid(cyl([0.24, ANKLE[1], ANKLE[2]], [0.44, ANKLE[1], ANKLE[2]], 0.11, 0.11, [16, 7, 6], 0.02)),
   );
 
   // ---- Torso: a narrow armoured chest on a bare spine, deepest at the shoulders and tapering down to the waist.
@@ -279,10 +333,10 @@ function build(lod: Lod): Part[] {
   const waistRam = (x: number) => mid(ram([x, 2.06, -0.12], [x * 0.9, 2.44, -0.1], 0.035, 0.5));
   const torsoFrame = merge(
     block([0, 2.0, 0.04], [0.42, 0.26, 0.36], 0.04), // pelvis
-    cyl([0, 2.08, 0.04], [0, 2.44, 0.04], 0.11, 0.11, 10), // the spine
-    mid(cyl([0, 2.2, 0.04], [0, 2.26, 0.04], 0.17, 0.17, 10)), // a rib, where the waist turns
-    cyl([0, 3.26, 0.02], [0, 3.52, 0.02], 0.09, 0.09, 8), // neck
-    mid(cyl([0, 3.34, 0.02], [0, 3.4, 0.02], 0.14, 0.14, 10)), // the neck's turning ring
+    cyl([0, 2.08, 0.04], [0, 2.44, 0.04], 0.11, 0.11, [16, 6, 5]), // the spine
+    mid(cyl([0, 2.2, 0.04], [0, 2.26, 0.04], 0.17, 0.17, [16, 6, 5])), // a rib, where the waist turns
+    cyl([0, 3.26, 0.02], [0, 3.52, 0.02], 0.09, 0.09, [14, 6, 4]), // neck
+    mid(cyl([0, 3.34, 0.02], [0, 3.4, 0.02], 0.14, 0.14, [16, 6, 5])), // the neck's turning ring
     chestCore, waistRam(0.15), waistRam(-0.15), intake,
   );
 
@@ -300,19 +354,25 @@ function build(lod: Lod): Part[] {
     // The end housings, where the lenses sit, deeper and taller than the bar.
     ...[1, -1].map((s) => block([s * lensX, barY, barZ - 0.04], [0.2, 0.27, 0.32], 0.03)),
   );
+  // Each lens sits deep in a barrel standing out of its housing, so the red eye shows only from in front and the
+  // barrel's lip throws a ring of shade round it. Past 25 m the barrel is solid, with the lens on its face.
+  const lensBarrel = (s: number) => lod === 0
+    ? lathe([s * lensX, barY, lensFront], [s * lensX, barY, lensFront - 1], [[0, 0.104], [0.08, 0.104], [0.1, 0.09], [0.1, 0.072], [0.045, 0.072]], 18)
+    : mid(cyl([s * lensX, barY, lensFront], [s * lensX, barY, lensFront - 0.1], 0.104, 0.104, [18, 6, 5]));
+  const lensAt = lod === 0 ? lensFront - 0.046 : lod === 1 ? lensFront - 0.101 : lensFront - 0.05;
   // The clamp that holds the bar on the crown, a hood over the main optic and its long lens barrel.
   const headFrame = merge(
     mid(block([0, barY + 0.02, barZ], [0.22, 0.19, 0.22], 0.02)),
-    cyl([0, 3.6, -0.22], [0, 3.6, -0.44], 0.1, 0.105, 10, 0.015),
+    cyl([0, 3.6, -0.22], [0, 3.6, -0.44], 0.1, 0.105, [16, 6, 5], 0.015),
     mid(block([0, 3.7, -0.33], [0.24, 0.035, 0.28], 0.01)), // its sunshade
-    mid(...[1, -1].map((s) => cyl([s * lensX, barY, lensFront + 0.01], [s * lensX, barY, lensFront - 0.05], 0.09, 0.095, 10))), // lens bezels
+    lensBarrel(1), lensBarrel(-1),
   );
   // The rangefinder's reading goes down to the rifle's fire control: a cable from the bar's clamp, down the back of
   // the neck and into the right collar.
   const rangeCable = mid(cable([[0.1, barY - 0.02, barZ + 0.11], [0.13, 3.5, 0.15], [0.22, 3.36, 0.13]], 0.03));
   const headGlow = merge(
-    cyl([0, 3.6, -0.44], [0, 3.6, -0.455], 0.075, 0.075, 10),
-    ...[1, -1].map((s) => cyl([s * lensX, barY, lensFront - 0.05], [s * lensX, barY, lensFront - 0.06], 0.066, 0.066, 10)),
+    cyl([0, 3.6, -0.44], [0, 3.6, -0.455], 0.075, 0.075, [16, 6, 5]),
+    ...[1, -1].map((s) => cyl([s * lensX, barY, lensAt], [s * lensX, barY, lensAt - 0.006], 0.066, 0.066, [16, 6, 5])),
   );
 
   // ---- Pack: the capacitor bank that charges the rail, a narrow box between the shoulder blades with a drum of cells
@@ -325,12 +385,28 @@ function build(lod: Lod): Part[] {
   // Two webbing straps hang it from the pack, so it reads as hung weight, not part of the body.
   const ballastStraps = mid(...[0.13, -0.13].map((x) => block([x, 2.44, 0.6], [0.06, 0.16, 0.22], 0)));
   // The cell drums stand a little above the pack's lid, so from behind the pack has two round shoulders of its own.
-  // Their clamps, the vents and the hatch are paint now: none of them was wider than the 6 cm outline.
-  const cellDrum = (x: number) => cyl([x, 2.48, 0.44], [x, 3.18, 0.44], 0.13, 0.13, 14, 0.025);
-  const nozzle = (x: number) => merge(
-    cyl([x, 2.34, 0.56], [x, 1.88, 0.56], 0.09, 0.15, 14, 0.02),
-    mid(cyl([x, 2.4, 0.56], [x, 2.32, 0.56], 0.115, 0.115, 10)), // the gimbal collar
-  );
+  // Up close each is ringed by four cooling ribs, a stack of cells you can count; past 25 m a plain drum as wide as
+  // the ribs. The clamps, the vents and the hatch are paint: none of them was wider than the 6 cm outline.
+  const ribs = [0.12, 0.25, 0.38, 0.51];
+  const cellDrum = (x: number) => lod === 0
+    ? lathe([x, 2.48, 0.44], [x, 3.18, 0.44], [
+      [0, 0.118], [0.015, 0.134],
+      ...ribs.flatMap((t): [number, number][] => [[t, 0.134], [t, 0.148], [t + 0.05, 0.148], [t + 0.05, 0.134]]),
+      [0.685, 0.134], [0.7, 0.118],
+    ], 16)
+    : cyl([x, 2.48, 0.44], [x, 3.18, 0.44], 0.145, 0.145, [16, 8, 7]);
+  // A jet nozzle: the gimbal collar, a narrow throat and a bell that flares to the exit, hollow up close, so you look
+  // up into it from behind and below. Its exit stays at 1.88 m, just over where the flame starts (data/thrusterFx.json
+  // nozzles, the default pair). Past 25 m a solid cone.
+  const nozzle = (x: number) => lod === 0
+    ? lathe([x, 2.4, 0.56], [x, 1.88, 0.56], [
+      [0, 0.1], [0.012, 0.117], [0.068, 0.117], [0.08, 0.094], [0.14, 0.094], [0.3, 0.112], [0.43, 0.138], [0.52, 0.153],
+      [0.52, 0.128], [0.4, 0.114], [0.27, 0.088],
+    ], 16)
+    : merge(
+      cyl([x, 2.34, 0.56], [x, 1.88, 0.56], 0.09, 0.15, 14, 0.02),
+      mid(cyl([x, 2.4, 0.56], [x, 2.32, 0.56], 0.115, 0.115, 10)), // the gimbal collar
+    );
   const jets = merge(
     nozzle(0.4), nozzle(-0.4),
     block([0, 2.44, 0.5], [0.74, 0.1, 0.18], 0.025), // the bar that carries both nozzles
@@ -369,9 +445,9 @@ function build(lod: Lod): Part[] {
     return mid(ram(add(lerp(s, e, 0.2), scale(f, 0.12)), add(lerp(e, w, 0.25), [0, 0.11, 0]), 0.042, 0.45));
   };
   const armFrame = merge(
-    ...[1, -1].map((s) => cyl([0.44 * s, SHOULDER_R[1], SHOULDER_R[2]], [0.68 * s, SHOULDER_R[1], SHOULDER_R[2]], 0.14, 0.14, 14, 0.025)),
-    mid(cyl([ELBOW_R[0] - 0.13, ELBOW_R[1], ELBOW_R[2]], [ELBOW_R[0] + 0.13, ELBOW_R[1], ELBOW_R[2]], 0.12, 0.12, 10, 0.02)),
-    mid(cyl(add(ELBOW_L, [-0.03, -0.12, 0.0]), add(ELBOW_L, [0.03, 0.12, 0.0]), 0.12, 0.12, 10, 0.02)),
+    ...[1, -1].map((s) => cyl([0.44 * s, SHOULDER_R[1], SHOULDER_R[2]], [0.68 * s, SHOULDER_R[1], SHOULDER_R[2]], 0.14, 0.14, [18, 8, 7], 0.025)),
+    mid(cyl([ELBOW_R[0] - 0.13, ELBOW_R[1], ELBOW_R[2]], [ELBOW_R[0] + 0.13, ELBOW_R[1], ELBOW_R[2]], 0.12, 0.12, [16, 6, 5], 0.02)),
+    mid(cyl(add(ELBOW_L, [-0.03, -0.12, 0.0]), add(ELBOW_L, [0.03, 0.12, 0.0]), 0.12, 0.12, [16, 6, 5], 0.02)),
     fistR, fistL,
     elbowPiston(SHOULDER_R, ELBOW_R, WRIST_R, upperDirR), elbowPiston(SHOULDER_L, ELBOW_L, WRIST_L, upperDirL),
   );
@@ -394,15 +470,24 @@ function build(lod: Lod): Part[] {
     block(R(0, -0.55), [0.18, 0.26, 1.0], 0.035),
     mid(block(R(0.15, -0.55), [0.1, 0.05, 0.7], 0.012)), // the rail the scope mounts clamp to
   );
-  const scopeHood = cyl(R(0.24, -0.99), R(0.24, -1.14), 0.12, 0.12, 14, 0.012);
+  // The scope's hood, a deep tube with the lens sunk at its floor so it glows from in front and hides from the side.
+  // Past 25 m it is solid with the lens on its face.
+  const scopeHood = lod === 0
+    ? lathe(R(0.24, -0.99), R(0.24, -2), [[0, 0.11], [0.012, 0.122], [0.158, 0.122], [0.17, 0.11], [0.17, 0.096], [0.075, 0.096]], 16)
+    : cyl(R(0.24, -0.99), R(0.24, -1.16), 0.122, 0.122, [16, 8, 7]);
+  const scopeLensZ = lod === 0 ? -1.066 : -1.161;
   const barrelLength = 1.95, barrelStart = -1.05;
-  // Coil collars every 40 cm round both rails; the far level keeps the two that break the barrel's line. The barrel
-  // is drawn heavier than a rifle's would be: past 50 m a true-to-scale rail is a hair, and the rifle is the mech.
-  const collarZ = lod === 2 ? [-1.75, -2.55] : [-1.35, -1.75, -2.15, -2.55, -2.92];
+  // Coil collars every 40 cm round both rails, the last butted against the muzzle's clamp; the far level keeps the two
+  // that break the barrel's line. Each is a heavy round drum, two flanges with the coil's winding between them. The
+  // barrel is drawn heavier than a rifle's would be: past 50 m a true-to-scale rail is a hair, and the rifle is the mech.
+  const collarZ = lod === 2 ? [-1.75, -2.55] : [-1.35, -1.75, -2.15, -2.55, -2.875];
+  const collar = (z: number) => lod === 0
+    ? lathe(R(0, z + 0.055), R(0, z - 1), [[0, 0.168], [0.012, 0.185], [0.03, 0.185], [0.03, 0.17], [0.08, 0.17], [0.08, 0.185], [0.098, 0.185], [0.11, 0.168]], 18)
+    : cyl(R(0, z + 0.055), R(0, z - 0.055), 0.185, 0.185, [16, 8, 6]);
   const rails = merge(
     bar(R(0.1, barrelStart), R(0.1, barrelStart - barrelLength), X, [0.14, 0.08], [0.14, 0.08], 0.015),
     bar(R(-0.1, barrelStart), R(-0.1, barrelStart - barrelLength), X, [0.14, 0.08], [0.14, 0.08], 0.015),
-    ...collarZ.map((z) => block(R(0, z), [0.25, 0.39, 0.08], 0.02)),
+    ...collarZ.map(collar),
   );
   // The armature between the rails, the part the current runs through: pale between the two dark rails, so the barrel
   // reads as rails from the side. Far off the gap is under a pixel, so it fills the whole space between them.
@@ -415,9 +500,12 @@ function build(lod: Lod): Part[] {
     // The scope: two mounts, the tube, the objective bell, and an eyepiece toward the pilot's camera. Its knobs and the
     // capacitor bank's cooling ribs are paint now.
     mid(...[-0.32, -0.78].map((z) => block(R(0.19, z), [0.09, 0.08, 0.07], 0))),
-    cyl(R(0.24, -0.12), R(0.24, -0.86), 0.072, 0.072, 12, 0.01),
-    cyl(R(0.24, -0.86), R(0.24, -0.99), 0.078, 0.115, 14),
-    mid(cyl(R(0.24, -0.04), R(0.24, -0.13), 0.065, 0.078, 10)),
+    cyl(R(0.24, -0.12), R(0.24, -0.86), 0.072, 0.072, [16, 7, 6], 0.01),
+    // The objective bell, flaring in a curve from the tube to the hood.
+    lod === 0
+      ? lathe(R(0.24, -0.86), R(0.24, -2), [[0, 0.074], [0.05, 0.084], [0.1, 0.103], [0.13, 0.117]], 16)
+      : cyl(R(0.24, -0.86), R(0.24, -0.99), 0.078, 0.115, 14),
+    mid(cyl(R(0.24, -0.04), R(0.24, -0.13), 0.065, 0.078, [16, 6, 5])),
     // The capacitor bank: the shot's charge waits here for the 1.2 s brace.
     block(R(-0.03, -0.62, 0.135), [0.09, 0.22, 0.6], 0.015),
   );
@@ -431,14 +519,21 @@ function build(lod: Lod): Part[] {
   const rifleWeapon = merge(
     block(R(0.0, -0.3, 0.1), [0.03, 0.14, 0.36], 0.008),
     mid(block(R(0.0, -0.3, -0.1), [0.03, 0.14, 0.36], 0.008)),
-    // The muzzle: two big jaws that let the slug out between them, a blunt block at the barrel's end that still shows
-    // as a knot on the line at 150 m.
-    ...[0.11, -0.11].map((dy) => block(R(dy, MUZZLE[2] + 0.1), [0.3, 0.16, 0.24], 0.025)),
-    block(R(0, MUZZLE[2] + 0.245), [0.32, 0.44, 0.05], 0.012), // the plate that clamps the jaws to the rails
+    // The muzzle, a blunt block at the barrel's end that still shows as a knot on the line at 150 m. Up close it is a
+    // brake: plates top and bottom and three baffles across, the front one round the bore, with two ports open
+    // right through between them, so the blast vents sideways and the slug's glow shows through. Past 25 m two
+    // solid jaws fill the same block.
+    ...(lod === 0 ? [
+      ...[0.165, -0.165].map((dy) => block(R(dy, MUZZLE[2] + 0.0975), [0.3, 0.05, 0.245], 0.015)),
+      ...[0.1, -0.1].map((dx) => block(R(0, MUZZLE[2] - 0.0025, dx), [0.1, 0.28, 0.045], 0.012)),
+      ...[0.095, -0.095].map((dy) => block(R(dy, MUZZLE[2] - 0.0025), [0.1, 0.09, 0.045], 0.012)),
+      ...[0.1, 0.2].map((dz) => block(R(0, MUZZLE[2] + dz), [0.3, 0.28, 0.04], 0.012)),
+    ] : [0.11, -0.11].map((dy) => block(R(dy, MUZZLE[2] + 0.1), [0.3, 0.16, 0.24], 0.025))),
+    block(R(0, MUZZLE[2] + 0.245), [0.32, 0.44, 0.05], 0.012), // the plate that clamps the brake to the rails
   );
   const rifleGlow = merge(
     mid(block(R(0, MUZZLE[2] + 0.08), [0.09, 0.07, 0.2], 0)), // the slug's path out between the jaws
-    cyl(R(0.24, -1.09), R(0.24, -1.1), 0.09, 0.09, 10), // the scope's lens, sunk in its hood
+    cyl(R(0.24, scopeLensZ), R(0.24, scopeLensZ - 0.006), 0.09, 0.09, [16, 6, 5]), // the scope's lens, at the floor of its hood
     mid(block(R(-0.03, -0.62, 0.182), [0.012, 0.06, 0.18], 0)), // the bank's charge window
   );
 
