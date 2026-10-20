@@ -69,15 +69,19 @@ describe("generated hills", () => {
         const map = build(seed, tier);
         const t = map.terrain;
         const limit = tiers.terrain!.maxRisePercent / 100 + 1e-6;
+        // Worst first, then one check: an expect per corner is far too slow on a medium map.
+        let steepest = 0;
         for (let j = 0; j < t.corners; j++) for (let i = 0; i + 1 < t.corners; i++) {
-          expect(Math.abs(t.corner(i + 1, j) - t.corner(i, j)) / t.cell).toBeLessThanOrEqual(limit);
-          expect(Math.abs(t.corner(j, i + 1) - t.corner(j, i)) / t.cell).toBeLessThanOrEqual(limit);
+          steepest = Math.max(steepest, Math.abs(t.corner(i + 1, j) - t.corner(i, j)) / t.cell, Math.abs(t.corner(j, i + 1) - t.corner(j, i)) / t.cell);
         }
+        expect(steepest).toBeLessThanOrEqual(limit);
+        const unlevel: number[] = [];
         map.boxes.forEach((b, k) => {
           if (k < 5 || map.propOfBox[k]! >= 0 || map.kindNames[map.kinds[k]!] === "boulder") return; // ground slab, edge walls, props and boulders sit on slopes
           const ground = [[b.minX, b.minZ], [b.maxX, b.maxZ], [b.minX, b.maxZ], [b.maxX, b.minZ]].map(([x, z]) => t.heightAt(x!, z!));
-          expect(Math.max(...ground) - Math.min(...ground), `${tier} seed ${seed} box ${k}`).toBeLessThan(0.01);
+          if (Math.max(...ground) - Math.min(...ground) >= 0.01) unlevel.push(k);
         });
+        expect(unlevel, `${tier} seed ${seed}: boxes not on level ground`).toEqual([]);
         expect(t.maxHeight - t.minHeight).toBeGreaterThan(4); // there really are hills
       }
     });
