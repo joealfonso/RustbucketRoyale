@@ -285,6 +285,20 @@ The first gate of "big moments", after Joseph asked for more ambitious steps. Tw
 
 Five agents at once: one per roster mech, each filling its mech toward the 10,000 triangle budget with layered armour, pistons, cables and properly modelled weapons, and one giving the buildings real structure, from corrugated containers with barred doors to warehouses with rafters, ruins with rebar and an edge wall with braces. Building it also found and fixed a hitch: walking into a new part of the map had cost 33 ms, now under 3.
 
+## 39. One-click Play
+*Passed 2026-10-20. Commit `006b339`.*
+
+![The title screen: the Arbiter in the hangar bay, a big Play button over Join a friend, a folded Custom room and Practice offline, the roster cards below](39-14a-one-click-play.jpg)
+
+Getting into a match used to take seven steps and started first-timers in the Arena test map. Now the title screen leads with one big Play: a small yard of normal bots that starts the moment you click in. Everything else folds under Custom room, and the mech is chosen in the hangar and nowhere else.
+
+## 40. Teach by play
+*Passed 2026-10-20. Commit `27e08b8`.*
+
+![An Arbiter in the yard with the small Click to resume bar at the top, the fight still in view behind it](40-14b-teach-by-play.jpg)
+
+The click-to-play screen dropped from fourteen keys to five. The rest arrive once each, at the moment they help, in the same box as "Hold F: repair": sprint after a stretch of walking, Q when the ability first comes up, G when you are first hit with a grenade in hand. Freeing the mouse no longer hides the fight behind a full screen.
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
