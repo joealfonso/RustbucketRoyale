@@ -469,7 +469,8 @@ renderer.setAnimationLoop(() => {
     }
     if (state.action === "throw" && crossed(before, seconds, config.throw.windupSeconds)) {
       const t = config.throw;
-      shared.aimCar(state.x + fx * t.handForward, t.handHeight, state.z + fz * t.handForward, state.x + fx * 45, config.car.radius, state.z + fz * 45, t.flightSeconds, config.car, shared.STEP, flying);
+      const rx = Math.cos(state.yaw), rz = -Math.sin(state.yaw);
+      shared.aimCar(state.x + fx * t.handForward + rx * t.handSide, t.handHeight, state.z + fz * t.handForward + rz * t.handSide, state.x + fx * 45, config.car.radius, state.z + fz * 45, t.flightSeconds, config.car, shared.STEP, flying);
       titan.event({ t: "titan", event: "throw", x: flying.x, y: flying.y, z: flying.z, vx: flying.vx, vy: flying.vy, vz: flying.vz });
       carLanding(flying.x, flying.y, flying.z, flying.vx, flying.vy, flying.vz, config.car, fuse, shared.STEP, rangeWorld, lands);
       landIn = fuse;

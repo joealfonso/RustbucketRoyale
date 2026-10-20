@@ -231,12 +231,12 @@ const placeCar = (m: MeshData, yaw: number, at: V3) => turn(m, [0, yaw, 0], [0, 
 
 // ---- Fixed points the game reads. They are the same at every level of detail.
 // Leg joints, right side: a person's leg, the knee ahead of the line from hip to ankle so it bends forward, and the
-// ankle over the back third of a crushed car, which runs forward from it to the toe. The car sits well forward of
-// the ankle, so its rear wheels lie nearer the foot's bone than the shin's and turn with the foot when the leg rig
-// cuts the legs (packages/client/src/legRig.ts).
+// ankle over the back of a crushed car, which runs forward from it to the toe like a shoe. Nothing of the car may
+// stick out behind the ankle: the leg rig (packages/client/src/legRig.ts) gives each shape to the bone nearest its
+// middle, and behind the ankle the shin and the foot are equally near, so the rear bumper rode the shin.
 const LX = 1.7;
-const HIP: V3 = [LX, 5.3, 0.25], KNEE: V3 = [LX, 3.15, -0.45], ANKLE: V3 = [LX, 1.45, 0.75], TOE: V3 = [LX, 0.45, -2.75];
-const FOOT_CAR_Z = -0.85;
+const HIP: V3 = [LX, 5.3, 0.25], KNEE: V3 = [LX, 3.15, -0.45], ANKLE: V3 = [LX, 1.45, 0.6], TOE: V3 = [LX, 0.45, -3.6];
+const FOOT_CAR_Z = -1.55;
 // The upper body (the container and everything on it: the head, the chimney, the shoulder tyres) is built upright
 // and then leaned forward about the waist, a brute's hunch, so the head and the fire come forward over the legs.
 // From the side the upright build read as a table on legs.
@@ -460,8 +460,8 @@ function build(lv: Level): Part[] {
     notFar(() => rod(lerp(KNEE, ANKLE, 0.84), lerp(KNEE, ANKLE, 0.9), 0.8, sides(16))),
   );
   const doorR = merge(
-    bar(add(lerp(KNEE, ANKLE, 0.2), scale(shinFront, 0.71)), add(lerp(KNEE, ANKLE, 0.78), scale(shinFront, 0.71)), X, [1.24, 0.1], [1.24, 0.1], bev(0.03)),
-    only(() => bar(add(lerp(KNEE, ANKLE, 0.62), add(scale(shinFront, 0.78), [0.34, 0, 0])), add(lerp(KNEE, ANKLE, 0.66), add(scale(shinFront, 0.78), [0.34, 0, 0])), X, [0.26, 0.05])), // its handle
+    bar(add(lerp(KNEE, ANKLE, 0.17), scale(shinFront, 0.71)), add(lerp(KNEE, ANKLE, 0.7), scale(shinFront, 0.71)), X, [1.24, 0.1], [1.24, 0.1], bev(0.03)),
+    only(() => bar(add(lerp(KNEE, ANKLE, 0.27), add(scale(shinFront, 0.78), [0.34, 0, 0])), add(lerp(KNEE, ANKLE, 0.31), add(scale(shinFront, 0.78), [0.34, 0, 0])), X, [0.26, 0.05])), // its handle, at the top, as the door hangs upside down
   );
   const legFrameR = merge(
     rod([LX - 0.72, kneeAt[1], kneeAt[2]], [LX + 1.08, kneeAt[1], kneeAt[2]], 0.26, sides(12)), // knee axle
@@ -469,7 +469,7 @@ function build(lv: Level): Part[] {
     rod([LX - 0.5, ankleAt[1], ankleAt[2]], [LX + 0.5, ankleAt[1], ankleAt[2]], 0.38, sides(12)), // ankle drum
     notFar(() => ram(RAM[0], RAM[1], 0.15)), // knee ram
     // The plate the shin is welded to on the crushed car's roof.
-    boxAt([LX - 0.55, 1.12, 0.1], [LX + 0.55, 1.24, 1.05], bev(0.02)),
+    boxAt([LX - 0.55, 1.12, -0.3], [LX + 0.55, 1.24, 0.42], bev(0.02)),
   );
   const kneeTyreR = tyre([LX + 0.86, kneeAt[1], kneeAt[2]], "x", 0.82, 0.42, sides(18), far);
   // Foot: a crushed car, nose forward, its cabin flattened by the weight on it.

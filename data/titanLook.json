@@ -65,6 +65,7 @@
     "leanBackDegrees": 8,
     "leanForwardDegrees": 10,
     "handMeters": 6,
+    "hand": [4.45, 2.25, -0.9],
     "carMeters": [4.4, 1.6, 2.1],
     "carColors": ["#DCCFA8", "#A23B2C", "#4A7896", "#D9A324"],
     "spinPerSecond": 4,
@@ -87,6 +88,7 @@
     "toppleDegrees": 28,
     "tumbleDegrees": 80,
     "slideMeters": 5,
+    "middleMeters": 3,
     "pourSeconds": 9,
     "shakeRadius": 140,
     "shakeForce": 1

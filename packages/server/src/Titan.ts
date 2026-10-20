@@ -270,8 +270,9 @@ export class Titan {
   private release(): void {
     const t = this.config.throw;
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
+    const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw); // its right, where the throwing arm is
     const car = createGrenade();
-    aimCar(this.x + fx * t.handForward, this.y + t.handHeight, this.z + fz * t.handForward, this.aimX, this.aimY + this.config.car.radius + CAR_LIFT, this.aimZ, t.flightSeconds, this.config.car, STEP, car);
+    aimCar(this.x + fx * t.handForward + rx * t.handSide, this.y + t.handHeight, this.z + fz * t.handForward + rz * t.handSide, this.aimX, this.aimY + this.config.car.radius + CAR_LIFT, this.aimZ, t.flightSeconds, this.config.car, STEP, car);
     this.cars.push(car);
     this.host.sendNearEither(this.x, this.z, this.aimX, this.aimZ, { t: "titan", event: "throw", x: car.x, y: car.y, z: car.z, vx: car.vx, vy: car.vy, vz: car.vz });
     this.host.noise("smash", this.x, this.z);

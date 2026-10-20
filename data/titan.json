@@ -66,8 +66,9 @@
     "recoverSeconds": 0.9,
     "cooldownSeconds": 5,
     "flightSeconds": 2.4,
-    "handHeight": 11,
-    "handForward": 2,
+    "handHeight": 15.9,
+    "handForward": 3.3,
+    "handSide": 4.45,
     "damage": 80,
     "blastRadius": 9
   },

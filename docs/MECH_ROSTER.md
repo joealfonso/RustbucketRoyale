@@ -65,6 +65,22 @@ Tall and thin, built to stand still at range and make one shot count. Added afte
 
 ---
 
+## The Junk Titan (roaming boss, gate 13c)
+Not a mech and not from Aegis Dynamics: a giant the junkyard welded together out of what was lying there, about four mechs tall (12 m to the chimney's cap). Built by `scripts/mechs/titan.ts` (20 October 2026); data/mechKits.json kit `titan`, not in the roster.
+
+- **Chest:** a 20 ft shipping container laid across the shoulders, faded container blue, cut open in the middle where a furnace burns behind a grate of bars. The glowing fire is the weak spot (its own part, `Furnace_Core`, centre at `Mount_Core`). A rusty stovepipe chimney stands behind the head (`Mount_Smoke`, where the smoke comes out), and a red car bonnet is welded over a rust hole low on the back.
+- **Head:** the front end of a cream car, cut off at the windscreen, sat forward on the container's front edge. The headlights are its glowing eyes, the bent bonnet lid its brow, the grille its mouth and the bumper its jaw.
+- **Body:** the upper body leans forward about the waist, a brute's hunch. The waist is two tyres stacked on the pelvis, a red car upright and crosswise, with the hips hung under it on drums; chains tie the chest to it.
+- **Right arm (the thrower):** a salvaged excavator boom and stick in faded construction yellow, with their rams and hoses, ending in a scrapyard grapple: four tines round a car's sides, hooking under its sills, so it reads as holding a car. A held car sits at `Mount_Hand`, and the thrown car (`Junk_Car.glb`, a cream wreck: roof dented, boot sprung, a wheel gone) is built round its own middle, so it goes there unturned.
+- **Left arm (the club):** two girders, a car tyre on the elbow, a culvert pipe forearm and an engine block for a fist, chained on, its cylinder head and exhaust stubs for knuckles.
+- **Legs:** paired girders for thighs, big steel pipes for shins with car doors bolted on as guards (each door from a different car than the foot under it), a tyre on each knee, a ram in front of each knee that slides as it bends, and a crushed car for each foot (cream on the right, red on the left), the ankle over its back end like a heel.
+- **Paint values:** light cream car and excavator yellow, mid container blue, red car, galvanised pipe and bare steel, dark rusted iron, rubber and glass. The fire (#FF8A2A) and the headlight eyes (spark yellow) are the only lit colours.
+- **Silhouette at 300 m:** the wide bar of the container with a tractor tyre at each end, a small head forward and the chimney behind it, two long arms (one with a car under it) and two pillar legs.
+- **Triangles:** about 9,350 near, 4,270 middle, 1,860 far; the thrown car 728 / 392 / 136. It is about four times a mech's size, so its levels should switch about four times farther out than a mech's (data/titanLook.json `lodScale`).
+- **Rebuild:** `npx tsx scripts/mechs/titan.ts`, then `npx tsx scripts/merge-mech-kits.ts` and `npx tsx scripts/make-hitboxes.ts`. On the style page (`style.html`), U shows it beside the roster at 10, 50, 150 and 300 m and then up close, a car in its hand.
+
+---
+
 ## The hangar (environment)
 Where the mechs are shown off, such as a menu or loadout screen backdrop. Built as the title screen's background (`packages/client/src/hangar/`, numbers in `data/hangar.json`).
 

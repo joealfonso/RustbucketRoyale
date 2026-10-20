@@ -32,7 +32,8 @@ export interface TitanLook {
     pickupShare: number; // of the wind-up, when the car appears in its hands
     raisedDegrees: number; releaseDegrees: number; // arms hauled up behind the head, then overhead where they let go
     leanBackDegrees: number; leanForwardDegrees: number;
-    handMeters: number; // from the shoulders to where the car is held
+    handMeters: number; // the stand-in holds the car this far below its shoulders
+    hand: number[]; // where the kit holds the car, in the model's own frame: its Mount_Hand (scripts/mechs/titan.ts)
     carMeters: number[]; carColors: string[];
     spinPerSecond: number; trailEverySeconds: number; trailMeters: number; maxCars: number;
     shakeRadius: number; shakeForce: number;
@@ -41,7 +42,9 @@ export interface TitanLook {
   // It tips forward `toppleDegrees` while it falls, then blows apart as it hits the ground: the mech blow-apart
   // (data/deathFx.json) grown `scale` times, the torso tumbling `tumbleDegrees` and sliding `slideMeters` on, pouring
   // smoke for `pourSeconds`.
-  fall: { scale: number; toppleDegrees: number; tumbleDegrees: number; slideMeters: number; pourSeconds: number; shakeRadius: number; shakeForce: number };
+  // `middleMeters`: arm shapes nearer its middle than this count as neither arm, both for the right arm's throw and
+  // for which way pieces fly when it blows apart.
+  fall: { scale: number; toppleDegrees: number; tumbleDegrees: number; slideMeters: number; middleMeters: number; pourSeconds: number; shakeRadius: number; shakeForce: number };
   // The core glow dims to `glowLeast` of full as it is worn down. Each zone (legs, arms, torso) rusts `zoneWear`
   // times as fast as its hit points go, so its legs and arms look beaten before its core does.
   damage: { glowLeast: number; zoneWear: number[] };
@@ -54,7 +57,7 @@ const GROUPS: Record<string, string[]> = {
   stomp: ["slamSeconds", "footLiftMeters", "footForwardMeters", "rearDegrees", "slamDegrees", "puffs", "puffMeters", "puffSeconds", "ringSeconds", "debris", "debrisSpeed", "crackSeconds", "crackFadeSeconds", "crackLift", "shakeRadius", "shakeForce"],
   throw: ["swingSeconds", "pickupShare", "raisedDegrees", "releaseDegrees", "leanBackDegrees", "leanForwardDegrees", "handMeters", "spinPerSecond", "trailEverySeconds", "trailMeters", "maxCars", "shakeRadius", "shakeForce"],
   roar: ["rearDegrees", "armDegrees", "shudderDegrees", "shudderHz", "shakeRadius", "shakeForce"],
-  fall: ["scale", "toppleDegrees", "tumbleDegrees", "slideMeters", "pourSeconds", "shakeRadius", "shakeForce"],
+  fall: ["scale", "toppleDegrees", "tumbleDegrees", "slideMeters", "middleMeters", "pourSeconds", "shakeRadius", "shakeForce"],
   damage: ["glowLeast"],
   hud: ["bossBarMeters", "radarMarkSize"],
   replay: ["sampleHz", "keepSeconds"],
@@ -78,6 +81,7 @@ export function parseTitanLook(raw: unknown): TitanLook {
   if (look.throw.pickupShare > 1) throw new Error("titanLook.json: throw.pickupShare is a share, 0 to 1");
   if (!Number.isInteger(look.throw.maxCars) || look.throw.maxCars < 1) throw new Error("titanLook.json: throw.maxCars must be a whole number, 1 or more");
   if (!Array.isArray(look.throw.carMeters) || look.throw.carMeters.length !== 3 || !look.throw.carMeters.every((v) => v > 0)) throw new Error("titanLook.json: throw.carMeters is length, height and width, each above 0");
+  if (!Array.isArray(look.throw.hand) || look.throw.hand.length !== 3 || !look.throw.hand.every(Number.isFinite)) throw new Error("titanLook.json: throw.hand is a point, x, y, z");
   if (!Array.isArray(look.throw.carColors) || look.throw.carColors.length === 0 || !look.throw.carColors.every((c) => typeof c === "string")) throw new Error("titanLook.json: throw.carColors needs one colour or more");
   if (!Array.isArray(look.damage.zoneWear) || look.damage.zoneWear.length !== 3 || !look.damage.zoneWear.every((v) => typeof v === "number" && v >= 0)) throw new Error("titanLook.json: damage.zoneWear is three numbers, legs, arms, torso");
   if (look.damage.glowLeast > 1) throw new Error("titanLook.json: damage.glowLeast is a share, 0 to 1");
@@ -95,7 +99,7 @@ export function titanDeathFx(base: DeathFxConfig, fall: TitanLook["fall"]): Deat
   return {
     ...base,
     maxWrecks: 1,
-    middleMeters: base.middleMeters * s,
+    middleMeters: fall.middleMeters,
     blast: { ...base.blast, popSize: base.blast.popSize * s, sparks: base.blast.sparks * 2 },
     torso: { ...base.torso, seconds: base.torso.seconds * root, meters: fall.slideMeters, degrees: fall.tumbleDegrees, rollDegrees: base.torso.rollDegrees * 0.5, hopMeters: base.torso.hopMeters * root },
     pieces: { ...base.pieces, speed: base.pieces.speed * root, lift: base.pieces.lift * root, settleSpeed: base.pieces.settleSpeed * root, landDustMeters: base.pieces.landDustMeters * s },

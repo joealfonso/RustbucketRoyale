@@ -12,6 +12,7 @@ import { moveMechParts } from "./mechMotion";
 import { bendLegs, footInWorld } from "./mechWalk";
 import { StompCracks } from "./stompCracks";
 import { castShadows } from "./sunShadows";
+import { LEFT, MIDDLE, RIGHT, splitBySide } from "./wreckSplit";
 import { ThrownCars, buildCar, carFuseSeconds, paintCar, type Car, type CarModel } from "./thrownCars";
 import type { Toon } from "./toonMaterial";
 import { titanDeathFx, type TitanLook } from "./titanLook";
@@ -36,6 +37,38 @@ export interface TitanViewDeps {
 const ARMS = 1;
 const WRECK_SEED = 13; // which way pieces fly is picked from this, the same on every screen
 const STAND_IN_SIDES = ["L", "R"] as const;
+
+// The right arm of a kit model, cut out of its merged arm pieces (wreckSplit.ts, the cut the blow-apart makes too)
+// into pieces of its own that show in the same damage states. What is left stays on the body.
+function rightArm(model: MechModel, middleMeters: number): THREE.Object3D[] {
+  const out: THREE.Object3D[] = [];
+  for (const piece of model.kitPieces.slice()) {
+    if (piece.zone !== ARMS) continue;
+    const lod = piece.object;
+    const right = new THREE.LOD();
+    let any = false;
+    for (const level of lod.levels) {
+      const holder = new THREE.Group();
+      for (const child of level.object.children.slice()) {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) continue;
+        const sides = splitBySide(mesh.geometry, middleMeters);
+        if (!sides[RIGHT]) continue;
+        holder.add(new THREE.Mesh(sides[RIGHT], mesh.material));
+        mesh.removeFromParent();
+        for (const side of [LEFT, MIDDLE]) if (sides[side]) level.object.add(new THREE.Mesh(sides[side]!, mesh.material));
+        any = true;
+      }
+      right.addLevel(holder, level.distance);
+    }
+    if (!any) continue;
+    right.visible = lod.visible;
+    lod.parent!.add(right);
+    model.kitPieces.push({ zone: ARMS, shownIn: piece.shownIn, object: right });
+    out.push(right);
+  }
+  return out;
+}
 
 // The Junk Titan (gate 13c) as this client sees it: drawn from the snapshots a little in the past like other mechs,
 // walking with the leg rig on a slow heavy stride (every footfall a thud, dust and a small shake), its stomp, throw
@@ -105,6 +138,7 @@ export class TitanView {
     held.group.visible = this.held.group.visible;
     held.group.position.copy(this.held.group.position);
     held.group.scale.copy(this.held.group.scale);
+    held.group.rotation.y = -model.turn; // sits in the hand as modelled, length forward
     this.shoulders.remove(this.held.group);
     this.shoulders.add(held.group);
     this.held = held;
@@ -120,9 +154,10 @@ export class TitanView {
     for (const part of model.gunParts) part.removeFromParent(); // the plain barrel mechs without a modelled gun get
     model.gunParts.length = 0;
     this.scale = kit ? look.kitScale : look.standInScale;
-    // Both arms swing together about the shoulders (the throw and the roar), from near the top of the arms as built,
-    // measured in the model's own frame before it joins the holder.
-    const arms: THREE.Object3D[] = kit ? model.kitPieces.filter((p) => p.zone === ARMS).map((p) => p.object) : [...model.armMeshes];
+    // The kit throws with its right arm alone (its grapple, holding the car at Mount_Hand): the arms' merged pieces
+    // are cut by side and the right side swings about its shoulder. The stand-in swings both arms. Measured in the
+    // model's own frame before it joins the holder.
+    const arms: THREE.Object3D[] = kit ? rightArm(model, look.fall.middleMeters) : [...model.armMeshes];
     model.group.updateMatrixWorld(true);
     const box = new THREE.Box3();
     for (const a of arms) box.expandByObject(a);
@@ -130,17 +165,19 @@ export class TitanView {
     this.holder.add(model.group);
     this.shoulders.removeFromParent();
     this.shoulders.rotation.set(0, 0, 0);
-    if (!box.isEmpty()) this.shoulders.position.set(0, box.max.y - (box.max.y - box.min.y) * 0.1, (box.min.z + box.max.z) / 2);
+    if (!box.isEmpty()) this.shoulders.position.set(kit ? (box.min.x + box.max.x) / 2 : 0, box.max.y - (box.max.y - box.min.y) * 0.1, (box.min.z + box.max.z) / 2);
     else this.shoulders.position.set(0, 2.6, 0);
     model.body.add(this.shoulders);
     for (const a of arms) {
       a.position.sub(this.shoulders.position);
       this.shoulders.add(a);
     }
-    // The car it lifts, held in both hands in front of it, at full size whatever the model's scale.
+    // The car it lifts: in the kit's hand (Mount_Hand), or in front of the stand-in's chest, at full size whatever
+    // the model's scale.
     this.held.group.visible = false;
     this.held.group.scale.setScalar(1 / this.scale);
-    this.held.group.position.set(0, -look.throw.handMeters / this.scale, -look.throw.carMeters[2]! / this.scale);
+    if (kit) this.held.group.position.fromArray(look.throw.hand).sub(this.shoulders.position);
+    else this.held.group.position.set(0, -look.throw.handMeters / this.scale, -look.throw.carMeters[2]! / this.scale);
     this.shoulders.add(this.held.group);
     castShadows(model.group);
     return model;

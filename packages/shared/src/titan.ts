@@ -60,8 +60,9 @@ export interface TitanConfig {
     recoverSeconds: number;
     cooldownSeconds: number;
     flightSeconds: number;
-    handHeight: number; // where the car leaves its hand: this high, this far in front
+    handHeight: number; // where the car leaves its hand: this high, this far in front, this far to its right
     handForward: number;
+    handSide: number;
     damage: number;
     blastRadius: number;
   };
@@ -95,7 +96,7 @@ export function parseTitanConfig(raw: unknown): TitanConfig {
   positive("stomp.", r.stomp, ["cooldownSeconds", "knockback", "pop"], true);
   if (!Array.isArray(r.stomp!.zoneDamage) || r.stomp!.zoneDamage.length !== 3 || r.stomp!.zoneDamage.some((n) => typeof n !== "number" || !(n >= 0))) throw new Error("titan.json: stomp.zoneDamage is legs, arms, torso");
   positive("throw.", r.throw, ["range", "windupSeconds", "recoverSeconds", "flightSeconds", "handHeight", "blastRadius"]);
-  positive("throw.", r.throw, ["minRange", "cooldownSeconds", "handForward", "damage"], true);
+  positive("throw.", r.throw, ["minRange", "cooldownSeconds", "handForward", "handSide", "damage"], true);
   if (!((r.throw!.minRange as number) < (r.throw!.range as number))) throw new Error("titan.json: throw.minRange must be under throw.range");
   positive("car.", r.car, ["gravity", "radius"]);
   positive("car.", r.car, ["bounce", "friction"], true);
