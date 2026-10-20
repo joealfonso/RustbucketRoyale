@@ -40,14 +40,16 @@ export interface GroundLook {
   };
   // Water (M11 11b). Ground under the water level is a muddy `bed`; ground less than `dampMeters` above it is
   // darkened toward `damp` (by `dampStrength`), so every pond has a dark wet rim that reads from far off. The edges
-  // waver by up to `raggedMeters` of height, with noise `scale` cells a metre.
-  wet: { bed: string; damp: string; dampMeters: number; dampStrength: number; raggedMeters: number; scale: number };
+  // waver by up to `raggedMeters` of height, with noise `scale` cells a metre. An island's shore is sand up to
+  // `beach.meters` above the sea (setGroundBeach), so it reads as a coast, not a flooded field.
+  wet: { bed: string; damp: string; dampMeters: number; dampStrength: number; raggedMeters: number; scale: number; beach: { color: string; meters: number } };
 }
 
 export function parseGroundLook(raw: unknown): GroundLook {
   const g = raw as GroundLook;
   if (!g?.regions || !g.breakup || !g.gravel || !g.brush || !g.oil || !g.tracks || !g.hills || !g.wet) throw new Error("ground.json: needs regions, breakup, gravel, brush, oil, tracks, hills and wet");
   if (!(g.wet.dampMeters > 0 && g.wet.raggedMeters >= 0 && g.wet.dampStrength >= 0 && g.wet.dampStrength <= 1)) throw new Error("ground.json: wet dampMeters above 0, raggedMeters 0 or more, dampStrength between 0 and 1");
+  if (!(typeof g.wet.beach?.color === "string" && g.wet.beach.meters > 0)) throw new Error("ground.json: wet needs beach color and meters above 0");
   const { hills } = g;
   if (!(hills.hollow.meters > 0 && hills.crest.meters > 0)) throw new Error("ground.json: hills hollow and crest meters must be above 0");
   if (!(hills.flatBelow > 0 && hills.flatBelow <= hills.dirt.rise && hills.dirt.rise < hills.rock.rise)) throw new Error("ground.json: hills must go flatBelow <= dirt rise < rock rise");
@@ -141,7 +143,10 @@ export function groundShaderCode(g: GroundLook): string {
       // Under the water a muddy bed, and a dark wet rim just above it. Last, so tracks and oil get soaked too.
       float aboveWater = vGroundY - groundWaterLevel + (gNoise(gp * ${f(wet.scale)} + 57.0) - 0.5) * ${f(wet.raggedMeters * 2)};
       if (aboveWater < 0.0) c = groundBed;
-      else if (aboveWater < ${f(wet.dampMeters)}) c = mix(c, groundDamp, ${f(wet.dampStrength)});
+      else {
+        if (aboveWater < groundBeach) c = groundSand;
+        if (aboveWater < ${f(wet.dampMeters)}) c = mix(c, groundDamp, ${f(wet.dampStrength)});
+      }
       diffuseColor.rgb = c;
     }`;
 }
@@ -156,15 +161,18 @@ export function groundMaterial(hex: string, ramp: THREE.Texture, color: (name: s
     groundDarkMoss: g.regions.darkMoss.color, groundDryGrass: g.regions.dryGrass.color, groundDirt: g.regions.dirt.color,
     groundGravel: g.gravel.color, groundSpeck: g.gravel.speck, groundOil: g.oil.color, groundTrack: g.tracks.color,
     groundSlope: g.hills.dirt.color, groundRock: g.hills.rock.color, groundStrata: g.hills.rock.strata,
-    groundBed: g.wet.bed, groundDamp: g.wet.damp,
+    groundBed: g.wet.bed, groundDamp: g.wet.damp, groundSand: g.wet.beach.color,
   };
   const code = groundShaderCode(g);
   // The map's water level, changed per map by setGroundWater without rebuilding the shader. Far below anything on a dry map.
   const waterLevel = { value: DRY };
   m.userData.groundWaterLevel = waterLevel;
+  const beach = { value: 0 };
+  m.userData.groundBeach = beach;
   m.onBeforeCompile = (shader) => {
     for (const [name, value] of Object.entries(colors)) shader.uniforms[name] = { value: new THREE.Color(color(value)) };
     shader.uniforms.groundWaterLevel = waterLevel;
+    shader.uniforms.groundBeach = beach;
     shader.vertexShader = shader.vertexShader
       .replace("void main() {", "varying vec2 vGroundPos;\nvarying float vGroundY;\nvarying float vGroundUp;\nvoid main() {")
       .replace("#include <begin_vertex>", `#include <begin_vertex>
@@ -178,7 +186,7 @@ export function groundMaterial(hex: string, ramp: THREE.Texture, color: (name: s
         vGroundPos = groundPos.xz;
         vGroundY = groundPos.y;
         vGroundUp = normalize(mat3(modelMatrix) * groundNormal).y;`);
-    const declarations = Object.keys(colors).map((name) => `uniform vec3 ${name};`).join("\n") + "\nuniform float groundWaterLevel;";
+    const declarations = Object.keys(colors).map((name) => `uniform vec3 ${name};`).join("\n") + "\nuniform float groundWaterLevel;\nuniform float groundBeach;";
     shader.fragmentShader = shader.fragmentShader
       .replace("void main() {", `varying vec2 vGroundPos;\nvarying float vGroundY;\nvarying float vGroundUp;\n${declarations}\n${GROUND_GLSL}\nvoid main() {`)
       .replace("#include <color_fragment>", `#include <color_fragment>\n${code}`);
@@ -194,4 +202,10 @@ const DRY = -1e6;
 export function setGroundWater(material: THREE.Material, level: number | null): void {
   const uniform = material.userData.groundWaterLevel as { value: number } | undefined;
   if (uniform) uniform.value = level === null || !Number.isFinite(level) ? DRY : level;
+}
+
+// How far above the water an island's shore is sand, per map, without rebuilding the shader; 0 for no beach.
+export function setGroundBeach(material: THREE.Material, meters: number): void {
+  const uniform = material.userData.groundBeach as { value: number } | undefined;
+  if (uniform) uniform.value = meters;
 }

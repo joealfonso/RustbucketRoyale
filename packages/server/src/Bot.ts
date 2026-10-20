@@ -266,6 +266,9 @@ export class Bot {
       if (distance < a.pounceMinRange || distance > a.pounceMaxRange || this.random() >= a.pounceChancePerSecond * dt) return;
     } else if (this.abilityKind === "barrage") {
       if (distance < a.barrageMinRange || distance > a.barrageMaxRange || this.random() >= a.barrageChancePerSecond * dt) return;
+    } else if (this.abilityKind === "rail") {
+      // A Rail Shot from range; the bot keeps tracking the target with its usual aim while it charges.
+      if (distance < a.railMinRange || distance > a.railMaxRange || this.random() >= a.railChancePerSecond * dt) return;
     } else {
       return;
     }

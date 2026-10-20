@@ -135,6 +135,11 @@ export class RemoteMechs {
     return this.remotes.get(id)?.weapon ?? -1;
   }
 
+  // Which way a mech faces as drawn right now, in radians, or NaN if we have not seen it.
+  yawOf(id: number): number {
+    return this.remotes.get(id)?.model.group.rotation.y ?? Number.NaN;
+  }
+
   // Where a mech is drawn right now, or false if we have not seen it.
   positionOf(id: number, out: { x: number; y: number; z: number }): boolean {
     const remote = this.remotes.get(id);

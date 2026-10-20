@@ -35,6 +35,7 @@ export interface Player {
   repairSeconds: number; // how long F has been held on it
   healthMark: number; // hit points plus armor last step, so any damage at all can cancel a repair
   rammed: number[]; // ids of the mechs the current ram has already hit, so it hits each one once
+  railHpMark: number; // hit points last step: a Rail Shot charge breaks when they drop
   interested: Set<number>;
   watchId: number;
   heard: NoiseEvent[];

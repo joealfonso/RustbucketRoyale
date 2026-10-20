@@ -16,7 +16,8 @@ export interface TerrainSettings {
   // is never deeper than maxDepthMeters, so a mech always wades and never goes under.
   water: { maxDepthMeters: number; wadeMeters: number };
   // `outcropSpacingMeters` packs a tier's outcrops closer than outcrops.spacingMeters: a small yard needs them denser.
-  tiers: Record<string, { octaves: { spacingMeters: number; amplitudeMeters: number }[]; waterShare?: number; outcropSpacingMeters?: number }>;
+  // `island` makes the tier an island in the sea instead of a yard inside the edge wall (generation/islandGen.ts).
+  tiers: Record<string, { octaves: { spacingMeters: number; amplitudeMeters: number }[]; waterShare?: number; outcropSpacingMeters?: number; island?: IslandSettings }>;
   // Woods of breakable pines on open ground: a slow random mask (from -1000 to 1000) is wooded where above
   // `maskAbove`; trees stand about `spacingMeters` apart, nudged up to `jitterMeters`. Whole metres throughout.
   forest?: { maskSpacingMeters: number; maskAbove: number; spacingMeters: number; jitterMeters: number; clearOfSpawnMeters: number; clearOfEdgeMeters: number; dryAboveWaterMeters: number };
@@ -31,6 +32,45 @@ export interface TerrainSettings {
     minWidthMeters: number; maxWidthMeters: number; minHeightMeters: number; maxHeightMeters: number; buriedMeters: number;
     color: string; clearOfSpawnMeters: number; clearOfEdgeMeters: number; dryAboveWaterMeters: number;
   };
+}
+
+// An island tier: land in the middle, a ragged shore and sea all round, which is the map's limit (no edge wall).
+// The shore sits `radiusMeters` from the middle, measured part way between a square and a circle (`roundPercent`:
+// 0 a square island, 100 a round one), pushed in and out by smooth random bays and points (`octaves`, each with
+// `perSide` bumps along each side of the square). The ground falls from the land (at 0) into the water
+// (`seaLevelMeters`) at `beachRisePercent`; mechs may wade `wadeOutMeters` past the waterline and no further. Past
+// that line the bed drops away at `dropRisePercent` to `seabedMeters` under the surface, and `openSeaMeters` of that
+// deep water lie between it and the map's edge. Buildings, props and spawns stand `buildInlandMeters` from the water.
+export interface IslandSettings {
+  radiusMeters: number;
+  roundPercent: number;
+  octaves: { perSide: number; amplitudeMeters: number }[];
+  seaLevelMeters: number;
+  beachRisePercent: number;
+  wadeOutMeters: number;
+  dropRisePercent: number;
+  seabedMeters: number;
+  openSeaMeters: number;
+  buildInlandMeters: number;
+}
+
+function checkIsland(tier: string, island: IslandSettings, maxRisePercent: number, waterShare: number | undefined): void {
+  const where = `terrain.json: ${tier} island`;
+  for (const key of ["radiusMeters", "beachRisePercent", "wadeOutMeters", "dropRisePercent", "seabedMeters", "openSeaMeters", "buildInlandMeters"] as const) {
+    if (!(typeof island[key] === "number" && island[key] > 0)) throw new Error(`${where}: ${key} must be above 0`);
+  }
+  if (!(typeof island.seaLevelMeters === "number" && island.seaLevelMeters < 0)) throw new Error(`${where}: seaLevelMeters must be below 0, under the land`);
+  if (!(Number.isInteger(island.roundPercent) && island.roundPercent >= 0 && island.roundPercent <= 100)) throw new Error(`${where}: roundPercent must be a whole number from 0 to 100`);
+  for (const key of ["beachRisePercent", "dropRisePercent"] as const) {
+    if (!Number.isInteger(island[key]) || island[key] > maxRisePercent) throw new Error(`${where}: ${key} must be a whole number no steeper than maxRisePercent`);
+  }
+  if (!(island.seabedMeters > (island.wadeOutMeters * island.beachRisePercent) / 100)) throw new Error(`${where}: the seabed must be deeper than the water at the wading limit`);
+  if (!Array.isArray(island.octaves)) throw new Error(`${where}: needs octaves`);
+  for (const o of island.octaves) {
+    if (!(Number.isInteger(o.perSide) && o.perSide > 0 && o.amplitudeMeters >= 0)) throw new Error(`${where}: each octave needs a whole perSide above 0 and amplitudeMeters`);
+  }
+  // The sea is the island's only water; ponds would need a second water level.
+  if (waterShare) throw new Error(`terrain.json: ${tier} is an island, so its waterShare must be 0`);
 }
 
 export function parseTerrainSettings(raw: unknown): TerrainSettings {
@@ -58,6 +98,7 @@ export function parseTerrainSettings(raw: unknown): TerrainSettings {
   for (const [tier, t] of Object.entries(d.tiers ?? {})) {
     if (t.waterShare !== undefined && !(t.waterShare >= 0 && t.waterShare < 0.5)) throw new Error(`terrain.json: ${tier} waterShare must be from 0 to under 0.5`);
     if (t.outcropSpacingMeters !== undefined && !(Number.isInteger(t.outcropSpacingMeters) && t.outcropSpacingMeters > 0)) throw new Error(`terrain.json: ${tier} outcropSpacingMeters must be a whole number above 0`);
+    if (t.island !== undefined) checkIsland(tier, t.island, d.maxRisePercent, t.waterShare);
     for (const o of t.octaves ?? []) {
       if (!(o.spacingMeters > 0) || o.spacingMeters % d.cellMeters !== 0) throw new Error(`terrain.json: ${tier} spacingMeters must be a whole number of cells`);
       if (!(o.amplitudeMeters >= 0)) throw new Error(`terrain.json: ${tier} amplitudeMeters must be 0 or more`);
@@ -75,10 +116,16 @@ export class Terrain {
 
   // `heights` in centimetres, corners row by row from (-meters/2, -meters/2), +x first.
   // `waterLevelCm` null for a dry map. `wadeMeters`: how far under the surface the feet must be to count as wading.
-  constructor(readonly meters: number, readonly cell: number, readonly heights: Int32Array, readonly snapMeters: number, readonly waterLevelCm: number | null = null, readonly wadeMeters = 0.1) {
+  // On an island, `coast` holds each corner's distance from the waterline in centimetres (inland positive, out to sea
+  // negative, the same layout as `heights`), and mechs keep within `wadeOutCm` of it out to sea. Null elsewhere.
+  constructor(
+    readonly meters: number, readonly cell: number, readonly heights: Int32Array, readonly snapMeters: number, readonly waterLevelCm: number | null = null, readonly wadeMeters = 0.1,
+    readonly coast: Int32Array | null = null, readonly wadeOutCm = 0,
+  ) {
     this.corners = Math.round(meters / cell) + 1;
     this.waterLevel = waterLevelCm === null ? -Infinity : waterLevelCm / 100;
     if (heights.length !== this.corners * this.corners) throw new Error("Terrain: heights do not match the size");
+    if (coast && coast.length !== heights.length) throw new Error("Terrain: coast does not match the size");
     let lo = Infinity, hi = -Infinity;
     for (const h of heights) { if (h < lo) lo = h; if (h > hi) hi = h; }
     this.minHeight = lo / 100;
@@ -98,6 +145,35 @@ export class Terrain {
 
   // The ground height under (x, z). Outside the map, the nearest edge.
   heightAt(x: number, z: number): number {
+    return this.sample(this.heights, x, z) / 100;
+  }
+
+  // Whether this is an island in the sea, whose shore is the map's limit.
+  get island(): boolean {
+    return this.coast !== null;
+  }
+
+  // How far (x, z) is inland from the waterline, in metres; negative out to sea. Outside the map, the nearest edge,
+  // which is always open sea. Infinity on a map with no shore.
+  coastAt(x: number, z: number): number {
+    return this.coast ? this.sample(this.coast, x, z) / 100 : Infinity;
+  }
+
+  // Whether a mech may stand at (x, z): not past the wading limit out to sea.
+  mayStand(x: number, z: number): boolean {
+    return !this.coast || this.sample(this.coast, x, z) + this.wadeOutCm >= 0;
+  }
+
+  // Whether a mech may move from one spot to another: the sea is a hard limit, but one already past it (put there by
+  // the server) may still come back in rather than being stuck.
+  mayMove(fromX: number, fromZ: number, toX: number, toZ: number): boolean {
+    if (!this.coast) return true;
+    const to = this.sample(this.coast, toX, toZ);
+    return to + this.wadeOutCm >= 0 || to >= this.sample(this.coast, fromX, fromZ);
+  }
+
+  // A corner value interpolated at (x, z) over the same two triangles per cell as the ground.
+  private sample(field: Int32Array, x: number, z: number): number {
     const n = this.corners - 1;
     let gx = (x + this.meters / 2) / this.cell, gz = (z + this.meters / 2) / this.cell;
     gx = gx < 0 ? 0 : gx > n ? n : gx;
@@ -107,9 +183,8 @@ export class Terrain {
     if (j >= n) j = n - 1;
     const fx = gx - i, fz = gz - j;
     const row = j * this.corners + i;
-    const h00 = this.heights[row]!, h10 = this.heights[row + 1]!, h01 = this.heights[row + this.corners]!, h11 = this.heights[row + this.corners + 1]!;
-    const cm = fx + fz <= 1 ? h00 + (h10 - h00) * fx + (h01 - h00) * fz : h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fz);
-    return cm / 100;
+    const h00 = field[row]!, h10 = field[row + 1]!, h01 = field[row + this.corners]!, h11 = field[row + this.corners + 1]!;
+    return fx + fz <= 1 ? h00 + (h10 - h00) * fx + (h01 - h00) * fz : h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fz);
   }
 
   // How deep the water is over the ground at (x, z), 0 where it is dry.

@@ -97,11 +97,13 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
       if (ability.kind !== "decoy") s.dashTime = 0;
       if (ability.kind === "ram") s.abilityTime = ability.activeSeconds;
       else if (ability.kind === "barrage") s.abilityTime = ability.braceSeconds;
+      else if (ability.kind === "rail") s.abilityTime = ability.chargeSeconds;
     }
   }
   const ramming = s.abilityTime > 0 && ability?.kind === "ram";
   const pouncing = s.abilityTime > 0 && ability?.kind === "pounce";
-  const bracing = s.abilityTime > 0 && ability?.kind === "barrage";
+  // A mortar call and a Rail Shot charge both plant the feet: no walking, jets or dash until it is over.
+  const bracing = s.abilityTime > 0 && (ability?.kind === "barrage" || ability?.kind === "rail");
 
   // A dash goes the way you are steering, in any of the eight directions, or straight ahead if you are standing still.
   s.dashCooldown = Math.max(0, s.dashCooldown - dt);
@@ -256,8 +258,22 @@ function nearbyBoxes(s: MechState, stats: MechStats, world: World): number {
 
 function moveHorizontal(s: MechState, stats: MechStats, dx: number, dz: number, world: World): void {
   if (dx === 0 && dz === 0) return;
+  const fromX = s.x, fromY = s.y, fromZ = s.z;
   s.x += dx;
   s.z += dz;
+  resolveBoxes(s, stats, dx, dz, world);
+  // An island's sea is a wall at the wading limit, at any height, so no walk, dash, ram, leap or jet gets out over it.
+  // The step that would cross it is undone (on this axis only, so a mech slides along the shore), the same way here
+  // and in the server, so prediction stops on the same spot.
+  const terrain = world.terrain;
+  if (terrain && !terrain.mayMove(fromX, fromZ, s.x, s.z)) {
+    s.x = fromX; s.y = fromY; s.z = fromZ;
+    if (dx !== 0) s.vx = 0;
+    else s.vz = 0;
+  }
+}
+
+function resolveBoxes(s: MechState, stats: MechStats, dx: number, dz: number, world: World): void {
   const wasOnGround = s.vy <= 0;
   const count = nearbyBoxes(s, stats, world);
   for (let i = 0; i < count; i++) {

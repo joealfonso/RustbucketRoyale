@@ -88,6 +88,7 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
     for (const m of room.inspect()) {
       if (![m.x, m.y, m.z, ...m.hp].every(Number.isFinite)) { problem(`tick ${tick}: mech ${m.id} has a bad number`); continue; }
       if (Math.abs(m.x) > edge || Math.abs(m.z) > edge) problem(`tick ${tick}: mech ${m.id} is outside the map at ${m.x.toFixed(1)}, ${m.z.toFixed(1)}`);
+      if (room.mapTerrain && !room.mapTerrain.mayStand(m.x, m.z)) problem(`tick ${tick}: mech ${m.id} is out past the island's limit at ${m.x.toFixed(1)}, ${m.z.toFixed(1)}`);
       if (m.y < -50) problem(`tick ${tick}: mech ${m.id} fell under the map`);
       m.hp.forEach((hp, zone) => { if (hp < 0 || hp > zoneMax[zone]! + 1e-9) problem(`tick ${tick}: mech ${m.id} zone ${zone} has ${hp} hit points`); });
       if (m.participant && !m.eliminated) alive++;

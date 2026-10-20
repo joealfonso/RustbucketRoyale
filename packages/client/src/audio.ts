@@ -9,7 +9,7 @@ export type SoundName =
   | "shot" | "shotScattergun" | "shotSpikeDriver" | "impact" | "explosion" | "smash" | "hitMarker" | "hurt"
   | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap" | "loot" | "repair"
   | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz" | "wade" | "splash" | "treeFall" | "treeLand"
-  | "uiHover" | "uiClick" | "uiPick" | "uiWhoosh";
+  | "uiHover" | "uiClick" | "uiPick" | "uiWhoosh" | "railCharge" | "railShot";
 
 export interface AudioConfig {
   master: number;
@@ -251,6 +251,14 @@ export class Sound {
       // Landing hard: a crack, steel ringing, grit flying and a deep thud that rolls.
       case "slam": this.burst(into, 0.015, "highpass", 2200, 0.7, 0.0005); this.clank(into, 150 * p, 0.45, 0.5); this.body(into, 140 * p, 32 * p, 0.6, 1.4); this.crunch(into, 0.4, "lowpass", 1300, 1.1); return this.burst(into, 1.2, "lowpass", 400, 0.6, 0.03);
       // A mortar tube going off: the crack of the charge, the tube ringing, a hollow thoonk and a cough of grit.
+      // Rail Shot charging: capacitors whining up through the whole charge, so the target hears it coming.
+      case "railCharge": this.glide(into, 220 * p, 1900 * p, 1.2, "sawtooth", 0.18, 0, true); return this.glide(into, 440 * p, 3800 * p, 1.2, "sine", 0.1, 0, true);
+      // The rail letting go: a hard crack, a deep thump, and a bright zap that rings off down the line.
+      case "railShot":
+        this.burst(into, 0.012, "highpass", 3200, 0.9, 0.0004);
+        this.body(into, 170 * p, 40 * p, 0.35, 1.3);
+        this.glide(into, 5200 * p, 900 * p, 0.25, "square", 0.12);
+        return this.burst(into, 0.9, "lowpass", 700 * p, 0.4, 0.01);
       case "mortar": this.burst(into, 0.015, "highpass", 2200, 0.8, 0.0005); this.clank(into, 230 * p, 0.45, 0.5); this.body(into, 240 * p, 50 * p, 0.5, 1.3); return this.crunch(into, 0.5, "lowpass", 1200, 1.1, 0.004);
       // A shell coming down: a whistle falling in pitch and swelling as it nears, over the rush of air.
       case "shellIncoming": this.sweep(into, 2600, 900, 0.6, 0.6); return this.glide(into, 1700, 650, 0.6, "sine", 0.45, 0, true);

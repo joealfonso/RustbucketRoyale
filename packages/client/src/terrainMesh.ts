@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import type { Terrain } from "@rustbucket/shared";
 import { freeze } from "./freeze";
+import { groundLook, setGroundBeach } from "./groundMaterial";
+import { waterLook } from "./waterLook";
 
 // The drawn hills: the map's Terrain (packages/shared/src/terrain.ts) as a mesh, cut into square tiles so tiles off
 // screen are culled. On big maps the tiles form a quadtree: far away four neighbouring tiles are drawn as one tile
@@ -137,6 +139,57 @@ export function terrainGeometry(terrain: Terrain, node: Pick<TerrainNode, "i0" |
   return geometry;
 }
 
+// The open sea round an island runs past the map's edge to the horizon: a ring of long quads from each corner on the
+// map's edge straight out from the middle to a square `outMeters` beyond it. Both the seabed (here) and the water
+// (waterMesh.ts) are drawn on it, sharing the map's own edge corners, so they meet the map's mesh with no seam.
+// `corners` lists the edge corners in order round the map (as indices into the terrain's corners) and `far` the
+// matching point on the outer square; quad q joins corner q, corner q + 1 and their far points.
+export interface SeaRing {
+  corners: number[];
+  far: [number, number][];
+}
+
+export function seaRing(terrain: Terrain, outMeters: number): SeaRing {
+  const n = terrain.corners - 1, half = terrain.meters / 2, scale = (half + outMeters) / half;
+  const corners: number[] = [];
+  const at = (i: number, j: number) => corners.push(j * terrain.corners + i);
+  for (let i = 0; i < n; i++) at(i, 0);
+  for (let j = 0; j < n; j++) at(n, j);
+  for (let i = n; i > 0; i--) at(i, n);
+  for (let j = n; j > 0; j--) at(0, j);
+  const far = corners.map((k): [number, number] => [((k % terrain.corners) * terrain.cell - half) * scale, (Math.floor(k / terrain.corners) * terrain.cell - half) * scale]);
+  return { corners, far };
+}
+
+// Two triangles per quad of the ring, facing up. `near(q)` and `far(q)` are vertex numbers of ring point q.
+export function seaRingIndex(count: number, near: (q: number) => number, far: (q: number) => number, out: number[]): void {
+  for (let q = 0; q < count; q++) {
+    const r = (q + 1) % count;
+    // Going round the map this way, (near q, near r, far q) faces up.
+    out.push(near(q), near(r), far(q), far(q), near(r), far(r));
+  }
+}
+
+// The seabed beyond an island's map: level with the map's edge, out to the horizon.
+export function seabedGeometry(terrain: Terrain, outMeters: number): THREE.BufferGeometry {
+  const ring = seaRing(terrain, outMeters), count = ring.corners.length, half = terrain.meters / 2;
+  const positions = new Float32Array(count * 2 * 3), normals = new Float32Array(count * 2 * 3);
+  ring.corners.forEach((k, q) => {
+    const y = terrain.heights[k]! / 100;
+    positions.set([(k % terrain.corners) * terrain.cell - half, y, Math.floor(k / terrain.corners) * terrain.cell - half], q * 3);
+    positions.set([ring.far[q]![0], y, ring.far[q]![1]], (count + q) * 3);
+  });
+  for (let v = 0; v < count * 2; v++) normals[v * 3 + 1] = 1;
+  const index: number[] = [];
+  seaRingIndex(count, (q) => q, (q) => count + q, index);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+  geometry.setIndex(index);
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
 // Which nodes to draw from a camera at (x, y, z): a node is drawn whole when it is far enough away for its stride,
 // otherwise its children are looked at instead. The drawn nodes cover the map once, with no gaps and no overlaps.
 // `draw` is called for each drawn node; nothing is allocated.
@@ -168,6 +221,7 @@ export class TerrainMeshes {
   private lod: boolean;
   private checkedAt = new THREE.Vector3(Infinity, 0, 0);
   private show = (node: TerrainNode) => { node.mesh!.visible = true; };
+  private seabed: THREE.Mesh | null = null;
 
   constructor(private scene: THREE.Scene, private terrain: Terrain, material: THREE.Material, private look: TerrainMeshLook) {
     const tileCells = Math.max(1, Math.round(look.tileMeters / terrain.cell));
@@ -185,6 +239,13 @@ export class TerrainMeshes {
       for (const child of node.children) build(child);
     };
     build(this.root);
+    // An island's seabed runs on under the open sea; it is one mesh, always drawn, outside the tiles' switching.
+    if (terrain.island) {
+      this.seabed = new THREE.Mesh(seabedGeometry(terrain, waterLook.sea.outMeters), material);
+      this.group.add(this.seabed);
+    }
+    // The ground under this map's hills has a sandy beach only round an island.
+    setGroundBeach(material, terrain.island ? groundLook.wet.beach.meters : 0);
     freeze(this.group);
     scene.add(this.group);
   }
@@ -212,5 +273,6 @@ export class TerrainMeshes {
   dispose(): void {
     this.scene.remove(this.group);
     for (const mesh of this.meshes) mesh.geometry.dispose();
+    this.seabed?.geometry.dispose();
   }
 }

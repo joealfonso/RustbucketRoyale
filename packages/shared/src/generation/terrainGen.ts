@@ -11,7 +11,7 @@ import { SeededRng, deriveSeed } from "./SeededRng";
 //     gentler than the slope cap, so nothing anywhere is steeper than the cap. The map's outer edge is a pad at height 0, so the
 //     edge wall and the junkyard beyond it stand on level ground.
 
-const ONE = 4096; // fixed point 1 for blend weights
+export const ONE = 4096; // fixed point 1 for blend weights
 const FAR = 1 << 30;
 
 // Corners per side for a map.
@@ -50,7 +50,7 @@ export function valueNoise(rng: SeededRng, n: number, spacing: number, amp: numb
 }
 
 // Smoothstep of step/steps, in fixed point: 0 to ONE, easing in and out, so lattice cells blend without creases.
-function smooth(step: number, steps: number): number {
+export function smooth(step: number, steps: number): number {
   const t = Math.floor((step * ONE) / steps);
   return Math.floor((t * t * (3 * ONE - 2 * t)) / (ONE * ONE));
 }
@@ -141,10 +141,11 @@ export function waterLevelFor(heights: Int32Array, share: number): number | null
 }
 
 // Raises the lowest ground to a shallow bed under the water, so it is never deeper than `maxDepth` cm. Raising
-// everything below one height to that height cannot make any slope steeper.
-export function floodBed(heights: Int32Array, level: number, maxDepth: number): void {
+// everything below one height to that height cannot make any slope steeper. With `reach` (an island), only the corners
+// a mech can reach (reach 0 or more) are raised: the sea past the wading limit keeps its depth.
+export function floodBed(heights: Int32Array, level: number, maxDepth: number, reach: Int32Array | null = null): void {
   const bed = level - maxDepth;
-  for (let k = 0; k < heights.length; k++) if (heights[k]! < bed) heights[k] = bed;
+  for (let k = 0; k < heights.length; k++) if (heights[k]! < bed && (!reach || reach[k]! >= 0)) heights[k] = bed;
 }
 
 // One level area: corners inside the rectangle (metres, already widened by the pad margin) are held at `height` cm.
@@ -154,8 +155,9 @@ export interface Pad {
 }
 
 // Step 3: the final ground. Pads (and the map's edge, at 0) are kept exactly; the noise fills the rest, squeezed so
-// nothing is steeper than the slope limit.
-export function shapeTerrain(noise: Int32Array, meters: number, pads: readonly Pad[], settings: TerrainSettings): Int32Array {
+// nothing is steeper than the slope limit. An island has no wall to stand level, so its edge is not held
+// (`holdEdge` false): the shore shaping has already put it on the seabed.
+export function shapeTerrain(noise: Int32Array, meters: number, pads: readonly Pad[], settings: TerrainSettings, holdEdge = true): Int32Array {
   const n = cornersFor(meters, settings.cellMeters);
   const cell = settings.cellMeters;
   const half = meters / 2;
@@ -172,9 +174,9 @@ export function shapeTerrain(noise: Int32Array, meters: number, pads: readonly P
     const j0 = Math.max(0, Math.ceil((p.minZ + half) / cell)), j1 = Math.min(n - 1, Math.floor((p.maxZ + half) / cell));
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) hold(i, j, p.height);
   }
-  // The edge is always 0, even where a pad's margin reaches it: it lies outside every building, and the edge wall
+  // A held edge is always 0, even where a pad's margin reaches it: it lies outside every building, and the edge wall
   // and the junkyard beyond stand on it.
-  for (let i = 0; i < n; i++) for (const k of [i, (n - 1) * n + i, i * n, i * n + n - 1]) { value[k] = 0; fixed[k] = 1; }
+  if (holdEdge) for (let i = 0; i < n; i++) for (const k of [i, (n - 1) * n + i, i * n, i * n + n - 1]) { value[k] = 0; fixed[k] = 1; }
 
   // Upper and lower bounds: from every held corner, the highest and lowest the ground may be at each other corner.
   // Two sweeps of a 3x3 chamfer (straight and diagonal steps), forward then back, reach every corner.

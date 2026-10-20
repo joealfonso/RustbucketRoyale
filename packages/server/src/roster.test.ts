@@ -57,7 +57,7 @@ describe("roster mechs", () => {
     const a = new Client(room, config);
     drive(room, [a], 3);
     const before = a.last().you.mech;
-    for (const bad of [4, -1, 1.5, "stiletto", null]) pick(room, a, bad);
+    for (const bad of [config.roster!.mechs.length, -1, 1.5, "stiletto", null]) pick(room, a, bad);
     drive(room, [a], 3);
     expect(a.last().you.mech).toBe(before);
 

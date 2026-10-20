@@ -18,7 +18,8 @@ async function loadRosterKit(id: string) {
 }
 
 describe("serial numbers", () => {
-  for (const id of kits.roster!) {
+  // A roster mech still drawn as the stand-in (the Longshot until gate 15c builds its model) has no serial yet.
+  for (const id of kits.roster!.filter((r) => !kits.kits[r]!.file?.includes("standin"))) {
     it(`${id}: every serial lies flat on the hull, facing out, with nothing of the mech in front of it`, async () => {
       const kit = await loadRosterKit(id);
       const wanted = kits.kits[id]!.serials ?? [];

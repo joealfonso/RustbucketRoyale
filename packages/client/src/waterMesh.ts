@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import type { Terrain } from "@rustbucket/shared";
 import { freeze } from "./freeze";
-import type { WaterLook } from "./waterLook";
+import { seaRing, seaRingIndex } from "./terrainMesh";
+import { waterLook, type WaterLook } from "./waterLook";
 
 // The water surface: one flat mesh at the map's water level over every terrain cell that dips under it, in one draw
 // call. Each corner carries how deep the water is over the ground there (negative where the ground is above it).
@@ -9,8 +10,9 @@ import type { WaterLook } from "./waterLook";
 // triangle: the shoreline is where it crosses zero, and the toon bands (shore, main, deep) follow the bed's contours.
 // Past the shoreline the water is cut away, so it never lies over dry ground.
 
-// The geometry for a map's water, or null on a dry map. Only cells with a corner under the water are in it.
-export function waterGeometry(terrain: Terrain): THREE.BufferGeometry | null {
+// The geometry for a map's water, or null on a dry map. Only cells with a corner under the water are in it. On an
+// island the sea also runs `seaMeters` on past the map's edge, at the edge's depth (terrainMesh.ts seaRing).
+export function waterGeometry(terrain: Terrain, seaMeters = 0): THREE.BufferGeometry | null {
   const level = terrain.waterLevel;
   if (!Number.isFinite(level)) return null;
   const n = terrain.corners - 1, half = terrain.meters / 2, cell = terrain.cell;
@@ -28,6 +30,10 @@ export function waterGeometry(terrain: Terrain): THREE.BufferGeometry | null {
     }
   }
   if (quads === 0) return null;
+  // Every corner on an island's edge is under the sea, so each already has a vertex for the ring to start from.
+  const ring = terrain.island && seaMeters > 0 ? seaRing(terrain, seaMeters) : null;
+  const inMap = vertices;
+  if (ring) vertices += ring.corners.length;
   const positions = new Float32Array(vertices * 3), normals = new Float32Array(vertices * 3), depths = new Float32Array(vertices);
   for (let k = 0; k < vertexOf.length; k++) {
     const v = vertexOf[k]!;
@@ -37,7 +43,18 @@ export function waterGeometry(terrain: Terrain): THREE.BufferGeometry | null {
     normals[v * 3 + 1] = 1;
     depths[v] = level - terrain.corner(i, j);
   }
-  const index = vertices > 65535 ? new Uint32Array(quads * 6) : new Uint16Array(quads * 6);
+  const ringIndex: number[] = [];
+  if (ring) {
+    ring.corners.forEach((k, r) => {
+      const v = inMap + r;
+      positions[v * 3] = ring.far[r]![0]; positions[v * 3 + 1] = level; positions[v * 3 + 2] = ring.far[r]![1];
+      normals[v * 3 + 1] = 1;
+      depths[v] = depths[vertexOf[k]!]!;
+    });
+    seaRingIndex(ring.corners.length, (r) => vertexOf[ring.corners[r]!]!, (r) => inMap + r, ringIndex);
+  }
+  const index = vertices > 65535 ? new Uint32Array(quads * 6 + ringIndex.length) : new Uint16Array(quads * 6 + ringIndex.length);
+  index.set(ringIndex, quads * 6);
   let q = 0;
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
@@ -128,7 +145,7 @@ export class WaterMesh {
   readonly mesh: THREE.Mesh;
   private time = { value: 0 };
 
-  constructor(scene: THREE.Scene, look: WaterLook["surface"], ramp: THREE.Texture, color: (name: string) => string) {
+  constructor(scene: THREE.Scene, look: WaterLook["surface"], ramp: THREE.Texture, color: (name: string) => string, private seaMeters = waterLook.sea.outMeters) {
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), waterMaterial(look, ramp, color, this.time));
     this.mesh.visible = false;
     this.mesh.renderOrder = 1; // after the opaque world, like any see-through surface
@@ -139,7 +156,7 @@ export class WaterMesh {
   // The map's terrain, or null for none (the range). Dry maps draw nothing.
   setTerrain(terrain: Terrain | null): void {
     this.mesh.geometry.dispose();
-    const geometry = terrain ? waterGeometry(terrain) : null;
+    const geometry = terrain ? waterGeometry(terrain, this.seaMeters) : null;
     this.mesh.geometry = geometry ?? new THREE.BufferGeometry();
     this.mesh.visible = geometry !== null;
   }

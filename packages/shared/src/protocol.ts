@@ -155,7 +155,7 @@ export interface ExplodeMessage {
 export interface AbilityMessage {
   t: "ability";
   id: number;
-  kind: "ram" | "pounce" | "barrage" | "decoy";
+  kind: "ram" | "pounce" | "barrage" | "decoy" | "rail";
   event: "start" | "hit" | "land" | "pop";
   x: number; y: number; z: number;
   ids?: number[]; // on a decoy start, the decoys' ids, so their owner can draw its own decoys see-through

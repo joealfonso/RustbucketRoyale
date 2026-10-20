@@ -15,7 +15,8 @@ export interface PackedMap {
   // The hills, as their whole-centimetre heights. Clients build the same terrain from the seed, so the server must
   // stand on exactly this one, not a rebuilt or flattened copy. Null for a map with no terrain (the range). The water
   // comes too: without it the server would walk on dry ground where clients wade, and every prediction would drift.
-  terrain: { heights: Int32Array; meters: number; cell: number; snapMeters: number; waterLevelCm: number | null; wadeMeters: number } | null;
+  // So does an island's coastline, which is where the sea stops mechs: without it the server would let them out.
+  terrain: { heights: Int32Array; meters: number; cell: number; snapMeters: number; waterLevelCm: number | null; wadeMeters: number; coast: Int32Array | null; wadeOutCm: number } | null;
 }
 
 const BOX_FIELDS = 6;
@@ -30,7 +31,7 @@ export function packMap(map: MapForRoom): PackedMap {
   const props = new Float64Array(map.props.length * PROP_FIELDS);
   map.props.forEach((p, i) => props.set([p.id, p.type, p.boxIndex, p.x, p.y, p.z], i * PROP_FIELDS));
   const t = map.world.terrain;
-  const terrain = t ? { heights: t.heights, meters: t.meters, cell: t.cell, snapMeters: t.snapMeters, waterLevelCm: t.waterLevelCm, wadeMeters: t.wadeMeters } : null;
+  const terrain = t ? { heights: t.heights, meters: t.meters, cell: t.cell, snapMeters: t.snapMeters, waterLevelCm: t.waterLevelCm, wadeMeters: t.wadeMeters, coast: t.coast, wadeOutCm: t.wadeOutCm } : null;
   return { boxes, props, propOfBox: map.propOfBox, nav: map.nav, spawns: map.spawns, meters: map.meters, terrain };
 }
 
@@ -38,6 +39,7 @@ export function packMap(map: MapForRoom): PackedMap {
 export function transferList(packed: PackedMap): ArrayBuffer[] {
   const buffers = [packed.boxes.buffer, packed.props.buffer, packed.propOfBox.buffer, packed.nav.top.buffer, packed.nav.ground.buffer];
   if (packed.terrain) buffers.push(packed.terrain.heights.buffer);
+  if (packed.terrain?.coast) buffers.push(packed.terrain.coast.buffer);
   return buffers as ArrayBuffer[];
 }
 
@@ -53,6 +55,6 @@ export function unpackMap(packed: PackedMap): MapForRoom {
     props[i] = { id: p[k]!, type: p[k + 1]!, boxIndex: p[k + 2]!, x: p[k + 3]!, y: p[k + 4]!, z: p[k + 5]! };
   }
   const t = packed.terrain;
-  const terrain = t ? new Terrain(t.meters, t.cell, t.heights, t.snapMeters, t.waterLevelCm, t.wadeMeters) : null;
+  const terrain = t ? new Terrain(t.meters, t.cell, t.heights, t.snapMeters, t.waterLevelCm, t.wadeMeters, t.coast, t.wadeOutCm) : null;
   return { world: new World(boxes, WORLD_CELL_METERS, terrain), nav: packed.nav, spawns: packed.spawns, meters: packed.meters, props, propOfBox: packed.propOfBox };
 }

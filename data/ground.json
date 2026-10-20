@@ -85,7 +85,11 @@
     "dampMeters": 0.3,
     "dampStrength": 0.85,
     "raggedMeters": 0.08,
-    "scale": 0.5
+    "scale": 0.5,
+    "beach": {
+      "color": "#9E916C",
+      "meters": 0.9
+    }
   },
   "mesh": {
     "tileMeters": 256,

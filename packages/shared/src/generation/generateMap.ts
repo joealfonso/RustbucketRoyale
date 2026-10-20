@@ -1,6 +1,7 @@
 import { World, type Box } from "../world";
 import { Terrain } from "../terrain";
 import { cornersFor, floodBed, noiseHeights, padHeights, shapeTerrain, valueNoise, waterLevelFor, type Rect } from "./terrainGen";
+import { islandCoast, onLand, reachOf, shapeShore } from "./islandGen";
 import { addProp, type PropConfig, type PropInstance } from "../props";
 import { orient, type ChunkSet } from "./chunks";
 import { buildNavGrid, floodFill, navCell, raised, type NavGrid, type NavParams } from "./navGrid";
@@ -52,6 +53,13 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   const templates = chunks.templates;
   const totalWeight = templates.reduce((sum, t) => sum + t.weight, 0);
 
+  // An island's coastline comes first: chunks, props and spawns are kept off the sea and the beach.
+  const island = settings?.tiers[tier]?.island ?? null;
+  const cellMeters = settings?.cellMeters ?? chunks.size;
+  const coast = island ? islandCoast(seed, def.meters, cellMeters, island) : null;
+  const inland = island ? Math.round(island.buildInlandMeters * 100) : 0;
+  const ashore = (minX: number, minZ: number, maxX: number, maxZ: number) => !coast || onLand(coast, def.meters, cellMeters, minX, minZ, maxX, maxZ, inland);
+
   const pick = (): number => {
     let r = rng.nextInt(totalWeight);
     for (let i = 0; i < templates.length; i++) {
@@ -65,6 +73,19 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   const grid = new Int32Array(n * n);
   const turnsOf = new Uint8Array(n * n);
   const mirrorOf = new Uint8Array(n * n);
+  const open = templates.findIndex((t) => t.boxes.length === 0);
+  if (coast && open < 0) throw new Error("chunks.json: an island needs an open chunk with no boxes for its shore");
+  const padMargin = settings?.padMarginMeters ?? 0;
+  const oriented = { center: [0, 0, 0] as [number, number, number], size: [0, 0, 0] as [number, number, number] };
+  // Whether every box of a chunk, with the level ground round it, stands far enough inland.
+  const chunkAshore = (cell: number) => {
+    const x = cell % n, z = (cell - x) / n;
+    return templates[grid[cell]!]!.boxes.every((b) => {
+      orient(b, chunks.size, turnsOf[cell]!, mirrorOf[cell] === 1, oriented);
+      const cx = x * chunks.size - half + oriented.center[0], cz = z * chunks.size - half + oriented.center[2];
+      return ashore(cx - oriented.size[0] / 2 - padMargin, cz - oriented.size[2] / 2 - padMargin, cx + oriented.size[0] / 2 + padMargin, cz + oriented.size[2] / 2 + padMargin);
+    });
+  };
   for (let z = 0; z < n; z++) {
     for (let x = 0; x < n; x++) {
       let choice = pick();
@@ -82,6 +103,18 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
       grid[z * n + x] = choice;
       turnsOf[z * n + x] = rng.nextInt(4);
       mirrorOf[z * n + x] = rng.nextInt(2);
+      // On an island a chunk whose buildings would reach the beach or the sea is swapped for one that fits, and failing
+      // that for open ground, never a dense one, so the rule above still holds.
+      if (coast && !chunkAshore(z * n + x)) {
+        grid[z * n + x] = open;
+        for (let tries = 0; tries < ISLAND_REPICKS; tries++) {
+          const other = pick();
+          if (templates[other]!.dense) continue;
+          grid[z * n + x] = other;
+          if (chunkAshore(z * n + x)) break;
+          grid[z * n + x] = open;
+        }
+      }
     }
   }
 
@@ -104,23 +137,40 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   for (const t of propConfig.types) palette.push(t.color);
   const props: PropInstance[] = [];
   const propWeight = propConfig.types.reduce((sum, t) => sum + t.weight, 0);
-  const wallY = tiers.edgeWallHeight / 2;
-  add(0, wallY, -half - margin / 2, def.meters + margin * 2, tiers.edgeWallHeight, margin, wallColor);
-  add(0, wallY, half + margin / 2, def.meters + margin * 2, tiers.edgeWallHeight, margin, wallColor);
-  add(-half - margin / 2, wallY, 0, margin, tiers.edgeWallHeight, def.meters, wallColor);
-  add(half + margin / 2, wallY, 0, margin, tiers.edgeWallHeight, def.meters, wallColor);
+  // An island has no wall: the sea is its limit (Terrain.mayMove).
+  if (!island) {
+    const wallY = tiers.edgeWallHeight / 2;
+    add(0, wallY, -half - margin / 2, def.meters + margin * 2, tiers.edgeWallHeight, margin, wallColor);
+    add(0, wallY, half + margin / 2, def.meters + margin * 2, tiers.edgeWallHeight, margin, wallColor);
+    add(-half - margin / 2, wallY, 0, margin, tiers.edgeWallHeight, def.meters, wallColor);
+    add(half + margin / 2, wallY, 0, margin, tiers.edgeWallHeight, def.meters, wallColor);
+  }
 
   // Breakable props scattered in a chunk, on a 1 m grid, clear of the chunk's own boxes, of each other, and of the
   // middle of a chunk where mechs may start. The same number of random draws happens whatever is decided, so the
   // rest of the map does not depend on how crowded one chunk was.
   let propBase = (_x: number, _z: number, _sx: number, _sz: number) => 0;
-  const placeProps = (firstBox: number, lastBox: number, originX: number, originZ: number, keepMiddleClear: boolean) => {
+  // Where a chunk's spawn would stand: its middle, or on an island the nearest spot toward the map's middle that is far
+  // enough inland, stepping a whole metre at a time and staying in the chunk. Null when there is none.
+  const spawnSpot = (cell: number): [number, number] | null => {
+    const x = cell % n, z = (cell - x) / n;
+    const mx = x * chunks.size - half + chunks.size / 2, mz = z * chunks.size - half + chunks.size / 2;
+    if (!coast) return [mx, mz];
+    const most = Math.max(Math.abs(mx), Math.abs(mz), 1);
+    for (let s = 0; s <= chunks.size / 2; s++) {
+      const px = mx - Math.round((s * mx) / most), pz = mz - Math.round((s * mz) / most);
+      if (ashore(px, pz, px, pz)) return [px, pz];
+    }
+    return null;
+  };
+
+  const placeProps = (firstBox: number, lastBox: number, originX: number, originZ: number, keepClear: [number, number] | null) => {
     const { min, max } = propConfig.perChunk;
     const count = min + rng.nextInt(max - min + 1);
     const edge = 3;
     const chunkProps: PropInstance[] = [];
     for (let i = 0; i < count; i++) {
-      for (let attempt = 0; attempt < 8; attempt++) {
+      for (let attempt = 0; attempt < (coast ? ISLAND_PROP_TRIES : 8); attempt++) {
         let roll = rng.nextInt(propWeight);
         let type = 0;
         while (roll >= propConfig.types[type]!.weight) { roll -= propConfig.types[type]!.weight; type++; }
@@ -132,8 +182,8 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
         let blocked = false;
         for (let k = firstBox; k < lastBox && !blocked; k++) blocked = hits(boxes[k]!);
         for (const p of chunkProps) if (!blocked) blocked = hits(boxes[p.boxIndex]!);
-        const middleX = originX + chunks.size / 2, middleZ = originZ + chunks.size / 2;
-        if (keepMiddleClear && Math.abs(x - middleX) < propConfig.keepClearOfSpawn + sx / 2 && Math.abs(z - middleZ) < propConfig.keepClearOfSpawn + sz / 2) blocked = true;
+        if (keepClear && Math.abs(x - keepClear[0]) < propConfig.keepClearOfSpawn + sx / 2 && Math.abs(z - keepClear[1]) < propConfig.keepClearOfSpawn + sz / 2) blocked = true;
+        if (!ashore(x - sx / 2, z - sz / 2, x + sx / 2, z + sz / 2)) blocked = true;
         if (blocked) continue;
         chunkProps.push(addProp(boxes, props, propConfig, type, x, z, propBase(x, z, sx, sz)));
         colors.push(propColor + type);
@@ -145,9 +195,11 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   // The hills: noise first, then each built chunk's pad height (terrainGen.ts).
   const flatCorners = cornersFor(def.meters, chunks.size);
   const noise = settings ? noiseHeights(seed, tier, def.meters, settings) : new Int32Array(flatCorners * flatCorners);
+  // On an island the shore cuts the hills down into the sea. Pads still come from the hills before the cut: a chunk's
+  // middle can be out at sea while its buildings stand well inland, and the seabed is no height for them.
+  const shored = coast && island ? Int32Array.from(noise) : noise;
+  if (coast && island) shapeShore(shored, coast, island);
   // Where each chunk's level ground will be: its boxes' footprints, widened by the pad margin.
-  const padMargin = settings?.padMarginMeters ?? 0;
-  const oriented = { center: [0, 0, 0] as [number, number, number], size: [0, 0, 0] as [number, number, number] };
   const held: Rect[][] = [];
   // Held ground under something no taller than this is a floor or a terrace, which an outcrop may rise out of.
   const tallHeld: Rect[] = [];
@@ -165,15 +217,18 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   }
   const padOf = settings ? padHeights(noise, def.meters, chunks.size, held, settings) : new Int32Array(n * n);
   const padsAt = () => held.flatMap((rects, cell) => rects.map((r) => ({ ...r, height: padOf[cell]! })));
-  let heights = settings ? shapeTerrain(noise, def.meters, padsAt(), settings) : noise;
+  let heights = settings ? shapeTerrain(shored, def.meters, padsAt(), settings, !island) : noise;
   // Water fills the lowest ground. Its bed is raised so it is never deeper than a wade; a building pad lower than
   // the bed is raised with it (still level, now standing in shallow water), and the ground is shaped again round it.
-  const water = settings ? waterLevelFor(heights, settings.tiers[tier]?.waterShare ?? 0) : null;
+  // An island's water is the sea: raised the same way wherever a mech can reach, deep past the wading limit.
+  const water = island ? Math.round(island.seaLevelMeters * 100) : settings ? waterLevelFor(heights, settings.tiers[tier]?.waterShare ?? 0) : null;
+  const reach = coast && island ? reachOf(coast, island) : null;
   if (settings && water !== null) {
     const depth = Math.round(settings.water.maxDepthMeters * 100);
     for (let cell = 0; cell < n * n; cell++) padOf[cell] = Math.max(padOf[cell]!, water - depth);
-    heights = shapeTerrain(noise, def.meters, padsAt(), settings);
-    floodBed(heights, water, depth);
+    heights = shapeTerrain(shored, def.meters, padsAt(), settings, !island);
+    if (coast && island) shapeShore(heights, coast, island, true);
+    floodBed(heights, water, depth, reach);
   }
 
   // Each chunk's boxes stand on its pad, and the ground round each box is held level.
@@ -197,7 +252,7 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
       if (template.spawnable) spawnCandidates.push(cell);
     }
   }
-  const terrain = new Terrain(def.meters, settings?.cellMeters ?? chunks.size, heights, settings?.snapMeters ?? 0.5, water, settings?.water.wadeMeters);
+  const terrain = new Terrain(def.meters, cellMeters, heights, settings?.snapMeters ?? 0.5, water, settings?.water.wadeMeters, coast, island ? Math.round(island.wadeOutMeters * 100) : 0);
   const ground = boxes[0]!;
   ground.maxY = Math.min(0, terrain.minHeight) - 1;
   ground.minY = ground.maxY - 1;
@@ -207,7 +262,7 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   for (let z = 0; z < n; z++) {
     for (let x = 0; x < n; x++) {
       const cell = z * n + x;
-      placeProps(firstBoxOf[cell]!, lastBoxOf[cell]!, x * chunks.size - half, z * chunks.size - half, templates[grid[cell]!]!.spawnable);
+      placeProps(firstBoxOf[cell]!, lastBoxOf[cell]!, x * chunks.size - half, z * chunks.size - half, templates[grid[cell]!]!.spawnable ? spawnSpot(cell) : null);
     }
   }
 
@@ -220,8 +275,10 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
     if (chosen.length >= def.spawns) break;
     const x = cell % n, z = (cell - x) / n;
     if (chosen.some((c) => Math.max(Math.abs((c % n) - x), Math.abs(Math.floor(c / n) - z)) < sep)) continue;
+    const spot = spawnSpot(cell);
+    if (!spot) continue;
+    const [sx, sz] = spot;
     chosen.push(cell);
-    const sx = x * chunks.size - half + chunks.size / 2, sz = z * chunks.size - half + chunks.size / 2;
     spawns.push([sx, terrain.heightAt(sx, sz) + 0.05, sz]);
   }
 
@@ -352,6 +409,17 @@ const MASK_RANGE = 1000; // forest and boulder masks run from -MASK_RANGE to MAS
 const ROCKS_SALT = 3000, FOREST_SALT = 3001, OUTCROP_SALT = 3002;
 const LOW_HELD_METERS = 1.6; // a floor slab or one of the old grey-box hill terraces, not a wall
 const WALL_GAP_METERS = 3; // an outcrop keeps this clear of any wall, so a gap beside it still fits a mech // each scatter draws from its own stream, apart from the hills and props
+const ISLAND_REPICKS = 4; // tries at a chunk that fits on the island before the shore gets open ground
+const ISLAND_PROP_TRIES = 32; // a shore chunk has little land, so its props get more tries at finding some
+
+// The ground mechs can stand on, in square metres: the whole map, or on an island the land and the shallows. Counted
+// from the coastline's whole-centimetre corners, a cell's worth for each, so it is the same on every machine.
+function landArea(terrain: Terrain | null, meters: number): number {
+  if (!terrain?.coast) return meters * meters;
+  let corners = 0;
+  for (const c of terrain.coast) if (c + terrain.wadeOutCm >= 0) corners++;
+  return corners * terrain.cell * terrain.cell;
+}
 
 // Checks a built map is playable: enough clear spawns, all reachable from each other, and no large sealed-off areas.
 export function validateMap(
@@ -363,13 +431,14 @@ export function validateMap(
 
   // Enough to break and loot, but not a solid field of crates.
   if (propConfig) {
+    const squareKm = landArea(map.world.terrain, map.meters) / 1_000_000;
     const scattered = map.props.filter((p) => !propConfig.types[p.type]!.scenery);
-    const perKm = scattered.length / ((map.meters * map.meters) / 1_000_000);
+    const perKm = scattered.length / squareKm;
     if (perKm < propConfig.density.minPerSquareKm || perKm > propConfig.density.maxPerSquareKm) problems.push(`prop density ${perKm.toFixed(0)} per square km is out of bounds`);
 
     const { lootDensity } = propConfig;
     const lootProps = map.props.filter((p) => propConfig.types[p.type]!.dropsLoot);
-    const lootPerKm = lootProps.length / ((map.meters * map.meters) / 1_000_000);
+    const lootPerKm = lootProps.length / squareKm;
     if (lootPerKm < lootDensity.minPerSquareKm || lootPerKm > lootDensity.maxPerSquareKm) problems.push(`loot density ${lootPerKm.toFixed(0)} per square km is out of bounds`);
     // Squared whole-metre distances, so the count is exact on every machine.
     const reach = lootDensity.nearSpawnMeters * lootDensity.nearSpawnMeters;

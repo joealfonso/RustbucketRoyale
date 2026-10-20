@@ -25,6 +25,8 @@ export interface NavGrid {
   ground: Float32Array;
 }
 
+const SEA_WALL_METERS = 1000; // open sea counts as a wall far too tall to climb or jet over
+
 // How far a cell's top stands up off the ground: 0 for bare hillside.
 export const raised = (grid: NavGrid, i: number) => grid.top[i]! - grid.ground[i]!;
 
@@ -58,6 +60,12 @@ export function buildNavGrid(boxes: readonly Box[], meters: number, centerX: num
         if (b.minY - ground[i]! >= params.mechHeight || b.maxY <= ground[i]! + 0.01) continue;
         if (b.maxY > top[i]!) top[i] = b.maxY;
       }
+    }
+  }
+  // Past an island's wading limit is a wall to routes and to the map's checks, as it is to mechs.
+  if (terrain?.island) {
+    for (let z = 0; z < cols; z++) for (let x = 0; x < cols; x++) {
+      if (!terrain.mayStand(originX + (x + 0.5) * params.cellMeters, originZ + (z + 0.5) * params.cellMeters)) top[z * cols + x] = ground[z * cols + x]! + SEA_WALL_METERS;
     }
   }
   return { cell: params.cellMeters, cols, rows: cols, originX, originZ, stepHeight: params.stepHeight, top, ground };

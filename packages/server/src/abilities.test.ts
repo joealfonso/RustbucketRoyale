@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  World, ZONE_ARMS, ZONE_TORSO, boxFromData, createMechInput, createMechState, type BarrageStats, type DecoyStats, type MechInput, type RamStats, type ServerMessage,
+  World, ZONE_ARMS, ZONE_TORSO, boxFromData, createMechInput, createMechState, type BarrageStats, type DecoyStats, type MechInput, type RailStats, type RamStats, type ServerMessage,
 } from "@rustbucket/shared";
 import { Bot } from "./Bot";
 import { loadRoomConfig } from "./config";
@@ -383,5 +383,49 @@ describe("Decoy Drones", () => {
     const before = a.messages.slice(0, popAt);
     expect(before.some((m) => m.t === "shot" && m.id === botId)).toBe(true);
     expect(before.some((m) => m.t === "explode")).toBe(false); // it was shot, not blown up
+  });
+});
+
+describe("Rail Shot", () => {
+  const aimAt = (room: Room, target: Client) => { const t = where(room, target); return { targetX: t.x, targetY: t.y + 2.4, targetZ: t.z }; };
+
+  it("plants the Longshot and charges, then fires one shot along its aim that hurts the mech there", () => {
+    const { room, config, a, b } = duel("longshot", "arbiter");
+    const rail = config.abilities.mechs.longshot as RailStats;
+    const startX = where(room, a).x;
+    const hpBefore = where(room, b).hp.reduce((s, h) => s + h, 0);
+    run(room, [a, b], (c) => (c === a ? forward({ aimYaw: TOWARD_SECOND, ability: true, ...aimAt(room, b) }) : idle()), 1);
+    run(room, [a, b], (c) => (c === a ? forward({ aimYaw: TOWARD_SECOND, ...aimAt(room, b) }) : idle()), Math.round(rail.chargeSeconds * 60) - 3);
+    expect(Math.abs(where(room, a).x - startX)).toBeLessThan(0.01); // planted, though it is pushing forward
+    expect(hitsOn(a, b.id)).toHaveLength(0); // nothing until the charge is done
+    run(room, [a, b], (c) => (c === a ? idle({ aimYaw: TOWARD_SECOND, ...aimAt(room, b) }) : idle()), 10);
+    expect(abilityMessages(b, "start")).toHaveLength(1); // the target saw the laser go up
+    expect(abilityMessages(b, "hit")).toHaveLength(1); // and the beam
+    expect(hitsOn(a, b.id)).toHaveLength(1);
+    expect(hpBefore - where(room, b).hp.reduce((s, h) => s + h, 0)).toBeGreaterThan(rail.damage * 0.5);
+  });
+
+  it("stops at a wall in the way", () => {
+    const wall = (c: RoomConfig): RoomConfig => {
+      const map = c.mapFor("small", 0);
+      const boxes = [...map.world.boxes, boxFromData({ name: "wall", color: "scrapSteel", center: [-18, 3, 0], size: [0.5, 6, 6] })];
+      return { ...c, mapFor: () => ({ ...map, world: new World(boxes) }) };
+    };
+    const { room, config, a, b } = duel("longshot", "arbiter", wall);
+    const rail = config.abilities.mechs.longshot as RailStats;
+    run(room, [a, b], (c) => (c === a ? idle({ aimYaw: TOWARD_SECOND, ability: true, ...aimAt(room, b) }) : idle()), 1);
+    run(room, [a, b], (c) => (c === a ? idle({ aimYaw: TOWARD_SECOND, ...aimAt(room, b) }) : idle()), Math.round(rail.chargeSeconds * 60) + 10);
+    expect(abilityMessages(a, "hit")).toHaveLength(1); // it fired
+    expect(hitsOn(a, b.id)).toHaveLength(0); // into the wall
+  });
+
+  it("breaks the charge when the Longshot is hit, and loses the shot", () => {
+    const { room, config, a, b } = duel("longshot", "arbiter");
+    const rail = config.abilities.mechs.longshot as RailStats;
+    run(room, [a, b], (c) => (c === a ? idle({ aimYaw: TOWARD_SECOND, ability: true, ...aimAt(room, b) }) : idle({ aimYaw: Math.PI / 2, fire: true, ...aimAt(room, a) })), 1);
+    run(room, [a, b], (c) => (c === a ? idle({ aimYaw: TOWARD_SECOND, ...aimAt(room, b) }) : idle({ aimYaw: Math.PI / 2, fire: true, ...aimAt(room, a) })), Math.round(rail.chargeSeconds * 60) + 10);
+    expect(hitsOn(b, a.id).length).toBeGreaterThan(0); // the Arbiter's autocannon landed during the charge
+    expect(abilityMessages(a, "hit")).toHaveLength(0); // so no beam
+    expect(a.last().you.abilityCooldown).toBeGreaterThan(0); // and the cooldown is spent anyway
   });
 });

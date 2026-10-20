@@ -68,6 +68,48 @@ describe("water mesh", () => {
   });
 });
 
+// A 40 m island: dry land within 10 m of the middle, sea 3 m deep everywhere else, so every edge corner is under it.
+function islet(): Terrain {
+  const cells = 10, cell = 4, n = cells + 1;
+  const heights = new Int32Array(n * n), coast = new Int32Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const d = Math.hypot(i * cell - 20, j * cell - 20);
+    heights[j * n + i] = d < 10 ? 0 : -400;
+    coast[j * n + i] = Math.round((10 - d) * 100);
+  }
+  return new Terrain(cells * cell, cell, heights, 0.5, -100, 0.1, coast, 300);
+}
+
+describe("the open sea round an island", () => {
+  it("runs on past the map's edge at the edge's depth, from the edge's own corners, so there is no seam", () => {
+    const terrain = islet();
+    const geometry = waterGeometry(terrain, 500)!;
+    for (const [x, z] of [[-200, 0], [0, 300], [400, 400], [-25, -21]] as const) expect(drawnDepthAt(geometry, x, z)).toBeCloseTo(3, 4);
+    expect(drawnDepthAt(geometry, -600, 0)).toBeNull(); // it stops where the sea is said to
+    // Every vertex at the map's edge is used once: the ring shares them with the water inside the map.
+    const p = geometry.getAttribute("position");
+    const edge = new Set<string>();
+    for (let v = 0; v < p.count; v++) if (Math.max(Math.abs(p.getX(v)), Math.abs(p.getZ(v))) === 20) edge.add(`${p.getX(v)},${p.getZ(v)}`);
+    expect(edge.size).toBe(40);
+    expect([...edge].length).toBe([...Array(p.count).keys()].filter((v) => Math.max(Math.abs(p.getX(v)), Math.abs(p.getZ(v))) === 20).length);
+  });
+
+  it("faces up all the way round, like the water in the map", () => {
+    const geometry = waterGeometry(islet(), 500)!;
+    const p = geometry.getAttribute("position"), index = geometry.getIndex()!;
+    for (let k = 0; k < index.count; k += 3) {
+      const [a, b, c] = [index.getX(k), index.getX(k + 1), index.getX(k + 2)];
+      const ux = p.getX(b) - p.getX(a), uz = p.getZ(b) - p.getZ(a), vx = p.getX(c) - p.getX(a), vz = p.getZ(c) - p.getZ(a);
+      expect(uz * vx - ux * vz).toBeGreaterThan(0); // the y of the face's normal
+    }
+  });
+
+  it("is not drawn round a map that is not an island", () => {
+    const pondOnly = waterGeometry(pond(), 500)!;
+    expect(drawnDepthAt(pondOnly, -100, 0)).toBeNull();
+  });
+});
+
 describe("water look", () => {
   const look = parseWaterLook(waterJson);
 

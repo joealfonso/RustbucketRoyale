@@ -54,7 +54,20 @@ export interface DecoyStats {
   stuckSeconds: number; // that long stuck and it turns a quarter turn off the wall
 }
 
-export type AbilityStats = RamStats | PounceStats | BarrageStats | DecoyStats;
+// The Longshot's Rail Shot (gate 15b): Q plants the mech and charges for `chargeSeconds`, with a laser line everyone can
+// see, then one hitscan shot goes along wherever it aims at that moment. Planted means no walking, jets or dash, the
+// same brace as the mortar. The camera narrows to `zoomFov` degrees while charging.
+export interface RailStats {
+  kind: "rail";
+  name: string;
+  cooldownSeconds: number;
+  chargeSeconds: number;
+  range: number; // metres; the shot stops at the first wall, rock or mech
+  damage: number; // to the one zone it hits
+  zoomFov: number;
+}
+
+export type AbilityStats = RamStats | PounceStats | BarrageStats | DecoyStats | RailStats;
 
 export interface AbilitySet {
   mechs: Record<string, AbilityStats>;
@@ -65,12 +78,14 @@ const POSITIVE: Record<AbilityStats["kind"], readonly string[]> = {
   pounce: ["cooldownSeconds", "speed", "lift", "maxRange", "slamRadius"],
   barrage: ["cooldownSeconds", "braceSeconds", "maxRange", "shells", "blastRadius"],
   decoy: ["cooldownSeconds", "count", "lifeSeconds", "stuckSpeed", "stuckSeconds"],
+  rail: ["cooldownSeconds", "chargeSeconds", "range", "damage", "zoomFov"],
 };
 const NOT_NEGATIVE: Record<AbilityStats["kind"], readonly string[]> = {
   ram: ["damage", "knockback", "pop", "shieldFrontCosine", "frontDamageMultiplier"],
   pounce: ["damage"],
   barrage: ["minRange", "delaySeconds", "shellSeconds", "spreadMeters", "damage"],
   decoy: ["spreadDegrees"],
+  rail: [],
 };
 // Counts of things the server spawns, which a fraction of a thing cannot be.
 const WHOLE: Partial<Record<AbilityStats["kind"], readonly string[]>> = {

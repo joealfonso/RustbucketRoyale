@@ -7,7 +7,8 @@
     "ironclad",
     "stiletto",
     "cataclysm",
-    "arbiter"
+    "arbiter",
+    "longshot"
   ],
   "kits": {
     "standin": {
@@ -1900,6 +1901,138 @@
           "height": 0.15,
           "paint": "frame"
         }
+      ]
+    },
+    "longshot": {
+      "file": "models/mechs/standin-one/Mech_StandinOne.glb",
+      "parts": {
+        "Torso": {
+          "zone": "torso",
+          "paint": "body"
+        },
+        "Jets": {
+          "zone": "torso",
+          "paint": "trim"
+        },
+        "Sensor": {
+          "zone": "torso",
+          "paint": "trim"
+        },
+        "Leg_L": {
+          "zone": "legs",
+          "paint": "body"
+        },
+        "Leg_R": {
+          "zone": "legs",
+          "paint": "body"
+        },
+        "Arm_L": {
+          "zone": "arms",
+          "paint": "accent"
+        },
+        "Arm_R": {
+          "zone": "arms",
+          "paint": "accent"
+        }
+      },
+      "hitboxes": {
+        "legs": [
+          {
+            "center": [
+              -0.6,
+              0.8,
+              0
+            ],
+            "size": [
+              0.6,
+              1.6,
+              0.7
+            ]
+          },
+          {
+            "center": [
+              0.6,
+              0.8,
+              0
+            ],
+            "size": [
+              0.6,
+              1.6,
+              0.7
+            ]
+          }
+        ],
+        "arms": [
+          {
+            "center": [
+              -1.2,
+              2.4,
+              0
+            ],
+            "size": [
+              0.5,
+              1.2,
+              0.5
+            ]
+          },
+          {
+            "center": [
+              1.2,
+              2.4,
+              -0.6
+            ],
+            "size": [
+              0.5,
+              0.6,
+              1.6
+            ]
+          }
+        ],
+        "torso": [
+          {
+            "center": [
+              0,
+              2.4,
+              0
+            ],
+            "size": [
+              1.8,
+              1.6,
+              1.2
+            ]
+          },
+          {
+            "center": [
+              0,
+              2.6,
+              0.8
+            ],
+            "size": [
+              1,
+              1,
+              0.4
+            ]
+          },
+          {
+            "center": [
+              0,
+              3.45,
+              -0.2
+            ],
+            "size": [
+              0.7,
+              0.5,
+              0.6
+            ]
+          }
+        ]
+      },
+      "muzzles": [
+        [
+          1.2,
+          2.4,
+          -1.65
+        ]
       ]
     }
   }

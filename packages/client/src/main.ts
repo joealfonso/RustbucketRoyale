@@ -96,6 +96,7 @@ import radarJson from "../../../data/radar.json";
 import { RemoteMechs } from "./remoteMechs";
 import { RingView } from "./ringView";
 import { DropView } from "./dropView";
+import { RailFx, type RailPose } from "./railFx";
 import { Tips, browserTipStore, parseTips } from "./tips";
 import tipsJson from "../../../data/tips.json";
 import dropsJson from "../../../data/drops.json";
@@ -258,12 +259,13 @@ let dressing = makeDressing();
 const barrierConfig = parseBarrier(backdropJson.barrier);
 const backdropConfig = parseBackdrop(backdropJson.backdrop);
 let edgeBarrier = new EdgeBarrier(scene, toon, map, mapMeshes, barrierConfig);
-const makeBackdrop = () => (map.tier === "range" ? null : new Backdrop(scene, toon, map.meters, tiersJson.edgeWallThickness, backdropConfig));
+// An island tier (the Arena) gets open sea, distant islets and rigs instead of the junkyard round it (backdrop.ts).
+const makeBackdrop = () => (map.tier === "range" ? null : new Backdrop(scene, toon, map.meters, tiersJson.edgeWallThickness, backdropConfig, map.terrain));
 let backdrop = makeBackdrop();
 // Mountains on the horizon beyond all of it, travelling with the camera; not round the range, which has no backdrop.
 const ranges = new Ranges(parseRanges(backdropJson.ranges), toon.bands, toon.hazeColor, (c) => toon.color(c));
 scene.add(ranges.mesh);
-ranges.mesh.visible = map.tier !== "range";
+ranges.mesh.visible = map.tier !== "range" && !map.terrain?.island;
 let propView = new PropView(map, propConfig, toon, PROP_MODELS);
 // The woods (data/forest.json): the pines are props, but drawn and felled here.
 const forestConfig = parseForest(forestJson);
@@ -302,6 +304,23 @@ const ringView = new RingView(scene, toon.color("zoneMagenta"));
 const dropView = new DropView(toon, fxSprites, parseDropsConfig(dropsJson));
 // Made once: a closure made in the frame loop would be garbage every frame.
 const markDrop = (x: number, z: number): void => radar?.markDrop(x, z);
+// The Longshot's Rail Shot: lasers while charging, a beam when it fires (railFx.ts). Its range is the longest any
+// roster mech's rail reaches, so a laser is never drawn shorter than the shot.
+const railRange = Math.max(0, ...Object.values(abilitySet.mechs).map((a) => (a.kind === "rail" ? a.range : 0)));
+const railFx = new RailFx(toon.color("warningRed"), toon.color("warmLight"), railRange);
+scene.add(railFx.group);
+const railPose: RailPose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+const railFrom = { x: 0, y: 0, z: 0 };
+// Where a charging mech is and which way it aims: yours from your own aim, anyone else's from how they are drawn
+// (their aim up and down is not sent, so their laser runs level).
+const railPoseOf = (id: number, out: RailPose): boolean => {
+  if (net && id === net.id) { out.x = mech.x; out.y = mech.y; out.z = mech.z; out.yaw = aim.yaw; out.pitch = aim.pitch; return true; }
+  if (!remotes.positionOf(id, out)) return false;
+  out.yaw = remotes.yawOf(id); // models face -z turned by their yaw, the same convention as aim
+  out.pitch = 0;
+  return true;
+};
+const railChargeOf = (m: number): number => { const a = m >= 0 ? abilityOf(m) : null; return a?.kind === "rail" ? a.chargeSeconds : 0; };
 scene.add(dropView.group);
 // Soft dark patches under map boxes and mechs, so nothing floats over the ground (data/ground.json shadows).
 const shadowLook = parseShadowLook(groundJson.shadows);
@@ -561,11 +580,11 @@ function swapMap(newSeed: number, newTier: string): void {
   dressing = makeDressing();
   edgeBarrier.dispose();
   edgeBarrier = new EdgeBarrier(scene, toon, map, mapMeshes, barrierConfig);
-  if (map.tier === "range" || backdrop?.meters !== map.meters) {
+  if (map.tier === "range" || !backdrop?.suits(map.meters, map.terrain)) {
     backdrop?.dispose();
     backdrop = makeBackdrop();
   }
-  ranges.mesh.visible = map.tier !== "range";
+  ranges.mesh.visible = map.tier !== "range" && !map.terrain?.island;
   propView = new PropView(map, propConfig, toon, PROP_MODELS);
   contactShadows.setMap(map.boxes, map.world);
   scene.add(propView.group);
@@ -662,6 +681,19 @@ if (net) {
   // warning ring for a strike is always the server's, yours too, so everyone sees the same spot.
   net.onAbility = (a) => {
     const own = a.id === net.id;
+    if (a.kind === "rail") {
+      if (a.event === "start") {
+        railFx.charge(a.id, railChargeOf(own ? mech.mech : remotes.mechOf(a.id)), performance.now());
+        sound.play("railCharge", { x: a.x, y: a.y + 2, z: a.z });
+      } else if (a.event === "hit") {
+        if (!railPoseOf(a.id, railPose)) { railPose.x = a.x; railPose.y = a.y; railPose.z = a.z; }
+        railFrom.x = railPose.x; railFrom.y = railPose.y; railFrom.z = railPose.z;
+        railFx.fire(a.id, railFrom, a.x, a.y, a.z, performance.now());
+        sound.play("railShot", { x: railFrom.x, y: railFrom.y + 2, z: railFrom.z });
+        showAbilityHit(a.x, a.y, a.z);
+      }
+      return;
+    }
     if (a.event === "hit") showAbilityHit(a.x, a.y, a.z);
     else if (a.event === "pop") showPop(a.id, a.x, a.y, a.z);
     else if (a.event === "land") { if (!own) showSlam(a.x, a.y, a.z, slamRadiusOf(remotes.mechOf(a.id))); }
@@ -800,7 +832,7 @@ function slamRadiusOf(m: number): number {
 function showAbilityStart(kind: AbilityMessage["kind"], x: number, y: number, z: number): void {
   if (kind === "decoy") return;
   abilityFx.start(x, y, z);
-  sound.play(kind === "barrage" ? "mortar" : kind, { x, y: y + 1, z });
+  sound.play(kind === "barrage" ? "mortar" : kind === "rail" ? "railCharge" : kind, { x, y: y + 1, z });
 }
 
 // The strike's numbers for the Cataclysm that called it. Someone near the target may not have that mech in sight,
@@ -905,7 +937,7 @@ function frame(now: number): void {
 
   // Look is applied every frame so the camera answers the mouse at once, not once per sim step.
   input.takeLook(look);
-  applyLook(aim, look.dx, look.dy, mechStats);
+  applyLook(aim, look.dx * rig.zoomShare, look.dy * rig.zoomShare, mechStats); // slower while scoped, so aim keeps pace on screen
 
   if (ready) accumulator += frameTime;
   else accumulator = 0;
@@ -998,6 +1030,8 @@ function frame(now: number): void {
   mortarWarnings.update(frameTime);
 
   // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.
+  const ownRail = ownAbilityStats?.kind === "rail" && mech.abilityTime > 0 && !health.dead ? ownAbilityStats : null;
+  rig.setZoom(ownRail ? ownRail.zoomFov : null);
   rig.setFovKick(mech.dashTime > 0 ? mech.dashTime / mechStats.dashSeconds : 0, frameTime);
   // A knocked out player (or someone who arrived mid match) watches a mech that is still standing.
   const spectating = net !== null && progress.state === "active" && health.dead;
@@ -1021,6 +1055,7 @@ function frame(now: number): void {
   const matchSeconds = progress.state === "active" ? progress.seconds + (performance.now() - progressAt) / 1000 : 0;
   const ring: RingNow | null = ringView.update(matchSeconds);
   dropView.update(progress.state === "active" ? matchSeconds : null, frameTime);
+  railFx.update(performance.now(), map.world, railPoseOf, railPose);
   if (dropView.news === "announced") { hud.flash("SUPPLY DROP INBOUND", 2500); hud.feed("Supply drop incoming: follow the yellow beam"); }
   else if (dropView.news === "open") hud.feed("Supply drop open");
   if (radar && progress.state === "active") dropView.forEachMarked(matchSeconds, markDrop);

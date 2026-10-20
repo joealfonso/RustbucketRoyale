@@ -183,6 +183,54 @@
         "paint": "#625E58",
         "accent": "#56504A"
       }
+    },
+    "sea": {
+      "seed": 5151,
+      "sinkMeters": 2,
+      "islets": {
+        "count": 5,
+        "spacingMeters": 1,
+        "outMeters": [
+          260,
+          1500
+        ],
+        "heightMeters": [
+          10,
+          45
+        ],
+        "radiusMeters": [
+          40,
+          140
+        ],
+        "sides": [
+          6,
+          9
+        ],
+        "junkPerHeap": 1,
+        "paints": [
+          "#4F5A3E",
+          "#5B5446",
+          "#4B5340"
+        ]
+      },
+      "rigs": {
+        "count": 2,
+        "outMeters": [
+          450,
+          1100
+        ],
+        "heightMeters": [
+          55,
+          80
+        ],
+        "legMeters": 4,
+        "deckMeters": [
+          30,
+          42
+        ],
+        "paint": "#3F4549",
+        "accent": "deepRust"
+      }
     }
   },
   "ranges": {

@@ -16,6 +16,15 @@ export interface HeapRow {
   paints: string[];
 }
 
+// Round an island tier there is open sea instead of the junkyard: a few far islets (heaps, low and green) and old
+// rigs standing in the water, each set `outMeters` beyond the map's edge in no fixed ring, so the horizon stays open.
+export interface SeaBackdrop {
+  seed: number;
+  islets: HeapRow & { count: number };
+  rigs: { count: number; outMeters: Range; heightMeters: Range; legMeters: number; deckMeters: Range; paint: string; accent: string };
+  sinkMeters: number; // how far under the waterline everything stands, so no gap shows at its foot
+}
+
 export interface BackdropConfig {
   seed: number;
   clearMeters: number; // nothing comes nearer the edge wall than this
@@ -31,12 +40,13 @@ export interface BackdropConfig {
     stack: { heightMeters: Range; radius: Range; bands: number; paint: string; accent: string };
     cooling: { heightMeters: Range; radius: Range; paint: string; accent: string };
   };
+  sea: SeaBackdrop;
 }
 
 export type LandmarkKind = "crane" | "gantry" | "stack" | "cooling";
 
 export interface BackdropItem {
-  kind: "heap" | LandmarkKind;
+  kind: "heap" | LandmarkKind | "rig";
   x: number;
   z: number;
   yaw: number; // radians about y; landmarks are turned to run along their side of the ring
@@ -61,6 +71,12 @@ export function parseBackdrop(raw: unknown): BackdropConfig {
   if (!(l?.spacingMeters > 0) || !Array.isArray(l.kinds) || l.kinds.length === 0) throw new Error("backdrop.json: landmarks need spacingMeters and kinds");
   range(l.outMeters, "landmarks.outMeters");
   for (const kind of l.kinds) range(l[kind]?.heightMeters, `landmarks.${kind}.heightMeters`);
+  const sea = c.sea;
+  if (typeof sea?.seed !== "number" || !(sea.sinkMeters >= 0)) throw new Error("backdrop.json: sea needs seed and sinkMeters");
+  for (const key of ["outMeters", "heightMeters", "radiusMeters", "sides"] as const) range(sea.islets?.[key], `sea.islets.${key}`);
+  for (const key of ["outMeters", "heightMeters", "deckMeters"] as const) range(sea.rigs?.[key], `sea.rigs.${key}`);
+  if (!(Number.isInteger(sea.islets.count) && sea.islets.count >= 0 && Number.isInteger(sea.rigs.count) && sea.rigs.count >= 0 && sea.rigs.legMeters > 0)) throw new Error("backdrop.json: sea needs whole islet and rig counts and rigs.legMeters");
+  if (!Array.isArray(sea.islets.paints) || sea.islets.paints.length === 0) throw new Error("backdrop.json: sea.islets needs paints");
   return c;
 }
 
@@ -114,4 +130,28 @@ export function landmarkReach(c: BackdropConfig, kind: LandmarkKind): number {
   if (kind === "gantry") return l.gantry.span[1] * 0.75 + l.gantry.leg;
   if (kind === "stack") return l.stack.radius[1] * 1.2;
   return l.cooling.radius[1] * 1.05;
+}
+
+// What stands in the open sea round an island `meters` across: islets and rigs at their own bearings, spread round the
+// compass with a little jitter so two never stand in line. Seeded from the size, like the junkyard.
+export function seaLayout(c: SeaBackdrop, meters: number): BackdropItem[] {
+  const r = rng(seedOf(c.seed, Math.round(meters)));
+  const items: BackdropItem[] = [];
+  const half = meters / 2;
+  const total = c.islets.count + c.rigs.count;
+  const turn = r() * Math.PI * 2;
+  // Bearings shared out round the compass, then dealt to islets and rigs in shuffled order.
+  const bearings = Array.from({ length: total }, (_, i) => turn + ((i + between(r, [-0.3, 0.3])) / Math.max(1, total)) * Math.PI * 2);
+  for (let i = bearings.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [bearings[i], bearings[j]] = [bearings[j]!, bearings[i]!]; }
+  bearings.forEach((a, i) => {
+    const islet = i < c.islets.count;
+    const out = half + between(r, islet ? c.islets.outMeters : c.rigs.outMeters);
+    const x = Math.cos(a) * out, z = Math.sin(a) * out;
+    if (islet) {
+      items.push({ kind: "heap", x, z, yaw: r() * Math.PI * 2, radius: between(r, c.islets.radiusMeters), height: between(r, c.islets.heightMeters), seed: Math.floor(r() * 2 ** 31), row: c.islets });
+    } else {
+      items.push({ kind: "rig", x, z, yaw: r() * Math.PI * 2, radius: c.rigs.deckMeters[1], height: between(r, c.rigs.heightMeters), seed: Math.floor(r() * 2 ** 31) });
+    }
+  });
+  return items;
 }

@@ -1,3 +1,5 @@
+import type { Terrain } from "./terrain";
+
 // The shrinking safe zone. A schedule is fixed circles (where the ring settles after each stage) plus
 // timings. The server picks the circle positions once per match and sends the whole schedule, so a client
 // only needs the match clock to know exactly where the ring is, with no per frame updates.
@@ -52,8 +54,9 @@ export function parseRingConfig(raw: unknown): RingConfig {
 
 // Picks where each stage's circle sits. `random` returns a number from 0 up to but not including 1.
 // Each circle stays inside the one before, and its centre moves only part of the way it could,
-// which keeps the ring edge slow enough for a walking mech to keep ahead of it.
-export function makeRingSchedule(config: RingConfig, tier: string, meters: number, random: () => number): RingSchedule {
+// which keeps the ring edge slow enough for a walking mech to keep ahead of it. `fits`, when given (an island),
+// turns down circles over the sea: a few more spots are tried, and failing those the centre stays where it was.
+export function makeRingSchedule(config: RingConfig, tier: string, meters: number, random: () => number, fits: ((circle: Circle) => boolean) | null = null): RingSchedule {
   const stages = config.tiers[tier];
   if (!stages) throw new Error(`ring.json has no stages for tier "${tier}"`);
   const initial: Circle = { cx: 0, cz: 0, radius: config.initialRadiusFraction * meters };
@@ -63,13 +66,28 @@ export function makeRingSchedule(config: RingConfig, tier: string, meters: numbe
     const radius = stage.radiusFraction * meters;
     const room = Math.max(0, previous.radius - radius) * config.maxCenterShiftFraction;
     // A random point in a disc of radius `room` around the old centre.
-    const angle = random() * Math.PI * 2;
-    const distance = Math.sqrt(random()) * room;
-    const circle: Circle = { cx: previous.cx + Math.cos(angle) * distance, cz: previous.cz + Math.sin(angle) * distance, radius };
+    let circle: Circle = { cx: previous.cx, cz: previous.cz, radius };
+    for (let tries = 0; tries < (fits ? FIT_TRIES : 1); tries++) {
+      const angle = random() * Math.PI * 2;
+      const distance = Math.sqrt(random()) * room;
+      const tried: Circle = { cx: previous.cx + Math.cos(angle) * distance, cz: previous.cz + Math.sin(angle) * distance, radius };
+      if (!fits || fits(tried)) { circle = tried; break; }
+    }
     previous = circle;
     return { ...circle, waitSeconds: stage.waitSeconds, shrinkSeconds: stage.shrinkSeconds, damagePerSecond: stage.damagePerSecond };
   });
   return { initial, stages: out };
+}
+
+const FIT_TRIES = 30;
+
+// On an island, a circle fits when its middle is at least its radius inland, so it lies over land, or failing that as
+// far inland as the island's middle is (a big early circle cannot help covering some sea). The island's middle always
+// passes, so a ring that keeps its centre still fits. Null on a map with no shore.
+export function ringOnLand(terrain: Terrain | null): ((circle: Circle) => boolean) | null {
+  if (!terrain?.island) return null;
+  const middle = terrain.coastAt(0, 0);
+  return (c) => terrain.coastAt(c.cx, c.cz) >= Math.min(c.radius, middle);
 }
 
 // How long until the last circle is reached.

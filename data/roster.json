@@ -35,6 +35,15 @@
       "jets": 1.15,
       "lift": 1,
       "damageTaken": { "legs": 1, "arms": 1, "torso": 1 }
+    },
+    {
+      "id": "longshot",
+      "name": "Longshot",
+      "role": "Marksman",
+      "speed": 0.95,
+      "jets": 1.2,
+      "lift": 1.15,
+      "damageTaken": { "legs": 1.25, "arms": 1.25, "torso": 1.25 }
     }
   ]
 }

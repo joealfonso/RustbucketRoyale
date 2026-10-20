@@ -40,7 +40,36 @@
     "tiers": {
       "arena": {
         "octaves": [],
-        "waterShare": 0
+        "waterShare": 0,
+        "island": {
+          "radiusMeters": 75,
+          "roundPercent": 40,
+          "octaves": [
+            {
+              "perSide": 2,
+              "amplitudeMeters": 7
+            },
+            {
+              "perSide": 3,
+              "amplitudeMeters": 10
+            },
+            {
+              "perSide": 5,
+              "amplitudeMeters": 8
+            },
+            {
+              "perSide": 12,
+              "amplitudeMeters": 3
+            }
+          ],
+          "seaLevelMeters": -1,
+          "beachRisePercent": 15,
+          "wadeOutMeters": 5,
+          "dropRisePercent": 55,
+          "seabedMeters": 3,
+          "openSeaMeters": 1,
+          "buildInlandMeters": 10
+        }
       },
       "small": {
         "octaves": [

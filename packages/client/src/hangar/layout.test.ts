@@ -20,7 +20,7 @@ describe("hangar layout", () => {
 
   it("spaces the bays evenly, centred on the loading bay, behind it", () => {
     const bays = bayCentres(config);
-    expect(bays).toHaveLength(4);
+    expect(bays).toHaveLength(config.bays.order.length);
     const mid = bays.reduce((s, b) => s + b.x, 0) / bays.length;
     expect(mid).toBeCloseTo(config.loadingBay.x);
     for (let i = 1; i < bays.length; i++) expect(bays[i]!.x - bays[i - 1]!.x).toBeCloseTo(config.bays.spacing);

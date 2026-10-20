@@ -1,12 +1,12 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   FireGate, STEP, ZONE_ARMS, ZONE_COUNT, ZONE_LEGS, ZONE_TORSO, applyDamage, propsInReach, computeShot, createGrenade, createHealth, createMechInput,
-  createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule, partToRepair,
+  createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule, partToRepair, ringOnLand,
   decodeInput, parseClientMessage, ringAt, rollLoot, itemWeapon, weaponItem, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
   NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
-  type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage,
+  type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage, type Terrain,
   takenWithE, itemUpgrade, upgradeItem, upgradeScale, applyTune, assignDeep, parseTunable, setNumberAt, TUNABLE_FILES, type TuningRaws, type UpgradeSet,
-  makeZonesFor, makeMuzzlesFor, mechStatsFor, rosterIndex, abilityFor, barrageTarget, type Roster, type AbilitySet, type AbilityStats, type BarrageStats,
+  makeZonesFor, makeMuzzlesFor, mechStatsFor, rosterIndex, abilityFor, barrageTarget, type Roster, type AbilitySet, type AbilityStats, type BarrageStats, type RailStats,
   type BotDifficulty, type DecoyStats, type PounceStats, type RamStats,
   ITEM_ARMOR_FIRST, ITEM_GRENADE, type DropsConfig, type SupplyDrop,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
@@ -209,7 +209,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: this.newBot(), send: () => {}, gone: false, goneTick: 0, rejoinToken: "", mech, state: this.freshState(slot, mech),
       gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -244,6 +244,11 @@ export class Room {
 
   get mapMeters(): number {
     return this.map.meters;
+  }
+
+  // The current map's ground, for checks: on an island, where its sea begins.
+  get mapTerrain(): Terrain | null {
+    return this.map.world.terrain;
   }
 
   get matchState(): MatchState {
@@ -304,7 +309,7 @@ export class Room {
     const mech = this.dealtMech(id);
     const player: Player = {
       id, slot, bot: null, send, gone: false, goneTick: 0, rejoinToken: randomBytes(16).toString("hex"), mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(),
-      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length),
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -668,7 +673,7 @@ export class Room {
     this.finder = new Pathfinder(this.map.nav, this.config.bots.path, this.map.world.terrain);
     for (const p of this.players.values()) p.bot?.setFinder(this.finder);
     this.fillBots();
-    this.ring = makeRingSchedule(this.config.ring, this.tier, this.map.meters, this.random);
+    this.ring = makeRingSchedule(this.config.ring, this.tier, this.map.meters, this.random, ringOnLand(this.map.world.terrain));
     this.drops = planDrops(this.config.drops, this.tier, this.ring, this.map, this.random);
     this.dropsLanded = 0;
     this.dropsOpened = 0;
@@ -799,6 +804,10 @@ export class Room {
     }
     const dashBefore = player.state.dashTime;
     const ability = this.abilityFor(player.state.mech);
+    // Hit while charging a Rail Shot: the charge breaks and the shot is lost (the cooldown is still spent).
+    const hp = player.hp[0]! + player.hp[1]! + player.hp[2]!;
+    if (ability?.kind === "rail" && player.state.abilityTime > 0 && hp < player.railHpMark) player.state.abilityTime = 0;
+    player.railHpMark = hp;
     const abilityBefore = player.state.abilityTime, cooldownBefore = player.state.abilityCooldown;
     player.state.crawling = player.hp[ZONE_LEGS]! <= 0;
     player.state.fuelScale = upgradeScale(player.loadout, this.config.upgrades, "fuel");
@@ -1029,7 +1038,35 @@ export class Room {
       if (started || timeBefore > 0) this.ramContact(player, ability);
     } else if (ability.kind === "pounce" && timeBefore > 0 && s.abilityTime <= 0 && s.grounded) {
       this.slam(player, ability);
+    } else if (ability.kind === "rail" && timeBefore > 0 && s.abilityTime <= 0) {
+      this.fireRail(player, input, ability);
     }
+  }
+
+  // The Rail Shot goes off at the end of its charge, along wherever the mech aims now, from its gun: one ray, no
+  // spread, to the first wall, rock or mech within range. Everyone near either end sees the beam.
+  private fireRail(player: Player, input: MechInput, rail: RailStats): void {
+    const muzzle = this.muzzlesFor(player.state.mech)[0]!;
+    const weapon = this.config.weapons.weapons[activeWeapon(player.loadout)] ?? this.config.weapons.weapons[0]!;
+    computeShot(player.state, input.targetX, input.targetY, input.targetZ, weapon, this.random, this.shot, 0, muzzle);
+    const s = this.shot;
+    let reach = rail.range;
+    let hitBox = -1;
+    if (this.map.world.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.worldHit)) { reach = this.worldHit.distance; hitBox = this.worldHit.index; }
+    const target = this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach);
+    if (target) {
+      reach = this.zoneHit.distance;
+      const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, rail.damage * this.shieldFactor(target, s.dx, s.dz), target.loadout.armor);
+      const killed = !target.dead && isDestroyed(target.hp);
+      player.send({ t: "hit", targetId: target.id, zone: this.zoneHit.zone, damage: taken, killed, x: s.ox + s.dx * reach, y: s.oy + s.dy * reach, z: s.oz + s.dz * reach });
+      if (killed) this.eliminate(target, player);
+    } else if (hitBox >= 0) {
+      const prop = this.map.propOfBox[hitBox]!;
+      if (prop >= 0) this.damageProp(prop, rail.damage, player);
+    }
+    const ex = s.ox + s.dx * reach, ey = s.oy + s.dy * reach, ez = s.oz + s.dz * reach;
+    this.sendNearEither(s.ox, s.oz, ex, ez, { t: "ability", id: player.id, kind: "rail", event: "hit", x: ex, y: ey, z: ez }, player);
+    this.makeNoise(player, "explosion", player.state.x, player.state.z);
   }
 
   // A ram hits each mech it passes through once, shoving it along the charge, and smashes any prop it drives into.
@@ -1270,7 +1307,9 @@ export class Room {
     const r = this.config.loot.spillRadius;
     items.forEach((item, i) => {
       const angle = start + (i / items.length) * Math.PI * 2;
-      const x = wreck.state.x + Math.cos(angle) * r, z = wreck.state.z + Math.sin(angle) * r;
+      let x = wreck.state.x + Math.cos(angle) * r, z = wreck.state.z + Math.sin(angle) * r;
+      // A wreck at an island's wading limit keeps its loot on the near side of it, where it can be picked up.
+      if (this.map.world.terrain && !this.map.world.terrain.mayMove(wreck.state.x, wreck.state.z, x, z)) { x = wreck.state.x; z = wreck.state.z; }
       this.pickups.add(item, x, this.surfaceBelow(x, z, wreck.state.y) + PICKUP_LIFT, z);
     });
     wreck.looted = true;

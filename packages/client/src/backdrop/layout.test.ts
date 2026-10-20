@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import backdropJson from "../../../../data/backdrop.json";
 import tiersJson from "../../../../data/tiers.json";
-import { backdropLayout, parseBackdrop } from "./layout";
+import { backdropLayout, parseBackdrop, seaLayout } from "./layout";
 import { backdropPieces } from "./shapes";
 
 const config = parseBackdrop(backdropJson.backdrop);
@@ -38,5 +38,18 @@ describe("backdrop", () => {
   it("breaks the horizon line: heights vary and some things stand tall", () => {
     const heights = backdropLayout(config, 1000, 502).map((i) => i.height);
     expect(Math.max(...heights) - Math.min(...heights)).toBeGreaterThan(100);
+  });
+
+  it("round an island, stands a few islets and rigs out at sea, the same every time, none near the shore", () => {
+    const items = seaLayout(config.sea, 200);
+    expect(JSON.stringify(items)).toBe(JSON.stringify(seaLayout(config.sea, 200)));
+    expect(items.filter((i) => i.kind === "heap")).toHaveLength(config.sea.islets.count);
+    expect(items.filter((i) => i.kind === "rig")).toHaveLength(config.sea.rigs.count);
+    for (const item of items) {
+      for (const piece of backdropPieces(config, item)) {
+        const p = piece.mesh.positions;
+        for (let i = 0; i < p.length; i += 3) expect(Math.hypot(p[i]!, p[i + 2]!)).toBeGreaterThan(100 + config.sea.islets.outMeters[0] - config.sea.islets.radiusMeters[1] * 1.1);
+      }
+    }
   });
 });

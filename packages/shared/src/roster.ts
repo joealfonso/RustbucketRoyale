@@ -19,7 +19,7 @@ export interface Roster {
 }
 
 // The mech number travels in two spare bits of a flags byte in every snapshot, so four is the most there can be.
-export const MAX_ROSTER = 4;
+export const MAX_ROSTER = 8; // a mech's roster number goes as 3 bits in snapshots (wire.ts)
 const ZONE_KEYS = ["legs", "arms", "torso"] as const;
 
 const positive = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v > 0;

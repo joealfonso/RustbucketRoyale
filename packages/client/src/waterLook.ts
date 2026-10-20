@@ -28,6 +28,8 @@ export interface WaterLook {
     streaks: { color: string; scale: number; stretch: number; angleDegrees: number; above: number; driftMetersPerSecond: number };
   };
   splashes: { wade: SplashLook; landing: SplashLook; shot: SplashLook; gravity: number; lift: number };
+  // The open sea round an island tier: its water and seabed run `outMeters` past the map's edge, out to the haze.
+  sea: { outMeters: number };
 }
 
 export function parseWaterLook(raw: unknown): WaterLook {
@@ -37,6 +39,7 @@ export function parseWaterLook(raw: unknown): WaterLook {
   if (!(s.shore.belowMeters > 0 && s.shore.belowMeters < s.deep.aboveMeters)) throw new Error("water.json: shore belowMeters must be above 0 and under deep aboveMeters");
   if (!(s.opacity > 0 && s.opacity <= 1)) throw new Error("water.json: opacity must be above 0, up to 1");
   if (!(s.streaks.stretch >= 1)) throw new Error("water.json: streaks stretch must be 1 or more");
+  if (!(w.sea?.outMeters > 0)) throw new Error("water.json: sea needs outMeters above 0");
   for (const name of ["wade", "landing", "shot"] as const) {
     const k = w.splashes[name];
     if (!k || !(k.ringMeters > 0 && k.ringSeconds > 0 && k.dropSeconds > 0 && k.drops >= 0 && Number.isInteger(k.drops))) throw new Error(`water.json: splashes.${name} needs ringMeters, ringSeconds, dropSeconds above 0 and a whole number of drops`);

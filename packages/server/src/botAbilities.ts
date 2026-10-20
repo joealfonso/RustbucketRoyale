@@ -15,11 +15,15 @@ export interface BotAbilityStats {
   decoyChancePerSecond: number; // while hurt lately, or with a target within decoyNearRange
   decoyHurtSeconds: number; // how long after a hit a bot still feels under fire
   decoyNearRange: number;
+  railChancePerSecond: number; // a Longshot with a target between the two ranges below starts a Rail Shot
+  railMinRange: number;
+  railMaxRange: number;
 }
 
 const KEYS: readonly (keyof BotAbilityStats)[] = [
   "ramChancePerSecond", "ramMaxAngleDegrees", "ramMinRange", "ramMaxRange", "pounceChancePerSecond", "pounceMinRange", "pounceMaxRange",
   "barrageChancePerSecond", "barrageMinRange", "barrageMaxRange", "decoyChancePerSecond", "decoyHurtSeconds", "decoyNearRange",
+  "railChancePerSecond", "railMinRange", "railMaxRange",
 ];
 
 // Fails loudly on a bad data file, same as the other tuning files.
@@ -37,5 +41,6 @@ export function parseBotAbilities(rawBots: unknown): BotAbilityStats {
   if (stats.ramMinRange > stats.ramMaxRange) throw new Error("bots.json: abilities.ramMinRange is past ramMaxRange");
   if (stats.pounceMinRange > stats.pounceMaxRange) throw new Error("bots.json: abilities.pounceMinRange is past pounceMaxRange");
   if (stats.barrageMinRange > stats.barrageMaxRange) throw new Error("bots.json: abilities.barrageMinRange is past barrageMaxRange");
+  if (stats.railMinRange > stats.railMaxRange) throw new Error("bots.json: abilities.railMinRange is past railMaxRange");
   return stats;
 }

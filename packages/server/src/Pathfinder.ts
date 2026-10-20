@@ -39,7 +39,7 @@ export class Pathfinder {
   // Cells the last search looked at: its cost, the same on any computer however busy.
   cellsSearched = 0;
 
-  constructor(nav: NavGrid, private stats: BotPathStats, terrain: Terrain | null = null) {
+  constructor(nav: NavGrid, private stats: BotPathStats, private terrain: Terrain | null = null) {
     this.searchesLeft = stats.searchesPerTick;
     const factor = Math.max(1, Math.round(stats.cellMeters / nav.cell));
     this.cell = nav.cell * factor;
@@ -189,11 +189,18 @@ export class Pathfinder {
     this.cellsSearched = 0;
     this.searchesLeft--;
     const start = this.nearestOpen(this.cellOf(startX, startZ));
-    let goal = this.nearestOpen(this.cellOf(goalX, goalZ));
-    if (start < 0 || goal < 0) return false;
+    if (start < 0) return false;
+    // A goal out at sea, past an island's limit, can lie further from open ground than nearestOpen looks: it is
+    // swapped for the nearest reachable spot below, like any goal that cannot be reached.
+    const goalCell = this.cellOf(goalX, goalZ);
+    let goal = this.nearestOpen(goalCell);
+    if (goal < 0 && this.terrain?.island) goal = this.nearestInRegion(goalCell, this.region[start]!);
+    if (goal < 0) return false;
     // A goal that cannot be reached from here: go to the nearest spot that can.
-    const exact = this.region[goal] === this.region[start];
-    if (!exact) goal = this.nearestInRegion(goal, this.region[start]!);
+    const sameRegion = this.region[goal] === this.region[start];
+    if (!sameRegion) goal = this.nearestInRegion(goal, this.region[start]!);
+    // Nor is a goal out at sea: the route ends on the shore, so the bot gives it up there instead of wading at the limit.
+    const exact = sameRegion && (this.terrain?.mayStand(goalX, goalZ) ?? true);
     // A route to the nearest reachable spot does not reach the goal, however well the search went. Saying it did kept
     // bots standing for minutes in clearings the grid sees as sealed in, sure they had arrived.
     if (start === goal) {

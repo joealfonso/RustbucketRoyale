@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import mechJson from "../../../data/mech.json";
 import rosterJson from "../../../data/roster.json";
-import { mechStatsFor, parseRoster, rosterIndex } from "./roster";
+import { MAX_ROSTER, mechStatsFor, parseRoster, rosterIndex } from "./roster";
 import { parseMechStats } from "./stats";
 
 const roster = parseRoster(rosterJson);
@@ -38,12 +38,12 @@ describe("roster", () => {
 
   it("never lets a bad mech number index past the roster", () => {
     expect(rosterIndex(roster, 2)).toBe(2);
-    for (const bad of [-1, 4, 1.5, Number.NaN]) expect(rosterIndex(roster, bad)).toBe(0);
+    for (const bad of [-1, roster.mechs.length, 1.5, Number.NaN]) expect(rosterIndex(roster, bad)).toBe(0);
   });
 
   it("refuses a broken file", () => {
     expect(() => parseRoster({ mechs: [] })).toThrow();
     expect(() => parseRoster({ mechs: [{ ...rosterJson.mechs[0], speed: 0 }] })).toThrow();
-    expect(() => parseRoster({ mechs: Array(5).fill(rosterJson.mechs[0]) })).toThrow();
+    expect(() => parseRoster({ mechs: Array(MAX_ROSTER + 1).fill(rosterJson.mechs[0]) })).toThrow(); // more than snapshots can number
   });
 });

@@ -3,6 +3,7 @@
     "ironclad": { "kind": "ram", "name": "Shield Ram", "cooldownSeconds": 7, "activeSeconds": 0.7, "speed": 26, "hitRadius": 2.2, "damage": 30, "knockback": 18, "pop": 5, "shieldFrontCosine": 0.3, "frontDamageMultiplier": 0.3 },
     "stiletto": { "kind": "pounce", "name": "Pounce", "cooldownSeconds": 6, "speed": 35, "lift": 13, "maxRange": 30, "slamRadius": 4, "damage": 35 },
     "cataclysm": { "kind": "barrage", "name": "Mortar Strike", "cooldownSeconds": 14, "braceSeconds": 1.0, "minRange": 15, "maxRange": 120, "delaySeconds": 1.5, "shells": 3, "shellSeconds": 0.25, "spreadMeters": 6, "damage": 30, "blastRadius": 6 },
-    "arbiter": { "kind": "decoy", "name": "Decoy Drones", "cooldownSeconds": 12, "count": 2, "lifeSeconds": 6, "spreadDegrees": 35, "stuckSpeed": 2, "stuckSeconds": 0.5 }
+    "arbiter": { "kind": "decoy", "name": "Decoy Drones", "cooldownSeconds": 12, "count": 2, "lifeSeconds": 6, "spreadDegrees": 35, "stuckSpeed": 2, "stuckSeconds": 0.5 },
+    "longshot": { "kind": "rail", "name": "Rail Shot", "cooldownSeconds": 10, "chargeSeconds": 1.2, "range": 320, "damage": 85, "zoomFov": 30 }
   }
 }

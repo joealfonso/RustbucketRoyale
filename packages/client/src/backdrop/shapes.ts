@@ -11,7 +11,7 @@ const between = (r: Rand, lo: number, hi: number) => lo + r() * (hi - lo);
 export function backdropPieces(c: BackdropConfig, item: BackdropItem): DressPiece[] {
   const r = rng(item.seed);
   const pieces = item.kind === "heap" ? heap(r, item) : item.kind === "crane" ? crane(c, r, item) : item.kind === "gantry" ? gantry(c, r, item)
-    : item.kind === "stack" ? stack(c, r, item) : cooling(c, r, item);
+    : item.kind === "stack" ? stack(c, r, item) : item.kind === "rig" ? rig(c, r, item) : cooling(c, r, item);
   return pieces.map((p) => ({ paint: p.paint, mesh: turn(fitInside(p.mesh, item.radius), [0, item.yaw, 0], [0, 0, 0], [item.x, 0, item.z]) }));
 }
 
@@ -111,6 +111,24 @@ function cooling(c: BackdropConfig, r: Rand, item: BackdropItem): DressPiece[] {
     shell.push(cylinder([0, H * (y0 + y1) / 2, 0], R * r0, H * (y1 - y0), "y", 14, R * r1));
   }
   return [{ paint: k.paint, mesh: merge(...shell) }, { paint: k.accent, mesh: cylinder([0, H * 0.035, 0], R * 0.98, H * 0.07, "y", 14) }];
+}
+
+// An old rig standing in the sea: four legs braced together, a deck, a derrick tapering up from it, a crane boom
+// reaching out and a flare arm off the far corner. Rusting, like everything else in this world.
+function rig(c: BackdropConfig, r: Rand, item: BackdropItem): DressPiece[] {
+  const k = c.sea.rigs, H = item.height, deck = between(r, k.deckMeters[0], k.deckMeters[1]), leg = k.legMeters, d = deck * 0.38;
+  const level = H * 0.35;
+  const steel: MeshData[] = [];
+  for (const [x, z] of [[-d, -d], [d, -d], [-d, d], [d, d]] as const) steel.push(cylinder([x, level / 2, z], leg / 2, level, "y", 6));
+  for (const y of [level * 0.3, level * 0.65]) {
+    steel.push(box([0, y, -d], [d * 2, leg * 0.4, leg * 0.4]), box([0, y, d], [d * 2, leg * 0.4, leg * 0.4]));
+    steel.push(box([-d, y, 0], [leg * 0.4, leg * 0.4, d * 2]), box([d, y, 0], [leg * 0.4, leg * 0.4, d * 2]));
+  }
+  steel.push(box([0, level + 1.5, 0], [deck, 3, deck]), box([d * 0.4, level + 5, -d * 0.3], [deck * 0.45, 5, deck * 0.4]));
+  const derrick = cylinder([-d * 0.3, level + 3 + (H - level) / 2, d * 0.3], deck * 0.14, H - level - 3, "y", 4, deck * 0.03);
+  const boom = turn(box([deck * 0.45, 0, 0], [deck * 0.9, leg * 0.35, leg * 0.35]), [0, r() * Math.PI * 2, between(r, 0.25, 0.5)], [0, 0, 0], [d * 0.6, level + 8, -d * 0.6]);
+  const flare = turn(box([deck * 0.35, 0, 0], [deck * 0.7, leg * 0.3, leg * 0.3]), [0, Math.PI * 0.75, 0.3], [0, 0, 0], [d, level + 3, d]);
+  return [{ paint: k.paint, mesh: merge(...steel, derrick) }, { paint: k.accent, mesh: merge(boom, flare) }];
 }
 
 // Shrinks a shape across the ground (never in height) until it fits within `radius` of its middle, so a landmark

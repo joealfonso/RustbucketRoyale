@@ -38,6 +38,8 @@ const OTHER_BYTES = OTHER_HEAD_BYTES + POSITION_BYTES + YAW_BYTES + DETAIL_BYTES
 const ABILITY_BIT = 1;
 const DELTA_BIT = 2;
 const DETAILS_BIT = 4;
+// A roster mech's number is 3 bits: two in the mech's flags byte, the top one here (gate 15b's fifth mech).
+const MECH_HIGH_BIT = 8;
 const LOADOUT_BYTES = 9;
 const LOOTING_BYTES = 2; // how far through looting a wreck, then through a repair, 0 to 255 each
 const PICKUP_BYTES = 9;
@@ -75,7 +77,7 @@ const fitsByte = (n: number) => n >= -128 && n <= 127;
 
 // `selfFloats` is how many of your own numbers are not 0.
 export function snapshotSize(others: number, noises = 0, pickups = 0, selfFloats = SELF_FLOATS): number {
-  return SNAPSHOT_HEADER_BYTES + SELF_MASK_BYTES + selfFloats * 4 + 1 + 1 + others * OTHER_BYTES + 1 + noises * NOISE_BYTES + LOADOUT_BYTES + LOOTING_BYTES + 1 + pickups * PICKUP_BYTES;
+  return SNAPSHOT_HEADER_BYTES + SELF_MASK_BYTES + selfFloats * 4 + 1 + 1 + 1 + others * OTHER_BYTES + 1 + noises * NOISE_BYTES + LOADOUT_BYTES + LOOTING_BYTES + 1 + pickups * PICKUP_BYTES;
 }
 
 export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, memory = new SnapshotMemory()): Uint8Array {
@@ -103,7 +105,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
     const was = memory.others.get(other.id);
     const delta = was !== undefined && fitsByte(now.x - was.x) && fitsByte(now.y - was.y) && fitsByte(now.z - was.z);
     const details = was === undefined || now.details.some((b, i) => b !== was.details[i]);
-    kinds.push((other.ability ? ABILITY_BIT : 0) | (delta ? DELTA_BIT : 0) | (details ? DETAILS_BIT : 0));
+    kinds.push((other.ability ? ABILITY_BIT : 0) | (delta ? DELTA_BIT : 0) | (details ? DETAILS_BIT : 0) | (other.mech & 4 ? MECH_HIGH_BIT : 0));
     otherBytes += OTHER_HEAD_BYTES + (delta ? POSITION_DELTA_BYTES : POSITION_BYTES) + YAW_BYTES + (details ? DETAIL_BYTES : 0);
     seen.set(other.id, now);
   }
@@ -126,7 +128,8 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
   for (let i = 0; i < SELF_MASK_BYTES; i++) { v.setUint8(o, (mask >> (i * 8)) & 255); o += 1; }
   selfNumbers.forEach((n, i) => { if (mask & (1 << i)) { v.setFloat32(o, n, true); o += 4; } });
   memory.self.set(selfNumbers);
-  v.setUint8(o, (s.grounded ? 1 : 0) | (s.running ? 2 : 0) | (s.jetting ? 4 : 0) | (s.fuelLocked ? 8 : 0) | (s.staminaLocked ? 16 : 0) | (s.crawling ? 32 : 0) | ((s.mech & 3) << 6)); o += 1;
+  v.setUint8(o, (s.grounded ? 1 : 0) | (s.running ? 2 : 0) | (s.jetting ? 4 : 0) | (s.fuelLocked ? 8 : 0) | (s.staminaLocked ? 16 : 0) | (s.crawling ? 32 : 0)); o += 1;
+  v.setUint8(o, s.mech); o += 1; // your own roster mech, a byte of its own since the flags byte is full
 
   v.setUint8(o, others.length); o += 1;
   others.forEach((other, i) => {
@@ -203,7 +206,7 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
   const flags = v.getUint8(o); o += 1;
   you.grounded = (flags & 1) !== 0; you.running = (flags & 2) !== 0; you.jetting = (flags & 4) !== 0;
   you.fuelLocked = (flags & 8) !== 0; you.staminaLocked = (flags & 16) !== 0; you.crawling = (flags & 32) !== 0;
-  you.mech = flags >> 6;
+  you.mech = v.getUint8(o); o += 1;
 
   const slot = (n: number) => (n === EMPTY_SLOT ? -1 : n);
   const count = v.getUint8(o); o += 1;
@@ -230,7 +233,7 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
     others.push({
       id, x: qx * POSITION_STEP, y: qy * HEIGHT_STEP, z: qz * POSITION_STEP, yaw,
       running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, repairing: (bits & 32) !== 0, bot: (bits & 8) !== 0,
-      hp: [d![0]!, d![1]!, d![2]!], weapon: d![3]!, armor: [d![4]!, d![5]!, d![6]!], upgrades: [slot(d![7]!), slot(d![8]!)], mech: bits >> 6, ability: (kind & ABILITY_BIT) !== 0,
+      hp: [d![0]!, d![1]!, d![2]!], weapon: d![3]!, armor: [d![4]!, d![5]!, d![6]!], upgrades: [slot(d![7]!), slot(d![8]!)], mech: (bits >> 6) | (kind & MECH_HIGH_BIT ? 4 : 0), ability: (kind & ABILITY_BIT) !== 0,
     });
   }
   if (bytes.length < o + 1) return null;

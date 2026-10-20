@@ -100,10 +100,13 @@ describe("generated hills", () => {
     for (const p of map.props) expect(map.boxes[p.boxIndex]!.minY).toBeLessThanOrEqual(t.heightAt(p.x, p.z) + 1e-9);
   });
 
-  it("keeps the arena flat", () => {
+  it("keeps the arena's land flat: it has no hills, only its beach and the sea fall away", () => {
     const map = build(1, "arena");
-    expect(map.terrain.maxHeight).toBe(0);
-    expect(map.terrain.minHeight).toBe(0);
+    const t = map.terrain;
+    expect(t.maxHeight).toBe(0);
+    const beach = tiers.terrain!.tiers.arena!.island!;
+    const flatFrom = Math.ceil((-beach.seaLevelMeters * 100) / beach.beachRisePercent) * 100; // cm inland where the beach meets the land
+    for (let k = 0; k < t.heights.length; k++) if (t.coast![k]! >= flatFrom) expect(t.heights[k]).toBe(0);
   });
 });
 
@@ -139,8 +142,10 @@ describe("water", () => {
     expect(build(5, "medium").terrain.waterLevel).toBe(build(5, "medium").terrain.waterLevel);
   });
 
-  it("leaves the arena dry", () => {
-    expect(build(1, "arena").terrain.waterLevel).toBe(-Infinity);
+  it("gives the arena no ponds: its only water is the sea round it", () => {
+    const t = build(1, "arena").terrain;
+    expect(t.waterLevel).toBe(tiers.terrain!.tiers.arena!.island!.seaLevelMeters);
+    for (let k = 0; k < t.heights.length; k++) if (t.heights[k]! / 100 < t.waterLevel) expect(t.coast![k]).toBeLessThan(0);
   });
 
   it("slows a wading mech to its share of walking speed, and not one jetting over the water", () => {

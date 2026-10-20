@@ -16,9 +16,12 @@ export class ThirdPersonCamera {
   private currentDistanceFraction = 1;
   private trauma = 0;
   private fovKick = 0;
+  private zoomTo: number | null = null;
+  private zoom: number;
 
   constructor(private stats: CameraStats, aspect: number) {
     this.camera = new THREE.PerspectiveCamera(stats.fov, aspect, stats.near, 3000);
+    this.zoom = stats.fov;
   }
 
   setAspect(aspect: number): void {
@@ -26,10 +29,22 @@ export class ThirdPersonCamera {
     this.camera.updateProjectionMatrix();
   }
 
+  // Narrows the view to this many degrees while a scope is up (the Longshot's Rail Shot charging), or back with null.
+  setZoom(fov: number | null): void {
+    this.zoomTo = fov;
+  }
+
+  // How much narrower than normal the view is now: 1 normally, less while zoomed. Aim turns this much slower, so the
+  // crosshair moves across the screen at the same speed zoomed or not.
+  get zoomShare(): number {
+    return this.camera.fov / this.stats.fov;
+  }
+
   // Pushes the field of view out while dashing and eases it back. Uses the camera's own fov as the base.
   setFovKick(target: number, dt: number): void {
     this.fovKick += (target - this.fovKick) * Math.min(1, dt * 14);
-    const fov = this.stats.fov + this.fovKick * this.stats.dashFovKick;
+    this.zoom += ((this.zoomTo ?? this.stats.fov) - this.zoom) * Math.min(1, dt * 12);
+    const fov = this.zoom + this.fovKick * this.stats.dashFovKick;
     if (Math.abs(fov - this.camera.fov) > 0.01) {
       this.camera.fov = fov;
       this.camera.updateProjectionMatrix();

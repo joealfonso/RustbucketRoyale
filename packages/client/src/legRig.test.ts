@@ -20,7 +20,8 @@ async function rosterKit(id: string) {
 const triangles = (g: THREE.BufferGeometry) => (g.index ? g.index.count : g.attributes.position!.count) / 3;
 
 describe("leg rig", () => {
-  it.each(kits.roster!)("finds %s's leg joints and cuts its legs without losing a triangle", async (id) => {
+  // The Longshot is the jointless stand-in until gate 15c builds its model.
+  it.each(kits.roster!.filter((r) => !kits.kits[r]!.file?.includes("standin")))("finds %s's leg joints and cuts its legs without losing a triangle", async (id) => {
     const kit = await rosterKit(id);
     expect(kit.legs.length).toBe(id === "cataclysm" ? 4 : 2);
     for (const part of kit.parts.filter((p) => p.zone === 0)) {

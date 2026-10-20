@@ -124,6 +124,16 @@
       "echo": 0.55,
       "file": null
     },
+    "railCharge": {
+      "volume": 0.6,
+      "echo": 0.2,
+      "file": null
+    },
+    "railShot": {
+      "volume": 1.0,
+      "echo": 0.5,
+      "file": null
+    },
     "shellIncoming": {
       "volume": 0.6,
       "echo": 0.3,

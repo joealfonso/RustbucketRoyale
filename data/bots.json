@@ -107,6 +107,9 @@
     "barrageMaxRange": 110,
     "decoyChancePerSecond": 1.5,
     "decoyHurtSeconds": 2,
-    "decoyNearRange": 15
+    "decoyNearRange": 15,
+    "railChancePerSecond": 0.4,
+    "railMinRange": 35,
+    "railMaxRange": 220
   }
 }
