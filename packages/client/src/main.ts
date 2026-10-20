@@ -58,6 +58,10 @@ import { Warnings, createWarningInput, parseWarnings } from "./warnings";
 import warningsJson from "../../../data/warnings.json";
 import { MapMeshes } from "./mapRenderer";
 import { TerrainMeshes, parseTerrainMeshLook } from "./terrainMesh";
+import { setGroundWater } from "./groundMaterial";
+import { WaterMesh } from "./waterMesh";
+import { waterLook } from "./waterLook";
+import { Splashes, wadingAt } from "./splashes";
 import { ContactShadows, parseShadowLook } from "./contactShadows";
 import groundJson from "../../../data/ground.json";
 import { BUILDERS, Dressing, scatter } from "./dressing";
@@ -212,6 +216,13 @@ let mapMeshes = new MapMeshes(scene, map, toon);
 const terrainLook = parseTerrainMeshLook(groundJson.mesh);
 const makeTerrain = () => (map.terrain ? new TerrainMeshes(scene, map.terrain, toon.ground(palette.world.ground), terrainLook) : null);
 let terrainMeshes = makeTerrain();
+// The water over the flooded low ground (data/water.json), and the ground under and round it soaked to mud.
+const water = new WaterMesh(scene, waterLook.surface, toon.bands, (c) => toon.color(c));
+const showWater = () => {
+  water.setTerrain(map.terrain);
+  setGroundWater(toon.ground(palette.world.ground), map.terrain?.waterLevel ?? null);
+};
+showWater();
 // Near you, map boxes are drawn as junkyard models of their kind and open ground gets scattered junk (data/dressing.json).
 const dressingConfig = { ...dressingJson, chunkMeters: chunksJsonForDressing.size };
 const makeDressing = () => new Dressing(scene, toon, map, mapMeshes, BUILDERS, scatter, dressingConfig);
@@ -233,6 +244,7 @@ const explosions = new Explosions(scene, fxSprites, chunks, explosionFx, (c) => 
 chunks.setTerrain(map.terrain);
 explosions.setTerrain(map.terrain);
 const thrusters = new Thrusters(fxSprites, parseThrusterFx(thrusterFxJson));
+const splashes = new Splashes(fxSprites.water, waterLook.splashes);
 const breakFx = new BreakFx(chunks, fxSprites, parsePropFx(propFxJson), (c) => toon.color(c));
 scene.add(propView.group);
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
@@ -261,6 +273,23 @@ const showSurfaces = () => shotFx.impacts.setSurfaces(map.palette.map((c) => too
 showSurfaces();
 const sound = new Sound(audioJson as AudioConfig);
 shotFx.onImpact = (x, y, z) => sound.play("impact", { x, y, z });
+// Splashes and their sounds. `splashAt` is reused so a splash allocates nothing of ours.
+const splashAt = { x: 0, y: 0, z: 0 };
+function splashSound(x: number, y: number, z: number, look: { loudness: number; pitch: number }): void {
+  splashAt.x = x; splashAt.y = y; splashAt.z = z;
+  sound.play("splash", splashAt, look.loudness, look.pitch);
+}
+shotFx.onWater = (x, y, z) => {
+  splashes.shot(x, y, z);
+  splashSound(x, y, z, waterLook.splashes.shot.sound);
+};
+// A mech coming down hard in the water splashes instead of raising dust.
+thrusters.onLanding = (x, y, z) => {
+  if (!wadingAt(map.terrain, x, y, z)) return false;
+  splashes.landing(x, map.terrain!.waterLevel, z);
+  splashSound(x, y, z, waterLook.splashes.landing.sound);
+  return true;
+};
 // Browsers only allow sound after a click, and the click that locks the mouse is the first one.
 for (const el of [canvas, hint]) el.addEventListener("click", () => sound.start());
 // A broken barrel goes off a beat later (props.json barrelBlast.delaySeconds) and the server's word on it can lag, so
@@ -281,15 +310,22 @@ const footAt = new THREE.Vector3();
 // Dust under each foot that came down, and one thud for them, pitched for the mech's weight. `audible` is false for
 // someone else walking beyond gait.json hearWalkMeters: up close you hear a mech walk, further off only its run, and
 // the radar still never shows walking (NOISE_KINDS), so sneaking past at a distance still works.
+// In the water (the same test the server slows a mech with) each foot splashes instead, and the thud is a slosh.
 function footfalls(model: MechModel, feet: number, audible: boolean): void {
   let thud = audible;
+  const p = model.group.position;
+  const wading = wadingAt(map.terrain, p.x, p.y, p.z);
+  const wade = waterLook.splashes.wade.sound;
   for (let leg = 0; leg < model.legs.length; leg++) {
     if (!(feet & (1 << leg))) continue;
     footInWorld(model, leg, footAt);
-    fxSprites.dustPuff(footAt.x, footAt.y, footAt.z, gaitConfig.dustMeters, gaitConfig.dustSeconds);
+    if (wading) splashes.wade(footAt.x, map.terrain!.waterLevel, footAt.z);
+    else fxSprites.dustPuff(footAt.x, footAt.y, footAt.z, gaitConfig.dustMeters, gaitConfig.dustSeconds);
     if (thud) {
       const loud = gaitConfig.stepLoudness + (gaitConfig.runStepLoudness - gaitConfig.stepLoudness) * model.gait!.loud;
-      sound.play("step", footAt, loud, gaitConfig.mechs[model.gaitId]?.stepPitch ?? 1);
+      const pitch = gaitConfig.mechs[model.gaitId]?.stepPitch ?? 1;
+      if (wading) sound.play("wade", footAt, loud * wade.loudness, pitch * wade.pitch);
+      else sound.play("step", footAt, loud, pitch);
       thud = false;
     }
   }
@@ -424,6 +460,7 @@ function swapMap(newSeed: number, newTier: string): void {
   mapMeshes = new MapMeshes(scene, map, toon);
   terrainMeshes?.dispose();
   terrainMeshes = makeTerrain();
+  showWater();
   chunks.setTerrain(map.terrain);
   explosions.setTerrain(map.terrain);
   showSurfaces();
@@ -841,6 +878,7 @@ function frame(now: number): void {
   remotes.forEachNear(mechGroup.position.x, mechGroup.position.z, gaitConfig.farMeters, walkRemote);
   explosions.update(frameTime);
   chunks.update(frameTime);
+  water.update(frameTime);
   mortarWarnings.update(frameTime);
 
   // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { createRayHit, type RayHit, type World } from "@rustbucket/shared";
 import { CardBatch, needleCard } from "./fx/cards";
 import { SlotRing } from "./fx/flipbook";
+import { waterCrossing } from "./splashes";
 import type { WeaponFx } from "./weaponFxData";
 
 const MECH_SKIN = 0.4; // metres; a shot's length on a mech can end a little inside its hit box
@@ -23,6 +24,8 @@ export class Projectiles {
   onImpact?: (x: number, y: number, z: number, nx: number, ny: number, nz: number, box: number) => void;
   // Where a bullet the server said hit a mech arrives.
   onMechImpact?: (x: number, y: number, z: number) => void;
+  // Where a bullet goes into the water, on its way to whatever it hits.
+  onWater?: (x: number, y: number, z: number) => void;
 
   constructor(scene: THREE.Scene, private fx: WeaponFx["tracer"], outer: string, core: string, private cap: () => number) {
     const count = fx.pool;
@@ -53,9 +56,16 @@ export class Projectiles {
       const x = this.pos[i * 3]!, y = this.pos[i * 3 + 1]!, z = this.pos[i * 3 + 2]!;
       const length = Math.min(this.speed[i]! * dt, this.left[i]!);
 
-      if (world.raycast(x, y, z, dx, dy, dz, length, this.hit)) {
+      const hits = world.raycast(x, y, z, dx, dy, dz, length, this.hit);
+      const terrain = world.terrain;
+      const wet = waterCrossing(terrain, x, y, z, dx, dy, dz, hits ? this.hit.distance : length);
+      if (wet >= 0) this.onWater?.(x + dx * wet, terrain!.waterLevel, z + dz * wet);
+      if (hits) {
         const h = this.hit;
-        this.onImpact?.(x + dx * h.distance, y + dy * h.distance, z + dz * h.distance, h.normalX, h.normalY, h.normalZ, h.index);
+        const hx = x + dx * h.distance, hy = y + dy * h.distance, hz = z + dz * h.distance;
+        // Under the water the splash was the impact: no sparks or grit from the bed.
+        const underwater = terrain !== null && hy < terrain.waterLevel && terrain.waterDepthAt(hx, hz) > 0;
+        if (!underwater) this.onImpact?.(hx, hy, hz, h.normalX, h.normalY, h.normalZ, h.index);
         this.left[i] = 0;
         continue;
       }

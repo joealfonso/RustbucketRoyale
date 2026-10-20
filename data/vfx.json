@@ -12,7 +12,8 @@
       "blastBlobs": 1,
       "blastSmoke": 3,
       "blastDebris": 4,
-      "blastScorch": 1
+      "blastScorch": 1,
+      "splashes": 60
     },
     "normal": {
       "fire": 120,
@@ -25,7 +26,8 @@
       "blastBlobs": 3,
       "blastSmoke": 8,
       "blastDebris": 10,
-      "blastScorch": 1
+      "blastScorch": 1,
+      "splashes": 160
     }
   },
   "sprites": {
@@ -39,7 +41,8 @@
       "dust": ["warmLight", "#C8B48F", "#8F7B5E"],
       "sparks": ["#FFFBE6", "sparkYellow", "#F28A2E"],
       "scorch": ["soot", "#3B302A", "#55493D"],
-      "teal": ["#E6FFFB", "#3FF0E0", "#1C8C86"]
+      "teal": ["#E6FFFB", "#3FF0E0", "#1C8C86"],
+      "water": ["#DDE2CF", "#A3AE95", "#6A7861"]
     }
   }
 }

@@ -79,6 +79,14 @@
     "ragged": 0.08,
     "flatBelow": 0.1
   },
+  "wet": {
+    "bed": "#4D4936",
+    "damp": "#4E4F37",
+    "dampMeters": 0.3,
+    "dampStrength": 0.85,
+    "raggedMeters": 0.08,
+    "scale": 0.5
+  },
   "mesh": {
     "tileMeters": 256,
     "lod": {

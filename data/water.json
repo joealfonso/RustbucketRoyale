@@ -1,0 +1,69 @@
+{
+  "surface": {
+    "main": "#687A64",
+    "shore": {
+      "color": "#A4A98E",
+      "belowMeters": 0.16
+    },
+    "deep": {
+      "color": "#4E604F",
+      "aboveMeters": 0.75
+    },
+    "opacity": 0.9,
+    "ragged": {
+      "scale": 0.4,
+      "meters": 0.05
+    },
+    "streaks": {
+      "color": "#7D8F78",
+      "scale": 0.22,
+      "stretch": 9,
+      "angleDegrees": 28,
+      "above": 0.7,
+      "driftMetersPerSecond": 0.35
+    }
+  },
+  "splashes": {
+    "wade": {
+      "ringMeters": 1.6,
+      "ringSeconds": 0.7,
+      "drops": 3,
+      "dropMeters": 0.45,
+      "dropSpeed": [2.5, 4],
+      "spread": 0.5,
+      "dropSeconds": 0.55,
+      "sound": {
+        "loudness": 1,
+        "pitch": 1
+      }
+    },
+    "landing": {
+      "ringMeters": 6,
+      "ringSeconds": 1.1,
+      "drops": 12,
+      "dropMeters": 0.9,
+      "dropSpeed": [5, 9],
+      "spread": 0.6,
+      "dropSeconds": 0.9,
+      "sound": {
+        "loudness": 1,
+        "pitch": 1
+      }
+    },
+    "shot": {
+      "ringMeters": 1.8,
+      "ringSeconds": 0.6,
+      "drops": 3,
+      "dropMeters": 0.4,
+      "dropSpeed": [4, 6.5],
+      "spread": 0.15,
+      "dropSeconds": 0.45,
+      "sound": {
+        "loudness": 0.3,
+        "pitch": 1.7
+      }
+    },
+    "gravity": 18,
+    "lift": 0.05
+  }
+}

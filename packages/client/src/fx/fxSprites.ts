@@ -3,9 +3,9 @@ import { mostOf, onVfxQuality, vfxConfig, vfxLevel } from "./quality";
 import { FRAMES } from "./spriteArt";
 import { SpritePool, type SpriteLook } from "./sprites";
 
-// The sprite pools every effect shares, one per palette in data/vfx.json, so the whole game's fire, smoke, dust and
-// sparks cost about seven draw calls. Each pool is made at the largest size any quality level allows; the active
-// level caps how many are in use.
+// The sprite pools every effect shares, one per palette in data/vfx.json, so the whole game's fire, smoke, dust,
+// sparks and splashes cost about eight draw calls. Each pool is made at the largest size any quality level allows;
+// the active level caps how many are in use.
 export class FxSprites {
   readonly fire: SpritePool; // fireballs, jet flames, dash bursts
   readonly smoke: SpritePool; // thick black smoke: broken parts and blast columns
@@ -14,6 +14,7 @@ export class FxSprites {
   readonly sparks: SpritePool;
   readonly scorch: SpritePool;
   readonly teal: SpritePool; // decoys bursting, in the Arbiter's own colour
+  readonly water: SpritePool; // splashes and ripples where mechs wade, land in water, or shots hit it
   private pools: SpritePool[];
 
   constructor(scene: THREE.Scene, color: (name: string) => string, scorchFade: { fadeFromMeters: number; fadeToMeters: number }) {
@@ -31,7 +32,8 @@ export class FxSprites {
     this.sparks = new SpritePool(scene, look("sparks"), color, mostOf(vfxConfig, "sparks"), cap("sparks"));
     this.scorch = new SpritePool(scene, look("scorch", { layer: "ground", ...scorchFade }), color, mostOf(vfxConfig, "scorches"), cap("scorches"));
     this.teal = new SpritePool(scene, look("teal"), color, 48, cap("sparks"));
-    this.pools = [this.fire, this.smoke, this.thinSmoke, this.dust, this.sparks, this.scorch, this.teal];
+    this.water = new SpritePool(scene, look("water"), color, mostOf(vfxConfig, "splashes"), cap("splashes"));
+    this.pools = [this.fire, this.smoke, this.thinSmoke, this.dust, this.sparks, this.scorch, this.teal, this.water];
     onVfxQuality(() => { for (const p of this.pools) p.trim(); });
   }
 

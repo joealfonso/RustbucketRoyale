@@ -138,6 +138,16 @@
       "volume": 0.55,
       "echo": 0.25,
       "file": null
+    },
+    "wade": {
+      "volume": 0.36,
+      "echo": 0.12,
+      "file": null
+    },
+    "splash": {
+      "volume": 0.75,
+      "echo": 0.3,
+      "file": null
     }
   }
 }

@@ -14,6 +14,8 @@ export class ShotFx {
   readonly impacts: ImpactFx;
   // Called where a bullet hits the map, for the sound.
   onImpact?: (x: number, y: number, z: number) => void;
+  // Called where a bullet goes into the water, for the splash and its sound.
+  onWater?: (x: number, y: number, z: number) => void;
 
   // `quality` is read on every spawn (the effects setting can change mid match); "low" keeps data's lowShare of each pool.
   constructor(
@@ -31,6 +33,7 @@ export class ShotFx {
         this.onImpact?.(x, y, z);
       };
       tracer.onMechImpact = (x, y, z) => this.impacts.mech(fx.impact, x, y, z);
+      tracer.onWater = (x, y, z) => this.onWater?.(x, y, z);
       return tracer;
     });
   }

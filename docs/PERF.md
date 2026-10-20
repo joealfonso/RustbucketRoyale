@@ -392,3 +392,6 @@ About 130 MB before any room, then roughly 2 to 3 MB a small room, 9 a medium an
 ### Hills (2026-10-19, M11 11a)
 Map build (generateMap, median / worst ms, 10 seeds): small 5-6 / 7, medium 55-58 / 61, large 219-225 / 237, about 25% more than before, all on the map workers; unpacking on the main thread 0.1 / 0.7 / 2.4 ms (small / medium / large). measure-rooms.ts, mean / p99 ms per tick: medium 10 rooms 0.33 / 1.05, 20 rooms 0.56 / 1.34, 40 rooms 1.32 / 3.13; large 5 rooms 0.15 / 1.23, 10 rooms 0.30 / 2.11, 20 rooms 0.69 / 4.54, all inside 8 ms. Soak after the hills: small 24 kbps, medium 21, large 14, tick p99 0.13 to 0.24 ms, worst prediction correction 0.01 cm (after keeping meters at float32). Client, seed 11 at 800x600 in the browser pane, draw calls before -> after: small spawn 119 -> 122, medium spawn 107 -> 115, large spawn 107 -> 117; triangles 301k -> 313k, 350k -> 422k, 674k -> 790k. The pane holds 60 fps; uncapped frame time and Joseph's laptop are not measured yet.
 
+### Water (2026-10-19, M11 11b)
+Seed 11 spawn views, renderer.info: medium 115 -> 116 draw calls, 422k -> 434k triangles; large 117 -> 118, 790k -> 834k. The water mesh is one draw call for the whole map; the splash pool draws nothing while empty. Soak with water: small 24 kbps, medium 21, large 17, tick p99 0.15 to 0.26 ms, worst correction 0.01 cm.
+

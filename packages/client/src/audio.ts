@@ -8,7 +8,7 @@
 export type SoundName =
   | "shot" | "shotScattergun" | "shotSpikeDriver" | "impact" | "explosion" | "smash" | "hitMarker" | "hurt"
   | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap" | "loot" | "repair"
-  | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz";
+  | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz" | "wade" | "splash";
 
 export interface AudioConfig {
   master: number;
@@ -199,6 +199,23 @@ export class Sound {
         if (r() < 0.35) this.burst(into, 0.18, "bandpass", (2000 + r() * 900) * p, 0.06, 0.05, 0.04);
         if (r() < 0.25) this.clank(into, (120 + r() * 50) * p, 0.3, 0.07, 0.05);
         return 0.35;
+      // A foot coming down in shallow water: a soft deep thump under a dark slosh, and now and then a low bubble.
+      // Kept low and dull, like the dry step, so wading sounds heavy rather than tinny.
+      case "wade":
+        this.body(into, 74 * p, 38 * p, 0.22, 0.5, 0.012);
+        this.sweep(into, 820 * p, 260 * p, 0.34, 0.7);
+        this.burst(into, 0.4, "lowpass", 620 * p, 0.3, 0.03);
+        if (r() < 0.4) this.glide(into, (230 + r() * 60) * p, (400 + r() * 80) * p, 0.06, "sine", 0.08, 0.12 + r() * 0.08);
+        return 0.45;
+      // Something big hitting the water: a deep whump, the slap of the water, the slosh falling back and the spray
+      // raining down. A shot plays it quieter and higher (`p`), as a plip.
+      case "splash":
+        this.body(into, 88 * p, 30 * p, 0.4, 1, 0.004);
+        this.burst(into, 0.25, "lowpass", 1800 * p, 0.75, 0.004);
+        this.sweep(into, 1200 * p, 300 * p, 0.6, 0.8);
+        this.burst(into, 0.9, "lowpass", 700 * p, 0.35, 0.06, 0.1);
+        this.glide(into, 260 * p, 470 * p, 0.07, "sine", 0.1, 0.25);
+        return this.glide(into, 310 * p, 520 * p, 0.06, "sine", 0.07, 0.4) + 0.5;
       case "grenadeThrow": this.clank(into, 640, 0.05, 0.15); return this.sweep(into, 1300, 500, 0.2, 0.6);
       case "countdown": return this.tone(into, 660, 0.14, "sine", 0.6);
       case "go": this.tone(into, 990, 0.4, "sine", 0.6); return this.tone(into, 495, 0.4, "triangle", 0.3);

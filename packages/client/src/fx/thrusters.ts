@@ -44,6 +44,8 @@ interface JetState { air: number; lowest: number; dashing: boolean; grounded: bo
 export class Thrusters {
   private states = new WeakMap<MechModel, JetState>(); // per mech drawn; goes with the model
   private time = 0;
+  // A hard landing at a mech's feet. Returns true when it was shown some other way (a splash in water), for no dust.
+  onLanding?: (x: number, y: number, z: number) => boolean;
 
   constructor(private sprites: FxSprites, private config: ThrusterFxConfig) {}
 
@@ -115,6 +117,7 @@ export class Thrusters {
     const { landing } = this.config;
     if (model.dead || state.air < landing.minAirSeconds || -state.lowest < landing.minFallSpeed) return;
     const p = model.group.position;
+    if (this.onLanding?.(p.x, p.y, p.z)) return;
     for (let i = 0; i < landing.puffs; i++) {
       const angle = (i / landing.puffs) * Math.PI * 2 + Math.random() * 0.4;
       this.sprites.dustPuff(p.x + Math.cos(angle) * landing.spread, p.y, p.z + Math.sin(angle) * landing.spread, landing.size, landing.seconds);

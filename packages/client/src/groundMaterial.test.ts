@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import groundJson from "../../../data/ground.json";
-import { groundMaterial, groundShaderCode, parseGroundLook } from "./groundMaterial";
+import { groundMaterial, groundShaderCode, parseGroundLook, setGroundWater } from "./groundMaterial";
 
 const copy = () => JSON.parse(JSON.stringify(groundJson)) as typeof groundJson;
 
@@ -46,5 +46,22 @@ describe("ground look", () => {
     const m = groundMaterial("#5E7F3A", new THREE.Texture(), (c) => c);
     expect(m.fog).toBe(true);
     expect(m.gradientMap).toBeTruthy();
+  });
+
+  it("soaks the ground under and just above the water, and is dry until a map says where its water is", () => {
+    const g = parseGroundLook(groundJson);
+    const code = groundShaderCode(g);
+    expect(code).toContain("groundWaterLevel");
+    expect(code).toContain(g.wet.dampMeters.toFixed(4));
+    const m = groundMaterial("#5E7F3A", new THREE.Texture(), (c) => c);
+    const level = m.userData.groundWaterLevel as { value: number };
+    expect(level.value).toBeLessThan(-1000);
+    setGroundWater(m, -5.5);
+    expect(level.value).toBe(-5.5);
+    setGroundWater(m, -Infinity);
+    expect(level.value).toBeLessThan(-1000);
+    const bad = copy();
+    bad.wet.dampStrength = 3;
+    expect(() => parseGroundLook(bad)).toThrow(/wet/);
   });
 });
