@@ -10,7 +10,7 @@ describe("tower", () => {
   it("stays well under the triangle cap and has dark window slots and roof details", () => {
     for (const b of sampleBoxes([[10, 14, 10], [16, 9, 12]], 4)) {
       const pieces = tower(b);
-      expect(triangleCount(pieces)).toBeLessThan(1500);
+      expect(triangleCount(pieces)).toBeLessThan(3600);
       expect(pieces.find((p) => p.paint === "soot")?.mesh.indices.length).toBeGreaterThan(0);
       expect(pieces.find((p) => p.paint === "rustOrange" || p.paint === "frameNavy")?.mesh.indices.length).toBeGreaterThan(0);
     }

@@ -4,7 +4,7 @@ import { castShadows } from "../sunShadows";
 import type { PlayMap } from "../loadMap";
 import type { MapMeshes } from "../mapRenderer";
 import type { Toon } from "../toonMaterial";
-import { toGeometry } from "./dressing";
+import { chunkGeometry, joinChunks, type ChunkGeometry } from "./dressing";
 import { farBay, nearBay, planBay, type BayPlan } from "./edgeBay";
 import dressingJson from "../../../../data/dressing.json";
 import { distanceToChunk, edgeBoxIndices, edgeChunks, edgeRuns, parseEdgeVariety, runToWorld, type BarrierConfig, type EdgeChunk, type EdgeRun } from "./edgeLayout";
@@ -33,7 +33,7 @@ export class EdgeBarrier {
   private plans: BayPlan[][]; // per run, per bay
   private farSlots: FarSlot[][] = []; // per chunk
   private farMeshes: THREE.InstancedMesh[] = [];
-  private nearPieces = new Map<number, Map<string, MeshData[]>>(); // chunk → paint hex → meshes, built once
+  private nearPieces = new Map<number, Map<string, ChunkGeometry>>(); // chunk → paint and surface → its geometry, built once
   private near = new Set<number>();
   private wanted = new Set<number>(); // the chunks that should be near, shown once all are built
   private missing: number[] = []; // wanted chunks still to build
@@ -118,10 +118,10 @@ export class EdgeBarrier {
     this.rebuildNear();
   }
 
-  private piecesOf(c: number): Map<string, MeshData[]> {
-    let byPaint = this.nearPieces.get(c);
-    if (byPaint) return byPaint;
-    byPaint = new Map();
+  private piecesOf(c: number): Map<string, ChunkGeometry> {
+    const built = this.nearPieces.get(c);
+    if (built) return built;
+    const byPaint = new Map<string, MeshData[]>();
     const chunk = this.chunks[c]!, run = this.runs[chunk.run]!;
     for (const plan of this.plans[chunk.run]!.slice(chunk.firstBay, chunk.firstBay + chunk.bayCount)) {
       for (const piece of nearBay(this.config, plan)) {
@@ -132,8 +132,11 @@ export class EdgeBarrier {
         else byPaint.set(key, [mesh]);
       }
     }
-    this.nearPieces.set(c, byPaint);
-    return byPaint;
+    // Made into arrays with their outline normals once, so a change of near chunks only copies them.
+    const geometry = new Map<string, ChunkGeometry>();
+    for (const [key, meshes] of byPaint) geometry.set(key, chunkGeometry(meshes));
+    this.nearPieces.set(c, geometry);
+    return geometry;
   }
 
   private rebuildNear(): void {
@@ -141,18 +144,18 @@ export class EdgeBarrier {
       this.nearMeshes.remove(child);
       (child as THREE.Mesh).geometry.dispose();
     }
-    const merged = new Map<string, MeshData[]>();
+    const merged = new Map<string, ChunkGeometry[]>();
     for (const c of this.near) {
-      for (const [paint, meshes] of this.piecesOf(c)) {
+      for (const [paint, part] of this.piecesOf(c)) {
         const list = merged.get(paint);
-        if (list) list.push(...meshes);
-        else merged.set(paint, [...meshes]);
+        if (list) list.push(part);
+        else merged.set(paint, [part]);
       }
     }
     // Merged geometry is not the unit box, so its paint never chips along edges (edges = false).
-    for (const [key, meshes] of merged) {
+    for (const [key, parts] of merged) {
       const [hex, surface] = fromMergeKey(key);
-      const geometry = toGeometry(meshes);
+      const geometry = joinChunks(parts);
       this.nearMeshes.add(new THREE.Mesh(geometry, this.toon.world(hex, surface, false)), new THREE.Mesh(geometry, this.toon.shellOutline(hex)));
     }
     freeze(this.nearMeshes);

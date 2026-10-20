@@ -2,6 +2,7 @@ import { ladder, vines } from "./details";
 import type { BarrierConfig } from "./edgeLayout";
 import { rng, seedOf, type DressPiece } from "./kinds";
 import { box, cylinder, merge, turn, type MeshData, type V3 } from "./shapes";
+import { beam, span } from "./structure";
 
 // One bay of the junkyard perimeter, in its wall's frame (u along, y up, w from the outer face to the face you see).
 // From the back: a solid core so nothing is see-through, columns of corrugated sheets of mixed heights on it (so the
@@ -13,7 +14,9 @@ import { box, cylinder, merge, turn, type MeshData, type V3 } from "./shapes";
 // With `variety` (data/dressing.json, "edge") the bays stop repeating: a breach where the sheets were torn off the
 // foot, a wire fence across it and the junkyard beyond in view; crushed car bales stacked where there are no
 // containers; bays patched with flat plates; girders at different heights; junk leaning on the wall; vines climbing
-// it. Those choices come from a second seed, so the sheets and containers of a bay stay as they were.
+// it; one post gap cross-braced; a few columns built up past the fence with more sheet, so the top line breaks; raking
+// shores propping the wall. Those choices come from a second seed, so the sheets and containers of a bay stay as they
+// were. Every bay stands on a concrete footing, and knee braces tie its posts to its girders.
 
 export interface Sheet { column: number; y0: number; y1: number; paint: string }
 export interface Patch { sheet: number; u: number; y: number; width: number; height: number; tilt: number; paint: string } // u, y: middle, as shares of the sheet
@@ -35,6 +38,8 @@ export interface BayPlan {
   girderLift: number; // added to every girder's height in this bay
   leaners: { kind: string; u: number; paint: string; lean: number }[];
   vines: { u: number; top: number }[];
+  braced: number | null; // the post gap with cross-bracing, counted from the bay's start
+  raised: { column: number; top: number; paint: string }[]; // columns built up from the fence line to `top`
 }
 
 // A flat rectangle facing into the map (`up` false) or facing the sky (`up` true), in the run's frame. The far
@@ -48,6 +53,8 @@ export interface FarQuad {
 
 const pick = <T>(r: () => number, list: readonly T[]): T => list[Math.floor(r() * list.length)]!;
 const between = (r: () => number, lo: number, hi: number) => lo + r() * (hi - lo);
+
+const knee = 1.1; // how far a knee brace reaches along its girder and down its post
 
 // Two columns of sheets between each pair of posts.
 const postCount = (c: BarrierConfig, length: number) => Math.max(1, Math.round(length / c.panelMeters));
@@ -98,7 +105,7 @@ export function planBay(c: BarrierConfig, seed: number, u0: number, length: numb
   }
   const plan: BayPlan = {
     u0, length, height, thickness, wallTop, columns, sheets, patches, containers, stackTop,
-    breach: null, bales: [], plates: false, girderLift: 0, leaners: [], vines: [],
+    breach: null, bales: [], plates: false, girderLift: 0, leaners: [], vines: [], braced: null, raised: [],
   };
   if (c.variety) vary(c, plan, rng(seedOf(seed, 0xed6e)));
   return plan;
@@ -158,11 +165,19 @@ function vary(c: BarrierConfig, p: BayPlan, r: () => number): void {
     const u = p.u0 + between(r, 1.5, p.length - 1.5);
     if (!p.breach || u < p.breach.u0 - 1.5 || u > p.breach.u1 + 1.5) p.vines.push({ u, top: Math.max(p.stackTop + 1, between(r, v.vineMeters[0]!, v.vineMeters[1]!)) });
   }
+  // Drawn last, so the choices above stay what they were before these were added.
+  if (r() < v.braceChance) {
+    const g = Math.floor(r() * gaps);
+    if (!p.breach || p.u0 + (g + 1) * 2 * columnWidth <= p.breach.u0 || p.u0 + g * 2 * columnWidth >= p.breach.u1) p.braced = g;
+  }
+  if (r() < v.raisedChance && p.height - p.wallTop > 2) {
+    const count = Math.min(p.columns, Math.round(between(r, v.raisedColumns[0]!, v.raisedColumns[1]!)));
+    const first = Math.floor(r() * (p.columns - count + 1));
+    for (let column = first; column < first + count; column++) {
+      p.raised.push({ column, top: p.wallTop + between(r, 1.5, p.height - p.wallTop), paint: pick(r, c.panelPaints) });
+    }
+  }
 }
-
-// A box from its lower and upper corners in the run's frame.
-const span = (u0: number, u1: number, y0: number, y1: number, w0: number, w1: number): MeshData =>
-  box([(u0 + u1) / 2, (y0 + y1) / 2, (w0 + w1) / 2], [u1 - u0, y1 - y0, w1 - w0]);
 
 // Post positions along the bay: one at its start (kept inside it) and one at each span boundary after.
 function postsAlong(c: BarrierConfig, p: BayPlan): number[] {
@@ -189,6 +204,7 @@ export function nearBay(c: BarrierConfig, p: BayPlan): DressPiece[] {
   const sheetBack = c.coreDepth, sheetFront = c.coreDepth + c.sheetDepth;
   const columnWidth = length / p.columns, s = c.seam / 2;
   const ribTop = p.stackTop + c.ribBandMeters;
+  const footing: MeshData[] = [];
 
   // The core, solid behind every sheet; round a breach it stops at the hole's sides and top.
   const hole = p.breach;
@@ -227,9 +243,42 @@ export function nearBay(c: BarrierConfig, p: BayPlan): DressPiece[] {
     add(patch.paint, turn(plate, [0, 0, patch.tilt], [0, 0, 0], centre));
   }
 
-  // Posts hold the sheets up; girders tie the posts together and cap the top.
-  for (const u of postsAlong(c, p)) add(c.steelPaint, span(u - c.postWidth / 2, u + c.postWidth / 2, 0, wallTop, sheetBack, sheetBack + c.postDepth));
-  for (const y of girdersUp(c, p)) add(c.steelPaint, span(u0, u1, y - c.girderHeight / 2, y + c.girderHeight / 2, sheetFront, sheetFront + c.girderDepth));
+  // Posts hold the sheets up; girders tie the posts together and cap the top; knee braces stiffen each joint.
+  const posts = postsAlong(c, p), girders = girdersUp(c, p), braceW = sheetFront + c.girderDepth / 2;
+  for (const u of posts) add(c.steelPaint, span(u - c.postWidth / 2, u + c.postWidth / 2, 0, wallTop, sheetBack, sheetBack + c.postDepth));
+  for (const y of girders) add(c.steelPaint, span(u0, u1, y - c.girderHeight / 2, y + c.girderHeight / 2, sheetFront, sheetFront + c.girderDepth));
+  for (const u of posts) {
+    for (const y of girders) {
+      for (const side of [-1, 1]) {
+        const reach = side < 0 ? Math.min(knee, u - u0 - c.postWidth / 2) : Math.min(knee, u1 - u - c.postWidth / 2);
+        if (reach < knee * 0.5) continue;
+        const at = u + side * c.postWidth / 2;
+        add(c.steelPaint, beam([at, y - c.girderHeight / 2 - reach, braceW], [at + side * reach, y - c.girderHeight / 2, braceW], 0.14, 0.16));
+      }
+    }
+  }
+  // The concrete footing the whole bay stands on.
+  footing.push(span(u0, u1, 0, 0.45, sheetFront, sheetFront + 0.3));
+  if (p.braced !== null) {
+    // Cross-bracing in one post gap, from the footing to each girder in turn.
+    const a = posts[p.braced]! + c.postWidth / 2, b = (posts[p.braced + 1] ?? u1) - c.postWidth / 2;
+    const levels = [0.45, ...girders];
+    for (let i = 0; i + 1 < levels.length; i++) {
+      const y0 = levels[i]! + 0.1, y1 = levels[i + 1]! - c.girderHeight / 2;
+      add(c.steelPaint, beam([a, y0, braceW + 0.1], [b, y1, braceW + 0.1], 0.12, 0.2));
+      add(c.steelPaint, beam([b, y0, braceW + 0.1], [a, y1, braceW + 0.1], 0.12, 0.2));
+    }
+  }
+  // Columns built up past the fence line: core and sheet to their own heights, a steel angle down each edge and
+  // along the top holding the extra sheet on.
+  for (const lift of p.raised) {
+    const a = u0 + lift.column * columnWidth, b = a + columnWidth;
+    add(c.corePaint, span(a, b, wallTop, lift.top, 0, c.coreDepth));
+    add(lift.paint, span(a + s, b - s, wallTop + s, lift.top - 0.12, sheetBack, sheetFront));
+    add(c.steelPaint, span(a, a + 0.18, wallTop, lift.top, sheetBack, sheetFront + 0.06));
+    add(c.steelPaint, span(b - 0.18, b, wallTop, lift.top, sheetBack, sheetFront + 0.06));
+    add(c.steelPaint, span(a, b, lift.top - 0.12, lift.top, 0, sheetFront + 0.06));
+  }
 
   for (const k of p.containers) for (const [paint, mesh] of containerMesh(c, k.u, k.level, k.paint, T)) add(paint, mesh);
   for (const b of p.bales) for (const [paint, mesh] of baleMesh(c, b.u, b.level, b.paint, b.shift, T)) add(paint, mesh);
@@ -245,7 +294,8 @@ export function nearBay(c: BarrierConfig, p: BayPlan): DressPiece[] {
   }
   add(c.fence.paint, fence(c, p));
 
-  return [...[...byPaint].map(([paint, meshes]) => ({ paint, mesh: merge(...meshes) })), ...plants];
+  const ground: DressPiece[] = [{ paint: "scrapSteel", mesh: merge(...footing), surface: "concrete" }];
+  return [...[...byPaint].map(([paint, meshes]) => ({ paint, mesh: merge(...meshes) })), ...plants, ...ground];
 }
 
 // A container seen from its long side: ribs on the face you see, a frame round it, corner posts at the ends.
@@ -325,6 +375,16 @@ function leanerMesh(c: BarrierConfig, l: BayPlan["leaners"][number], T: number, 
     // An I-beam: two flanges and a web, propped on its end.
     const tall = 6, beam = merge(box([0, tall / 2, -0.12], [0.36, tall, 0.04]), box([0, tall / 2, 0.12], [0.36, tall, 0.04]), box([0, tall / 2, 0], [0.04, tall, 0.24]));
     add("deepRust", turn(beam, [-l.lean * 0.5, 0.2, 0], [0, 0, 0], [l.u, 0, face + 0.2 + tall * Math.sin(l.lean * 0.5)]));
+  } else if (l.kind === "shore") {
+    // A raking shore: a heavy beam from a sole plate on the ground up to a plate bolted on the wall, holding it up,
+    // and a tie along the ground back to the wall's foot so the foot cannot kick out.
+    const top = 5 + l.lean * 6, foot = T - 0.35;
+    add("deepRust", beam([l.u, 0.25, foot], [l.u, top - 0.4, face + 0.18], 0.3, 0.3));
+    add(c.steelPaint, merge(
+      span(l.u - 0.35, l.u + 0.35, 0, 0.12, foot - 0.3, T - 0.05),
+      span(l.u - 0.22, l.u + 0.22, top - 1.4, top, face, face + 0.12),
+      beam([l.u, 0.2, foot - 0.2], [l.u, 0.2, face + 0.1], 0.16, 0.16),
+    ));
   } else if (l.kind === "tyres") {
     const count = 3 + Math.round(l.lean * 10) % 3;
     for (let i = 0; i < count; i++) add("soot", cylinder([l.u + Math.sin(i * 2.1) * 0.06, 0.13 + i * 0.26, T - 0.55 + Math.cos(i * 1.7) * 0.05], 0.44, 0.26, "y", 10));
@@ -380,5 +440,10 @@ export function farBay(c: BarrierConfig, p: BayPlan): FarQuad[] {
   const b = c.variety?.bale;
   if (b) for (const bale of p.bales) face(bale.u + bale.shift - b.length / 2, bale.u + bale.shift + b.length / 2, bale.level * b.height, (bale.level + 1) * b.height, p.thickness - 0.03, bale.paint);
   out.push({ centre: [p.u0 + p.length / 2, p.wallTop, girderFront / 2], size: [p.length, girderFront], up: true, paint: c.steelPaint });
+  for (const lift of p.raised) {
+    const a = p.u0 + lift.column * columnWidth;
+    face(a, a + columnWidth, p.wallTop, lift.top, sheetFront, lift.paint);
+    out.push({ centre: [a + columnWidth / 2, lift.top, sheetFront / 2], size: [columnWidth, sheetFront], up: true, paint: c.steelPaint });
+  }
   return out;
 }

@@ -1,5 +1,6 @@
+import { trianglesFor } from "./budget";
 import type { DressBox, DressPiece } from "./kinds";
-import { box, convex, cylinder, merge, mirrorX, prism, turn, type MeshData, type V3 } from "./shapes";
+import { box, convex, cylinder, merge, prism, turn, type MeshData, type V3 } from "./shapes";
 
 // Small details the building builders hang on their faces, so two buildings of a kind stop looking alike. Each has a
 // job you can say in a sentence (DESIGN.md): vines climb from the ground, a vent has a dark intake behind its
@@ -15,19 +16,32 @@ export interface Face {
   out: 1 | -1;
 }
 
-// The mirror image across z = 0 (a half turn, then the mirror across x), windings kept facing out.
-const mirrorZ = (mesh: MeshData): MeshData => mirrorX(turn(mesh, [0, Math.PI, 0]));
+// Every corner moved by `move`, with optionally its x and z swapped (a mirror) or its z flipped (a mirror too).
+// Written out rather than turned with trigonometry: builders send every piece through here.
+function shift(mesh: MeshData, move: V3, swapXZ: boolean, flipZ: boolean): MeshData {
+  const n = mesh.positions.length;
+  const positions = new Array<number>(n), normals = new Array<number>(n);
+  const p = mesh.positions, q = mesh.normals;
+  for (let i = 0; i < n; i += 3) {
+    const x = swapXZ ? p[i + 2]! : p[i]!, z = swapXZ ? p[i]! : flipZ ? -p[i + 2]! : p[i + 2]!;
+    positions[i] = x + move[0]; positions[i + 1] = p[i + 1]! + move[1]; positions[i + 2] = z + move[2];
+    normals[i] = swapXZ ? q[i + 2]! : q[i]!; normals[i + 1] = q[i + 1]!; normals[i + 2] = swapXZ ? q[i]! : flipZ ? -q[i + 2]! : q[i + 2]!;
+  }
+  const indices = mesh.indices.slice();
+  if (swapXZ || flipZ) for (let i = 0; i < indices.length; i += 3) { const k = indices[i + 1]!; indices[i + 1] = indices[i + 2]!; indices[i + 2] = k; }
+  return { positions, normals, indices };
+}
 
-// A piece built in the face frame, moved into the builder's (u, y, across) frame: across = at + out * w.
+// A piece built in the face frame, moved into the builder's (u, y, across) frame: across = at + out * w. Facing the
+// other way is the mirror across the face, windings kept facing out.
 export function onFace(mesh: MeshData, face: Face): MeshData {
-  return turn(face.out < 0 ? mirrorZ(mesh) : mesh, [0, 0, 0], [0, 0, 0], [0, 0, face.at]);
+  return shift(mesh, [0, 0, face.at], false, face.out < 0);
 }
 
 // A builder's local frame (u along the box, y up from its floor, across, centred on the box) into the world, the way
 // the builders' own `part` helpers do it: along x a move; along z, u and across swap (a mirror, windings put right).
 export function toWorld(mesh: MeshData, alongX: boolean, centre: V3): MeshData {
-  const placed = alongX ? mesh : mirrorX(turn(mesh, [0, -Math.PI / 2, 0]));
-  return turn(placed, [0, 0, 0], [0, 0, 0], centre);
+  return shift(mesh, centre, !alongX, false);
 }
 
 const span = (u0: number, u1: number, y0: number, y1: number, w0: number, w1: number): MeshData =>
@@ -127,6 +141,44 @@ export function door(u: number, width: number, height: number): { frame: MeshDat
   return { frame, panel, step };
 }
 
+// A steel-framed window in a wall, built on the wall's core (w = 0) with `stand` the depth of the corrugation in front
+// of it: the opening is dark inside, the frame and sill stand just proud of the folds, glazing bars cross it into four
+// panes, and each pane is whole (dull glass) or broken, with a shard or two left in the frame.
+export function glazedWindow(r: () => number, u: number, y: number, width: number, height: number, stand: number): { frame: MeshData; dark: MeshData; glass: MeshData } {
+  const f = 0.08, d = stand + 0.03, u0 = u - width / 2, u1 = u + width / 2, y0 = y - height / 2, y1 = y + height / 2;
+  const frame: MeshData[] = [
+    span(u0 - f, u1 + f, y1, y1 + f, 0, d), span(u0 - f, u0, y0, y1, 0, d), span(u1, u1 + f, y0, y1, 0, d),
+    span(u0 - f - 0.06, u1 + f + 0.06, y0 - 0.1, y0, 0, d + 0.02), // the sill, a little wider and prouder, to shed rain
+    span(u - 0.03, u + 0.03, y0, y1, 0, stand * 0.6), span(u0, u1, y - 0.03, y + 0.03, 0, stand * 0.6), // glazing bars
+  ];
+  const glass: MeshData[] = [];
+  const pane = stand * 0.3;
+  for (const [a, b] of [[u0, u - 0.03], [u + 0.03, u1]] as const) {
+    for (const [c, e] of [[y0, y - 0.03], [y + 0.03, y1]] as const) {
+      if (r() < 0.35) { glass.push(span(a, b, c, e, pane, pane + 0.02)); continue; }
+      // A broken pane keeps a jagged triangle of glass in one corner, or none.
+      if (r() < 0.4) continue;
+      const left = r() < 0.5, low = r() < 0.5, su = (b - a) * (0.4 + r() * 0.4), sy = (e - c) * (0.4 + r() * 0.4);
+      const cu = left ? a : b, cy = low ? c : e;
+      glass.push(prism([[cu, cy], [cu + (left ? su : -su), cy], [cu, cy + (low ? sy : -sy)]], "z", pane, pane + 0.02));
+    }
+  }
+  return { frame: merge(...frame), dark: span(u0, u1, y0, y1, 0, 0.01), glass: merge(...glass) };
+}
+
+// A roller shutter: slats in two depths so each one reads, guide channels down both sides and the drum's box over the
+// top. `open` is how far it was left up: the dark inside shows beneath it.
+export function shutter(u: number, width: number, height: number, open: number, stand: number): { slats: MeshData; steel: MeshData; dark: MeshData } {
+  const u0 = u - width / 2, u1 = u + width / 2, slat = 0.22;
+  const slats: MeshData[] = [];
+  for (let y = open, i = 0; y < height - 0.05; y += slat, i++) slats.push(span(u0, u1, y, Math.min(height, y + slat), 0, stand + (i % 2 === 0 ? 0.04 : 0.02)));
+  const steel = merge(
+    span(u0 - 0.14, u0, 0, height + 0.45, 0, stand + 0.08), span(u1, u1 + 0.14, 0, height + 0.45, 0, stand + 0.08),
+    span(u0 - 0.14, u1 + 0.14, height, height + 0.45, 0, stand + 0.1),
+  );
+  return { slats: merge(...slats), steel, dark: open > 0 ? span(u0, u1, 0, open, 0, 0.01) : { positions: [], normals: [], indices: [] } };
+}
+
 // A builder's optional details, kept only while the box's triangle budget allows (the same budget builderChecks.ts
 // holds every builder to, less a little), so a long wall that drew every variation still stays cheap. A group goes
 // in whole or not at all.
@@ -136,8 +188,7 @@ export class Details {
 
   // `cap` lowers the budget for a builder that wants to stay well under it.
   constructor(box: DressBox, private used: number, cap = Infinity) {
-    const volume = (box.max[0] - box.min[0]) * (box.max[1] - box.min[1]) * (box.max[2] - box.min[2]);
-    this.budget = Math.min(cap, Math.min(2500, Math.max(150, volume * 40)) * 0.95);
+    this.budget = Math.min(cap, trianglesFor(box) * 0.95);
   }
 
   add(group: DressPiece[]): boolean {

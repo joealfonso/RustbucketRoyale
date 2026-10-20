@@ -10,8 +10,10 @@ import type { MeshData, V3 } from "./shapes";
 //  - Fill it: the plain box is hidden while the dressing shows, so a gap would let you see through solid cover.
 //  - Same box and seed, same result: no Math.random, no time. Use `rng(seed)`.
 //  - Faces outward (the shapes in shapes.ts already do), flat-shaded, chunky, nothing thinner than about 0.08 m.
-//  - Cheap: aim for a few hundred triangles for a box the size of a shipping container, and scale the detail with
-//    size, not the count (a 34 m warehouse wall gets more posts, not finer ones).
+//  - Cheap: within the triangle budget for the box's size (data/dressing.json "triangleBudget", budget.ts), about two
+//    thousand for a shipping container, and scale the detail with size, not the count (a 34 m warehouse wall gets
+//    more posts, not finer ones). Build from the stretched unit parts in structure.ts where you can: the dressing
+//    builds a chunk of boxes on one frame.
 //
 // Paints are palette names (data/palette.json: rustOrange, deepRust, moss, darkMoss, scrapSteel, soot, warmLight,
 // sparkYellow, paintWhite, frameNavy) or hex colours. Everything is drawn with the weathered world material, so moss

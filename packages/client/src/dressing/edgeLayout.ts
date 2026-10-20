@@ -48,9 +48,12 @@ export interface EdgeVariety {
   bale: { length: number; height: number; depth: number; maxStack: number; paints: string[] };
   platesChance: number; // a bay patched with big flat plates instead of corrugated sheet
   girderJitterMeters: number; // each bay's girders sit up to this much higher, so the bands do not run level for 2 km
+  braceChance: number; // one post gap in the bay cross-braced between its girders, the frame stiffened by hand
+  raisedChance: number; // a few columns built up past the fence with more sheet, so the top line is not one straight edge
+  raisedColumns: number[]; // how many, [low, high]
   leanerChance: number; // per free slot at the foot of a bay with nothing stacked against it
   leanerSlotMeters: number;
-  leanerKinds: string[]; // "sheet", "ladder", "tyres", "drums", "girder"
+  leanerKinds: string[]; // "sheet", "ladder", "tyres", "drums", "girder", "shore" (a raking prop holding the wall up)
   vineChance: number;
   vineMeters: number[]; // how high the vines climb, [low, high]
 }
@@ -59,17 +62,17 @@ export function parseEdgeVariety(raw: unknown): EdgeVariety {
   const v = raw as EdgeVariety;
   const fail = (what: string) => { throw new Error(`dressing.json: edge.${what}`); };
   if (!v || typeof v !== "object") fail("is missing");
-  for (const k of ["breachChance", "baleChance", "platesChance", "girderJitterMeters", "leanerChance", "leanerSlotMeters", "vineChance"] as const) {
+  for (const k of ["breachChance", "baleChance", "platesChance", "girderJitterMeters", "braceChance", "raisedChance", "leanerChance", "leanerSlotMeters", "vineChance"] as const) {
     if (typeof v[k] !== "number" || v[k] < 0) fail(`${k} must be a number, 0 or more`);
   }
-  for (const k of ["breachPanels", "breachMeters", "vineMeters"] as const) {
+  for (const k of ["breachPanels", "breachMeters", "raisedColumns", "vineMeters"] as const) {
     const r = v[k];
     if (!Array.isArray(r) || r.length !== 2 || !(r[0]! > 0) || !(r[1]! >= r[0]!)) fail(`${k} must be [low, high]`);
   }
   const b = v.bale;
   if (!b || !(b.length > 0 && b.height > 0 && b.depth > 0 && b.maxStack >= 1) || !Array.isArray(b.paints) || b.paints.length === 0) fail("bale needs length, height, depth, maxStack and paints");
-  const known = new Set(["sheet", "ladder", "tyres", "drums", "girder"]);
-  if (!Array.isArray(v.leanerKinds) || v.leanerKinds.some((k) => !known.has(k))) fail("leanerKinds may hold only sheet, ladder, tyres, drums, girder");
+  const known = new Set(["sheet", "ladder", "tyres", "drums", "girder", "shore"]);
+  if (!Array.isArray(v.leanerKinds) || v.leanerKinds.some((k) => !known.has(k))) fail("leanerKinds may hold only sheet, ladder, tyres, drums, girder, shore");
   return v;
 }
 

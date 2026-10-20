@@ -2,6 +2,11 @@
   "radiusMeters": 120,
   "scatterPerChunk": 40,
   "buildAtOnce": 2,
+  "triangleBudget": {
+    "perCubicMetre": 60,
+    "min": 150,
+    "max": 4500
+  },
   "cover": {
     "radiusMeters": 42,
     "fadeMeters": 12,
@@ -118,6 +123,12 @@
     },
     "platesChance": 0.25,
     "girderJitterMeters": 4,
+    "braceChance": 0.35,
+    "raisedChance": 0.3,
+    "raisedColumns": [
+      1,
+      3
+    ],
     "leanerChance": 0.45,
     "leanerSlotMeters": 4,
     "leanerKinds": [
@@ -126,7 +137,9 @@
       "ladder",
       "tyres",
       "drums",
-      "girder"
+      "girder",
+      "shore",
+      "shore"
     ],
     "vineChance": 0.4,
     "vineMeters": [

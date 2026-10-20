@@ -1,8 +1,9 @@
+import { TRIANGLE_BUDGET, trianglesFor, type TriangleBudget } from "./budget";
 import type { DressBox, DressPiece, KindBuilder } from "./kinds";
 
 // Checks one kind builder against the rules in kinds.ts, on a set of boxes. Returns what is wrong (empty when all is
 // well). Every builder's test calls this; see container.test.ts for the pattern.
-export function checkBuilder(builder: KindBuilder, boxes: DressBox[], trianglesPerCubicMetre = 40, maxTriangles = 2500): string[] {
+export function checkBuilder(builder: KindBuilder, boxes: DressBox[], triangleBudget: TriangleBudget = TRIANGLE_BUDGET): string[] {
   const problems: string[] = [];
   const slack = 0.06; // metres a piece may stick out of its box
   for (const box of boxes) {
@@ -30,8 +31,7 @@ export function checkBuilder(builder: KindBuilder, boxes: DressBox[], trianglesP
         if (cross[0]! * normals[a]! + cross[1]! * normals[a + 1]! + cross[2]! * normals[a + 2]! <= 0) { problems.push(`${label}: a triangle faces the wrong way`); break; }
       }
     }
-    const volume = (box.max[0] - box.min[0]) * (box.max[1] - box.min[1]) * (box.max[2] - box.min[2]);
-    const budget = Math.min(maxTriangles, Math.max(150, volume * trianglesPerCubicMetre));
+    const budget = trianglesFor(box, triangleBudget);
     if (triangles > budget) problems.push(`${label}: ${triangles} triangles, over ${Math.round(budget)}`);
     if (JSON.stringify(pieces) !== JSON.stringify(builder(box))) problems.push(`${label}: not the same twice for the same box and seed`);
   }

@@ -3,6 +3,7 @@ import { byPaint, Details, downpipe, ladder, onFace, toWorld, vines, type Face }
 import type { SurfaceKind } from "../paint/paintLook";
 import { rng, type DressBox, type DressPiece, type KindBuilder } from "./kinds";
 import { box, cylinder, merge, type MeshData } from "./shapes";
+import { beam, span } from "./structure";
 
 // A squat concrete tower block. The windows are not cut holes: a dark core fills the box a little way in, and a
 // concrete grid of floor slabs and piers stands in front of it, so wherever the grid leaves a gap you see a dark,
@@ -21,7 +22,9 @@ const RIM_THICK = 0.35;
 const DECK_DROP = 0.12; // deck below the box top; mechs stand on the box top, so this must stay small
 const DETAIL_GAP = 0.02; // roof details stop this far under the rim top, so their tops never fight with it
 // The per-tower variations, so no two blocks look alike. Each is kept only while the tower stays under TRIANGLE_CAP.
-const TRIANGLE_CAP = 1450;
+const TRIANGLE_CAP = 3600;
+const GLAZED_SHARE = 0.4; // windows still holding their steel glazing bars, some panes whole
+const BRACED_CHANCE = 0.7; // steel cross-bracing bolted over one face, holding the cracked block together
 const BOARDED_SHARE = 0.15; // windows boarded over with a plate, where someone kept the weather out
 const MAX_BOARDED = 8;
 const COOLER_CHANCE = 0.5; // an air-conditioning box set in a window, a fan grille on its front
@@ -137,6 +140,36 @@ export const tower: KindBuilder = (b: DressBox): DressPiece[] => {
     return piece;
   };
   const windows = faces.flatMap((f, fi) => f.openings.flatMap(([a, c]) => Array.from({ length: floors }, (_, floor) => ({ fi, a, c, floor }))));
+  // Every window has a sill standing out of the grid to shed the rain; some still have their glazing bars.
+  const sills: DressPiece[] = [], glazing: DressPiece[] = [];
+  for (const w of windows) {
+    const ys = w.floor * floorHeight + sill * floorHeight, yh = w.floor * floorHeight + head * floorHeight;
+    sills.push(put(faces[w.fi]!, GRID_INSET, base[0]!.paint, span(w.a - 0.1, w.c + 0.1, ys - 0.1, ys + 0.02, 0, 0.08), "concrete"));
+    if (r() >= GLAZED_SHARE) continue;
+    const mid = (w.a + w.c) / 2, ym = ys + (yh - ys) * 0.62;
+    const bars = merge(span(mid - 0.04, mid + 0.04, ys, yh, 0, 0.06), span(w.a, w.c, ym - 0.04, ym + 0.04, 0, 0.06));
+    const panes = [[w.a, mid - 0.04, ys, ym - 0.04], [mid + 0.04, w.c, ys, ym - 0.04], [w.a, mid - 0.04, ym + 0.04, yh], [mid + 0.04, w.c, ym + 0.04, yh]]
+      .filter(() => r() < 0.45).map(([a, c, y0, y1]) => span(a!, c!, y0!, y1!, -0.02, 0));
+    glazing.push(put(faces[w.fi]!, CORE_INSET - 0.08, "soot", bars));
+    if (panes.length > 0) glazing.push(put(faces[w.fi]!, CORE_INSET - 0.08, "scrapSteel", merge(...panes)));
+  }
+  details.add(sills);
+  details.add(glazing);
+  const bracedFace = Math.floor(r() * faces.length);
+  for (const fi of [bracedFace, bracedFace ^ 1]) {
+    // Flat steel straps corner to corner across two storeys at a time, bolted through gusset plates at each end; the
+    // face opposite sometimes got the same.
+    if (r() >= (fi === bracedFace ? BRACED_CHANCE : BRACED_CHANCE * 0.5)) continue;
+    const f = faces[fi]!;
+    const lo = -f.span / 2 + pilaster + 0.15, hi = f.span / 2 - pilaster - 0.15;
+    const straps: MeshData[] = [];
+    for (let floor = 0; floor + 2 <= floors; floor += 2) {
+      const y0 = floor * floorHeight + 0.3, y1 = (floor + 2) * floorHeight - 0.3;
+      straps.push(beam([lo, y0, 0.04], [hi, y1, 0.04], 0.07, 0.24), beam([hi, y0, 0.04], [lo, y1, 0.04], 0.07, 0.24));
+      for (const [u, y] of [[lo, y0], [hi, y0], [lo, y1], [hi, y1]] as const) straps.push(span(u - 0.25, u + 0.25, y - 0.25, y + 0.25, 0, 0.05));
+    }
+    if (straps.length > 0) details.add([put(f, GRID_INSET, "deepRust", merge(...straps))]);
+  }
   // Boarded windows: a plate over the slot on the grid face, two planks nailed across it.
   const boardPaint = r() < 0.5 ? "deepRust" : "rustOrange";
   let boarded = 0;

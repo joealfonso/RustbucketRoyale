@@ -36,7 +36,7 @@ export class Dressing {
   readonly group = new THREE.Group();
   readonly far: FarBoulders | null = null;
   readonly cover: GroundCover | null = null;
-  private chunkPieces = new Map<number, Map<string, MeshData[]>>(); // chunk key → paint and surface (mergeKey) → meshes
+  private chunkPieces = new Map<number, Map<string, ChunkGeometry>>(); // chunk key → paint and surface (mergeKey) → its geometry
   private chunkBoxes = new Map<number, number[]>(); // chunk key → dressed box indices in it
   private chunkBlockers = new Map<number, number[]>(); // chunk key → every box standing in it, for the scatter
   private ahead: number[] = []; // chunks just beyond the dressed ones, to build on quiet frames
@@ -175,16 +175,16 @@ export class Dressing {
     return this.near.has(key) && (this.chunkBoxes.get(key)?.includes(boxIndex) ?? false);
   }
 
-  private piecesOf(key: number): Map<string, MeshData[]> {
-    let byPaint = this.chunkPieces.get(key);
-    if (byPaint) return byPaint;
-    byPaint = new Map();
+  private piecesOf(key: number): Map<string, ChunkGeometry> {
+    const built = this.chunkPieces.get(key);
+    if (built) return built;
+    const byPaint = new Map<string, MeshData[]>();
     const add = (pieces: DressPiece[]) => {
       for (const p of pieces) {
         const key = mergeKey(this.toon.color(p.paint), p.surface);
-        const list = byPaint!.get(key);
+        const list = byPaint.get(key);
         if (list) list.push(p.mesh);
-        else byPaint!.set(key, [p.mesh]);
+        else byPaint.set(key, [p.mesh]);
       }
     };
     const boxes: DressBox[] = [];
@@ -205,8 +205,11 @@ export class Dressing {
       });
       add(this.scatter({ minX, minZ, size, seed: seedOf(this.map.seed, 100000 + key), groundAt: this.groundAt }, blockers, this.config.scatterPerChunk));
     }
-    this.chunkPieces.set(key, byPaint);
-    return byPaint;
+    // The chunk's arrays and outline normals are made once here, so a chunk change only copies them (docs/PERF.md).
+    const geometry = new Map<string, ChunkGeometry>();
+    for (const [paint, meshes] of byPaint) geometry.set(paint, chunkGeometry(meshes));
+    this.chunkPieces.set(key, geometry);
+    return geometry;
   }
 
   private rebuild(): void {
@@ -214,18 +217,18 @@ export class Dressing {
       this.group.remove(child);
       (child as THREE.Mesh).geometry.dispose();
     }
-    const merged = new Map<string, MeshData[]>();
+    const merged = new Map<string, ChunkGeometry[]>();
     for (const key of this.near) {
-      for (const [paint, meshes] of this.piecesOf(key)) {
+      for (const [paint, part] of this.piecesOf(key)) {
         const list = merged.get(paint);
-        if (list) list.push(...meshes);
-        else merged.set(paint, [...meshes]);
+        if (list) list.push(part);
+        else merged.set(paint, [part]);
       }
     }
     // Merged geometry is not the unit box, so its paint never chips along edges (edges = false).
-    for (const [key, meshes] of merged) {
+    for (const [key, parts] of merged) {
       const [hex, surface] = fromMergeKey(key);
-      const geometry = toGeometry(meshes);
+      const geometry = joinChunks(parts);
       this.group.add(new THREE.Mesh(geometry, this.toon.world(hex, surface, false)), new THREE.Mesh(geometry, this.toon.shellOutline(hex)));
     }
     // A rebuild makes new meshes, which three would otherwise update every frame like anything else.
@@ -245,6 +248,79 @@ export class Dressing {
       this.far.dispose();
     }
   }
+}
+
+// One chunk's meshes of one paint, as the arrays a three.js geometry is made of, outline normals included.
+export interface ChunkGeometry {
+  positions: Float32Array;
+  normals: Float32Array;
+  outline: Float32Array;
+  index: Uint32Array;
+}
+
+export function chunkGeometry(meshes: MeshData[]): ChunkGeometry {
+  let vertices = 0, indices = 0;
+  for (const m of meshes) { vertices += m.positions.length; indices += m.indices.length; }
+  const positions = new Float32Array(vertices), normals = new Float32Array(vertices), index = new Uint32Array(indices);
+  let v = 0, i = 0;
+  for (const m of meshes) {
+    const base = v / 3;
+    positions.set(m.positions, v);
+    normals.set(m.normals, v);
+    for (const k of m.indices) index[i++] = k + base;
+    v += m.positions.length;
+  }
+  return { positions, normals, outline: outlineNormals(positions, normals), index };
+}
+
+// The same outline normals as outlineNormals.ts (each corner gets the average of the face normals meeting there,
+// corners within a millimetre being one), found with a hash table of whole millimetres instead of a string per
+// corner: the dressing makes them for a chunk on a frame of its own, so this keeps that frame short.
+function outlineNormals(positions: Float32Array, normals: Float32Array): Float32Array {
+  const count = positions.length / 3;
+  let size = 1;
+  while (size < count * 2) size *= 2;
+  const keys = new Int32Array(size * 3), used = new Uint8Array(size), sums = new Float64Array(size * 3);
+  const slotOf = new Int32Array(count);
+  for (let i = 0; i < count; i++) {
+    const x = Math.round(positions[i * 3]! * 1000), y = Math.round(positions[i * 3 + 1]! * 1000), z = Math.round(positions[i * 3 + 2]! * 1000);
+    let slot = (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) & (size - 1);
+    while (used[slot] && (keys[slot * 3] !== x || keys[slot * 3 + 1] !== y || keys[slot * 3 + 2] !== z)) slot = (slot + 1) & (size - 1);
+    if (!used[slot]) { used[slot] = 1; keys[slot * 3] = x; keys[slot * 3 + 1] = y; keys[slot * 3 + 2] = z; }
+    sums[slot * 3]! += normals[i * 3]!; sums[slot * 3 + 1]! += normals[i * 3 + 1]!; sums[slot * 3 + 2]! += normals[i * 3 + 2]!;
+    slotOf[i] = slot;
+  }
+  const out = new Float32Array(positions.length);
+  for (let i = 0; i < count; i++) {
+    const s = slotOf[i]! * 3, length = Math.hypot(sums[s]!, sums[s + 1]!, sums[s + 2]!);
+    // Faces that cancel out (a sheet seen from both sides) fall back to the face's own normal.
+    if (length < 1e-6) { out[i * 3] = normals[i * 3]!; out[i * 3 + 1] = normals[i * 3 + 1]!; out[i * 3 + 2] = normals[i * 3 + 2]!; }
+    else { out[i * 3] = sums[s]! / length; out[i * 3 + 1] = sums[s + 1]! / length; out[i * 3 + 2] = sums[s + 2]! / length; }
+  }
+  return out;
+}
+
+// Several chunks' geometry as one, copied rather than worked out again. A corner shared by two chunks keeps each
+// chunk's own outline normal, which only shows where two boxes meet exactly on a chunk line.
+export function joinChunks(parts: ChunkGeometry[]): THREE.BufferGeometry {
+  let vertices = 0, indices = 0;
+  for (const p of parts) { vertices += p.positions.length; indices += p.index.length; }
+  const positions = new Float32Array(vertices), normals = new Float32Array(vertices), outline = new Float32Array(vertices);
+  const index = vertices / 3 > 65535 ? new Uint32Array(indices) : new Uint16Array(indices);
+  let v = 0, i = 0;
+  for (const p of parts) {
+    positions.set(p.positions, v); normals.set(p.normals, v); outline.set(p.outline, v);
+    const base = v / 3;
+    for (let k = 0; k < p.index.length; k++) index[i++] = p.index[k]! + base;
+    v += p.positions.length;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+  geometry.setAttribute("outlineNormal", new THREE.BufferAttribute(outline, 3));
+  geometry.setIndex(new THREE.BufferAttribute(index, 1));
+  geometry.computeBoundingSphere();
+  return geometry;
 }
 
 // Many meshes as one three.js geometry (positions, normals, one index).

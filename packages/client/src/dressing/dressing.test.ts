@@ -8,6 +8,8 @@ import { buildPlayMap } from "../loadMap";
 import { MapMeshes } from "../mapRenderer";
 import { Toon, parseLook, parsePalette } from "../toonMaterial";
 import { BUILDERS, Dressing, scatter } from "./index";
+import { chunkGeometry, toGeometry } from "./dressing";
+import { sampleBoxes } from "./builderChecks";
 
 function setup(scatterPerChunk = 40) {
   const map = buildPlayMap("medium", 5, parseMechStats(mechJson));
@@ -80,5 +82,13 @@ describe("junkyard dressing", () => {
     expect(a.dressing.group.children.length % 2).toBe(0);
     const count = (d: Dressing) => d.group.children.reduce((n, c) => n + ((c as THREE.Mesh).geometry.index?.count ?? 0), 0);
     expect(count(a.dressing)).toBe(count(b.dressing));
+  });
+
+  it("makes each chunk's outline normals once, the same as working them out on the merged mesh", () => {
+    const meshes = sampleBoxes([[12, 2.6, 2.6], [16, 4, 1], [10, 14, 10]], 2).flatMap((b, i) => BUILDERS[["container", "sheet", "tower"][Math.floor(i / 2)]!]!(b).map((p) => p.mesh));
+    const part = chunkGeometry(meshes), whole = toGeometry(meshes);
+    expect(Array.from(part.positions)).toEqual(Array.from(whole.getAttribute("position").array));
+    expect(Array.from(part.outline)).toEqual(Array.from(whole.getAttribute("outlineNormal").array));
+    expect(Array.from(part.index)).toEqual(Array.from(whole.index!.array));
   });
 });

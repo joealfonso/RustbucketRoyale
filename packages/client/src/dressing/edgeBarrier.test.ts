@@ -106,6 +106,12 @@ describe("edge barrier", () => {
     expect(plans.some((p) => p.plates)).toBe(true);
     expect(plans.some((p) => p.leaners.length > 0)).toBe(true);
     expect(plans.some((p) => p.vines.length > 0)).toBe(true);
+    expect(plans.some((p) => p.braced !== null)).toBe(true);
+    expect(plans.some((p) => p.leaners.some((l) => l.kind === "shore"))).toBe(true);
+    // Raised columns break the top line, built up past the fence line but never above the wall's box.
+    const raised = plans.flatMap((p) => p.raised);
+    expect(raised.length).toBeGreaterThan(0);
+    for (const lift of raised) { expect(lift.top).toBeGreaterThan(37); expect(lift.top).toBeLessThanOrEqual(40); }
     expect(new Set(plans.map((p) => p.girderLift.toFixed(2))).size).toBeGreaterThan(40);
     expect(JSON.stringify(planBay(config, 7, 0, 24, 40, 2))).toBe(JSON.stringify(planBay(config, 7, 0, 24, 40, 2)));
     // Without the variety the plain bay is unchanged by it: same sheets, same containers.
@@ -120,7 +126,7 @@ describe("edge barrier", () => {
     for (let seed = 0; seed < 200; seed++) {
       const plan = planBay(config, seed, 0, 24, 40, 2);
       const triangles = nearBay(config, plan).reduce((n, p) => n + p.mesh.indices.length / 3, 0);
-      expect(triangles).toBeLessThan(3500);
+      expect(triangles).toBeLessThan(4000);
       expect(farBay(config, plan).length).toBeLessThan(90);
     }
   });

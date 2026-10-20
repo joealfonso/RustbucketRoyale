@@ -411,3 +411,29 @@ The GPU numbers swing more between runs than the change itself. Toggling only th
 
 ### What each look feature costs (2026-10-19, gate 12c)
 F1, Performance, Look features, "Measure feature costs": everything on, then each feature off for 3 s after 2 s to settle, median GPU time from the WebGL timer query. Medium seed 11 at the spawn view, the Claude desktop app's browser pane on the M4 MacBook (machine also running other work), offline: all on 6.1 ms; sun shadows save 0.7 ms, ground cover 0.7 ms, painted marks 0.1 ms. 202 draw calls. Joseph's laptop: not measured yet; press the button there and add a row.
+
+
+### Buildings with real structure (2026-10-19, gate V8)
+The building builders gained their structure (corrugated folds, castings and door gear on containers; posts, girts, bracing, gutters, windows and shutters on sheet walls; the warehouse roof with rafters and purlins, its columns and crates; a concrete frame with a slab, bent rebar and a bricked-up window in the ruins; sills, glazing bars and steel bracing on towers; footing, knee braces, cross-bracing, raised columns and shores on the edge wall). The per-box limit is now one setting, `triangleBudget` in data/dressing.json (budget.ts): 60 a cubic metre, at least 150, at most 4,500 (was 40 and 2,500 in code). Scrap piles keep their own old numbers. The edge wall's per-bay test limit went from 3,500 to 4,000.
+
+Triangles per box, every box on medium seed 11 (Node, `builders` only): container 808 -> 2,002, sheet 858 -> 1,277 (a 34 m warehouse wall up to about 4,400), ruin 1,233 -> 1,410, tower 1,109 -> 3,031; building triangles within 120 m of the middle 38k -> 64k (small seed 123: 28.5k -> 48k). Edge wall bay median 2,378 -> 2,684, worst 3,432 -> 3,768.
+
+Browser, headless Chrome 155 over CDP at 1600 x 900, M4 MacBook (ANGLE Metal), spawn view, offline, draw calls and triangles counted by wrapping the WebGL draws (shadow pass counted apart), GPU time from EXT_disjoint_timer_query_webgl2, old and new dressing sources swapped in alternately on the same dev server:
+
+| View | Draw calls before / after (shadow pass) | Triangles drawn before / after | GPU ms median, alternating runs before / after |
+| :- | :- | :- | :- |
+| medium seed 11 spawn | 203 (62) / 210 (65) | 889k / 977k | 6.5, 9.7, 8.0-8.3, 9.1-10.3, 10.0-11.2 / 7.5, 10.3, 9.3-9.7, 7.8-8.4, 7.3-7.7 |
+| small seed 123 spawn | 167 (54) / 176 (57) | 517k / 593k | 5.8, 6.6 / 6.4, 8.1 |
+
+The GPU time swings more between runs than between versions (four other agents were rendering mechs on the same machine), so the change's own cost is lost in that noise; it adds about 10% more triangles, no new shaders, and one more paint and surface pair in view (2 draw calls and its shadow), plus the edge wall's concrete footing (the same again where the wall is near). Joseph's laptop: not measured; F1, Performance, "Measure feature costs" there gives the number.
+
+Building and merging got cheaper rather than dearer, measured in Node (`scripts/measure-dressing.ts medium 11`, and timing the builders and a chunk change on the same map). Most of the old cost was not the builders but the merge on entering a new chunk: every dressed chunk near you was merged again and every corner's outline normal worked out again by a string key, 33 ms each time before this gate and 55 ms with the new geometry. Each chunk's arrays and outline normals are now made once when it is built (a numeric hash table, the same normals as outlineNormals.ts, tested), and a chunk change only copies them; the edge wall does the same. Builders place stretched copies of unit shapes (structure.ts) and move pieces into the world without trigonometry.
+
+| Medium seed 11 | Before | After |
+| :- | :- | :- |
+| Chunk change, the merge, median / worst | 33 / 46 ms | 2.7 / 5.0 ms |
+| Building builders per 50 m chunk, median / p90 / worst | 2.6 / 5.1 / 7.7 ms | 1.6 / 3.0 / 4.3-6.5 ms |
+| First build at the middle | 180 ms | 147 ms |
+| Sprinting corner to corner, p99 / worst frame | 5.3 / 69 ms | 4.8 / 9.8 ms |
+| Spectator cuts, every frame p99 / worst | 10.1 / 57 ms | 8.3 / 11.2 ms |
+| Edge wall alone, worst frame | 25.5 ms | 6.1 ms |
