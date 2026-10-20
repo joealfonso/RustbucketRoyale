@@ -1,0 +1,103 @@
+/* UI motion: every duration, easing and distance in one place, and the moves built from them. Motion is feedback
+   (a press, a pick, something arriving), never decoration. Only transform-like properties (translate, scale) and
+   opacity move, so nothing reflows, and no motion ever holds back a click: a button mid-animation still works.
+   The menus move smoothly like hardware; the in-match HUD moves in hard steps like an old tube redrawing. */
+:root {
+  --ui-fast: 110ms; /* hover and press */
+  --ui-in: 200ms; /* something arriving */
+  --ui-out: 160ms; /* something leaving */
+  --ui-stagger: 40ms; /* between panels arriving together */
+  --ui-count: 500ms; /* a number rolling to its value on the results screen (read by hud.ts) */
+  --ui-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ui-steps: steps(3, end);
+  --ui-shift: 0.8rem; /* how far things slide in from */
+  --ui-lift: 2px; /* how far a button rises on hover and sinks on press */
+  --ui-punch-big: 1.6; /* the countdown and GO land from this scale */
+  --ui-punch-small: 1.3; /* warnings and the alive count */
+}
+
+/* Motion off: nothing slides, lifts or punches. What remains are the fades, which only change how things appear. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ui-shift: 0px;
+    --ui-lift: 0px;
+    --ui-punch-big: 1;
+    --ui-punch-small: 1;
+    --ui-count: 0ms;
+  }
+}
+
+/* Each element says where it slides in from with --from-x / --from-y. Fill is backwards only, so once it has
+   arrived the element's own hover and press moves are free to work. */
+@keyframes ui-slide { from { opacity: 0; translate: var(--from-x, 0) var(--from-y, 0); } }
+@keyframes ui-fade { from { opacity: 0; } }
+@keyframes ui-leave { to { opacity: 0; translate: var(--to-x, 0) var(--to-y, 0); } }
+/* Two copies of one punch, so uiMotion.replay can restart it by flipping data-beat without forcing a layout. */
+@keyframes ui-punch-a { from { scale: var(--punch-from, 1.3); } }
+@keyframes ui-punch-b { from { scale: var(--punch-from, 1.3); } }
+[data-beat] { animation-duration: var(--ui-in); animation-timing-function: var(--ui-steps); }
+[data-beat="a"] { animation-name: ui-punch-a; }
+[data-beat="b"] { animation-name: ui-punch-b; }
+
+/* ---- Title screen. The name, the choices and the mech cards come in from their own edges, quickly and once. */
+#menu.arrive #titleBlock { --from-x: calc(var(--ui-shift) * -2); animation: ui-slide var(--ui-in) var(--ui-ease) backwards; }
+#menu.arrive #deploy { --from-x: calc(var(--ui-shift) * 2); animation: ui-slide var(--ui-in) var(--ui-ease) var(--ui-stagger) backwards; }
+#menu.arrive #pick h2 { animation: ui-fade var(--ui-in) var(--ui-ease) calc(var(--ui-stagger) * 2) backwards; }
+#menu.arrive .mechCards button { --from-y: calc(var(--ui-shift) * 1.5); animation: ui-slide var(--ui-in) var(--ui-ease) calc(var(--ui-stagger) * (2 + var(--i, 0))) backwards; }
+/* Custom room opening: its fields drop into place instead of popping. */
+#deploy #custom[open] > :not(summary) { --from-y: calc(var(--ui-shift) * -0.5); animation: ui-slide var(--ui-in) var(--ui-ease) backwards; }
+
+/* Buttons are keys: they sink when pressed. The press is near instant, the release eases back. */
+:is(#menu, #roomBar, #hint) :is(button, summary) { transition: translate var(--ui-fast) var(--ui-ease); }
+:is(#menu, #roomBar, #hint) :is(button, summary):active { translate: 0 var(--ui-lift); transition-duration: 30ms; }
+.segments span { transition: translate var(--ui-fast) var(--ui-ease); }
+.segments label:active span { translate: 0 var(--ui-lift); transition-duration: 30ms; }
+/* The filled buttons rise off the panel on hover with a hard soot edge under them, the same hard offset the title
+   wears, and press flat into it. */
+#menu button:not(.ghost, [data-mech]):hover { translate: calc(var(--ui-lift) * -1) calc(var(--ui-lift) * -1); box-shadow: calc(var(--ui-lift) * 2) calc(var(--ui-lift) * 2) 0 var(--hud-soot); }
+#menu button:not(.ghost, [data-mech]):active { translate: var(--ui-lift) var(--ui-lift); box-shadow: none; }
+/* Mech cards lift toward you on hover. Picking one fills it from the left in steps, like a bar loading. */
+:is(#menu, #hint) .mechCards button:hover { translate: 0 calc(var(--ui-lift) * -2); }
+:is(#menu, #hint) .mechCards button:active { translate: 0 var(--ui-lift); }
+:is(#menu, #hint) .mechCards button.on::before { animation: card-fill var(--ui-in) steps(4, end) backwards; }
+@keyframes card-fill { from { scale: 0 1; } }
+
+/* ---- Between screens. */
+/* The connecting and map building message: a hard blinking cursor, so a long build never looks frozen. */
+#hint.busy::after { content: "_"; margin-left: 0.15em; animation: busy-blink 0.9s steps(1, end) infinite; }
+@keyframes busy-blink { 50% { opacity: 0; } }
+/* Click to play arrives a touch above where it sits; the resume bar drops in from the top. */
+#hint .screen { --from-y: var(--ui-shift); animation: ui-slide var(--ui-in) var(--ui-ease) backwards; }
+#hint .resumeLine { transition: translate var(--ui-in) var(--ui-ease); }
+#hint.hidden .resumeLine { translate: 0 calc(var(--ui-shift) * -1); }
+@starting-style { #hint.resume:not(.hidden) .resumeLine { translate: 0 calc(var(--ui-shift) * -1); } }
+/* The room bar, the match numbers and the radar come in from the edge they sit on. */
+#roomBar { --from-y: calc(var(--ui-shift) * -1); animation: ui-slide var(--ui-in) var(--ui-ease) backwards; }
+#matchHud { --from-x: calc(var(--ui-shift) * -1.5); animation: ui-slide var(--ui-in) var(--ui-steps) backwards; }
+#radarFrame { --from-x: calc(var(--ui-shift) * 1.5); animation: ui-slide var(--ui-in) var(--ui-steps) backwards; }
+#status { --from-y: calc(var(--ui-shift) * -0.5); animation: ui-slide var(--ui-in) var(--ui-steps) backwards; }
+
+/* ---- In the match. */
+/* The countdown and GO slam down onto the screen; the alive count kicks when someone drops. */
+#bigText { --punch-from: var(--ui-punch-big); }
+#aliveText { --punch-from: var(--ui-punch-small); }
+/* Kill feed lines step in from the right and slide back out when they expire (hud.ts waits --ui-out to remove them). */
+#feed > div { --from-x: calc(var(--ui-shift) * 2); animation: ui-slide var(--ui-in) var(--ui-steps) backwards; }
+#feed > div.out { --to-x: var(--ui-shift); animation: ui-leave var(--ui-out) var(--ui-steps) forwards; }
+/* The prompt box eases up into place and sinks away, keeping its last words while it fades. */
+#prompt { transition: opacity var(--ui-out) var(--ui-ease), translate var(--ui-out) var(--ui-ease), visibility 0s linear var(--ui-out); }
+#prompt.on { transition-duration: var(--ui-in), var(--ui-in), 0s; transition-delay: 0s; }
+
+/* ---- Match over: the dark falls, the title lands and the line under it rises. */
+#results { animation: ui-fade var(--ui-out) linear backwards; }
+#results h2 { --punch-from: var(--ui-punch-small); animation: ui-punch-a var(--ui-in) var(--ui-steps) backwards; }
+#results p { --from-y: var(--ui-shift); animation: ui-slide var(--ui-in) var(--ui-ease) calc(var(--ui-stagger) * 2) backwards; }
+/* Right-aligned in a box as wide as the biggest number it rolls through, so the sentence never shifts. */
+#resultPlace { display: inline-block; text-align: right; font-family: var(--hud-num); }
+
+/* Motion off, continued. Last in the file so it wins: blinks and wipes are motion too, so the cursor holds still and
+   a picked card's fill fades in. */
+@media (prefers-reduced-motion: reduce) {
+  #hint.busy::after { animation: none; }
+  :is(#menu, #hint) .mechCards button.on::before { animation-name: ui-fade; }
+}

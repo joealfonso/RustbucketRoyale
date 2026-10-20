@@ -7,6 +7,8 @@
 @import "@fontsource/barlow/latin-600.css";
 /* The decal face, for the Aegis Dynamics name on the title screen and the stencils painted in the hangar. */
 @import "@fontsource/big-shoulders-stencil/latin-700.css";
+/* How the HUD and menus move: its tokens and every animation (motion.css). */
+@import "./motion.css";
 
 /* Other HUD pieces (the damage diagram, warnings) read these, so every colour and face is set once. */
 :root {
@@ -154,8 +156,12 @@ canvas { display: block; width: 100%; height: 100%; }
 /* The Q cooldown again, small under the aim, so you need not look away to know when it is back. */
 #aimCooldown { display: none; text-transform: none; position: fixed; left: 50%; top: calc(50% + 46px); transform: translateX(-50%); color: var(--hud-amber); font: 400 0.8rem var(--hud-num); opacity: 0.8; pointer-events: none; white-space: nowrap; }
 #aimCooldown .key { margin-right: 0.3em; }
-#prompt { display: none; position: fixed; left: 50%; top: 62%; transform: translateX(-50%); padding: 0.35rem 0.8rem; font: 700 0.95rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
-#bigText { position: fixed; left: 50%; top: 32%; transform: translate(-50%, -50%); color: var(--hud-amber); font: 400 6rem/1 var(--hud-num); text-shadow: 4px 4px 0 var(--hud-soot); pointer-events: none; }
+/* Hidden by fading rather than by display, so it can ease out with its last words still in it (motion.css). */
+#prompt { position: fixed; left: 50%; top: 62%; transform: translateX(-50%); padding: 0.35rem 0.8rem; font: 700 0.95rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; visibility: hidden; opacity: 0; translate: 0 calc(var(--ui-shift) * 0.5); }
+#prompt.on { visibility: visible; opacity: 1; translate: 0 0; }
+#bigText { position: fixed; left: 50%; top: 32%; transform: translate(-50%, -50%); color: var(--hud-amber); font: 400 6rem/1 var(--hud-num); text-shadow: 4px 4px 0 var(--hud-soot); pointer-events: none; white-space: nowrap; }
+/* A message rather than a count (SUPPLY DROP INBOUND) is words, smaller, so it does not cover half the fight. */
+#bigText.words { font: 700 2.6rem/1 var(--hud-word); letter-spacing: 0.06em; }
 #status { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); color: var(--hud-amber); background: var(--hud-panel); border: var(--hud-border) solid var(--hud-amber-dim); padding: 0.4rem 0.9rem; font: 700 1.25rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.05em; pointer-events: none; white-space: nowrap; }
 #status:empty { display: none; }
 #hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 160px 40px rgba(255, 77, 61, 0.6); transition: opacity 0.4s; }
@@ -221,7 +227,9 @@ body.titleScreen > :not(#menu, #game) { display: none !important; }
 .screen { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1rem; text-align: center; }
 .screen.panel { pointer-events: auto; padding: 2rem 2.4rem; }
 #hint { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(42, 47, 46, 0.82); color: var(--hud-amber); font: 700 1.4rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; text-align: center; cursor: pointer; }
-#hint.hidden { display: none; }
+/* Hidden by fading, so the screen melts away under the first click instead of blinking off (motion.css timings). */
+#hint { transition: opacity var(--ui-in) var(--ui-ease); }
+#hint.hidden { opacity: 0; visibility: hidden; transition: opacity var(--ui-out) linear, visibility 0s linear var(--ui-out); }
 #hint .resumeLine { display: none; }
 #hint.resume { inset: auto 0 auto 0; top: 22%; background: none; pointer-events: none; }
 #hint.resume .screen { display: none; }
@@ -243,7 +251,10 @@ body.titleScreen > :not(#menu, #game) { display: none !important; }
 #menu .mechCards button { width: 11.5rem; background: var(--hud-panel); }
 #menu .mechCards button:hover { background: rgba(58, 52, 30, 0.95); }
 /* The picked card is filled, not just recoloured, so it reads without colour. */
-:is(#menu, #hint) .mechCards button.on { border-color: var(--hud-amber); background: var(--hud-amber); color: var(--hud-soot); }
+/* The fill is a layer under the text, so it can wipe in when picked (motion.css). */
+:is(#menu, #hint) .mechCards button { position: relative; isolation: isolate; }
+:is(#menu, #hint) .mechCards button.on { border-color: var(--hud-amber); color: var(--hud-soot); }
+:is(#menu, #hint) .mechCards button.on::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--hud-amber); transform-origin: left; }
 .mechCards strong { display: block; font: 700 1rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.04em; }
 .mechCards em { display: block; font: 400 0.8rem var(--hud-body); font-style: normal; opacity: 0.8; margin-bottom: 0.45rem; }
 .mechCards .stats { display: grid; grid-template-columns: 3.2rem 1fr; gap: 0.2rem 0.4rem; align-items: center; font: 500 0.7rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.08em; }

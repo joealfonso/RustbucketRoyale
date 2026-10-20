@@ -1,7 +1,10 @@
 import { parseBotDifficulty, type Roster } from "@rustbucket/shared";
+import audioJson from "../../../data/audio.json";
+import { Sound, type AudioConfig } from "./audio";
 import { Hangar } from "./hangar/hangar";
 import { mechCards } from "./mechPicker";
 import { createRoomSearch, playSearch } from "./roomLinks";
+import { uiSounds } from "./uiSounds";
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -9,7 +12,8 @@ const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) 
 // custom room (map, bots and how hard they are), or practise offline. The mech is chosen here and nowhere else. Every button reloads the page with the choice in the address (see main.ts). Behind it the hangar runs,
 // with the picked mech standing in the loading bay.
 export function showTitleScreen(roster: Roster, picked: number): void {
-  byId("menu").style.display = "grid";
+  const menu = byId("menu");
+  menu.style.display = "grid";
   document.body.classList.add("titleScreen"); // hides the match HUD, which would otherwise show over the hangar
   const tier = byId<HTMLSelectElement>("tierSelect");
   const bots = byId<HTMLSelectElement>("botSelect");
@@ -34,4 +38,8 @@ export function showTitleScreen(roster: Roster, picked: number): void {
     // Without WebGL the menu still works over the plain background.
     console.warn("The hangar could not be drawn:", error);
   }
+  uiSounds(menu, new Sound(audioJson as AudioConfig));
+  // The panels slide in now (motion.css), after the hangar's first build has held the page, so the motion is seen
+  // rather than spent while nothing could paint. Every button already works while they move.
+  menu.classList.add("arrive");
 }

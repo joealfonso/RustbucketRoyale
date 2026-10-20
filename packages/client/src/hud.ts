@@ -1,4 +1,5 @@
 import type { Loadout, MatchProgress, RingNow, RosterMech, UpgradeDef, WeaponStats } from "@rustbucket/shared";
+import { countUp, cssSeconds, replay } from "./uiMotion";
 
 export interface RoomView {
   code: string;
@@ -10,6 +11,9 @@ export interface RoomView {
 }
 
 const byId = (id: string) => document.getElementById(id)!;
+
+// How long a kill feed line stays up before it slides out.
+const FEED_SECONDS = 5;
 
 // The cooldown bar moves in this many steps, so the page changes a few times a second instead of every frame.
 export const COOLDOWN_STEPS = 20;
@@ -65,6 +69,11 @@ export class Hud {
   private abilityShown: string | null = null;
   private abilityKey = -1;
   private promptBox = byId("prompt");
+  private promptOn = false;
+  private flashTimer = 0; // while a flash (GO) is up, the countdown's clearing of the big text waits for it
+  private stopCount: (() => void) | null = null;
+  // Read once: how long a feed line takes to slide out, so it is removed only after (motion.css --ui-out).
+  private feedOutMs = cssSeconds("--ui-out") * 1000;
   private plateCells = Array.from(document.querySelectorAll<HTMLElement>("#plates > div"));
   // The numbers last drawn, so a frame where nothing changed builds no strings at all.
   private shownProgress = [-1, -1, -1, -1, -1];
@@ -98,9 +107,19 @@ export class Hud {
     if (room.state !== "results") this.results.style.display = "none";
   }
 
+  // The big centre text, which lands with a punch every time it changes to something.
+  private big(value: string): void {
+    if (this.lastText.get(this.bigText) === value) return;
+    this.text(this.bigText, value);
+    this.bigText.classList.toggle("words", value.length > 3);
+    if (value) replay(this.bigText);
+  }
+
   setProgress(progress: MatchProgress, ring: RingNow | null): void {
     const { state } = progress;
-    this.text(this.bigText, state === "countdown" ? String(Math.ceil(progress.seconds)) : "");
+    // A countdown at 0 is the frame it ends on, not a number to show.
+    if (state === "countdown") this.big(progress.seconds > 0 ? String(Math.ceil(progress.seconds)) : "");
+    else if (!this.flashTimer) this.big("");
     const live = state === "active";
     this.display(this.matchHud, live ? "grid" : "none");
     if (!live) return;
@@ -109,6 +128,8 @@ export class Hud {
     const ringKind = !ring ? -1 : ring.secondsToChange <= 0 ? 0 : ring.shrinking ? 1 : 2;
     const shown = this.shownProgress;
     if (shown[0] === progress.alive && shown[1] === progress.total && shown[2] === secs && shown[3] === ringLeft && shown[4] === ringKind) return;
+    // Someone dropped: the count kicks, so a knockout anywhere on the map is felt in the corner of your eye.
+    if (progress.alive < shown[0]!) replay(this.aliveText);
     shown[0] = progress.alive; shown[1] = progress.total; shown[2] = secs; shown[3] = ringLeft; shown[4] = ringKind;
     this.text(this.aliveText, String(progress.alive));
     this.text(this.aliveTotal, `of ${progress.total}`);
@@ -119,10 +140,12 @@ export class Hud {
     }
   }
 
-  // "GO" shows briefly when the countdown ends.
+  // "GO" shows briefly when the countdown ends. Until it is gone, setProgress leaves the big text alone: it used to
+  // clear it on the very next frame, so GO was never seen.
   flash(message: string, ms: number): void {
-    this.text(this.bigText, message);
-    window.setTimeout(() => this.text(this.bigText, ""), ms);
+    this.big(message);
+    window.clearTimeout(this.flashTimer);
+    this.flashTimer = window.setTimeout(() => { this.flashTimer = 0; this.big(""); }, ms);
   }
 
   // The two weapon slots, the one in hand marked, the grenade count and fitted upgrades; and the plate points on
@@ -179,26 +202,48 @@ export class Hud {
     if (!ready) this.text(this.aimCooldownTime, `${seconds}`);
   }
 
-  // A hint shown near something to interact with, or hidden with an empty string.
+  // A hint shown near something to interact with, or hidden with an empty string. Hiding keeps the last words in
+  // the box, so it fades out still saying them instead of shrinking to nothing.
   setPrompt(text: string): void {
-    this.display(this.promptBox, text ? "block" : "none");
-    this.text(this.promptBox, text);
+    const on = text !== "";
+    if (on !== this.promptOn) {
+      this.promptOn = on;
+      this.promptBox.classList.toggle("on", on);
+    }
+    if (on) this.text(this.promptBox, text);
   }
 
   feed(message: string): void {
     const line = document.createElement("div");
     line.textContent = message;
     this.feedBox.prepend(line);
-    window.setTimeout(() => line.remove(), 5000);
+    window.setTimeout(() => line.classList.add("out"), FEED_SECONDS * 1000);
+    window.setTimeout(() => line.remove(), FEED_SECONDS * 1000 + this.feedOutMs);
   }
 
-  showResult(title: string, sub: string): void {
+  // The match result. Your place rolls down from the size of the field to where you finished. `place` is null
+  // for the winner and for someone who never had a mech.
+  showResult(title: string, place: number | null, field: number): void {
     byId("resultTitle").textContent = title;
-    byId("resultSub").textContent = sub;
+    const sub = byId("resultSub");
+    this.stopCount?.();
+    this.stopCount = null;
+    if (place === null) {
+      sub.textContent = "Next match starting...";
+    } else {
+      const number = document.createElement("span");
+      number.id = "resultPlace";
+      // As wide as the biggest number it passes through, so the line does not twitch as the digits change.
+      number.style.minWidth = `${String(Math.max(field, place)).length}ch`;
+      sub.replaceChildren("You placed ", number, ". Next match starting...");
+      this.stopCount = countUp(number, Math.max(field, place), place, cssSeconds("--ui-count"));
+    }
     this.results.style.display = "flex";
   }
 
   hideResult(): void {
+    this.stopCount?.();
+    this.stopCount = null;
     this.results.style.display = "none";
   }
 }

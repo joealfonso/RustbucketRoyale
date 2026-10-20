@@ -7,6 +7,7 @@ import {
 import mechJson from "../../../data/mech.json";
 import audioJson from "../../../data/audio.json";
 import { Sound, type AudioConfig } from "./audio";
+import { uiSounds } from "./uiSounds";
 import { BlastSizes } from "./fx/blastSize";
 import { Debris } from "./fx/debris";
 import { Explosions, parseExplosionFx } from "./fx/explosion";
@@ -180,6 +181,8 @@ let tier = params.get("tier") ?? "medium";
 let seed = params.has("seed") ? Number(params.get("seed")) : Math.floor(Math.random() * 0x100000000);
 let roomCode = "";
 
+// A blinking cursor after the message while connecting and building (motion.css), so a long build never looks stuck.
+hint.classList.add("busy");
 try {
   if (net) {
     hint.textContent = "Connecting...";
@@ -195,11 +198,13 @@ try {
   // Let the message paint before the map build holds the thread.
   await new Promise((resolve) => setTimeout(resolve, 30));
 } catch (error) {
+  hint.classList.remove("busy");
   hint.textContent = error instanceof Error ? error.message : String(error);
   throw error;
 }
 let map = buildPlayMap(tier, seed, mechStats);
 const overview = params.has("overview");
+hint.classList.remove("busy");
 hint.innerHTML = hintHtml;
 crt.attachSwitch(document.getElementById("crtSwitch") as HTMLButtonElement);
 // The mech is picked on the title screen only (gate 14a); the Menu button in the room bar goes back there.
@@ -350,6 +355,10 @@ thrusters.onLanding = (x, y, z) => {
 };
 // Browsers only allow sound after a click, and the click that locks the mouse is the first one.
 for (const el of [canvas, hint]) el.addEventListener("click", () => sound.start());
+// UI sounds: a click for clicking in (or back in) and for the room bar's buttons, a tick for hovering them.
+// Only while the mouse is free: the screen fades out under the first shots, and those clicks are not UI.
+hint.addEventListener("click", () => { if (!document.pointerLockElement) sound.play("uiClick"); });
+uiSounds(document.getElementById("roomBar")!, sound);
 // A broken barrel goes off a beat later (props.json barrelBlast.delaySeconds) and the server's word on it can lag, so
 // a blast where one broke is taken for it this long afterwards.
 const BARREL_MEMORY_SECONDS = 1;
@@ -679,7 +688,8 @@ if (net) {
   };
   net.onResult = (r) => {
     const won = r.winnerId === net.id;
-    hud.showResult(won ? "Victory!" : r.winnerId === null ? "Nobody wins" : `${name(r.winnerId)} wins`, myPlace && !won ? `You placed ${myPlace}. Next match starting...` : "Next match starting...");
+    hud.showResult(won ? "Victory!" : r.winnerId === null ? "Nobody wins" : `${name(r.winnerId)} wins`, myPlace && !won ? myPlace : null, progress.total);
+    sound.play("uiWhoosh");
   };
   net.onClose = (reason) => {
     ready = false;

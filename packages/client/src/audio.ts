@@ -8,7 +8,8 @@
 export type SoundName =
   | "shot" | "shotScattergun" | "shotSpikeDriver" | "impact" | "explosion" | "smash" | "hitMarker" | "hurt"
   | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap" | "loot" | "repair"
-  | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz" | "wade" | "splash" | "treeFall" | "treeLand";
+  | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz" | "wade" | "splash" | "treeFall" | "treeLand"
+  | "uiHover" | "uiClick" | "uiPick" | "uiWhoosh";
 
 export interface AudioConfig {
   master: number;
@@ -257,6 +258,21 @@ export class Sound {
       case "decoy": this.glide(into, 700, 1400, 0.45, "triangle", 0.22, 0, true); this.glide(into, 712, 1428, 0.45, "triangle", 0.18, 0, true); return this.sweep(into, 1500, 4000, 0.4, 0.5);
       // A decoy bursting: an electric crackle and a blip dropping away.
       case "fizz": this.crunch(into, 0.22, "highpass", 3000, 0.7); this.burst(into, 0.08, "bandpass", 4500, 1.2); return this.glide(into, 1600, 260, 0.22, "square", 0.12);
+      // Menus and HUD: short and quiet, metal switches rather than app chimes, so they belong to the same machines.
+      // Hovering: the faintest tick of a contact closing.
+      case "uiHover": return this.tone(into, 2600 * p, 0.025, "triangle", 0.25);
+      // A press: a chunky toggle switch, a sharp clack with a little weight behind it.
+      case "uiClick":
+        this.burst(into, 0.012, "highpass", 3200, 0.5, 0.0005);
+        this.body(into, 240 * p, 120 * p, 0.05, 0.35);
+        return this.clank(into, 980 * p, 0.05, 0.12);
+      // Picking a mech: a latch dropping home, then a short blip that says it took.
+      case "uiPick":
+        this.clank(into, 520 * p, 0.09, 0.22);
+        this.body(into, 170 * p, 80 * p, 0.1, 0.55);
+        return this.tone(into, 1320 * p, 0.09, "triangle", 0.22, 0.05);
+      // Something sliding in: a short rising breath of air.
+      case "uiWhoosh": return this.sweep(into, 380 * p, 2200 * p, 0.22, 0.6);
       case "jets": return 0;
     }
   }

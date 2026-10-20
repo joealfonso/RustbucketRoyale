@@ -158,6 +158,22 @@
       "volume": 0.95,
       "echo": 0.55,
       "file": null
+    },
+    "uiHover": {
+      "volume": 0.2,
+      "file": null
+    },
+    "uiClick": {
+      "volume": 0.3,
+      "file": null
+    },
+    "uiPick": {
+      "volume": 0.35,
+      "file": null
+    },
+    "uiWhoosh": {
+      "volume": 0.2,
+      "file": null
     }
   }
 }

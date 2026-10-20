@@ -1,13 +1,17 @@
 /* Warning tags. Danger and caution differ by marker, border and blinking as well as colour, so neither rests on
    colour alone. The blink is a hard on and off step, never a soft fade or glow. */
 .warnings { display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
-.warningTag { display: flex; align-items: stretch; font-family: var(--hud-word, "Chakra Petch", system-ui, sans-serif); font-weight: 700; font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; background: var(--hud-soot, #2a2f2e); white-space: nowrap; }
+/* Every tag lands with a short stepped punch (motion.css tokens); a danger tag then blinks. */
+.warningTag { animation: warning-arrive var(--ui-in, 0.2s) var(--ui-steps, steps(3, end)) backwards; display: flex; align-items: stretch; font-family: var(--hud-word, "Chakra Petch", system-ui, sans-serif); font-weight: 700; font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; background: var(--hud-soot, #2a2f2e); white-space: nowrap; }
 .warningTag > span { padding: 3px 10px; }
 .warningMark { font-family: var(--hud-num, "Share Tech Mono", ui-monospace, monospace); }
-.warningTag.danger { color: var(--hud-warn, #FF4D3D); border: 2px solid var(--hud-warn, #FF4D3D); animation: warning-blink var(--warning-blink, 0.8s) steps(1, end) infinite; }
+.warningTag.danger { color: var(--hud-warn, #FF4D3D); border: 2px solid var(--hud-warn, #FF4D3D); animation: warning-arrive var(--ui-in, 0.2s) var(--ui-steps, steps(3, end)) backwards, warning-blink var(--warning-blink, 0.8s) steps(1, end) infinite; }
 .warningTag.danger .warningMark { background: var(--hud-warn, #FF4D3D); color: var(--hud-soot, #2a2f2e); }
 .warningTag.caution { color: var(--hud-amber, #FFB000); border: 1px dashed var(--hud-amber, #FFB000); }
 .warningTag.caution .warningMark { border-right: 1px dashed var(--hud-amber, #FFB000); }
-.warnings.noBlink .warningTag { animation: none; }
-@media (prefers-reduced-motion: reduce) { .warningTag { animation: none; } }
+.warnings.noBlink .warningTag { animation: warning-arrive var(--ui-in, 0.2s) var(--ui-steps, steps(3, end)) backwards; }
+/* Specific enough to beat .warningTag.danger: the plain .warningTag here before lost to it, so danger tags kept
+   blinking with motion turned off. */
+@media (prefers-reduced-motion: reduce) { .warnings .warningTag:is(.danger, .caution) { animation: none; } }
 @keyframes warning-blink { 0% { opacity: 1; } 70% { opacity: 0.25; } }
+@keyframes warning-arrive { from { scale: var(--ui-punch-small, 1.3); } }

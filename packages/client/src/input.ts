@@ -16,6 +16,7 @@ export class Input {
   private slot = 0;
   private clickQueued = false;
   private enterQueued = false;
+  private played = false; // the mouse has been locked at least once
   private sprint = new Sprint();
 
   // `sprintWindowSeconds` is read each time, so the tuning panel can change it live.
@@ -60,7 +61,10 @@ export class Input {
     document.addEventListener("pointerlockchange", () => {
       this.locked = document.pointerLockElement === canvas;
       // Once you have played, freeing the mouse shows a small bar instead of the whole screen, so the fight stays in view.
-      if (this.locked) hint.classList.add("resume");
+      // Switched on when the mouse is freed rather than when it is first locked, so the full screen fades out as
+      // itself instead of turning into the bar halfway through its fade.
+      if (this.locked) this.played = true;
+      else if (this.played) hint.classList.add("resume");
       hint.classList.toggle("hidden", this.locked || this.panelOpen);
       if (!this.locked) this.mouseDown = false;
     });

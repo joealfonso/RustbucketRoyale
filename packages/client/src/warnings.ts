@@ -90,9 +90,12 @@ export function shownWarnings(mask: number, c: WarningsConfig): WarningDef[] {
 // danger is a filled "!!" block with a solid border and blinks, caution is a hollow "!" with a dashed border.
 const MARKS: Record<WarningLevel, string> = { danger: "!!", caution: "!" };
 
-// The warning tags in the upper centre of the HUD. Only touches the page when the set of warnings changes.
+// The warning tags in the upper centre of the HUD. Only touches the page when the set of warnings changes. Each tag
+// is made once and kept: one still showing stays where it is, so only a new warning plays its arrival punch
+// (warnings.css), and a warning that went and came back punches again.
 export class Warnings {
   private shownMask = -1;
+  private tags = new Map<WarningId, HTMLElement>();
 
   constructor(private root: HTMLElement, private config: WarningsConfig) {
     root.classList.add("warnings");
@@ -104,16 +107,24 @@ export class Warnings {
     const mask = warningMask(s, this.config);
     if (mask === this.shownMask) return;
     this.shownMask = mask;
-    this.root.replaceChildren(...shownWarnings(mask, this.config).map((w) => {
-      const tag = document.createElement("div");
-      tag.className = `warningTag ${w.level}`;
-      const mark = document.createElement("span");
-      mark.className = "warningMark";
-      mark.textContent = MARKS[w.level];
-      const text = document.createElement("span");
-      text.textContent = w.text;
-      tag.append(mark, text);
-      return tag;
-    }));
+    const shown = shownWarnings(mask, this.config).map((w) => this.tag(w));
+    for (const child of [...this.root.children]) if (!shown.includes(child as HTMLElement)) child.remove();
+    // Priority order never changes, so the tags still up are already in order and new ones slot in between.
+    shown.forEach((tag, i) => { if (this.root.children[i] !== tag) this.root.insertBefore(tag, this.root.children[i] ?? null); });
+  }
+
+  private tag(w: WarningDef): HTMLElement {
+    let tag = this.tags.get(w.id);
+    if (tag) return tag;
+    tag = document.createElement("div");
+    tag.className = `warningTag ${w.level}`;
+    const mark = document.createElement("span");
+    mark.className = "warningMark";
+    mark.textContent = MARKS[w.level];
+    const text = document.createElement("span");
+    text.textContent = w.text;
+    tag.append(mark, text);
+    this.tags.set(w.id, tag);
+    return tag;
   }
 }
