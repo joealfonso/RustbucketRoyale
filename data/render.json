@@ -1,0 +1,10 @@
+{
+  "minPixelRatio": 1,
+  "maxPixelRatio": 2,
+  "startPixelRatio": 1.25,
+  "step": 0.25,
+  "checkSeconds": 1,
+  "lowerAboveFrameMs": 18,
+  "raiseBelowGpuMs": 8,
+  "raiseAfterSeconds": 4
+}

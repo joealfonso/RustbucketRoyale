@@ -97,6 +97,8 @@ import { RemoteMechs } from "./remoteMechs";
 import { RingView } from "./ringView";
 import { DropView } from "./dropView";
 import { RailFx, type RailPose } from "./railFx";
+import { RenderScale, parseRenderScale } from "./renderScale";
+import renderJson from "../../../data/render.json";
 import { Tips, browserTipStore, parseTips } from "./tips";
 import tipsJson from "../../../data/tips.json";
 import dropsJson from "../../../data/drops.json";
@@ -222,7 +224,10 @@ hint.addEventListener("click", () => { clickedIn = true; });
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Dynamic resolution (renderScale.ts): starts below a Retina screen's full ratio and follows how the frames go.
+const renderScale = new RenderScale(parseRenderScale(renderJson), window.devicePixelRatio);
+renderer.setPixelRatio(renderScale.ratio);
+const frameSummary = { median: 0, worst: 0 }, gpuSummaryForScale = { median: 0, worst: 0 };
 
 // The game's look (V1): palette, toon bands and outlines, warm key light, sky and haze. See DESIGN.md and toonMaterial.ts.
 // The map seed picks the light preset, so everyone in a room sees the same sky; offline ?look=<name> forces one.
@@ -1166,8 +1171,17 @@ function frame(now: number): void {
   gpuTimer.end();
   featureCost.tick(frameTime, gpuTimer.times, gpuSummary);
   frameMs.record(frameTime * 1000);
+  if (renderScale.due(frameTime)) {
+    frameMs.summary(frameSummary);
+    gpuTimer.times.summary(gpuSummaryForScale);
+    if (renderScale.decide(frameSummary.median, gpuSummaryForScale.median)) {
+      renderer.setPixelRatio(renderScale.ratio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      frameMs.clear(); // the old frames were drawn at the old size
+    }
+  }
   workMs.record(performance.now() - workStarted);
-  if (panel?.visible) panel.updateRender(frameMs, workMs, renderer.info.render.calls, renderer.info.render.triangles, gpuTimer.times);
+  if (panel?.visible) panel.updateRender(frameMs, workMs, renderer.info.render.calls, renderer.info.render.triangles, gpuTimer.times, renderScale.ratio);
   requestAnimationFrame(frame);
 }
 // Effects sit in the scene from the start with nothing to draw, so their shaders build now rather than in the frame

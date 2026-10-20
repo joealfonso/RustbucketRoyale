@@ -31,7 +31,7 @@ export class DebugPanel {
   readonly gui = new GUI({ title: "Tuning (F1)" });
   readonly readouts: Readouts = { speed: 0, grounded: false, fps: 0, players: 1, correction: 0, ping: 0, viewDelay: 0 };
   private crossReadout = { seconds: 0 };
-  private render = { frameMedian: 0, frameWorst: 0, workMedian: 0, workWorst: 0, gpuMedian: 0, gpuWorst: 0, drawCalls: 0, triangles: 0 };
+  private render = { frameMedian: 0, frameWorst: 0, workMedian: 0, workWorst: 0, gpuMedian: 0, gpuWorst: 0, drawCalls: 0, triangles: 0, pixelRatio: 0 };
   private costs = { progress: "not run", result: "" };
   private frame = { median: 0, worst: 0 };
   private status = { note: "offline: changes apply at once" };
@@ -60,6 +60,7 @@ export class DebugPanel {
     perf.add(this.render, "workWorst").name("Work ms, worst").listen().disable();
     perf.add(this.render, "gpuMedian").name("GPU ms, median").listen().disable();
     perf.add(this.render, "gpuWorst").name("GPU ms, worst").listen().disable();
+    perf.add(this.render, "pixelRatio").name("Render scale (pixel ratio)").listen().disable();
     perf.add(this.render, "drawCalls").name("Draw calls").listen().disable();
     perf.add(this.render, "triangles").name("Triangles").listen().disable();
     this.gui.add(this.status, "note").name("Tuning").disable();
@@ -153,7 +154,8 @@ export class DebugPanel {
   }
   private featureCost: FeatureCost | null = null;
 
-  updateRender(frames: FrameTimes, work: FrameTimes, drawCalls: number, triangles: number, gpu: FrameTimes): void {
+  updateRender(frames: FrameTimes, work: FrameTimes, drawCalls: number, triangles: number, gpu: FrameTimes, pixelRatio: number): void {
+    this.render.pixelRatio = pixelRatio;
     frames.summary(this.frame);
     this.render.frameMedian = Math.round(this.frame.median * 10) / 10;
     this.render.frameWorst = Math.round(this.frame.worst * 10) / 10;
