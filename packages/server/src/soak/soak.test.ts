@@ -3,10 +3,14 @@ import { runSoak } from "./runSoak";
 
 // The full match soak for the small tier runs with every test pass. Medium and large run nightly in CI
 // (npm run soak), because they take a few seconds each.
+const SUITE_TICK_BUDGET_MS = 50;
+
 describe("soak", () => {
   it("plays a whole small match on a random seed with nothing going wrong", async () => {
     const seed = Math.floor(Math.random() * 1_000_000_000);
-    const report = await runSoak("small", seed);
+    // Every game check as the real soak, but a loose clock: here it shares the machine with the whole suite running
+    // in parallel, so tick times say more about the load than the code. `npm run soak` keeps the real 8 ms budget.
+    const report = await runSoak("small", seed, { tickBudgetMs: SUITE_TICK_BUDGET_MS });
     expect(report.problems, `replay with: SEED=${seed} npm run soak -- small`).toEqual([]);
     expect(report.eliminations).toBeGreaterThan(0);
   }, 60_000);
