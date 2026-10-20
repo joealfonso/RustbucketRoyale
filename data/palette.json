@@ -31,7 +31,10 @@
     "overcastZenith": "#D2D5CF",
     "overcastSun": "#ECE8DC",
     "overcastCloudLit": "#DEDCD2",
-    "overcastCloudShade": "#ABACA4"
+    "overcastCloudShade": "#ABACA4",
+    "bounceWarm": "#6E5A3C",
+    "duskBounce": "#6E4A34",
+    "overcastBounce": "#5E5C4E"
   },
   "mech": {
     "body": "paintWhite",

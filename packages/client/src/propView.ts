@@ -7,6 +7,7 @@ import { seedOf, type DressPiece } from "./dressing/kinds";
 import type { PlayMap } from "./loadMap";
 import { standIn, type FarBands } from "./props/standIn";
 import type { Toon, ToonInstances } from "./toonMaterial";
+import { propSurface, type SurfaceKind } from "./paint/paintLook";
 
 // Past `beyondMeters` from the camera a standing prop is drawn as its plain stand-in box (props/standIn.ts), and it
 // turns back into its model only once nearer than `beyondMeters - hysteresisMeters`, so a prop at the boundary does
@@ -73,7 +74,8 @@ class PropInstances {
   private isFar: Uint8Array;
   private reach = 0; // how far any piece, standing or broken, goes from its prop's origin
 
-  constructor(toon: Toon, intact: DressPiece[], destroyed: DressPiece[], private count: number, bands: FarBands | null = null) {
+  // `kindOf`: the painted surface (wood, metal) of a piece, by its paint.
+  constructor(toon: Toon, intact: DressPiece[], destroyed: DressPiece[], private count: number, bands: FarBands | null = null, kindOf: (paint: string) => SurfaceKind = () => "metal") {
     this.matrices = new Float32Array(count * 16);
     this.isBroken = new Uint8Array(count);
     this.isFar = new Uint8Array(count);
@@ -84,7 +86,7 @@ class PropInstances {
         const geometry = toGeometry([p.mesh]);
         const sphere = geometry.boundingSphere!;
         this.reach = Math.max(this.reach, sphere.center.length() + sphere.radius);
-        for (const material of [toon.instanced(toon.world(p.paint)), toon.instanced(toon.shellOutline(p.paint))]) {
+        for (const material of [toon.instanced(toon.world(p.paint, kindOf(p.paint))), toon.instanced(toon.shellOutline(p.paint))]) {
           const mesh = new THREE.InstancedMesh(geometry, material, count);
           mesh.instanceMatrix = buffer;
           mesh.frustumCulled = false; // culled per prop below; three's one sphere round all of them never culls
@@ -189,7 +191,7 @@ export class PropView {
       const builder = builders[t.id];
       if (builder) {
         const model = builder(t.size, type);
-        const view = new PropInstances(toon, model.intact, model.destroyed, ids.length, far.bands?.[t.id] ?? null);
+        const view = new PropInstances(toon, model.intact, model.destroyed, ids.length, far.bands?.[t.id] ?? null, (paint) => propSurface(toon.paint.look, t.id, paint));
         const square = t.size[0] === t.size[2];
         ids.forEach((id, instance) => {
           const p = map.props[id]!;

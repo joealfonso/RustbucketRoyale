@@ -22,6 +22,22 @@ describe("light presets", () => {
     const backwards = preset();
     backwards.haze.far = backwards.haze.near;
     expect(() => parseLight({ presets: [backwards] })).toThrow(/near < far/);
+    const overhead = preset();
+    overhead.key.direction = [0, 1, 0];
+    expect(() => parseLight({ presets: [overhead] })).toThrow(/straight above/);
+    for (const shadow of [-0.1, 1.5, Number.NaN]) {
+      const p = preset();
+      p.key.shadow = shadow;
+      expect(() => parseLight({ presets: [p] })).toThrow(/key shadow/);
+    }
+  });
+
+  it("every preset casts shadows long enough to read: the sun no higher than 60 degrees", () => {
+    for (const p of light.presets) {
+      const [x, y, z] = p.key.direction;
+      expect((Math.atan2(y, Math.hypot(x, z)) * 180) / Math.PI).toBeLessThanOrEqual(60);
+      expect(p.key.shadow).toBeGreaterThan(0);
+    }
   });
 
   it("rejects a colour the palette does not have", () => {

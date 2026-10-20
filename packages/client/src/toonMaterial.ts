@@ -1,12 +1,20 @@
 import * as THREE from "three";
+import { addPaint, paintCacheKey, type PaintSurface } from "./paint/paintChunk";
+import { PaintKit } from "./paint/paintKit";
+import type { SurfaceKind } from "./paint/paintLook";
+import type { Terrain } from "@rustbucket/shared";
+import { vfxConfig } from "./fx/quality";
 import { groundMaterial } from "./groundMaterial";
 import { installHaze } from "./haze";
 import { parseLight, presetColors, presetForSeed, presetNamed, type LightConfig, type LightPreset } from "./lightPresets";
 import { Sky, parseSky, type SkyConfig } from "./sky";
+import { parseSunShadowLook, type SunShadowLook } from "./sunShadows";
+import { installToonLight } from "./toonLight";
 
 // The look of the game, from data/look.json and data/palette.json: one master toon material for everything (three
-// flat bands of light plus a hard rim), a dark outline round every box, and one warm key light with cool fill, a sky
-// and warm haze, from one of the light presets.
+// flat bands of light plus a hard rim), a dark outline round every box, and one warm key light (the sun, casting
+// toon shadows: toonLight.ts, sunShadows.ts) with a cool sky fill and warm ground bounce, a sky and warm haze, from
+// one of the light presets.
 // Colours are named from the palette in DESIGN.md. Art hook: real models get the same material from `material()`.
 
 export interface Palette {
@@ -34,6 +42,12 @@ export interface LookConfig {
     grime: { color: string; height: number; strength: number };
   };
   light: LightConfig;
+  // The sun's shadow map near the camera and how its shadows are drawn (sunShadows.ts, toonLight.ts).
+  shadows: SunShadowLook;
+  // Contact darkening: surfaces within `heightMeters` of the ground under them lose up to `strength` of their light,
+  // in `steps` flat steps (a toon band, not a gradient), the edge broken up by `ragged` of the height with noise.
+  // Ambient (sky and bounce) light loses all of it, the sun's `directShare`. Faces turned up are left alone.
+  ao: { heightMeters: number; strength: number; steps: number; ragged: number; directShare: number };
   // How fast the haze thins with height, per metre (see haze.ts). The haze colour and distances are per preset.
   haze: { heightFalloff: number };
   sky: SkyConfig;
@@ -53,6 +67,9 @@ export function parseLook(raw: unknown): LookConfig {
   if (typeof l.haze?.heightFalloff !== "number" || l.haze.heightFalloff < 0) throw new Error("look.json: needs haze.heightFalloff");
   parseLight(l.light);
   parseSky(l.sky);
+  parseSunShadowLook(l.shadows, Object.keys(vfxConfig.levels));
+  const ao = l.ao;
+  if (!(ao?.heightMeters > 0 && ao.strength >= 0 && ao.strength <= 1 && Number.isInteger(ao.steps) && ao.steps >= 1 && ao.ragged >= 0 && ao.directShare >= 0 && ao.directShare <= 1)) throw new Error("look.json: ao needs heightMeters above 0, strength and directShare 0 to 1, whole steps of 1 or more, ragged 0 or more");
   return l;
 }
 
@@ -81,8 +98,14 @@ export class Toon {
   // Made by `light`, changed in place by `useLight`, so a new match only changes numbers and compiles nothing.
   private fill = new THREE.HemisphereLight();
   private key = new THREE.DirectionalLight();
+  private towardSun = new THREE.Vector3(0, 1, 0);
+  // The height of the ground under any point, for the contact darkening and the grime: the map's hills as a small
+  // texture (one texel per terrain corner), or flat at 0. Shared by every material, swapped per map by `setGround`.
+  private groundHeights: { value: THREE.DataTexture } = { value: flatGround() };
+  private groundUv = { value: new THREE.Vector3(0, 0.5, 0.5) }; // uv = xz * x + (y, z)
   private haze = new THREE.Fog(0xffffff);
   private sky: Sky;
+  private paintKit: PaintKit | null = null;
 
   constructor(private look: LookConfig, private palette: Palette) {
     // The bands as a tiny texture read with no blending, so light falls in flat steps.
@@ -103,6 +126,33 @@ export class Toon {
       for (const c of presetColors(preset)) if (!/^#[0-9a-fA-F]{6}$/.test(this.color(c))) throw new Error(`look.json: light preset ${preset.name} names ${c}, which is not in palette.json`);
     }
     this.sky = new Sky(look.sky, (c) => this.color(c));
+    installToonLight(look.shadows);
+  }
+
+  // The key light, which casts the shadows (sunShadows.ts), and the unit direction toward it for this preset.
+  get sun(): THREE.DirectionalLight {
+    return this.key;
+  }
+
+  get toSun(): THREE.Vector3 {
+    return this.towardSun;
+  }
+
+  // The map's hills under every material's contact darkening and grime; null for flat ground at 0 (the range).
+  setGround(terrain: Terrain | null): void {
+    const old = this.groundHeights.value;
+    if (!terrain) {
+      this.groundHeights.value = flatGround();
+      this.groundUv.value.set(0, 0.5, 0.5);
+    } else {
+      const n = terrain.corners;
+      const heights = new Uint16Array(n * n);
+      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) heights[j * n + i] = THREE.DataUtils.toHalfFloat(terrain.corner(i, j));
+      this.groundHeights.value = heightTexture(heights, n);
+      const [scale, offset] = groundMapping(terrain);
+      this.groundUv.value.set(scale, offset, offset);
+    }
+    old.dispose();
   }
 
   // A palette name, an old map colour remapped onto the palette, or a plain hex colour.
@@ -128,7 +178,7 @@ export class Toon {
     const hex = this.color(name);
     let m = this.groundMaterials.get(hex);
     if (!m) {
-      m = groundMaterial(hex, this.ramp, (c) => this.color(c));
+      m = groundMaterial(hex, this.ramp, (c) => this.color(c), undefined, this.paint.ground());
       this.groundMaterials.set(hex, m);
     }
     return m;
@@ -146,8 +196,8 @@ export class Toon {
 
   // A material of its own, for something whose colour changes on its own (a mech zone darkening with damage).
   // With `rusts`, `setRust` eats its paint away to rust (see DESIGN.md, "Rust").
-  ownMaterial(name: string, rusts = false): THREE.MeshToonMaterial {
-    return this.make(this.color(name), rusts);
+  ownMaterial(name: string, rusts = false, kind: SurfaceKind | null = null): THREE.MeshToonMaterial {
+    return this.make(this.color(name), rusts, false, kind ? this.paint.surface(kind) : null);
   }
 
   // How much of a rusting material's paint is gone: 0 for clean paint, 1 for a part at zero hit points.
@@ -158,31 +208,68 @@ export class Toon {
 
   // The map's version of the master material: moss on what faces up, rust streaks down walls, grime at the foot
   // (see DESIGN.md, World kit). Shared per colour, like `material`.
-  world(name: string): THREE.MeshToonMaterial {
+  // `kind`: which painted marks it carries (metal plates, concrete, wood, or none); `edges` chips paint along the
+  // edges of a unit box, for map boxes only.
+  world(name: string, kind: SurfaceKind | null = "metal", edges = false): THREE.MeshToonMaterial {
     const hex = this.color(name);
-    let m = this.worldMaterials.get(hex);
+    const key = `${hex}-${kind}-${edges}`;
+    let m = this.worldMaterials.get(key);
     if (!m) {
-      m = this.make(hex, false, true);
-      this.worldMaterials.set(hex, m);
+      m = this.make(hex, false, true, kind ? this.paint.surface(kind, edges) : null);
+      this.worldMaterials.set(key, m);
     }
     return m;
   }
 
-  private make(hex: string, rusts = false, weathered = false): THREE.MeshToonMaterial {
+  // The painted atlas (paint/), built on first use so a Toon that never paints anything (tests, tools) never pays for it.
+  get paint(): PaintKit {
+    this.paintKit ??= new PaintKit((c) => this.color(c));
+    return this.paintKit;
+  }
+
+  // `paint`: the painted marks for this kind of surface (paint/paintChunk.ts), laid on after rust and weathering.
+  private make(hex: string, rusts = false, weathered = false, paint: PaintSurface | null = null): THREE.MeshToonMaterial {
     const m = new THREE.MeshToonMaterial({ color: hex, gradientMap: this.ramp });
     const { strength, width } = this.look.rim;
     const rim = this.rimColor;
     const rust = this.look.rust;
     const rustCover = { value: 0 };
     if (rusts) m.userData.rustCover = rustCover;
+    // Everything in the master material casts sun shadows (sunShadows.ts); the ground and outlines do not.
+    m.userData.castsShadow = true;
+    const ao = this.look.ao;
     // A hard rim of warm light where a surface turns away from the camera, so shapes separate from what is behind.
     // Rust: a value-noise pattern fixed to the part (in its own frame, scaled to metres, so it moves with the mech)
     // decides which bits of paint go first; everything under `rustCover` is rust, with a dark band at the edge.
     // Weathering: the same noise in world space, so it lines up across neighbouring boxes and never moves.
+    // Contact darkening (look.json ao): by height above the ground under each point, in flat steps, so things sit
+    // in the ground instead of on it. It darkens the light, not the paint, so rust and moss darken with it.
     m.onBeforeCompile = (shader) => {
       shader.uniforms.rimColor = { value: rim };
+      shader.uniforms.toonGround = this.groundHeights;
+      shader.uniforms.toonGroundMap = this.groundUv;
+      shader.vertexShader = shader.vertexShader
+        .replace("void main() {", "varying vec3 vWorldPos;\nvoid main() {")
+        .replace("#include <begin_vertex>", `#include <begin_vertex>
+          vec4 toonWorld = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            toonWorld = instanceMatrix * toonWorld;
+          #endif
+          vWorldPos = (modelMatrix * toonWorld).xyz;`);
       let fragment = shader.fragmentShader
-        .replace("void main() {", `uniform vec3 rimColor;\n${NOISE_GLSL}\nvoid main() {`)
+        .replace("void main() {", `uniform vec3 rimColor;\nvarying vec3 vWorldPos;\nuniform sampler2D toonGround;\nuniform vec3 toonGroundMap;\n${NOISE_GLSL}\nvoid main() {`)
+        .replace("#include <logdepthbuf_fragment>", `#include <logdepthbuf_fragment>
+          float toonAbove = vWorldPos.y - texture2D(toonGround, vWorldPos.xz * toonGroundMap.x + toonGroundMap.yz).r;`)
+        .replace("#include <aomap_fragment>", `
+          {
+            float upness = (vec4(normal, 0.0) * viewMatrix).y;
+            float t = toonAbove / ${ao.heightMeters.toFixed(3)} + (rustNoise(vWorldPos * 1.7 + 23.0) - 0.5) * ${ao.ragged.toFixed(3)};
+            float occluded = ceil(clamp(1.0 - t, 0.0, 1.0) * ${ao.steps.toFixed(1)}) / ${ao.steps.toFixed(1)} * step(upness, 0.5);
+            float toonAo = 1.0 - ${ao.strength.toFixed(3)} * occluded;
+            reflectedLight.indirectDiffuse *= toonAo;
+            reflectedLight.directDiffuse *= mix(1.0, toonAo, ${ao.directShare.toFixed(3)});
+          }
+          #include <aomap_fragment>`)
         .replace("#include <opaque_fragment>", `
           float facing = max(dot(normalize(normal), normalize(vViewPosition)), 0.0);
           outgoingLight += rimColor * ${strength.toFixed(3)} * step(1.0 - ${width.toFixed(3)}, 1.0 - facing) * diffuseColor.rgb;
@@ -211,18 +298,15 @@ export class Toon {
         shader.uniforms.streakColor = { value: new THREE.Color(this.color(streaks.color)) };
         shader.uniforms.grimeColor = { value: new THREE.Color(this.color(grime.color)) };
         shader.vertexShader = shader.vertexShader
-          .replace("void main() {", "varying vec3 vWorldPos;\nvarying vec3 vWorldN;\nvoid main() {")
+          .replace("void main() {", "varying vec3 vWorldN;\nvoid main() {")
           .replace("#include <begin_vertex>", `#include <begin_vertex>
-            vec4 wPos = vec4(transformed, 1.0);
             vec3 wN = objectNormal;
             #ifdef USE_INSTANCING
-              wPos = instanceMatrix * wPos;
               wN = mat3(instanceMatrix) * wN;
             #endif
-            vWorldPos = (modelMatrix * wPos).xyz;
             vWorldN = normalize(mat3(modelMatrix) * wN);`);
         fragment = fragment
-          .replace("void main() {", "varying vec3 vWorldPos;\nvarying vec3 vWorldN;\nuniform vec3 mossColor;\nuniform vec3 mossDark;\nuniform vec3 streakColor;\nuniform vec3 grimeColor;\nvoid main() {")
+          .replace("void main() {", "varying vec3 vWorldN;\nuniform vec3 mossColor;\nuniform vec3 mossDark;\nuniform vec3 streakColor;\nuniform vec3 grimeColor;\nvoid main() {")
           .replace("#include <color_fragment>", `#include <color_fragment>
             if (vWorldN.y > ${moss.minUp.toFixed(3)}) {
               float n = rustNoise(vec3(vWorldPos.xz * ${moss.scale.toFixed(3)}, 3.0)) * 0.7 + rustNoise(vec3(vWorldPos.xz * ${(moss.scale * 3).toFixed(3)}, 9.0)) * 0.3;
@@ -231,12 +315,13 @@ export class Toon {
               float along = vWorldPos.x + vWorldPos.z;
               float n = rustNoise(vec3(along * ${streaks.scale.toFixed(3)}, vWorldPos.y * ${(streaks.scale * 0.12).toFixed(3)}, 5.0));
               if (n < ${streaks.cover.toFixed(3)}) diffuseColor.rgb = mix(diffuseColor.rgb, streakColor, ${streaks.strength.toFixed(3)});
-              if (vWorldPos.y < ${grime.height.toFixed(3)}) diffuseColor.rgb = mix(diffuseColor.rgb, grimeColor, ${grime.strength.toFixed(3)});
+              if (toonAbove < ${grime.height.toFixed(3)}) diffuseColor.rgb = mix(diffuseColor.rgb, grimeColor, ${grime.strength.toFixed(3)});
             }`);
       }
       shader.fragmentShader = fragment;
+      if (paint) addPaint(shader, paint);
     };
-    m.customProgramCacheKey = () => `toon-rim-${strength}-${width}${rusts ? "-rust" : ""}${weathered ? "-world" : ""}`;
+    m.customProgramCacheKey = () => `toon-rim-${strength}-${width}${rusts ? "-rust" : ""}${weathered ? "-world" : ""}${paint ? `-${paintCacheKey(paint)}` : ""}`;
     return m;
   }
 
@@ -353,12 +438,36 @@ export class Toon {
     this.fill.intensity = preset.fillIntensity;
     this.key.color.set(this.color(preset.key.color));
     this.key.intensity = preset.key.intensity;
-    this.key.position.set(...preset.key.direction).multiplyScalar(100);
+    this.towardSun.set(...preset.key.direction).normalize();
+    this.key.position.copy(this.key.target.position).addScaledVector(this.towardSun, 100);
+    this.key.shadow.intensity = preset.key.shadow;
     this.haze.color.set(this.color(preset.haze.color));
     this.haze.near = preset.haze.near;
     this.haze.far = preset.haze.far;
     this.sky.use(preset);
   }
+}
+
+// How a world position maps onto the ground texture: u = x * scale + offset, the same for z. Corner (i, j) stands at
+// (i * cell - meters / 2, j * cell - meters / 2) and lands in the middle of texel (i, j).
+export function groundMapping(terrain: Pick<Terrain, "cell" | "corners" | "meters">): [number, number] {
+  const n = terrain.corners;
+  return [1 / (terrain.cell * n), (terrain.meters / 2 / terrain.cell + 0.5) / n];
+}
+
+// Flat ground at height 0, for pages and maps with no hills.
+function flatGround(): THREE.DataTexture {
+  return heightTexture(new Uint16Array([THREE.DataUtils.toHalfFloat(0)]), 1);
+}
+
+// Heights in metres as half floats, which graphics cards blend between texels for free.
+function heightTexture(heights: Uint16Array, size: number): THREE.DataTexture {
+  const texture = new THREE.DataTexture(heights, size, size, THREE.RedFormat, THREE.HalfFloatType);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 export interface ToonBox {
@@ -380,7 +489,7 @@ export class ToonInstances {
 
   // `ground` draws the bands with no rim and no outline, for the floor.
   constructor(toon: Toon, name: string, count: number, private outlineWidth: number, ground = false) {
-    this.mesh = new THREE.InstancedMesh(unitBox, toon.instanced(ground ? toon.ground(name) : toon.world(name)), count);
+    this.mesh = new THREE.InstancedMesh(unitBox, toon.instanced(ground ? toon.ground(name) : toon.world(name, "metal", true)), count);
     this.hull = ground ? null : new THREE.InstancedMesh(unitBox, toon.instanced(toon.outlineMaterial(name)), count);
   }
 

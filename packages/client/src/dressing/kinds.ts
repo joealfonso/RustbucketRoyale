@@ -1,3 +1,4 @@
+import type { SurfaceKind } from "../paint/paintLook";
 import type { MeshData, V3 } from "./shapes";
 
 // The contract between the junkyard dressing and the builders that make it (one file per kind in this folder).
@@ -26,6 +27,17 @@ export interface DressBox {
 export interface DressPiece {
   paint: string;
   mesh: MeshData;
+  // Which painted marks it carries (paint/paintLook.ts): metal when left out, null for none (plants).
+  surface?: SurfaceKind | null;
+}
+
+// The key a piece is merged under: its colour and its surface, since each pair is one material.
+export const mergeKey = (hex: string, surface: SurfaceKind | null | undefined) => `${hex}|${surface === undefined ? "metal" : surface ?? "none"}`;
+
+// The colour and surface back out of a merge key.
+export function fromMergeKey(key: string): [string, SurfaceKind | null] {
+  const [hex, surface] = key.split("|") as [string, string];
+  return [hex, surface === "none" ? null : (surface as SurfaceKind)];
 }
 
 export type KindBuilder = (box: DressBox) => DressPiece[];

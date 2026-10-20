@@ -1,12 +1,14 @@
 import * as THREE from "three";
 import { freeze } from "../freeze";
+import { castShadows } from "../sunShadows";
 import type { PlayMap } from "../loadMap";
 import type { MapMeshes } from "../mapRenderer";
 import type { Toon } from "../toonMaterial";
 import { toGeometry } from "./dressing";
 import { farBay, nearBay, planBay, type BayPlan } from "./edgeBay";
-import { distanceToChunk, edgeBoxIndices, edgeChunks, edgeRuns, runToWorld, type BarrierConfig, type EdgeChunk, type EdgeRun } from "./edgeLayout";
-import { seedOf } from "./kinds";
+import dressingJson from "../../../../data/dressing.json";
+import { distanceToChunk, edgeBoxIndices, edgeChunks, edgeRuns, parseEdgeVariety, runToWorld, type BarrierConfig, type EdgeChunk, type EdgeRun } from "./edgeLayout";
+import { fromMergeKey, mergeKey, seedOf } from "./kinds";
 import { turn, type MeshData } from "./shapes";
 
 const unitQuad = new THREE.PlaneGeometry(1, 1); // faces +z, which is w (into the map) in a run's frame
@@ -39,13 +41,15 @@ export class EdgeBarrier {
   private checkedAt = new THREE.Vector3(Infinity, 0, 0);
 
   constructor(private scene: THREE.Scene, private toon: Toon, map: PlayMap, mapMeshes: MapMeshes, private config: BarrierConfig) {
+    // The wall's shape comes from backdrop.json; what varies from bay to bay lives with the rest of the dressing.
+    this.config = { ...config, variety: config.variety ?? parseEdgeVariety(dressingJson.edge) };
     const edges = map.tier === "range" ? [] : edgeBoxIndices(map.boxes, map.meters);
     for (const i of edges) mapMeshes.setVisible(i, false);
     mapMeshes.commit();
     this.runs = edgeRuns(map.boxes, edges, config.bayMeters);
     this.chunks = edgeChunks(this.runs, config.baysPerChunk);
     this.plans = this.runs.map((run, r) => Array.from({ length: run.bays }, (_, b) =>
-      planBay(config, seedOf(map.seed, 200000 + r * 10000 + b), b * run.bayLength, run.bayLength, run.height, run.thickness)));
+      planBay(this.config, seedOf(map.seed, 200000 + r * 10000 + b), b * run.bayLength, run.bayLength, run.height, run.thickness)));
     this.buildFar();
     this.group.add(this.nearMeshes);
     // The far quads are instances and the near models are built in place: nothing here moves.
@@ -121,11 +125,11 @@ export class EdgeBarrier {
     const chunk = this.chunks[c]!, run = this.runs[chunk.run]!;
     for (const plan of this.plans[chunk.run]!.slice(chunk.firstBay, chunk.firstBay + chunk.bayCount)) {
       for (const piece of nearBay(this.config, plan)) {
-        const hex = this.toon.color(piece.paint);
+        const key = mergeKey(this.toon.color(piece.paint), piece.surface);
         const mesh = turn(piece.mesh, [0, run.yaw, 0], [0, 0, 0], run.origin);
-        const list = byPaint.get(hex);
+        const list = byPaint.get(key);
         if (list) list.push(mesh);
-        else byPaint.set(hex, [mesh]);
+        else byPaint.set(key, [mesh]);
       }
     }
     this.nearPieces.set(c, byPaint);
@@ -139,17 +143,20 @@ export class EdgeBarrier {
     }
     const merged = new Map<string, MeshData[]>();
     for (const c of this.near) {
-      for (const [hex, meshes] of this.piecesOf(c)) {
-        const list = merged.get(hex);
+      for (const [paint, meshes] of this.piecesOf(c)) {
+        const list = merged.get(paint);
         if (list) list.push(...meshes);
-        else merged.set(hex, [...meshes]);
+        else merged.set(paint, [...meshes]);
       }
     }
-    for (const [hex, meshes] of merged) {
+    // Merged geometry is not the unit box, so its paint never chips along edges (edges = false).
+    for (const [key, meshes] of merged) {
+      const [hex, surface] = fromMergeKey(key);
       const geometry = toGeometry(meshes);
-      this.nearMeshes.add(new THREE.Mesh(geometry, this.toon.world(hex)), new THREE.Mesh(geometry, this.toon.shellOutline(hex)));
+      this.nearMeshes.add(new THREE.Mesh(geometry, this.toon.world(hex, surface, false)), new THREE.Mesh(geometry, this.toon.shellOutline(hex)));
     }
     freeze(this.nearMeshes);
+    castShadows(this.nearMeshes);
   }
 
   dispose(): void {

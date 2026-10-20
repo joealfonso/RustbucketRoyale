@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GROUND_DETAIL_CACHE_KEY, addGroundDetail, type GroundDetail } from "./paint/groundDetail";
 import groundJson from "../../../data/ground.json";
 
 // The floor's look, from data/ground.json: the toon bands over painted patches worked out in the shader from world
@@ -148,7 +149,8 @@ export function groundShaderCode(g: GroundLook): string {
 // The ground material: the toon bands with no rim (a rim on a big flat floor draws a hard line where it turns away),
 // over the patches. It keeps the standard fog, so the scene's haze lies over it like everything else. Used for the
 // hills (terrainMesh.ts) and for the flat floor box of the range and the style test.
-export function groundMaterial(hex: string, ramp: THREE.Texture, color: (name: string) => string, g: GroundLook = groundLook): THREE.MeshToonMaterial {
+// `detail`: the close-range painted grit, pebbles, grass and cracks (paint/groundDetail.ts), or none.
+export function groundMaterial(hex: string, ramp: THREE.Texture, color: (name: string) => string, g: GroundLook = groundLook, detail: GroundDetail | null = null): THREE.MeshToonMaterial {
   const m = new THREE.MeshToonMaterial({ color: hex, gradientMap: ramp });
   const colors: Record<string, string> = {
     groundDarkMoss: g.regions.darkMoss.color, groundDryGrass: g.regions.dryGrass.color, groundDirt: g.regions.dirt.color,
@@ -180,8 +182,9 @@ export function groundMaterial(hex: string, ramp: THREE.Texture, color: (name: s
     shader.fragmentShader = shader.fragmentShader
       .replace("void main() {", `varying vec2 vGroundPos;\nvarying float vGroundY;\nvarying float vGroundUp;\n${declarations}\n${GROUND_GLSL}\nvoid main() {`)
       .replace("#include <color_fragment>", `#include <color_fragment>\n${code}`);
+    if (detail) addGroundDetail(shader, detail);
   };
-  m.customProgramCacheKey = () => "toon-ground";
+  m.customProgramCacheKey = () => `toon-ground${detail ? `-${GROUND_DETAIL_CACHE_KEY}` : ""}`;
   return m;
 }
 

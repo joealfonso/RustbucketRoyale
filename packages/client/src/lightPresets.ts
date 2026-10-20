@@ -3,7 +3,11 @@
 
 export interface LightPreset {
   name: string;
-  key: { color: string; intensity: number; direction: [number, number, number] };
+  // The sun. `direction` points toward it; `shadow` is how strongly what it casts darkens, 0 (none) to 1 (down to
+  // the darkest band), so a hazy sky can keep faint shadows.
+  key: { color: string; intensity: number; direction: [number, number, number]; shadow: number };
+  // The ambient light: `fillSky` from above (it also tints the shadow band, toonLight.ts) and `fillGround`, the warm
+  // light bounced up off the ground onto undersides.
   fillSky: string;
   fillGround: string;
   fillIntensity: number;
@@ -33,6 +37,9 @@ export function parseLight(raw: unknown): LightConfig {
     const d = p.key?.direction;
     if (!isText(p.key?.color) || !isNumber(p.key.intensity) || !Array.isArray(d) || d.length !== 3 || !d.every(isNumber)) throw new Error(`${where} needs key colour, intensity and direction`);
     if (d[1]! <= 0) throw new Error(`${where}: the key light must come from above the horizon`);
+    // Straight down would leave the shadow camera with no sideways direction to line up with.
+    if (Math.hypot(d[0]!, d[2]!) < 0.05 * Math.hypot(d[0]!, d[1]!, d[2]!)) throw new Error(`${where}: the key light must not come from straight above`);
+    if (!isNumber(p.key.shadow) || p.key.shadow < 0 || p.key.shadow > 1) throw new Error(`${where} needs key shadow, 0 to 1`);
     if (!isText(p.fillSky) || !isText(p.fillGround) || !isNumber(p.fillIntensity)) throw new Error(`${where} needs fillSky, fillGround and fillIntensity`);
     if (!isText(p.sky?.zenith) || !isText(p.sky.sun) || !isText(p.clouds?.lit) || !isText(p.clouds.shade)) throw new Error(`${where} needs sky and cloud colours`);
     if (!isText(p.haze?.color) || !isNumber(p.haze.near) || !isNumber(p.haze.far) || p.haze.near < 0 || p.haze.far <= p.haze.near) throw new Error(`${where} needs haze colour and near < far`);

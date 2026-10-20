@@ -1,5 +1,7 @@
+import { triangleCount } from "./builderChecks";
+import { byPaint, Details, onFace, toWorld, vines } from "./details";
 import { rng, type DressBox, type DressPiece, type KindBuilder } from "./kinds";
-import { box, merge, turn, wedge, type MeshData, type V3 } from "./shapes";
+import { box, cylinder, merge, turn, wedge, type MeshData, type V3 } from "./shapes";
 
 // A broken concrete wall: stacked block courses below a seam, then columns of blocks whose tops step up and down
 // along the wall, rebar poking out of the broken columns, and rubble at the foot. The box is still the collision, so
@@ -13,6 +15,10 @@ const BLOCK_BEVEL = 0.05;
 const REBAR_SIZE = 0.1;
 const LOWEST_TOP = 0.6; // of the height, for the lowest broken column
 const STEP = 0.25; // column tops snap to this, so the broken edge reads as steps
+// Overgrowth, the ruin's own variety: a ruin is where the yard has been left alone longest.
+const VINE_CHANCE = 0.7; // per face
+const MOSS_CHANCE = 0.5; // a mat of moss on a broken column top, where rain sits
+const SAPLING_CHANCE = 0.4; // one young tree rooted in a broken top
 
 // Cuts a length into pieces between `min` and `max` long; a short leftover joins the last piece.
 function split(length: number, min: number, max: number, r: () => number): number[] {
@@ -71,6 +77,7 @@ export const ruin: KindBuilder = (b: DressBox): DressPiece[] => {
   const tallest = Math.floor(r() * widths.length);
   tops[tallest] = height;
   if (widths.length > 1) tops[(tallest + 1 + Math.floor(r() * (widths.length - 1))) % widths.length] = Math.ceil(LOWEST_TOP * height / STEP) * STEP;
+  const broken: { u: number; w: number; top: number; st: number }[] = [];
   let u = u0;
   widths.forEach((w, i) => {
     const top = Math.min(height, Math.max(columnBase + 0.5, tops[i]!));
@@ -80,6 +87,7 @@ export const ruin: KindBuilder = (b: DressBox): DressPiece[] => {
       concrete.push(block(u, u + w, columnBase, mid, st, 0), block(u, u + w, mid, top, st));
     } else concrete.push(block(u, u + w, columnBase, top, st));
 
+    if (top <= height - 0.5) broken.push({ u, w, top, st });
     // Rebar stubs out of the broken columns.
     if (top <= height - 0.5 && w > 0.6) {
       for (let k = 0; k < 2; k++) {
@@ -107,9 +115,42 @@ export const ruin: KindBuilder = (b: DressBox): DressPiece[] => {
   }
 
   const paint = r() < 0.5 ? "warmLight" : "scrapSteel";
-  return [
-    { paint, mesh: merge(...concrete) },
+  const pieces: DressPiece[] = [
+    { paint, mesh: merge(...concrete), surface: "concrete" },
     { paint: r() < 0.5 ? "rustOrange" : "deepRust", mesh: merge(...rebar) },
-    { paint: "scrapSteel", mesh: merge(...rubble) },
-  ].filter((p) => p.mesh.indices.length > 0);
+    { paint: "scrapSteel", mesh: merge(...rubble), surface: "concrete" },
+  ];
+  const base = pieces.filter((p) => p.mesh.indices.length > 0);
+
+  // Overgrowth, added only while the triangle budget allows. The concrete stays the first piece.
+  const details = new Details(b, triangleCount(base));
+  const uc = (u0 + u1) / 2;
+  const centre: V3 = alongX ? [uc, y0, tc] : [tc, y0, uc];
+  const local = (m: MeshData) => toWorld(m, alongX, centre);
+  for (const side of [-1, 1] as const) {
+    if (r() >= VINE_CHANCE) continue;
+    const v = vines(r, (r() - 0.5) * length * 0.7, 2, Math.min(baseTop + 1, height * 0.75), -length / 2, length / 2);
+    const face = { at: side * (wall / 2 - 0.02), out: side };
+    details.add([{ paint: "darkMoss", mesh: local(onFace(v.stems, face)), surface: null }, { paint: "moss", mesh: local(onFace(v.leaves, face)), surface: null }]);
+  }
+  for (const c of broken) {
+    if (r() >= MOSS_CHANCE || c.w < 0.6) continue;
+    const mw = c.w * (0.5 + r() * 0.4), mu = c.u + c.w / 2 + (r() - 0.5) * (c.w - mw);
+    details.add([{ paint: "moss", mesh: box(...centreSize(mu, c.top + 0.02, tc, mw, 0.1, c.st * 0.8), 0.03), surface: null }]);
+  }
+  if (broken.length > 0 && r() < SAPLING_CHANCE) {
+    // A young tree rooted in the rubble of a broken top: a thin trunk and two clumps of leaves, kept under the box top.
+    const c = broken[Math.floor(r() * broken.length)]!;
+    const room = height - c.top;
+    if (room >= 0.9) {
+      const su = c.u + c.w / 2, trunk = room * 0.65, crown = Math.min(0.45, wall / 2 - 0.02);
+      const [tc0] = centreSize(su, c.top + trunk / 2, tc, 0, 0, 0);
+      details.add([
+        { paint: "#7A5A2E", mesh: cylinder(tc0, 0.06, trunk, "y", 5, 0.035), surface: "wood" },
+        { paint: "darkMoss", mesh: cylinder(centreSize(su, c.top + trunk * 0.85, tc, 0, 0, 0)[0], crown, room * 0.35, "y", 6, crown * 0.5), surface: null },
+        { paint: "moss", mesh: cylinder(centreSize(su, height - room * 0.12, tc, 0, 0, 0)[0], crown * 0.7, room * 0.22, "y", 6, crown * 0.3), surface: null },
+      ]);
+    }
+  }
+  return [...base, ...byPaint(details.pieces)];
 };

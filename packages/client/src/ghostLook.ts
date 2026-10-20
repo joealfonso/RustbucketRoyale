@@ -7,7 +7,7 @@ type Tintable = THREE.Material & { emissive?: THREE.Color; emissiveIntensity?: n
 // Draws one mech see-through and faintly tinted: how an Arbiter sees its own decoys, so it never loses track of the
 // real one. Only this model changes. Its own materials (zones, paint, gun, glows) are changed in place; materials it
 // shares with other mechs (toon.material by colour, outlines, plates) are swapped for copies of its own, so every
-// other mech of that colour stays solid. Outlines are hidden: a hologram has no ink line. Run once per model.
+// other mech of that colour stays solid. Outlines are hidden: a hologram has no ink line, and no shadow. Run once per model.
 // Returns the copies it made, for disposing when the model goes.
 export function makeGhost(model: MechModel, look: AbilityFxConfig["ghost"]): THREE.Material[] {
   const owned = new Set<THREE.Material>([...model.zoneMaterials, model.gunMaterial, ...model.paints.map((p) => p.material), ...model.glows.map((g) => g.material)]);
@@ -24,6 +24,7 @@ export function makeGhost(model: MechModel, look: AbilityFxConfig["ghost"]): THR
   };
   model.group.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
+    o.castShadow = false; // a hologram casts no sun shadow
     const m = o.material as THREE.Material;
     if (m.side === THREE.BackSide) { o.visible = false; return; }
     if (owned.has(m)) {

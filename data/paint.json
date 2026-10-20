@@ -1,0 +1,66 @@
+{
+  "seed": 7331,
+  "tileSize": 512,
+  "anisotropy": 4,
+  "colors": {
+    "rust": "rustOrange",
+    "rustDark": "deepRust",
+    "grime": "soot",
+    "tape": "warmLight"
+  },
+  "tapeShare": 0.3,
+  "fade": { "startMeters": 12, "endMeters": 40 },
+  "surfaces": {
+    "metal": { "layer": "metal", "metersPerTile": 4, "shade": 0.32, "rust": 0.9, "grime": 0.55, "bare": 0.85, "bareColor": "scrapSteel", "topRust": 0.35, "edgeMeters": 0.03 },
+    "mech": { "layer": "metal", "metersPerTile": 2.5, "shade": 0.26, "rust": 0, "grime": 0, "bare": 0.5, "bareColor": "scrapSteel", "topRust": 0, "edgeMeters": 0 },
+    "concrete": { "layer": "concrete", "metersPerTile": 4, "shade": 0.34, "rust": 0.8, "grime": 0.5, "bare": 0.7, "bareColor": "warmLight", "topRust": 0.2, "edgeMeters": 0.035 },
+    "wood": { "layer": "wood", "metersPerTile": 2, "shade": 0.4, "rust": 0.8, "grime": 0.5, "bare": 0.8, "bareColor": "warmLight", "topRust": 0.3, "edgeMeters": 0.025 }
+  },
+  "ground": {
+    "metersPerTile": 3,
+    "secondScale": 0.77,
+    "secondTurnDegrees": 37,
+    "fade": { "startMeters": 6, "endMeters": 28 },
+    "grit": 0.35,
+    "grass": 0.45,
+    "cracks": 0.4,
+    "grassTest": { "greenOverRed": 0.95, "greenOverBlue": 1.2 }
+  },
+  "metal": {
+    "brushStrokes": 320,
+    "plateColumns": 2,
+    "plateRows": 2,
+    "rivetSpacing": 0.032,
+    "rivetRadius": 0.0055,
+    "seamWidth": 0.006,
+    "streaks": 16,
+    "chips": 90
+  },
+  "concrete": {
+    "brushStrokes": 260,
+    "pourLifts": 3,
+    "boardJoints": 4,
+    "cracks": 3,
+    "streaks": 14,
+    "chips": 30
+  },
+  "wood": {
+    "planks": 7,
+    "grainStrokes": 420,
+    "knots": 5,
+    "streaks": 8,
+    "chips": 40
+  },
+  "groundTile": {
+    "grit": 2600,
+    "pebbles": 70,
+    "stones": 6,
+    "tufts": 150,
+    "cracks": 5
+  },
+  "props": {
+    "crate": { "default": "wood", "paints": { "sparkYellow": "metal" } },
+    "barrel": { "default": "metal", "paints": {} },
+    "junk": { "default": "metal", "paints": {} }
+  }
+}

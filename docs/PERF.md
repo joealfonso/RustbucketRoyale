@@ -398,3 +398,13 @@ Seed 11 spawn views, renderer.info: medium 115 -> 116 draw calls, 422k -> 434k t
 ### Forests (2026-10-19, M11 11c)
 renderer.info at 1024x768, before -> after: medium seed 11 spawn 120 / 463k -> 130 / 473k (draw calls / triangles), overview 106 / 532k -> 108 / 566k; large seed 2 (5,610 trees) spawn 125 / 966k -> 135 / 934k, overview 91 / 976k -> 97 / 1,064k; inside a medium wood 134 / 420k. Tree culling about 0.18 ms CPU a frame on large. Server: blast prop lookups on large from 134 us (all 10,844 props) to 0.3 us (the world grid); measure-rooms medium 40 rooms 1.78 / 4.68 ms mean / p99 a tick (steering adds about 10 to 25% on medium), large 20 rooms 0.93 / 6.74; large map unpack 3.6 ms on the main thread (was 2.4). Soak: small 25 kbps, medium 22, large 18, worst correction 0.01 cm. Frame time on Joseph's laptop not measured yet.
 
+
+### Sun shadows and contact darkening (2026-10-19, V7a)
+Headless Chrome 155 over CDP at 1600 x 900, M4 MacBook (ANGLE Metal), frame-rate capped, the laptop busy with other agents. Draw calls and triangles counted by wrapping the WebGL draw calls (the shadow pass counted apart by its framebuffer); GPU time per frame from EXT_disjoint_timer_query_webgl2. Before is the same tree without the V7a changes, served side by side and measured alternately.
+
+| View | Draw calls before / after (of which shadow pass) | Triangles before / after | GPU ms median before / after | Work ms median before / after |
+| :- | :- | :- | :- | :- |
+| medium seed 11 spawn | 133 / 191 (58) | 620k / 897k | 3.9 to 4.2 / 4.0 to 10.7 | 0.7 to 0.8 / 0.9 |
+| large seed 2 spawn | 136 / 196 (60) | 1.15M / 1.72M | 10.7 to 10.9 / 5.2 to 11.6 | 0.8 / 1.0 |
+
+The GPU numbers swing more between runs than the change itself. Toggling only the shadow depth pass in the same page (three rounds each) gives its cost: medium 3.1 to 3.3 ms without, 4.0 to 4.6 with (about 1 ms); large 5.0 to 6.0 without, 5.2 to 6.9 with (0.2 to 0.9 ms). What the depth pass draws on large: the whole map's instanced boxes 146k triangles (mostly hidden instances near you, since the dressing stands in), dressing 133k, trees 98k, props 50k, far boulders 34k, edge wall 14k, a mech 6k. The low effects quality draws a 1024 map over 70 m; on this machine its saving was lost in the noise. Not measured: Joseph's laptop (F1, Performance: the draw call and triangle readouts include the shadow pass).

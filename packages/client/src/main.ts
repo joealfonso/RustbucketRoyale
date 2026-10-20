@@ -36,6 +36,7 @@ import { parseGait, type GaitInput } from "./gait";
 import { footInWorld, walkMech } from "./mechWalk";
 import { loadKit, loadRoster, parseKits } from "./mechKit";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
+import { SunShadows, castShadows } from "./sunShadows";
 import botsJson from "../../../data/bots.json";
 import noiseJson from "../../../data/noise.json";
 import combatJson from "../../../data/combat.json";
@@ -94,7 +95,7 @@ import { RingView } from "./ringView";
 import { ShotFx } from "./shotFx";
 import { parseWeaponFx } from "./weaponFxData";
 import weaponFxJson from "../../../data/weaponFx.json";
-import { addVfxQualityControl, mostOf, vfxConfig, vfxLevel, vfxQuality } from "./fx/quality";
+import { addVfxQualityControl, mostOf, onVfxQuality, vfxConfig, vfxLevel, vfxQuality } from "./fx/quality";
 import { ThirdPersonCamera } from "./thirdPersonCamera";
 
 const KILL_HEIGHT = -50;
@@ -210,10 +211,15 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 // The game's look (V1): palette, toon bands and outlines, warm key light, sky and haze. See DESIGN.md and toonMaterial.ts.
 // The map seed picks the light preset, so everyone in a room sees the same sky; offline ?look=<name> forces one.
 const palette = parsePalette(paletteJson);
-const toon = new Toon(parseLook(lookJson), palette);
+const lookConfig = parseLook(lookJson);
+const toon = new Toon(lookConfig, palette);
 const forcedLook = offline ? params.get("look") : null;
 const scene = new THREE.Scene();
 toon.light(scene, toon.presetFor(map.seed, forcedLook));
+toon.setGround(map.terrain);
+// Real sun shadows near the camera (V7a, sunShadows.ts), their cost following the F1 "Effects quality" switch.
+const sunShadows = new SunShadows(renderer, toon.sun, toon.toSun, lookConfig.shadows, vfxQuality());
+onVfxQuality(() => sunShadows.setQuality(vfxQuality()));
 if (params.has("overview")) scene.fog = null;
 
 let mapMeshes = new MapMeshes(scene, map, toon);
@@ -272,11 +278,20 @@ const splashes = new Splashes(fxSprites.water, waterLook.splashes);
 const breakFx = new BreakFx(chunks, fxSprites, parsePropFx(propFxJson), (c) => toon.color(c));
 scene.add(propView.group);
 let treeView = makeTrees();
+// What the map casts in the sun. The dressing and the near edge wall mark their own as they rebuild near you.
+const castMapShadows = () => {
+  for (const group of [mapMeshes.group, dressing.group, dressing.far?.group, edgeBarrier.group, propView.group, treeView.group]) if (group) castShadows(group);
+};
+castMapShadows();
 const ringView = new RingView(scene, toon.color("zoneMagenta"));
 // Soft dark patches under map boxes and mechs, so nothing floats over the ground (data/ground.json shadows).
 const shadowLook = parseShadowLook(groundJson.shadows);
 const contactShadows = new ContactShadows(scene, shadowLook, toon.color(shadowLook.color));
 contactShadows.setMap(map.boxes, map.world);
+// Where the sun's shadows reach, the box patches step back to a share of their strength.
+const fadeContacts = () => contactShadows.fadeNear(sunShadows.meters, sunShadows.meters + sunShadows.ahead, lookConfig.shadows.contactNear);
+fadeContacts();
+onVfxQuality(fadeContacts);
 const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters, parseRadar(radarJson)) : null;
 
 // Each mech is drawn as its roster mech's kit, by the mech number the server sends. ?kit=grey draws everyone as the
@@ -285,7 +300,11 @@ const kitId = params.get("kit") ?? "roster";
 const kitsData = parseKits(mechKitsJson);
 const oneKit = kitId !== "roster" && kitId !== "grey" ? await loadKit(kitId, kitsData) : null;
 const kitFor = kitId === "roster" ? await loadRoster(kitsData) : () => oneKit;
-const makeOwnModel = (m: number) => createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body, kitFor(m), palette.mech.trim);
+const makeOwnModel = (m: number) => {
+  const model = createMechModel(palette.mech.youAccent, zoneMaxHp, toon, palette.mech.body, kitFor(m), palette.mech.trim);
+  castShadows(model.group);
+  return model;
+};
 let shownMech = picked ?? 0;
 let shownNext = -2; // the "next match" mech on the HUD line, -1 for none, -2 before the line is first written
 let ownModel = makeOwnModel(shownMech);
@@ -496,6 +515,7 @@ function swapMap(newSeed: number, newTier: string): void {
   treeView.dispose();
   map = buildPlayMap(newTier, newSeed, mechStats);
   toon.useLight(toon.presetFor(newSeed, forcedLook));
+  toon.setGround(map.terrain);
   mapMeshes = new MapMeshes(scene, map, toon);
   terrainMeshes?.dispose();
   terrainMeshes = makeTerrain();
@@ -516,6 +536,7 @@ function swapMap(newSeed: number, newTier: string): void {
   contactShadows.setMap(map.boxes, map.world);
   scene.add(propView.group);
   treeView = makeTrees();
+  castMapShadows();
   pickupView.clear();
   predictor.setWorld(map.world);
 }
@@ -1052,6 +1073,7 @@ function frame(now: number): void {
   if (panel?.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection, net?.rttMs ?? 0, net ? remotes.viewDelayMs : 0);
 
   shotFx.draw(rig.camera, frameTime);
+  sunShadows.follow(rig.camera);
   renderer.render(scene, rig.camera);
   frameMs.record(frameTime * 1000);
   workMs.record(performance.now() - workStarted);

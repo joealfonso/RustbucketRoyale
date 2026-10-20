@@ -36,6 +36,41 @@ export interface BarrierConfig {
     ribSpacing: number; ribDepth: number; frame: number; paints: string[];
   };
   fence: { height: number; postSpacing: number; postSize: number; strands: number; strandSize: number; armLength: number; paint: string };
+  variety?: EdgeVariety; // data/dressing.json "edge"; without it every bay is the plain sheet wall
+}
+
+// What makes one stretch of the perimeter differ from the next (data/dressing.json, "edge"). Chances are per bay.
+export interface EdgeVariety {
+  breachChance: number; // sheets torn off the foot of the wall, a wire fence across the hole, the junkyard beyond in view
+  breachPanels: number[]; // the hole spans this many post gaps, [low, high]
+  breachMeters: number[]; // how tall the hole is, [low, high]
+  baleChance: number; // in a bay with no containers: crushed car bales stacked against the foot instead
+  bale: { length: number; height: number; depth: number; maxStack: number; paints: string[] };
+  platesChance: number; // a bay patched with big flat plates instead of corrugated sheet
+  girderJitterMeters: number; // each bay's girders sit up to this much higher, so the bands do not run level for 2 km
+  leanerChance: number; // per free slot at the foot of a bay with nothing stacked against it
+  leanerSlotMeters: number;
+  leanerKinds: string[]; // "sheet", "ladder", "tyres", "drums", "girder"
+  vineChance: number;
+  vineMeters: number[]; // how high the vines climb, [low, high]
+}
+
+export function parseEdgeVariety(raw: unknown): EdgeVariety {
+  const v = raw as EdgeVariety;
+  const fail = (what: string) => { throw new Error(`dressing.json: edge.${what}`); };
+  if (!v || typeof v !== "object") fail("is missing");
+  for (const k of ["breachChance", "baleChance", "platesChance", "girderJitterMeters", "leanerChance", "leanerSlotMeters", "vineChance"] as const) {
+    if (typeof v[k] !== "number" || v[k] < 0) fail(`${k} must be a number, 0 or more`);
+  }
+  for (const k of ["breachPanels", "breachMeters", "vineMeters"] as const) {
+    const r = v[k];
+    if (!Array.isArray(r) || r.length !== 2 || !(r[0]! > 0) || !(r[1]! >= r[0]!)) fail(`${k} must be [low, high]`);
+  }
+  const b = v.bale;
+  if (!b || !(b.length > 0 && b.height > 0 && b.depth > 0 && b.maxStack >= 1) || !Array.isArray(b.paints) || b.paints.length === 0) fail("bale needs length, height, depth, maxStack and paints");
+  const known = new Set(["sheet", "ladder", "tyres", "drums", "girder"]);
+  if (!Array.isArray(v.leanerKinds) || v.leanerKinds.some((k) => !known.has(k))) fail("leanerKinds may hold only sheet, ladder, tyres, drums, girder");
+  return v;
 }
 
 export function parseBarrier(raw: unknown): BarrierConfig {

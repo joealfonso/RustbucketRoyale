@@ -1,5 +1,8 @@
+import { triangleCount } from "./builderChecks";
+import { byPaint, Details, downpipe, ladder, onFace, toWorld, vines, type Face } from "./details";
+import type { SurfaceKind } from "../paint/paintLook";
 import { rng, type DressBox, type DressPiece, type KindBuilder } from "./kinds";
-import { box, merge, type MeshData } from "./shapes";
+import { box, cylinder, merge, type MeshData } from "./shapes";
 
 // A squat concrete tower block. The windows are not cut holes: a dark core fills the box a little way in, and a
 // concrete grid of floor slabs and piers stands in front of it, so wherever the grid leaves a gap you see a dark,
@@ -17,6 +20,14 @@ const RIM_HEIGHT = 0.6; // the band round the top storey
 const RIM_THICK = 0.35;
 const DECK_DROP = 0.12; // deck below the box top; mechs stand on the box top, so this must stay small
 const DETAIL_GAP = 0.02; // roof details stop this far under the rim top, so their tops never fight with it
+// The per-tower variations, so no two blocks look alike. Each is kept only while the tower stays under TRIANGLE_CAP.
+const TRIANGLE_CAP = 1450;
+const BOARDED_SHARE = 0.15; // windows boarded over with a plate, where someone kept the weather out
+const MAX_BOARDED = 8;
+const COOLER_CHANCE = 0.5; // an air-conditioning box set in a window, a fan grille on its front
+const PIPE_CHANCE = 0.7; // a downpipe draining the deck through the rim, down a corner to a grate
+const LADDER_CHANCE = 0.4; // a fixed ladder from the ground to the underside of the rim
+const VINE_CHANCE = 0.45;
 
 export const tower: KindBuilder = (b: DressBox): DressPiece[] => {
   const r = rng(b.seed);
@@ -53,21 +64,25 @@ export const tower: KindBuilder = (b: DressBox): DressPiece[] => {
 
   // Piers between window columns, each a slab right through the block so one box serves both opposite faces.
   const bay = 2 + r() * 0.6, windowShare = 0.45 + r() * 0.15;
-  const piers = (span: number, place: (a: number, c: number) => MeshData) => {
+  // Each call also lists its window openings (from, to along the face), for the variations below.
+  const piers = (span: number, place: (a: number, c: number) => MeshData): [number, number][] => {
     const inner = span / 2 - pilaster;
     const count = Math.max(1, Math.floor((inner * 2) / bay));
     const step = (inner * 2) / count, opening = step * windowShare;
+    const openings: [number, number][] = [];
     let at = -inner;
     for (let i = 0; i < count; i++) {
       const left = -inner + step * i + (step - opening) / 2;
       body.push(place(at, left));
+      openings.push([left, left + opening]);
       at = left + opening;
     }
     body.push(place(at, inner));
+    return openings;
   };
   // Up to the top slab only, so they don't share its top face.
-  piers(sx, (a, c) => slab(a, c, 0, below, gz0, gz1));
-  piers(sz, (a, c) => slab(gx0, gx1, 0, below, a, c));
+  const alongXOpenings = piers(sx, (a, c) => slab(a, c, 0, below, gz0, gz1));
+  const alongZOpenings = piers(sz, (a, c) => slab(gx0, gx1, 0, below, a, c));
 
   // Corner pilasters, up to the rim.
   for (const [px, pz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
@@ -100,9 +115,65 @@ export const tower: KindBuilder = (b: DressBox): DressPiece[] => {
     roof.push(slab(vx - w / 2, vx + w / 2, deck, top, vz - d / 2, vz + d / 2));
   }
 
-  return [
-    { paint: r() < 0.5 ? "warmLight" : "scrapSteel", mesh: merge(...body) },
+  const base: DressPiece[] = [
+    { paint: r() < 0.5 ? "warmLight" : "scrapSteel", mesh: merge(...body), surface: "concrete" },
     { paint: "soot", mesh: merge(...dark) },
     { paint: r() < 0.5 ? "rustOrange" : "frameNavy", mesh: merge(...roof) },
   ];
+
+  // The variations, on the four faces. A face is (u along it, y up, w out of it); w = 0 is set on the box face, the
+  // grid face or the core, depending on how deep the detail sits, and nothing reaches past the box face.
+  const details = new Details(b, triangleCount(base), TRIANGLE_CAP);
+  const faces = [
+    { alongX: true, half: hz, span: sx, openings: alongXOpenings, out: -1 as const },
+    { alongX: true, half: hz, span: sx, openings: alongXOpenings, out: 1 as const },
+    { alongX: false, half: hx, span: sz, openings: alongZOpenings, out: -1 as const },
+    { alongX: false, half: hx, span: sz, openings: alongZOpenings, out: 1 as const },
+  ];
+  // A face frame `depth` metres behind the box face.
+  const put = (f: (typeof faces)[number], depth: number, paint: string, mesh: MeshData, surface?: SurfaceKind | null): DressPiece => {
+    const piece: DressPiece = { paint, mesh: toWorld(onFace(mesh, { at: f.out * (f.half - depth), out: f.out } as Face), f.alongX, [cx, y0, cz]) };
+    if (surface !== undefined) piece.surface = surface;
+    return piece;
+  };
+  const windows = faces.flatMap((f, fi) => f.openings.flatMap(([a, c]) => Array.from({ length: floors }, (_, floor) => ({ fi, a, c, floor }))));
+  // Boarded windows: a plate over the slot on the grid face, two planks nailed across it.
+  const boardPaint = r() < 0.5 ? "deepRust" : "rustOrange";
+  let boarded = 0;
+  for (const w of windows) {
+    if (r() >= BOARDED_SHARE || boarded >= MAX_BOARDED) continue;
+    const y0w = w.floor * floorHeight + sill * floorHeight, y1w = w.floor * floorHeight + head * floorHeight;
+    const plate = box([(w.a + w.c) / 2, (y0w + y1w) / 2, 0.02], [w.c - w.a + 0.16, y1w - y0w + 0.12, 0.04]);
+    const plank = box([(w.a + w.c) / 2, (y0w + y1w) / 2, 0.06], [w.c - w.a + 0.24, 0.18, 0.04]);
+    if (details.add([put(faces[w.fi]!, GRID_INSET, boardPaint, plate), put(faces[w.fi]!, GRID_INSET, "#7A5A2E", plank, "wood")])) boarded++;
+  }
+  if (r() < COOLER_CHANCE && windows.length > 0) {
+    // An air conditioner sat on a sill in the window recess, its fan grille facing out, its dark intake round it.
+    const w = windows[Math.floor(r() * windows.length)]!;
+    const width = Math.min(0.9, (w.c - w.a) * 0.6), tall = Math.min(0.6, (head - sill) * floorHeight * 0.6);
+    const u = (w.a + w.c) / 2, ys = w.floor * floorHeight + sill * floorHeight;
+    const unit = box([u, ys + tall / 2, 0.12], [width, tall, 0.22]);
+    const fan = cylinder([u, ys + tall / 2, 0.235], tall * 0.35, 0.02, "z", 8);
+    details.add([put(faces[w.fi]!, CORE_INSET, "paintWhite", unit), put(faces[w.fi]!, CORE_INSET, "soot", fan)]);
+  }
+  const face = faces[Math.floor(r() * faces.length)]!;
+  if (r() < PIPE_CHANCE) {
+    // Next to a corner pilaster, inside the grid's inset so it never stands past the box face.
+    const corner = r() < 0.5 ? -1 : 1;
+    const p = downpipe(corner * (face.span / 2 - pilaster - 0.18), rimBase, 0.05, 0);
+    details.add([put(face, GRID_INSET + 0.02, r() < 0.5 ? "scrapSteel" : "rustOrange", p.pipe), put(face, GRID_INSET + 0.02, "soot", p.brackets)]);
+  }
+  if (r() < LADDER_CHANCE) {
+    // Up a pier between two windows, to the rim: the rungs stand in the grid's inset.
+    const piersAt = face.openings.slice(1).map(([a], i) => (a + face.openings[i]![1]) / 2);
+    if (piersAt.length > 0) {
+      const u = piersAt[Math.floor(r() * piersAt.length)]!;
+      details.add([put(face, GRID_INSET, "soot", ladder(u, rimBase, 0.02))]);
+    }
+  }
+  if (r() < VINE_CHANCE) {
+    const v = vines(r, (r() - 0.5) * face.span * 0.6, 3, Math.min(deck, 3 + r() * 4), -face.span / 2 + pilaster, face.span / 2 - pilaster);
+    details.add([put(face, 0.06, "darkMoss", v.stems, null), put(face, 0.06, "moss", v.leaves, null)]);
+  }
+  return [...base, ...byPaint(details.pieces)];
 };

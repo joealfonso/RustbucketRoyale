@@ -6,6 +6,7 @@ import type { Toon } from "./toonMaterial";
 import type { LoadedKit } from "./mechKit";
 import type { AbilityFxConfig } from "./abilityFx";
 import { makeGhost } from "./ghostLook";
+import { castShadows } from "./sunShadows";
 
 interface Sample {
   time: number;
@@ -174,6 +175,7 @@ export class RemoteMechs {
 
   private makeModel(o: OtherState): MechModel {
     const model = this.look ? createMechModel(this.look.accentFor(o.id), this.zoneMaxHp, this.look.toon, this.look.body, this.look.kitFor(o.mech), this.look.trim) : createMechModel("#2f7fd0", this.zoneMaxHp);
+    castShadows(model.group);
     this.scene.add(model.group);
     return model;
   }

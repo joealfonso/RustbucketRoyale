@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 import mechJson from "../../../../data/mech.json";
 import tiersJson from "../../../../data/tiers.json";
 import backdropJson from "../../../../data/backdrop.json";
+import dressingJson from "../../../../data/dressing.json";
 import { parseMechStats } from "@rustbucket/shared";
 import { buildPlayMap } from "../loadMap";
 import { farBay, nearBay, planBay } from "./edgeBay";
-import { edgeBoxIndices, edgeChunks, edgeRuns, parseBarrier, runToWorld } from "./edgeLayout";
+import { edgeBoxIndices, edgeChunks, edgeRuns, parseBarrier, parseEdgeVariety, runToWorld } from "./edgeLayout";
 import { seedOf } from "./kinds";
 import { turn } from "./shapes";
 
-const config = parseBarrier(backdropJson.barrier);
+const config = { ...parseBarrier(backdropJson.barrier), variety: parseEdgeVariety(dressingJson.edge) };
 const mech = parseMechStats(mechJson);
 
 describe("edge barrier", () => {
@@ -51,7 +52,8 @@ describe("edge barrier", () => {
       const b = map.boxes[run.box]!;
       const inside = (x: number, y: number, z: number) =>
         x >= b.minX - slack && x <= b.maxX + slack && y >= b.minY - slack && y <= b.maxY + slack && z >= b.minZ - slack && z <= b.maxZ + slack;
-      for (const bay of [0, 1, run.bays - 1]) {
+      // The first bays, the last, and enough in between that breaches, bales and leaners all turn up.
+      for (const bay of [0, 1, ...Array.from({ length: 12 }, (_, i) => Math.floor(((i + 1) * run.bays) / 14)), run.bays - 1]) {
         const plan = () => planBay(config, seedOf(map.seed, r * 1000 + bay), bay * run.bayLength, run.bayLength, run.height, run.thickness);
         expect(JSON.stringify(nearBay(config, plan()))).toBe(JSON.stringify(nearBay(config, plan())));
         for (const piece of nearBay(config, plan())) {
@@ -70,23 +72,52 @@ describe("edge barrier", () => {
     });
   });
 
-  it("covers every column of the wall face up to the fence, so no gap shows through", () => {
-    for (let seed = 0; seed < 20; seed++) {
+  it("covers every column of the wall face up to the fence, so no gap shows through except a breach", () => {
+    let breaches = 0;
+    for (let seed = 0; seed < 60; seed++) {
       const plan = planBay(config, seed, 0, 24, 40, 2);
+      const columnWidth = plan.length / plan.columns;
       for (let column = 0; column < plan.columns; column++) {
         const sheets = plan.sheets.filter((s) => s.column === column);
-        expect(sheets[0]!.y0).toBe(0);
+        const u = plan.u0 + (column + 0.5) * columnWidth;
+        const inHole = plan.breach !== null && u > plan.breach.u0 && u < plan.breach.u1;
+        // A breach column starts where the hole's top is, and the core above the hole starts there too.
+        expect(sheets[0]!.y0).toBe(inHole ? plan.breach!.height : 0);
         sheets.forEach((s, i) => { if (i > 0) expect(s.y0).toBe(sheets[i - 1]!.y1); });
         expect(sheets[sheets.length - 1]!.y1).toBeCloseTo(plan.wallTop, 6);
       }
       // The seams must not line up into the rows of a building.
       const tops = (column: number) => plan.sheets.filter((s) => s.column === column).map((s) => s.y1.toFixed(2)).join();
       expect(new Set(Array.from({ length: plan.columns }, (_, c) => tops(c))).size).toBeGreaterThan(1);
+      if (plan.breach) {
+        breaches++;
+        // Nothing stacked in the hole, and it ends at posts, so the posts at its sides still stand.
+        expect(plan.containers.length + plan.bales.length).toBe(0);
+        expect(((plan.breach.u1 - plan.breach.u0) / (2 * columnWidth)) % 1).toBeCloseTo(0, 6);
+      }
+    }
+    expect(breaches).toBeGreaterThan(0);
+  });
+
+  it("varies from bay to bay: breaches, bales, plates, leaners and vines all turn up, from the seed alone", () => {
+    const plans = Array.from({ length: 80 }, (_, seed) => planBay(config, seed, 0, 24, 40, 2));
+    expect(plans.some((p) => p.breach)).toBe(true);
+    expect(plans.some((p) => p.bales.length > 0)).toBe(true);
+    expect(plans.some((p) => p.plates)).toBe(true);
+    expect(plans.some((p) => p.leaners.length > 0)).toBe(true);
+    expect(plans.some((p) => p.vines.length > 0)).toBe(true);
+    expect(new Set(plans.map((p) => p.girderLift.toFixed(2))).size).toBeGreaterThan(40);
+    expect(JSON.stringify(planBay(config, 7, 0, 24, 40, 2))).toBe(JSON.stringify(planBay(config, 7, 0, 24, 40, 2)));
+    // Without the variety the plain bay is unchanged by it: same sheets, same containers.
+    const plain = { ...config, variety: undefined };
+    for (const seed of [1, 2, 3]) {
+      const a = planBay(plain, seed, 0, 24, 40, 2), b = planBay(config, seed, 0, 24, 40, 2);
+      if (!b.breach) expect(b.sheets).toEqual(a.sheets);
     }
   });
 
   it("stays within a modest triangle budget per bay", () => {
-    for (let seed = 0; seed < 20; seed++) {
+    for (let seed = 0; seed < 200; seed++) {
       const plan = planBay(config, seed, 0, 24, 40, 2);
       const triangles = nearBay(config, plan).reduce((n, p) => n + p.mesh.indices.length / 3, 0);
       expect(triangles).toBeLessThan(3500);

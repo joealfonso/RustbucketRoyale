@@ -80,7 +80,8 @@ export const rock: KindBuilder = (box: DressBox): DressPiece[] => {
   const cx = (box.min[0] + box.max[0]) / 2, cz = (box.min[2] + box.max[2]) / 2;
   const angles: V3 = sx >= sz ? [0, 0, 0] : [0, Math.PI / 2, 0];
   const place = (m: MeshData) => turn(m, angles, [0, 0, 0], [cx, box.min[1], cz]);
-  const pieces: DressPiece[] = [{ paint: light, mesh: place(merge(...main)) }];
-  if (second.length > 0) pieces.push({ paint: dark, mesh: place(merge(...second)) });
+  // Stone wears none of the painted marks (paint/): plates and rivets on a rock read as metal.
+  const pieces: DressPiece[] = [{ paint: light, surface: null, mesh: place(merge(...main)) }];
+  if (second.length > 0) pieces.push({ paint: dark, surface: null, mesh: place(merge(...second)) });
   return pieces;
 };

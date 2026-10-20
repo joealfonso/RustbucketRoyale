@@ -14,6 +14,7 @@ import damageFxJson from "../../../data/damageFx.json";
 import { parseDamageFx } from "./damageFx";
 import { createMechModel, setCrawlLook, setMechDamage, type MechModel } from "./mechModel";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
+import { SunShadows, castShadows } from "./sunShadows";
 import mechKitsJson from "../../../data/mechKits.json";
 import { loadKit, parseKits, type LoadedKit } from "./mechKit";
 import { PROP_MODELS } from "./props";
@@ -22,7 +23,7 @@ import weaponsJson from "../../../data/weapons.json";
 import weaponFxJson from "../../../data/weaponFx.json";
 import { ShotFx } from "./shotFx";
 import { parseWeaponFx } from "./weaponFxData";
-import { mostOf, setVfxQuality, vfxConfig, vfxLevel, vfxQuality } from "./fx/quality";
+import { mostOf, onVfxQuality, setVfxQuality, vfxConfig, vfxLevel, vfxQuality } from "./fx/quality";
 import explosionFxJson from "../../../data/explosionFx.json";
 import thrusterFxJson from "../../../data/thrusterFx.json";
 import grenadeJson from "../../../data/grenade.json";
@@ -32,12 +33,14 @@ import { Explosions, parseExplosionFx } from "./fx/explosion";
 import { FxSprites } from "./fx/fxSprites";
 import { Thrusters, parseThrusterFx } from "./fx/thrusters";
 import { DamageFx } from "./damageFx";
+import { PaintPreview } from "./paint/paintPreview";
 
 // The V1 style test (style.html): one chunk, its props and three mechs in the game's look, seen from 10, 50 and
 // 150 m, so the palette, bands, outline and light can be judged before any real art is made. Keys 1, 2, 3 move the
 // camera; Q and E turn round the mechs; L steps through the light presets (data/look.json).
 const palette = parsePalette(paletteJson);
-const toon = new Toon(parseLook(lookJson), palette);
+const lookConfig = parseLook(lookJson);
+const toon = new Toon(lookConfig, palette);
 const chunks = parseChunkSet(chunksJson);
 const props = parsePropConfig(propsJson);
 const zones = parseZones(zonesJson);
@@ -57,6 +60,8 @@ const scene = new THREE.Scene();
 let preset = 0;
 toon.light(scene, toon.presets[preset]!);
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 3000);
+const sunShadows = new SunShadows(renderer, toon.sun, toon.toSun, lookConfig.shadows, vfxQuality());
+onVfxQuality(() => sunShadows.setQuality(vfxQuality()));
 
 // Ground, then the chunk with its middle on the origin.
 const ground = new THREE.Mesh(new THREE.BoxGeometry(600, 1, 600), toon.ground(palette.world.ground));
@@ -119,6 +124,12 @@ roster.forEach((r, i) => {
   scene.add(model.group);
   rosterModels.push(model);
 });
+
+// Key 9: the painted atlas (V7b) on a row of boxes, dressing, a crate and a roster mech, left of the chunk.
+// 9 steps close / 10 m / 50 m, 0 the next thing, P paint on and off.
+const paintMech = roster[0] ? createMechModel(palette.mech.othersAccent, zoneMaxHp, toon, palette.mech.body, roster[0].kit, palette.mech.trim).group : null;
+const paintPreview = new PaintPreview(scene, toon, toon.paint, paintMech);
+let lookingAtPaint = false;
 
 // Key W: the roster walks on the spot, as on a treadmill, so each gait (data/gait.json) can be judged side by side.
 const gait = parseGait(gaitJson);
@@ -213,6 +224,10 @@ function place(): void {
   // The middle of the line-up being looked at: the damage row, or the roster further out.
   const close = rosterModels[closeUp];
   rosterModels.forEach((m, i) => { m.group.visible = !close || i === closeUp; }); // the others would stand in the way
+  if (lookingAtPaint) {
+    label.textContent = paintPreview.place(camera, turn);
+    return;
+  }
   if (lookingAtFx) {
     camera.position.set(5 + Math.sin(turn) * 22, 5, ROSTER_Z + Math.cos(turn) * 22);
     camera.lookAt(5, 3, ROSTER_Z - 4);
@@ -240,6 +255,10 @@ function place(): void {
 window.addEventListener("keydown", (e) => {
   const index = ["Digit1", "Digit2", "Digit3"].indexOf(e.code);
   if (index >= 0) { distance = DISTANCES[index]!; lookingAtRoster = false; lookingAtProps = false; closeUp = -1; lookingAtRange = false; lookingAtFx = false; }
+  if (index >= 0 || ["Digit4", "Digit5", "Digit6", "Digit7", "Digit8"].includes(e.code)) lookingAtPaint = false;
+  if (e.code === "Digit9") { if (lookingAtPaint) paintPreview.nextView(); lookingAtPaint = true; lookingAtRange = false; lookingAtFx = false; closeUp = -1; }
+  if (e.code === "Digit0" && lookingAtPaint) paintPreview.nextItem();
+  if (e.code === "KeyP") paintPreview.togglePaint();
   if (e.code === "Digit8") { lookingAtFx = true; lookingAtRange = false; closeUp = -1; turn = 0; }
   if (e.code === "KeyB") { const [, radius] = BLASTS[nextBlast]!; explosions.blast(5, 0.3, ROSTER_Z - 7, radius, 0); nextBlast = (nextBlast + 1) % BLASTS.length; }
   if (e.code === "KeyJ") { jetsOn = !jetsOn; if (!jetsOn) dropFrames = 1; }
@@ -265,6 +284,8 @@ window.addEventListener("resize", () => {
   camera.updateProjectionMatrix();
 });
 place();
+// Everything here is built by now: let what the master material draws cast sun shadows.
+castShadows(scene);
 renderer.setAnimationLoop(() => {
   const dt = Math.min(0.05, clock.getDelta());
   walkRoster(dt);
@@ -272,5 +293,6 @@ renderer.setAnimationLoop(() => {
   const fxDt = rangeSlow ? dt / 4 : dt;
   shotFx.update(fxDt, rangeWorld);
   shotFx.draw(camera, fxDt);
+  sunShadows.follow(camera);
   renderer.render(scene, camera);
 });

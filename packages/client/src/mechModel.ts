@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { UpgradeDef } from "@rustbucket/shared";
 import type { Toon } from "./toonMaterial";
+import { castShadows } from "./sunShadows";
 import type { LoadedKit } from "./mechKit";
 import { createGait, type GaitState } from "./gait";
 import { SEGMENTS_PER_LEG, segmentOf } from "./legRig";
@@ -99,7 +100,7 @@ export function createMechModel(
   const grey = toon ? toon.color(bodyColor) : bodyColor;
   const baseColors = [new THREE.Color(grey), new THREE.Color(toon ? toon.color(accent) : accent), new THREE.Color(grey)];
   // In the toon look each zone's paint rusts away with damage; the plain look darkens instead.
-  const zoneMaterials = baseColors.map((c) => (toon ? toon.ownMaterial(`#${c.getHexString()}`, true) : new THREE.MeshStandardMaterial({ color: c, roughness: 1 })));
+  const zoneMaterials = baseColors.map((c) => (toon ? toon.ownMaterial(`#${c.getHexString()}`, true, "mech") : new THREE.MeshStandardMaterial({ color: c, roughness: 1 })));
   const armMeshes: THREE.Mesh[] = [];
   // Every box gets an outline in the toon look, tinted from the colour it starts with.
   const outline = (mesh: THREE.Mesh, color: string) => { if (toon) toon.outlineChild(mesh, color); };
@@ -114,7 +115,7 @@ export function createMechModel(
   };
   const legMeshes: THREE.Mesh[] = [];
   // The weapon in hand's colour: on a kit's own gun parts, or on the plain barrel added below.
-  const gunMaterial = toon ? toon.ownMaterial("#d9731a") : new THREE.MeshStandardMaterial({ color: "#d9731a", roughness: 0.6 });
+  const gunMaterial = toon ? toon.ownMaterial("#d9731a", false, "mech") : new THREE.MeshStandardMaterial({ color: "#d9731a", roughness: 0.6 });
   let hasModelledGun = false;
   const paints: MechModel["paints"] = [];
   const glows: MechModel["glows"] = [];
@@ -122,7 +123,7 @@ export function createMechModel(
   const paintFor = (zone: number, color: string, cornerColors: boolean): THREE.MeshToonMaterial => {
     const found = paints.find((p) => p.zone === zone && p.material.vertexColors === cornerColors);
     if (found) return found.material;
-    const material = toon!.ownMaterial(color, true);
+    const material = toon!.ownMaterial(color, true, "mech");
     material.vertexColors = cornerColors;
     paints.push({ zone, material, base: new THREE.Color(color) });
     return material;
@@ -279,7 +280,7 @@ const cornerColoredByToon = new WeakMap<Toon, { plain: THREE.MeshToonMaterial; s
 function cornerColored(toon: Toon): { plain: THREE.MeshToonMaterial; shell: THREE.MeshBasicMaterial } {
   let found = cornerColoredByToon.get(toon);
   if (!found) {
-    const plain = toon.ownMaterial("#ffffff");
+    const plain = toon.ownMaterial("#ffffff", false, "mech");
     plain.vertexColors = true;
     const source = toon.shellOutline("#ffffff");
     const shell = source.clone();
@@ -379,6 +380,7 @@ export function setMechUpgrades(model: MechModel, upgrades: readonly number[], d
       part.scale.set(mount.size[0]!, mount.size[1]!, mount.size[2]!);
       model.body.add(part);
       model.toon?.outlineChild(part, def.color);
+      castShadows(part);
       model.upgradeParts[u] = part;
     }
     if (part) part.visible = fitted;

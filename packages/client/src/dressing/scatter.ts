@@ -33,7 +33,8 @@ const grass: Item = (r) => {
     const a = r() * Math.PI * 2, d = r() * 0.3;
     byPaint[r() < 0.6 ? "moss" : "darkMoss"]!.push(turn(blade, [between(r, -0.3, 0.3), r() * Math.PI * 2, between(r, -0.3, 0.3)], [0, 0, 0], [Math.cos(a) * d, 0, Math.sin(a) * d]));
   }
-  return Object.entries(byPaint).filter(([, m]) => m.length > 0).map(([paint, m]) => ({ paint, mesh: ground(merge(...m)) }));
+  // Plants carry no painted metal marks.
+  return Object.entries(byPaint).filter(([, m]) => m.length > 0).map(([paint, m]) => ({ paint, mesh: ground(merge(...m)), surface: null }));
 };
 
 const tyreFlat: Item = (r) => {
@@ -95,7 +96,7 @@ const bush: Item = (r) => {
     const size = i === 0 ? between(r, 0.55, 0.8) : between(r, 0.35, 0.55);
     mounds.push(turn(mound(r, size, size * between(r, 0.85, 1.05)), [0, 0, 0], [0, 0, 0], [Math.cos(a) * d, -0.04, Math.sin(a) * d]));
   }
-  return [{ paint, mesh: merge(...mounds) }];
+  return [{ paint, mesh: merge(...mounds), surface: null }];
 };
 
 // Weights out of 100. Most of it is grass, the junk is the seasoning, and bushes break up the open ground.
@@ -146,7 +147,7 @@ export const scatter: Scatter = (chunk, boxes, count) => {
     const spin = r() * Math.PI * 2;
     for (let t = 0; t < TRIES; t++) {
       const [x, z] = spot();
-      const placed = pieces.map((p) => ({ paint: p.paint, mesh: turn(p.mesh, [0, spin, 0], [0, 0, 0], [x, 0, z]) }));
+      const placed = pieces.map((p) => ({ ...p, mesh: turn(p.mesh, [0, spin, 0], [0, 0, 0], [x, 0, z]) }));
       if (!fits(placed, chunk.minX, chunk.minZ, chunk.size, boxes)) continue;
       const { groundAt } = chunk;
       if (groundAt) for (const p of placed) drape(p.mesh, groundAt);

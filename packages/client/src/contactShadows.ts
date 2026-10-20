@@ -6,6 +6,9 @@ import { onHills } from "./groundTilt";
 // Soft dark patches on the ground under things, so crates, walls and mechs sit on the floor instead of floating
 // over it. Not real shadows: no light direction, just the darkening where an object meets the ground.
 // Static ones go under every map box that stands on the ground, built once per map; moving ones follow the mechs.
+// Near the camera the sun's real shadows (sunShadows.ts) and the contact darkening on the boxes themselves do this
+// job, so the static patches fade down to a share of their strength there (`fadeNear`) and only carry the grounding
+// past the shadow range. The mechs keep theirs at every distance: it shows how high a jetting mech is over the ground.
 // Each set is one instanced mesh of flat quads, so all of it costs two draw calls.
 
 export interface ShadowLook {
@@ -98,25 +101,30 @@ export function makeShadowTexture(falloff: number, size = 64): THREE.Texture {
 // The disc stretched to any rectangle without stretching its rim: the middle stays full and only the outer `soft`
 // metres fade, with rounded corners, so a long wall gets an even band and a mech a round patch.
 // Per instance: `shadowShape` holds (strength, soft metres); the size comes from the instance's scale.
-function makeShadowMaterial(texture: THREE.Texture, color: string): THREE.MeshBasicMaterial {
+// `near` (from metres, to metres, share kept) fades the patches by distance from the camera: down to the share kept
+// within `from`, full strength past `to`. Null for patches that never fade.
+function makeShadowMaterial(texture: THREE.Texture, color: string, near: { value: THREE.Vector3 } | null): THREE.MeshBasicMaterial {
   const m = new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.shadowDisc = { value: texture };
+    if (near) shader.uniforms.shadowNear = near;
     shader.vertexShader = shader.vertexShader
-      .replace("void main() {", "attribute vec2 shadowShape;\nvarying vec2 vShadowAt;\nvarying vec2 vShadowHalf;\nvarying vec2 vShadowShape;\nvoid main() {")
+      .replace("void main() {", "attribute vec2 shadowShape;\nvarying vec2 vShadowAt;\nvarying vec2 vShadowHalf;\nvarying vec2 vShadowShape;\nvarying float vShadowDistance;\nvoid main() {")
       .replace("#include <begin_vertex>", `#include <begin_vertex>
         vec2 shadowSize = vec2(length(instanceMatrix[0].xyz), length(instanceMatrix[2].xyz));
         vShadowAt = position.xz * shadowSize;
         vShadowHalf = shadowSize * 0.5;
-        vShadowShape = shadowShape;`);
+        vShadowShape = shadowShape;
+        vShadowDistance = distance((modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz, cameraPosition);`);
     shader.fragmentShader = shader.fragmentShader
-      .replace("void main() {", "uniform sampler2D shadowDisc;\nvarying vec2 vShadowAt;\nvarying vec2 vShadowHalf;\nvarying vec2 vShadowShape;\nvoid main() {")
+      .replace("void main() {", `uniform sampler2D shadowDisc;\n${near ? "uniform vec3 shadowNear;\n" : ""}varying vec2 vShadowAt;\nvarying vec2 vShadowHalf;\nvarying vec2 vShadowShape;\nvarying float vShadowDistance;\nvoid main() {`)
       .replace("#include <alphamap_fragment>", `#include <alphamap_fragment>
         float shadowSoft = max(min(vShadowShape.y, min(vShadowHalf.x, vShadowHalf.y)), 0.001);
         vec2 intoRim = max(abs(vShadowAt) - (vShadowHalf - shadowSoft), 0.0) / shadowSoft;
-        diffuseColor.a *= texture2D(shadowDisc, 0.5 + 0.5 * intoRim).a * vShadowShape.x;`);
+        diffuseColor.a *= texture2D(shadowDisc, 0.5 + 0.5 * intoRim).a * vShadowShape.x;
+        ${near ? "diffuseColor.a *= mix(shadowNear.z, 1.0, smoothstep(shadowNear.x, shadowNear.y, vShadowDistance));" : ""}`);
   };
-  m.customProgramCacheKey = () => "contact-shadow";
+  m.customProgramCacheKey = () => (near ? "contact-shadow-near" : "contact-shadow");
   return m;
 }
 
@@ -152,6 +160,9 @@ function shadowMesh(material: THREE.Material, count: number): { mesh: THREE.Inst
 
 export class ContactShadows {
   private material: THREE.MeshBasicMaterial;
+  private stillMaterial: THREE.MeshBasicMaterial;
+  // Until `fadeNear` is called the static patches never fade.
+  private near = { value: new THREE.Vector3(0, 0, 1) };
   private still: { mesh: THREE.InstancedMesh; shape: THREE.InstancedBufferAttribute } | null = null;
   private instanceOfBox = new Int32Array(0);
   private moving: { mesh: THREE.InstancedMesh; shape: THREE.InstancedBufferAttribute };
@@ -160,7 +171,9 @@ export class ContactShadows {
   private found: number[] = [];
 
   constructor(private scene: THREE.Scene, private look: ShadowLook, color: string) {
-    this.material = makeShadowMaterial(makeShadowTexture(look.falloff), color);
+    const disc = makeShadowTexture(look.falloff);
+    this.material = makeShadowMaterial(disc, color, null);
+    this.stillMaterial = makeShadowMaterial(disc, color, this.near);
     this.moving = shadowMesh(this.material, look.moving.maxCount);
     // They move every frame, so the bounds are never right for culling. There are only a few.
     this.moving.mesh.frustumCulled = false;
@@ -176,7 +189,7 @@ export class ContactShadows {
     let count = 0;
     const groundUnder = (b: Box) => (world.terrain ? world.groundAt((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2) : 0);
     boxes.forEach((b, i) => { if (shadowFootprint(b, this.look.static, footprint, groundUnder(b))) this.instanceOfBox[i] = count++; });
-    const still = shadowMesh(this.material, Math.max(1, count));
+    const still = shadowMesh(this.stillMaterial, Math.max(1, count));
     still.mesh.count = count;
     boxes.forEach((b, i) => {
       const instance = this.instanceOfBox[i]!;
@@ -191,6 +204,12 @@ export class ContactShadows {
     still.mesh.computeBoundingSphere();
     this.scene.add(still.mesh);
     this.still = still;
+  }
+
+  // Where the sun's real shadows are drawn: the static patches keep `share` of their strength within `fromMeters` of
+  // the camera, rising to full by `toMeters`.
+  fadeNear(fromMeters: number, toMeters: number, share: number): void {
+    this.near.value.set(fromMeters, Math.max(toMeters, fromMeters + 0.01), share);
   }
 
   // A broken prop's patch goes with it.

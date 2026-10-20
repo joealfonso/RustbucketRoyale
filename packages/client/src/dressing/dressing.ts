@@ -1,11 +1,14 @@
 import * as THREE from "three";
 import { freeze } from "../freeze";
+import { castShadows } from "../sunShadows";
 import { addOutlineNormals } from "../outlineNormals";
 import type { PlayMap } from "../loadMap";
 import type { MapMeshes } from "../mapRenderer";
 import type { Toon } from "../toonMaterial";
+import { GroundCover } from "./cover";
+import { parseCover } from "./coverConfig";
 import { FarBoulders } from "./farBoulders";
-import { seedOf, type DressBox, type DressPiece, type KindBuilder } from "./kinds";
+import { fromMergeKey, mergeKey, seedOf, type DressBox, type DressPiece, type KindBuilder } from "./kinds";
 import type { MeshData } from "./shapes";
 
 export interface DressingConfig {
@@ -13,6 +16,7 @@ export interface DressingConfig {
   chunkMeters: number; // the size of the map's chunks
   scatterPerChunk: number; // loose junk and grass dropped on open ground per chunk
   buildAtOnce: number; // a move needing more unbuilt chunks than this (a spectator cut) builds them one per frame
+  cover?: unknown; // the near ground cover (coverConfig.ts), checked on load; none without it
 }
 
 // Things lying about on open ground in one chunk. Visual only: nothing here collides. `groundAt` is the height of
@@ -31,7 +35,8 @@ export type Scatter = (
 export class Dressing {
   readonly group = new THREE.Group();
   readonly far: FarBoulders | null = null;
-  private chunkPieces = new Map<number, Map<string, MeshData[]>>(); // chunk key → paint → meshes
+  readonly cover: GroundCover | null = null;
+  private chunkPieces = new Map<number, Map<string, MeshData[]>>(); // chunk key → paint and surface (mergeKey) → meshes
   private chunkBoxes = new Map<number, number[]>(); // chunk key → dressed box indices in it
   private chunkBlockers = new Map<number, number[]>(); // chunk key → every box standing in it, for the scatter
   private ahead: number[] = []; // chunks just beyond the dressed ones, to build on quiet frames
@@ -79,6 +84,10 @@ export class Dressing {
       mapMeshes.commit();
       scene.add(this.far.group);
     }
+    if (config.cover !== undefined) {
+      this.cover = new GroundCover(toon, map, parseCover(config.cover));
+      scene.add(freeze(this.cover.group));
+    }
     freeze(this.group);
     scene.add(this.group);
   }
@@ -115,6 +124,7 @@ export class Dressing {
   // spectator camera cutting to another mech) would need a few dozen chunks built at once, a dropped frame of 50 to
   // 100 ms, so then they are built one per frame and the plain boxes stand in until all are ready.
   update(x: number, z: number): void {
+    this.cover?.update(x, z);
     const key = this.keyAt(x, z);
     if (key === this.centreKey) {
       const next = this.missing.pop() ?? this.ahead.pop();
@@ -171,10 +181,10 @@ export class Dressing {
     byPaint = new Map();
     const add = (pieces: DressPiece[]) => {
       for (const p of pieces) {
-        const hex = this.toon.color(p.paint);
-        const list = byPaint!.get(hex);
+        const key = mergeKey(this.toon.color(p.paint), p.surface);
+        const list = byPaint!.get(key);
         if (list) list.push(p.mesh);
-        else byPaint!.set(hex, [p.mesh]);
+        else byPaint!.set(key, [p.mesh]);
       }
     };
     const boxes: DressBox[] = [];
@@ -206,23 +216,30 @@ export class Dressing {
     }
     const merged = new Map<string, MeshData[]>();
     for (const key of this.near) {
-      for (const [hex, meshes] of this.piecesOf(key)) {
-        const list = merged.get(hex);
+      for (const [paint, meshes] of this.piecesOf(key)) {
+        const list = merged.get(paint);
         if (list) list.push(...meshes);
-        else merged.set(hex, [...meshes]);
+        else merged.set(paint, [...meshes]);
       }
     }
-    for (const [hex, meshes] of merged) {
+    // Merged geometry is not the unit box, so its paint never chips along edges (edges = false).
+    for (const [key, meshes] of merged) {
+      const [hex, surface] = fromMergeKey(key);
       const geometry = toGeometry(meshes);
-      this.group.add(new THREE.Mesh(geometry, this.toon.world(hex)), new THREE.Mesh(geometry, this.toon.shellOutline(hex)));
+      this.group.add(new THREE.Mesh(geometry, this.toon.world(hex, surface, false)), new THREE.Mesh(geometry, this.toon.shellOutline(hex)));
     }
     // A rebuild makes new meshes, which three would otherwise update every frame like anything else.
     freeze(this.group);
+    castShadows(this.group);
   }
 
   dispose(): void {
     for (const child of this.group.children) (child as THREE.Mesh).geometry.dispose();
     this.scene.remove(this.group);
+    if (this.cover) {
+      this.scene.remove(this.cover.group);
+      this.cover.dispose();
+    }
     if (this.far) {
       this.scene.remove(this.far.group);
       this.far.dispose();
