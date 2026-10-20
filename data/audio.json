@@ -71,7 +71,7 @@
       "file": null
     },
     "step": {
-      "volume": 0.32,
+      "volume": 0.12,
       "echo": 0.15,
       "file": null
     },
@@ -140,7 +140,7 @@
       "file": null
     },
     "wade": {
-      "volume": 0.36,
+      "volume": 0.14,
       "echo": 0.12,
       "file": null
     },
