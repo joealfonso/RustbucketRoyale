@@ -89,7 +89,8 @@ import { Backdrop } from "./backdrop/backdrop";
 import { parseBackdrop } from "./backdrop/layout";
 import { Ranges, parseRanges } from "./backdrop/ranges";
 import chunksJsonForDressing from "../../../data/chunks.json";
-import { createMechModel, legsLimping, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
+import { createMechModel, kickMech, legsLimping, moveGunsAndSensors, recoilConfig, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
+import { kickFor } from "./recoil";
 import { NetClient, type Session } from "./net";
 import { Radar } from "./radar";
 import { parseRadar } from "./radarData";
@@ -98,6 +99,7 @@ import { RemoteMechs } from "./remoteMechs";
 import { RingView } from "./ringView";
 import { DropView } from "./dropView";
 import { RailFx, type RailPose } from "./railFx";
+import { moveMechParts } from "./mechMotion";
 import { knockoutWords, statLines, type Names } from "./knockoutCard";
 import { RenderScale, parseRenderScale } from "./renderScale";
 import renderJson from "../../../data/render.json";
@@ -440,6 +442,7 @@ const walkRemote = (model: MechModel, m: number, vx: number, vy: number, vz: num
   gaitInput.limping = legsLimping(model);
   gaitInput.walkSpeed = stats.walkSpeed; gaitInput.runSpeed = stats.runSpeed;
   const feet = walkMech(model, gaitConfig, gaitInput, fxDt);
+  moveMechParts(model, fxDt);
   thrusters.drive(model, jetting, gaitInput.dashing, gaitInput.grounded, vy, fxDt);
   if (feet) {
     const p = model.group.position, me = mechGroup.position;
@@ -453,6 +456,14 @@ const thrown = createGrenade();
 const damageFx = new DamageFx(fxSprites, damageFxConfig, zoneSet);
 let fxDt = 0;
 const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
+const moveGuns = (model: MechModel) => moveGunsAndSensors(model, fxDt);
+// Someone's gun kicks for a shot that left from (ox, oz) in the world: which gun goes by where the shot started, in
+// the mech's own frame (the inverse of computeShot's turn), so the Arbiter's two guns kick in turn.
+const kickShooter = (model: MechModel | null, kick: string | undefined, ox: number, oz: number) => {
+  if (!model) return;
+  const p = model.group.position, yaw = model.group.rotation.y;
+  kickMech(model, kickFor(recoilConfig, kick), Math.cos(yaw) * (ox - p.x) - Math.sin(yaw) * (oz - p.z));
+};
 const shadowUnder = (model: MechModel) => contactShadows.addObject(model.group);
 // Everyone else wears the same accent: telling friend from foe is by name and behaviour, not colour.
 const pilotAccents = palette.mech.pilotAccents ?? [];
@@ -711,6 +722,7 @@ if (net) {
     if (now - (lastShotSound.get(id) ?? -Infinity) < 40) return;
     lastShotSound.set(id, now);
     sound.play(sound.shotFor(weaponSet.weapons[weapon]?.id), { x: s.ox, y: s.oy, z: s.oz });
+    kickShooter(id === net.id ? ownModel : remotes.modelOf(id), weaponSet.weapons[weapon]?.id, s.ox, s.oz); // once a pull, like the sound
   };
   killReplay.onShot = showShot;
   net.onShot = (s) => {
@@ -753,6 +765,7 @@ if (net) {
         if (!railPoseOf(a.id, railPose)) { railPose.x = a.x; railPose.y = a.y; railPose.z = a.z; }
         railFx.muzzleAt(railPose, railFrom);
         railFx.fire(a.id, railFrom, a.x, a.y, a.z, performance.now());
+        kickShooter(own ? ownModel : remotes.modelOf(a.id), "railShot", railFrom.x, railFrom.z);
         sound.play("railShot", { x: railFrom.x, y: railFrom.y + 2, z: railFrom.z });
         showAbilityHit(a.x, a.y, a.z);
       }
@@ -1060,6 +1073,7 @@ function frame(now: number): void {
       }
       sound.play(sound.shotFor(weapon.id), { x: shot.ox, y: shot.oy, z: shot.oz });
       rig.addShake(weapon.shakeForce);
+      kickMech(ownModel, kickFor(recoilConfig, weapon.id), muzzle[0]!);
     }
     // Online a grenade needs one in the bag. Count it down here so a held key does not throw twice before the server says.
     const hasGrenade = (net === null || loadout.grenades > 0) && !armsBroken();
@@ -1108,10 +1122,13 @@ function frame(now: number): void {
     walkRemote(ownModel, mech.mech, o.vx, o.vy, o.vz, o.jetting, o.running, o.ability);
   } else {
     const ownFeet = walkMech(ownModel, gaitConfig, gaitInput, frameTime);
+    moveMechParts(ownModel, frameTime);
     thrusters.drive(ownModel, mech.jetting && !health.dead, gaitInput.dashing, mech.grounded, mech.vy, frameTime);
     if (ownFeet && !health.dead) footfalls(ownModel, ownFeet, true);
   }
   remotes.forEachNear(mechGroup.position.x, mechGroup.position.z, gaitConfig.farMeters, walkRemote);
+  moveGunsAndSensors(ownModel, fxTime);
+  remotes.forEachModel(moveGuns);
   explosions.update(fxTime);
   chunks.update(fxTime);
   water.update(frameTime);

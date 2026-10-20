@@ -16,6 +16,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeGlb, type MeshData, type NodeData } from "../assets/glbWrite";
 import { bothLegs } from "./joints";
+import { leftOf, piston, sway } from "./motion";
 import { box, convex, empty, merge, mirrorX, triangles, turn, type V3 } from "../../packages/client/src/dressing/shapes";
 
 const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -165,6 +166,16 @@ const THIGH_TOP = add(HIP, [0, 0.05, 0]);
 const SHOULDER_R: V3 = [0.78, 2.84, 0], ELBOW_R: V3 = [1.12, 2.42, 0.08], WRIST_R: V3 = [1.2, 2.42, -0.7];
 const ELBOW_L = mirrorPoint(ELBOW_R), WRIST_L: V3 = [-1.18, 2.32, -0.44];
 
+// The leg pistons' mounts (gate V9b): the knee piston from the front of the thigh to the knee cap, which rides the
+// shin, and the hock damper from the side of the shin to the foot. Shared by every level and the motion entries below.
+const thighFront = perp(norm(sub(KNEE, THIGH_TOP)), [0, 0, -1]);
+const shinBack = scale(perp(norm(sub(HOCK, KNEE)), [0, 0, -1]), -1);
+const strutOut = (t: number) => add([0.15 - t * 0.03, 0, 0], scale(shinBack, 0.04));
+const KNEE_TOP = add(lerp(THIGH_TOP, KNEE, 0.12), scale(thighFront, 0.285)), KNEE_ROD = add(lerp(THIGH_TOP, KNEE, 0.86), scale(thighFront, 0.215));
+const HOCK_TOP = add(lerp(KNEE, HOCK, 0.14), strutOut(0.14)), HOCK_ROD = add(lerp(KNEE, HOCK, 0.88), strutOut(0.88));
+// The fuel line hangs between the tank and the nozzle bar: it swings about the line between its two fittings.
+const FUEL_LINE: V3[] = [[-0.37, 3.02, 0.68], [-0.39, 2.62, 0.72], [-0.27, 2.47, 0.74]];
+
 type Zone = "legs" | "arms" | "torso";
 // `noHit`: spans both arms, so one hit box round it would stretch across the chest, or sits inside other parts'
 // boxes. `finish`: left out for painted armour; "metal" for bare barrels, pistons and joints, "rubber" for hoses.
@@ -214,14 +225,15 @@ function build(lod: Lod): Part[] {
   // that soaks up landings. Ball: a plain pin. Each drum's outer face carries an orange power core (Leg_Conduits).
   const hipDrum = cyl([0.28, HIP[1], HIP[2]], [0.68, HIP[1], HIP[2]], 0.19, 0.19, 10, 0.03);
   // The pistons: bare metal, so they get the hard highlight that says "machine" from across the field.
+  // Each rod runs deep into its cylinder, out of sight, so it never pulls out as the joint bends (gate V9b: the knee
+  // piston's rod is pinned to the knee cap on the shin, the damper's to the foot, and the game slides them).
   const kneePiston = mid(
     cyl(onThigh(0.12, scale(thighFront, 0.285)), onThigh(0.5, scale(thighFront, 0.28)), 0.06, 0.06, 8, 0.014),
-    cyl(onThigh(0.45, scale(thighFront, 0.28)), onThigh(0.86, scale(thighFront, 0.215)), 0.032, 0.032, 6),
+    cyl(onThigh(0.25, scale(thighFront, 0.28)), KNEE_ROD, 0.032, 0.032, 6),
   );
-  const strutOut = (t: number) => add([0.15 - t * 0.03, 0, 0], scale(shinBack, 0.04));
   const hockStrut = merge(
     mid(cyl(onShin(0.14, strutOut(0.14)), onShin(0.46, strutOut(0.46)), 0.055, 0.055, 8, 0.012)), // damper body
-    mid(cyl(onShin(0.4, strutOut(0.4)), onShin(0.88, strutOut(0.88)), 0.03, 0.03, 6)), // rod into the hock
+    mid(cyl(onShin(0.22, strutOut(0.22)), HOCK_ROD, 0.03, 0.03, 6)), // rod into the hock
     near(...[0.54, 0.65, 0.76].map((t) => cyl(onShin(t - 0.025, strutOut(t)), onShin(t + 0.025, strutOut(t)), 0.08, 0.08, 8))), // the coil
     // Lugs that hold the strut to the shin at both ends.
     near(bar(onShin(0.16, [0.08, 0, 0]), onShin(0.16, strutOut(0.16)), shinDir, [0.05, 0.07], [0.05, 0.07], 0), bar(onShin(0.86, [0.07, 0, 0]), onShin(0.86, strutOut(0.86)), shinDir, [0.05, 0.06], [0.05, 0.06], 0)),
@@ -355,7 +367,7 @@ function build(lod: Lod): Part[] {
   const finRamR = mid(ram([0.12, 3.2, 0.8], turnPoint([0.215, 3.42, 0.8], finTurn, finPivot), 0.04, 0.5));
   // The fuel line down the pack's bare left side, from the tank to the nozzle bar: rubber, so it flexes with the
   // gimbals.
-  const fuelLine = mid(hose([[-0.37, 3.02, 0.68], [-0.39, 2.62, 0.72], [-0.27, 2.47, 0.74]], 0.04));
+  const fuelLine = mid(hose(FUEL_LINE, 0.04));
   // A hatch over the fuel cell on the pack's back, opposite the blue plate.
   const hatch = near(block([0.15, 2.92, 0.79], [0.24, 0.26, 0.04], 0.015));
   const packCamo = merge(
@@ -549,7 +561,12 @@ const dir = join(root, "assets/models/mechs/stiletto");
 mkdirSync(dir, { recursive: true });
 writeFileSync(join(dir, "Mech_Stiletto.glb"), writeGlb([...parts.map((p) => ({ name: p.name, mesh: p.mesh })), ...lodNodes, ...markers], { quantize: true }));
 const kitParts = Object.fromEntries(parts.map(({ name, mesh: _mesh, ...look }) => [name, look]));
-writeFileSync(join(root, "scripts/mechs/stiletto.kit.json"), `${JSON.stringify({ scheme, parts: kitParts }, null, 2)}\n`);
+const motionR = [
+  piston("Knee_Piston_R", ["Leg_Pistons"], ["thigh_R", KNEE_TOP], ["shin_R", KNEE_ROD], 0.1),
+  piston("Hock_Damper_R", ["Leg_Pistons"], ["shin_R", HOCK_TOP], ["foot_R", HOCK_ROD], 0.12),
+];
+const motion = [...motionR, ...motionR.map(leftOf), sway("Fuel_Line", ["Pack_Hose"], "body", FUEL_LINE, 0.1, "hose", true)];
+writeFileSync(join(root, "scripts/mechs/stiletto.kit.json"), `${JSON.stringify({ scheme, parts: kitParts, motion }, null, 2)}\n`);
 const totals = levels.map((l) => l.reduce((s, p) => s + triangles(p.mesh), 0));
 console.log(`Wrote Mech_Stiletto.glb to ${dir}: ${totals.join(" / ")} triangles (near / middle / far), ${totals[0]! + lodNodes.reduce((s, n) => s + triangles(n.mesh!), 0)} in the file`);
 parts.forEach((p, i) => console.log(`  ${p.name.padEnd(15)} ${p.zone.padEnd(6)} ${p.paint.padEnd(12)} ${levels.map((l) => String(triangles(l[i]!.mesh)).padStart(5)).join(" ")}`));

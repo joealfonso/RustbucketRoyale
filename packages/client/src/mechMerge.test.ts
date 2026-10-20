@@ -38,7 +38,9 @@ const partTriangles = (kit: LoadedKit, part: LoadedKit["parts"][number], state: 
   const s = part.states[state];
   if (!s) return 0;
   const at = (lods: THREE.BufferGeometry[]) => triangles(lods[Math.min(level, lods.length - 1)]);
-  return s.pieces && kit.legs.length > 0 ? s.pieces.reduce((n, p) => n + at(p.lods), 0) : at(s.lods);
+  // Moving parts (kitMotion.ts) are lifted out of the nearest level and drawn on their own.
+  const moving = (s.moving ?? []).reduce((n, m) => n + at(m.lods), 0);
+  return moving + (s.pieces && kit.legs.length > 0 ? s.pieces.reduce((n, p) => n + at(p.lods), 0) : at(s.lods));
 };
 // What setMechDamage shows for a part: its own damaged version, or the intact one when it has none.
 const shownState = (part: LoadedKit["parts"][number], state: number) => (state === 1 && !part.states[1] ? 0 : state);
@@ -65,9 +67,12 @@ describe("merged mech parts", () => {
       expect(fills, `level ${level}`).toBe(expected);
       expect(outlines, `level ${level}`).toBe(expected);
     }
-    // The point of it: far fewer meshes than a mesh and an outline for every part, state and leg piece.
+    // The point of it: far fewer meshes than a mesh and an outline for every part, state and leg piece. Each end of a
+    // moving part (kitMotion.ts) has to turn by itself, so those are left out of the count.
     const unmerged = kit.parts.reduce((n, part) => n + part.states.reduce((m, s) => m + (!s ? 0 : s.pieces && kit.legs.length > 0 ? s.pieces.length : 1), 0), 0) * 2;
-    expect(pieces.reduce((n, p) => n + p.fills.length + p.outlines.length, 0)).toBeLessThan(unmerged * 0.6);
+    expect(pieces.filter((p) => !p.motion).reduce((n, p) => n + p.fills.length + p.outlines.length, 0)).toBeLessThan(unmerged * 0.6);
+    const ends = new Set(kit.parts.flatMap((part) => (part.states[0]!.moving ?? []).map((m) => `${m.piece.motion.name} ${m.piece.end}`)));
+    expect(pieces.filter((p) => p.motion)).toHaveLength(ends.size);
   });
 
   it("paints each part's corners in its own colour", async () => {

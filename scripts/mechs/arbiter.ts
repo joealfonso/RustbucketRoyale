@@ -24,6 +24,7 @@ import { join } from "node:path";
 import type { MeshData, NodeData } from "../assets/glbWrite";
 import { writeGlb } from "../assets/glbWrite";
 import { bothLegs } from "./joints";
+import { leftOf, piston, sway } from "./motion";
 import { box, convex, cylinder, empty, merge, mirrorX, prism, triangles, turn, type V3 } from "../../packages/client/src/dressing/shapes";
 
 type P2 = [number, number];
@@ -152,6 +153,12 @@ const hip: V3 = [legX, 1.52, 0.02], knee: V3 = [legX, 1.02, -0.2], hock: V3 = [l
 const thighDir = unit(sub(knee, hip)), shinDir = unit(sub(hock, knee));
 const thighFront: V3 = [0, -thighDir[2], thighDir[1]]; // faces forward and a little up
 const shinFront: V3 = [0, -shinDir[2], shinDir[1]]; // faces forward and down
+// The leg rams' mounts, right leg. The knee actuator rides on the outside of the thigh: its sleeve hangs from below the
+// hip cap, its rod ends on a lug at the knee drum. The calf actuator runs down the back of the shin to the hock and
+// lifts the foot.
+const legPoint = (a: V3, b: V3, front: V3) => (t: number, out = 0) => add(lerp(a, b, t), scale(front, out));
+const thighRam: [V3, V3] = [add(legPoint(hip, knee, thighFront)(0.36), [0.19, 0, 0]), add(legPoint(hip, knee, thighFront)(0.92), [0.18, 0, 0])];
+const calfRam: [V3, V3] = [legPoint(knee, hock, shinFront)(0.14, -0.17), legPoint(knee, hock, shinFront)(0.9, -0.14)];
 
 // The radome: far bigger than a head needs to be, sitting low in a collar. It is the silhouette.
 const domeCentre: V3 = [0, 3.72, 0];
@@ -202,12 +209,10 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
   // rubber hose (Leg_Hoses). Thick enough to read as legs, not stilts, at 50 m.
   const thighAt = (t: number, front = 0) => add(lerp(hip, knee, t), scale(thighFront, front));
   const shinAt = (t: number, front = 0) => add(lerp(knee, hock, t), scale(shinFront, front));
-  // The knee actuator rides on the outside of the thigh: its sleeve hangs from below the hip cap, its rod ends on a
-  // lug at the knee drum. The calf actuator runs down the back of the shin to the hock and lifts the foot.
-  const thighRam: [V3, V3] = [add(thighAt(0.36), [0.19, 0, 0]), add(thighAt(0.92), [0.18, 0, 0])];
-  const calfRam: [V3, V3] = [shinAt(0.14, -0.17), shinAt(0.9, -0.14)];
+  // The rod runs deep into the sleeve, out of sight, so it never pulls out as the joint bends (gate V9b: the game
+  // slides it, the thigh ram's rod with the shin and the calf ram's with the foot).
   const ramSleeve = ([a, b]: [V3, V3]) => tube(a, lerp(a, b, 0.58), 0.055, round(8));
-  const ramRod = ([a, b]: [V3, V3]) => tube(lerp(a, b, 0.5), b, 0.03, 6);
+  const ramRod = ([a, b]: [V3, V3]) => tube(lerp(a, b, 0.2), b, 0.03, 6);
 
   const legShellR = merge(
     bar(thighAt(-0.08), thighAt(0.92), [0.3, 0.38], c(0.05), [0.25, 0.28]), // thigh
@@ -562,7 +567,18 @@ const root = new URL("../..", import.meta.url).pathname;
 const dir = join(root, "assets/models/mechs/arbiter");
 mkdirSync(dir, { recursive: true });
 writeFileSync(join(dir, "Mech_Arbiter.glb"), writeGlb(nodes, { quantize: true }));
-writeFileSync(join(root, "scripts/mechs/arbiter.kit.json"), `${JSON.stringify({ scheme, parts: looks }, null, 2)}\n`);
+// What moves (gate V9b): the leg rams slide; the mast whips about its foot and each drone sways on its pylon about
+// the swivel at the hull, all on springs (data/sway.json). The sleeves are shell paint (Leg_R), the rods frame.
+const motionR = [
+  piston("Thigh_Ram_R", ["Leg_R", "Leg_Frame"], ["thigh_R", thighRam[0]], ["shin_R", thighRam[1]], 0.1),
+  piston("Calf_Ram_R", ["Leg_R", "Leg_Frame"], ["shin_R", calfRam[0]], ["foot_R", calfRam[1]], 0.13),
+];
+const motion = [
+  ...motionR, ...motionR.map(leftOf),
+  sway("Mast", ["Mast"], "body", [[mastX, 3.27, mastZ], [mastX, 4.8, mastZ]], 0.3, "mast"),
+  ...dronePlaces.map((p, i) => sway(`Drone_${i + 1}`, ["Drones", "Drone_Eyes", "Drone_Pylons"], "body", [p.mount, p.elbow, p.at], 0.62, "drone")),
+];
+writeFileSync(join(root, "scripts/mechs/arbiter.kit.json"), `${JSON.stringify({ scheme, parts: looks, motion }, null, 2)}\n`);
 const count = (lod: number) => Object.values(levels[lod]!).reduce((s, m) => s + triangles(m), 0);
 console.log(`Mech_Arbiter.glb: ${count(0)} triangles near, ${count(1)} and ${count(2)} at range (${count(0) + count(1) + count(2)} in the file)`);
 for (const name of Object.keys(looks)) console.log(`  ${name.padEnd(13)} ${levels.map((l) => String(triangles(l[name]!)).padStart(5)).join(" ")}`);

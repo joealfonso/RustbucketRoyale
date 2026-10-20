@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { checkMotion, liftShapes, readyMotion, type MotionData, type MotionPiece } from "./kitMotion";
 import { readLegJoints, splitBySegment, type LegJoints } from "./legRig";
 import { FACINGS, placeSerials, type PlacedSerial, type SerialData } from "./mechSerials";
 import { addOutlineNormals } from "./outlineNormals";
@@ -40,6 +41,7 @@ export interface KitsData {
     parts: Record<string, { zone: string; paint: Paint; noHit?: boolean; glow?: boolean; rusts?: boolean; finish?: Finish }>;
     hitboxes?: Record<string, { center: number[]; size: number[] }[]>;
     serials?: SerialData[];
+    motion?: MotionData[]; // pistons that slide and parts that sway (kitMotion.ts)
   }>;
 }
 
@@ -50,6 +52,10 @@ export interface KitState {
   // A leg part of a kit with leg joints, cut into thigh, shin and foot pieces per leg (legRig.ts), each with its own
   // levels of detail. The mech bends them at the joints. Absent on every other part.
   pieces?: { piece: number; lods: THREE.BufferGeometry[] }[];
+  // The intact part's shapes that move on their own (kitMotion.ts), lifted out of its nearest level, each end on its
+  // bone (a leg piece, or -1 for the body). They are drawn only at the nearest level: the simpler levels keep them
+  // fixed in place, so `lods` is the moving shapes and then nothing.
+  moving?: { piece: MotionPiece; segment: number; lods: THREE.BufferGeometry[] }[];
 }
 
 export interface KitPart {
@@ -85,6 +91,7 @@ export function parseKits(raw: unknown): KitsData {
         && s.at.every(Number.isFinite) && typeof s.height === "number" && s.height > 0 && !!kit.scheme?.[s.paint];
       if (!ok) throw new Error(`mechKits.json: ${id} has a serial that needs text, a facing (${FACINGS.join(", ")}), at [across, up], a height and a paint from its scheme`);
     }
+    checkMotion(id, kit.motion, Object.keys(kit.parts));
   }
   return d;
 }
@@ -195,9 +202,25 @@ export function kitFromScene(id: string, data: KitsData, scene: THREE.Object3D):
   });
   const missing = parts.filter((p) => !p.states[0]).map((p) => p.name);
   if (missing.length > 0) throw new Error(`no intact ${missing.join(", ")}`);
+  liftMoving(parts, kit.motion ?? [], legs);
   if (legs.length > 0) for (const part of parts) if (part.zone === ZONE_INDEX.legs) for (const state of part.states) if (state) state.pieces = cutLegs(state.lods, legs);
   return { id, parts, lodDistances: data.lodDistances, legs, serials: serialsOf(kit, parts) };
 }
+
+// Takes each moving part's shapes out of the nearest level of the intact parts that hold them. The level after keeps
+// the part whole (the part's own next level, or the nearest one again when it has no other).
+function liftMoving(parts: KitPart[], motion: MotionData[], legs: LegJoints[]): void {
+  const ready = motion.map((m) => ({ data: m, motion: readyMotion(m, legs) }));
+  for (const part of parts) {
+    const state = part.states[0]!;
+    const mine = ready.filter((r) => r.data.parts.includes(part.name)).map((r) => ({ motion: r.motion, radius: r.data.radius, split: r.data.split ?? 0.5 }));
+    const result = mine.length > 0 ? liftShapes(state.lods[0]!, mine) : null;
+    if (!result) continue;
+    state.lods = [result.rest, state.lods[1] ?? state.lods[0]!, ...state.lods.slice(2)];
+    state.moving = result.lifted.map(({ piece, geometry }) => ({ piece, segment: piece.motion.segments[piece.end]!, lods: [geometry, NOTHING] }));
+  }
+}
+const NOTHING = new THREE.BufferGeometry();
 
 // A kit's serial numbers placed on the nearest level of its intact parts.
 function serialsOf(kit: KitsData["kits"][string], parts: KitPart[]): PlacedSerial[] {

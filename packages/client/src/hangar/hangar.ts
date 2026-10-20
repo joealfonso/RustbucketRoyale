@@ -16,6 +16,7 @@ import { parseGait, type GaitInput } from "../gait";
 import { loadRoster, parseKits } from "../mechKit";
 import { createMechModel, type MechModel } from "../mechModel";
 import { walkMech } from "../mechWalk";
+import { moveMechParts } from "../mechMotion";
 import { Toon, parseLook, parsePalette } from "../toonMaterial";
 import { aegisMark, decalFontReady, textDecal } from "./decals";
 import { GantryArms, buildGantries } from "./gantry";
@@ -245,6 +246,7 @@ export class Hangar {
       gaitInput.vx = step.vx; gaitInput.vz = step.vz;
       gaitInput.walkSpeed = m.stats.walkSpeed; gaitInput.runSpeed = m.stats.runSpeed;
       walkMech(m.model, this.gait, gaitInput, dt);
+      moveMechParts(m.model, dt);
       this.shadows.addObject(m.model.group);
     });
     this.shadows.endMoving();

@@ -57,6 +57,11 @@
       "zone": "arms",
       "paint": "scorch"
     },
+    "Muzzle_Soot": {
+      "zone": "arms",
+      "paint": "scorch",
+      "noHit": true
+    },
     "Barrels": {
       "zone": "arms",
       "paint": "rustBrown"
@@ -153,5 +158,103 @@
       "finish": "rubber",
       "rusts": false
     }
-  }
+  },
+  "motion": [
+    {
+      "name": "Knee_Ram_FR",
+      "parts": [
+        "Leg_FR_Hydraulics"
+      ],
+      "path": [
+        [
+          1.223,
+          2.036,
+          -1.285
+        ],
+        [
+          1.687,
+          2.78,
+          -1.725
+        ]
+      ],
+      "radius": 0.15,
+      "piston": [
+        "thigh_FR",
+        "shin_FR"
+      ],
+      "split": 0.58
+    },
+    {
+      "name": "Knee_Ram_FL",
+      "parts": [
+        "Leg_FL_Hydraulics"
+      ],
+      "path": [
+        [
+          -1.223,
+          2.036,
+          -1.285
+        ],
+        [
+          -1.687,
+          2.78,
+          -1.725
+        ]
+      ],
+      "radius": 0.15,
+      "piston": [
+        "thigh_FL",
+        "shin_FL"
+      ],
+      "split": 0.58
+    },
+    {
+      "name": "Knee_Ram_BR",
+      "parts": [
+        "Leg_BR_Hydraulics"
+      ],
+      "path": [
+        [
+          1.223,
+          2.036,
+          1.285
+        ],
+        [
+          1.687,
+          2.78,
+          1.725
+        ]
+      ],
+      "radius": 0.15,
+      "piston": [
+        "thigh_BR",
+        "shin_BR"
+      ],
+      "split": 0.58
+    },
+    {
+      "name": "Knee_Ram_BL",
+      "parts": [
+        "Leg_BL_Hydraulics"
+      ],
+      "path": [
+        [
+          -1.223,
+          2.036,
+          1.285
+        ],
+        [
+          -1.687,
+          2.78,
+          1.725
+        ]
+      ],
+      "radius": 0.15,
+      "piston": [
+        "thigh_BL",
+        "shin_BL"
+      ],
+      "split": 0.58
+    }
+  ]
 }

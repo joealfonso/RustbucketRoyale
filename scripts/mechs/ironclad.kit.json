@@ -49,6 +49,13 @@
       "paint": "weapon",
       "finish": "metal"
     },
+    "Autocannon_Bores": {
+      "zone": "arms",
+      "paint": "frame",
+      "rusts": false,
+      "noHit": true,
+      "finish": "metal"
+    },
     "Arm_L": {
       "zone": "arms",
       "paint": "hull",
@@ -140,5 +147,145 @@
       "paint": "hazardBlack",
       "finish": "paint"
     }
-  }
+  },
+  "motion": [
+    {
+      "name": "Knee_Ram_Outer_R",
+      "parts": [
+        "Pistons"
+      ],
+      "path": [
+        [
+          0.89,
+          1.363,
+          -0.02
+        ],
+        [
+          0.89,
+          0.56,
+          -0.076
+        ]
+      ],
+      "radius": 0.16,
+      "piston": [
+        "thigh_R",
+        "shin_R"
+      ]
+    },
+    {
+      "name": "Knee_Ram_Inner_R",
+      "parts": [
+        "Pistons"
+      ],
+      "path": [
+        [
+          0.24,
+          1.363,
+          -0.02
+        ],
+        [
+          0.24,
+          0.56,
+          -0.076
+        ]
+      ],
+      "radius": 0.15,
+      "piston": [
+        "thigh_R",
+        "shin_R"
+      ]
+    },
+    {
+      "name": "Calf_Ram_R",
+      "parts": [
+        "Pistons"
+      ],
+      "path": [
+        [
+          0.57,
+          0.804,
+          0.404
+        ],
+        [
+          0.57,
+          0.3,
+          0.22
+        ]
+      ],
+      "radius": 0.13,
+      "piston": [
+        "shin_R",
+        "foot_R"
+      ]
+    },
+    {
+      "name": "Knee_Ram_Outer_L",
+      "parts": [
+        "Pistons"
+      ],
+      "path": [
+        [
+          -0.89,
+          1.363,
+          -0.02
+        ],
+        [
+          -0.89,
+          0.56,
+          -0.076
+        ]
+      ],
+      "radius": 0.16,
+      "piston": [
+        "thigh_L",
+        "shin_L"
+      ]
+    },
+    {
+      "name": "Knee_Ram_Inner_L",
+      "parts": [
+        "Pistons"
+      ],
+      "path": [
+        [
+          -0.24,
+          1.363,
+          -0.02
+        ],
+        [
+          -0.24,
+          0.56,
+          -0.076
+        ]
+      ],
+      "radius": 0.15,
+      "piston": [
+        "thigh_L",
+        "shin_L"
+      ]
+    },
+    {
+      "name": "Calf_Ram_L",
+      "parts": [
+        "Pistons"
+      ],
+      "path": [
+        [
+          -0.57,
+          0.804,
+          0.404
+        ],
+        [
+          -0.57,
+          0.3,
+          0.22
+        ]
+      ],
+      "radius": 0.13,
+      "piston": [
+        "shin_L",
+        "foot_L"
+      ]
+    }
+  ]
 }

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { MotionPiece } from "./kitMotion";
 import type { KitPart, LoadedKit } from "./mechKit";
 import type { Toon } from "./toonMaterial";
 
@@ -17,6 +18,10 @@ export interface MergedPiece {
   zone: number;
   shownIn: number; // one bit per zone state it shows in: 1 intact, 2 damaged, 4 broken
   segment: number; // the leg piece it hangs on (legRig.ts numbering), or -1 for the body
+  // One end of a part that moves on its own (kitMotion.ts), merged apart from everything else so it can turn by
+  // itself; null for the rest. Its geometries carry it too, as `userData.motion`, so mechMotion.ts can find the
+  // object a model drew it with.
+  motion: MotionPiece | null;
   // Each level of detail, nearest first; null where nothing of this kind is left at that level.
   fills: { look: FillLook; accent: boolean; lods: (THREE.BufferGeometry | null)[] }[];
   outlines: { accent: boolean; lods: (THREE.BufferGeometry | null)[] }[];
@@ -47,11 +52,11 @@ export function mergedPieces(kit: LoadedKit, toon: Toon, bodyColor: string, trim
 }
 
 function merge(kit: LoadedKit, toon: Toon, bodyColor: string, trimColor: string): MergedPiece[] {
-  const groups = new Map<string, { zone: number; shownIn: number; segment: number; members: Member[] }>();
-  const add = (zone: number, shown: number, segment: number, member: Member) => {
-    const key = `${segment}|${zone}|${shown}`;
+  const groups = new Map<string, { zone: number; shownIn: number; segment: number; motion: MotionPiece | null; members: Member[] }>();
+  const add = (zone: number, shown: number, segment: number, member: Member, motion: MotionPiece | null = null) => {
+    const key = `${segment}|${zone}|${shown}${motion ? `|${motion.motion.name}|${motion.end}` : ""}`;
     let group = groups.get(key);
-    if (!group) groups.set(key, (group = { zone, shownIn: shown, segment, members: [] }));
+    if (!group) groups.set(key, (group = { zone, shownIn: shown, segment, motion, members: [] }));
     group.members.push(member);
   };
   for (const part of kit.parts) {
@@ -67,9 +72,10 @@ function merge(kit: LoadedKit, toon: Toon, bodyColor: string, trimColor: string)
       if (state.pieces && kit.legs.length > 0) {
         for (const { piece, lods } of state.pieces) add(part.zone, shown, piece, { lods, fill, outline, look, accent });
       } else add(part.zone, shown, -1, { lods: state.lods, fill, outline, look, accent });
+      for (const m of state.moving ?? []) add(part.zone, shown, m.segment, { lods: m.lods, fill, outline, look, accent }, m.piece);
     });
   }
-  return [...groups.values()].map(({ zone, shownIn, segment, members }) => {
+  return [...groups.values()].map(({ zone, shownIn, segment, motion, members }) => {
     const levels = Math.max(...members.map((m) => m.lods.length));
     // A part with fewer levels keeps showing its simplest one, as its own LOD object did.
     const at = (m: Member, level: number) => m.lods[Math.min(level, m.lods.length - 1)]!;
@@ -84,7 +90,8 @@ function merge(kit: LoadedKit, toon: Toon, bodyColor: string, trimColor: string)
       const same = members.filter((o) => o.accent === accent);
       if (same.length > 0) outlines.push({ accent, lods: levelsOf(levels, (level) => same.map((o) => ({ geometry: at(o, level), color: o.outline })), "outlineNormal") });
     }
-    return { zone, shownIn, segment, fills, outlines };
+    if (motion) for (const g of [...fills, ...outlines].flatMap((f) => f.lods)) if (g) g.userData.motion = motion;
+    return { zone, shownIn, segment, motion, fills, outlines };
   });
 }
 

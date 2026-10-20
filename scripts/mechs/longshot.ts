@@ -19,6 +19,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeGlb, type MeshData, type NodeData } from "../assets/glbWrite";
 import { bothLegs } from "./joints";
+import { leftOf, piston, sway } from "./motion";
 import { box, convex, empty, merge, mirrorX, triangles, turn, type V3 } from "../../packages/client/src/dressing/shapes";
 
 const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -139,9 +140,10 @@ function makers(lod: Lod) {
 
 
   // A hydraulic ram from `a` to `b`: a fat cylinder most of the way, a thin rod out of it. `at` is where the rod
-  // leaves the cylinder, as a share of the length.
+  // leaves the cylinder, as a share of the length. The rod runs on deep inside the cylinder, out of sight, so it never
+  // pulls out when the game slides it (gate V9b).
   const ram = (a: V3, b: V3, r: number, at = 0.55) =>
-    merge(cyl(a, lerp(a, b, at + 0.05), r, r, 8, r * 0.25), cyl(lerp(a, b, at), b, r * 0.5, r * 0.5, 6));
+    merge(cyl(a, lerp(a, b, at + 0.05), r, r, 8, r * 0.25), cyl(lerp(a, b, Math.min(at, 0.2)), b, r * 0.5, r * 0.5, 6));
 
   // A cable through a run of points, one rod per stretch, so it bends where it is clipped down.
   const cable = (points: V3[], r: number) => merge(...points.slice(1).map((p, i) => cyl(points[i]!, p, r, r, 6)));
@@ -163,6 +165,19 @@ const MUZZLE: V3 = [RX, RY, -3.2];
 // The serial number's plate on the right of the chest (data/mechKits.json serials: "05" there, from the front). Its
 // face stays flat and clear of bolts over the whole number.
 const SERIAL_AT: V3 = [0.19, 2.86, -0.325];
+
+// The leg rams' mounts (gate V9b): the knee piston from the front of the thigh to the shin just below the knee, the
+// calf ram from the back of the shin to the foot behind the ankle, so the game slides each as its joint bends.
+const KNEE_PISTON: [V3, V3] = [
+  add(lerp(HIP, KNEE, 0.16), scale(perp(norm(sub(KNEE, HIP)), [0, 0, -1]), 0.27)),
+  add(lerp(HIP, KNEE, 0.84), scale(perp(norm(sub(KNEE, HIP)), [0, 0, -1]), 0.215)),
+];
+const CALF_RAM: [V3, V3] = [
+  add(lerp(KNEE, ANKLE, 0.14), scale(perp(norm(sub(ANKLE, KNEE)), [0, 0, -1]), -0.2)),
+  add(lerp(KNEE, ANKLE, 0.86), scale(perp(norm(sub(ANKLE, KNEE)), [0, 0, -1]), -0.12)),
+];
+// The ballast hangs from the pack on two straps (their tops at 2.52 m), and swings on them.
+const BALLAST_AT: V3 = [0, 2.27, 0.6];
 
 type Zone = "legs" | "arms" | "torso";
 // How the master material shades a part: painted armour, bare metal (one hard highlight), or rubber (dark, no rim).
@@ -212,8 +227,8 @@ function build(lod: Lod): Part[] {
   const hipDrum = cyl([0.2, HIP[1], HIP[2]], [0.54, HIP[1], HIP[2]], 0.16, 0.16, 16, 0.03);
   // Drives: a piston on the front of the thigh straightens the knee, a ram down the back of the shin (the calf)
   // works the ankle. Each stays on its own bone, so the walk never stretches one across a joint.
-  const kneePiston = mid(ram(onThigh(0.16, scale(thighFront, 0.27)), onThigh(0.84, scale(thighFront, 0.215)), 0.05, 0.5));
-  const calfRam = mid(ram(onShin(0.14, scale(shinBack, 0.2)), onShin(0.86, scale(shinBack, 0.12)), 0.05, 0.5));
+  const kneePiston = mid(ram(KNEE_PISTON[0], KNEE_PISTON[1], 0.05, 0.5));
+  const calfRam = mid(ram(CALF_RAM[0], CALF_RAM[1], 0.05, 0.5));
   // The heel spade, the stabiliser that plants it for Rail Shot: a plate on a hinge behind the heel, angled down so
   // its edge bites into the ground when the mech leans back into the recoil. A short ram off the foot holds it. The
   // middles of both must stay nearer the foot's bone than the shin's, or the walk hangs them on the shin: the spade
@@ -306,8 +321,7 @@ function build(lod: Lod): Part[] {
     block([0, 2.8, 0.42], [0.46, 0.66, 0.32], 0.05),
     mid(block([0, 3.15, 0.4], [0.36, 0.06, 0.26], 0.02)), // the lid over the cells' terminals
   );
-  const ballastAt: V3 = [0, 2.27, 0.6];
-  const ballast = block(ballastAt, [0.38, 0.24, 0.26], 0.04);
+  const ballast = block(BALLAST_AT, [0.38, 0.24, 0.26], 0.04);
   // Two webbing straps hang it from the pack, so it reads as hung weight, not part of the body.
   const ballastStraps = mid(...[0.13, -0.13].map((x) => block([x, 2.44, 0.6], [0.06, 0.16, 0.22], 0)));
   // The cell drums stand a little above the pack's lid, so from behind the pack has two round shoulders of its own.
@@ -497,7 +511,12 @@ const dir = join(root, "assets/models/mechs/longshot");
 mkdirSync(dir, { recursive: true });
 writeFileSync(join(dir, "Mech_Longshot.glb"), writeGlb([...parts.map((p) => ({ name: p.name, mesh: p.mesh })), ...lodNodes, ...markers], { quantize: true }));
 const kitParts = Object.fromEntries(parts.map(({ name, mesh: _mesh, ...look }) => [name, look]));
-writeFileSync(join(root, "scripts/mechs/longshot.kit.json"), `${JSON.stringify({ scheme, parts: kitParts }, null, 2)}\n`);
+const motionR = [
+  piston("Knee_Piston_R", ["Leg_Frame"], ["thigh_R", KNEE_PISTON[0]], ["shin_R", KNEE_PISTON[1]], 0.08),
+  piston("Calf_Ram_R", ["Leg_Frame"], ["shin_R", CALF_RAM[0]], ["foot_R", CALF_RAM[1]], 0.08),
+];
+const motion = [...motionR, ...motionR.map(leftOf), sway("Ballast", ["Ballast", "Hoses"], "body", [[0, 2.52, 0.6], BALLAST_AT], 0.3, "ballast")];
+writeFileSync(join(root, "scripts/mechs/longshot.kit.json"), `${JSON.stringify({ scheme, parts: kitParts, motion }, null, 2)}\n`);
 const totals = levels.map((l) => l.reduce((s, p) => s + triangles(p.mesh), 0));
 console.log(`Wrote Mech_Longshot.glb to ${dir}: ${totals.join(" / ")} triangles (near / middle / far), ${totals[0]! + lodNodes.reduce((s, n) => s + triangles(n.mesh!), 0)} in the file`);
 parts.forEach((p, i) => console.log(`  ${p.name.padEnd(13)} ${p.zone.padEnd(6)} ${p.paint.padEnd(12)} ${levels.map((l) => String(triangles(l[i]!.mesh)).padStart(5)).join(" ")}`));

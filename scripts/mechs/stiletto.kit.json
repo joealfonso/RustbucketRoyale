@@ -170,5 +170,126 @@
       "glow": true,
       "noHit": true
     }
-  }
+  },
+  "motion": [
+    {
+      "name": "Knee_Piston_R",
+      "parts": [
+        "Leg_Pistons"
+      ],
+      "path": [
+        [
+          0.42,
+          1.669,
+          -0.269
+        ],
+        [
+          0.42,
+          1.19,
+          -0.459
+        ]
+      ],
+      "radius": 0.1,
+      "piston": [
+        "thigh_R",
+        "shin_R"
+      ]
+    },
+    {
+      "name": "Hock_Damper_R",
+      "parts": [
+        "Leg_Pistons"
+      ],
+      "path": [
+        [
+          0.566,
+          0.957,
+          -0.212
+        ],
+        [
+          0.544,
+          0.572,
+          0.217
+        ]
+      ],
+      "radius": 0.12,
+      "piston": [
+        "shin_R",
+        "foot_R"
+      ]
+    },
+    {
+      "name": "Knee_Piston_L",
+      "parts": [
+        "Leg_Pistons"
+      ],
+      "path": [
+        [
+          -0.42,
+          1.669,
+          -0.269
+        ],
+        [
+          -0.42,
+          1.19,
+          -0.459
+        ]
+      ],
+      "radius": 0.1,
+      "piston": [
+        "thigh_L",
+        "shin_L"
+      ]
+    },
+    {
+      "name": "Hock_Damper_L",
+      "parts": [
+        "Leg_Pistons"
+      ],
+      "path": [
+        [
+          -0.566,
+          0.957,
+          -0.212
+        ],
+        [
+          -0.544,
+          0.572,
+          0.217
+        ]
+      ],
+      "radius": 0.12,
+      "piston": [
+        "shin_L",
+        "foot_L"
+      ]
+    },
+    {
+      "name": "Fuel_Line",
+      "parts": [
+        "Pack_Hose"
+      ],
+      "path": [
+        [
+          -0.37,
+          3.02,
+          0.68
+        ],
+        [
+          -0.39,
+          2.62,
+          0.72
+        ],
+        [
+          -0.27,
+          2.47,
+          0.74
+        ]
+      ],
+      "radius": 0.1,
+      "sway": "hose",
+      "bone": "body",
+      "swing": true
+    }
+  ]
 }

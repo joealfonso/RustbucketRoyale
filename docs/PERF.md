@@ -487,3 +487,6 @@ Method: headless Chrome over CDP at 1600 x 900, ratio 1, vsync and frame cap off
 | Medium 11, spawn (210 draw calls, 1.31M triangles) | 3.7, 3.7 | 3.7 to 3.8, 3.8 |
 
 The surface changes cost nothing measurable here (within the run-to-run swing). Crease lines (creasePass.ts, off by default, F1 > Look features): 1.3 ms on medium in both runs (all on 5.0 to 5.1 ms), about a third of the frame, from drawing the scene into a 4x multisampled half-float target and one full-screen pass of five depth reads; at Joseph's ratio 1.25 to 2 it scales with pixels. Not nearly free, so it stays a proposal. Joseph's laptop: not measured; F1 > Measure feature costs there gives the number, crease lines included.
+
+### Mech motion (2026-10-20, gate V9b)
+Pistons and swaying parts are separate objects within 25 m (about 16 to 40 per mech, the Arbiter most), guns split out for recoil add about one outline each. Production build, headless Chrome 1600 x 900, frame cap off, offline spawn with your own Arbiter: small 182 to 221 draw calls, GPU 3.1 ms; medium 204 to 243, GPU 3.8 ms (both as before); work 1.3 ms. A fight with many mechs within 25 m adds the most; if it bites, the Ironclad's inner rams and the per-drone split go first.

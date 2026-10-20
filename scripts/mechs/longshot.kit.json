@@ -155,5 +155,121 @@
       "glow": true,
       "noHit": true
     }
-  }
+  },
+  "motion": [
+    {
+      "name": "Knee_Piston_R",
+      "parts": [
+        "Leg_Frame"
+      ],
+      "path": [
+        [
+          0.34,
+          1.932,
+          -0.255
+        ],
+        [
+          0.34,
+          1.308,
+          -0.33
+        ]
+      ],
+      "radius": 0.08,
+      "piston": [
+        "thigh_R",
+        "shin_R"
+      ]
+    },
+    {
+      "name": "Calf_Ram_R",
+      "parts": [
+        "Leg_Frame"
+      ],
+      "path": [
+        [
+          0.34,
+          1.071,
+          0.072
+        ],
+        [
+          0.34,
+          0.516,
+          0.146
+        ]
+      ],
+      "radius": 0.08,
+      "piston": [
+        "shin_R",
+        "foot_R"
+      ]
+    },
+    {
+      "name": "Knee_Piston_L",
+      "parts": [
+        "Leg_Frame"
+      ],
+      "path": [
+        [
+          -0.34,
+          1.932,
+          -0.255
+        ],
+        [
+          -0.34,
+          1.308,
+          -0.33
+        ]
+      ],
+      "radius": 0.08,
+      "piston": [
+        "thigh_L",
+        "shin_L"
+      ]
+    },
+    {
+      "name": "Calf_Ram_L",
+      "parts": [
+        "Leg_Frame"
+      ],
+      "path": [
+        [
+          -0.34,
+          1.071,
+          0.072
+        ],
+        [
+          -0.34,
+          0.516,
+          0.146
+        ]
+      ],
+      "radius": 0.08,
+      "piston": [
+        "shin_L",
+        "foot_L"
+      ]
+    },
+    {
+      "name": "Ballast",
+      "parts": [
+        "Ballast",
+        "Hoses"
+      ],
+      "path": [
+        [
+          0,
+          2.52,
+          0.6
+        ],
+        [
+          0,
+          2.27,
+          0.6
+        ]
+      ],
+      "radius": 0.3,
+      "sway": "ballast",
+      "bone": "body"
+    }
+  ]
 }

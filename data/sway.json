@@ -1,0 +1,13 @@
+{
+  "offAtQuality": ["low"],
+  "stepSeconds": 0.0125,
+  "maxSpeedChange": 4,
+  "maxTurnChange": 3,
+  "jumpMeters": 4,
+  "profiles": {
+    "mast": { "hz": 2.4, "damping": 0.28, "push": 0.08, "turn": 0.45, "maxDegrees": 7 },
+    "drone": { "hz": 1.7, "damping": 0.32, "push": 0.12, "turn": 0.55, "maxDegrees": 9 },
+    "hose": { "hz": 2.2, "damping": 0.35, "push": 0.35, "turn": 0.6, "maxDegrees": 22 },
+    "ballast": { "hz": 1.5, "damping": 0.3, "push": 0.3, "turn": 0.5, "maxDegrees": 16 }
+  }
+}

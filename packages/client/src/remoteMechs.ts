@@ -147,6 +147,11 @@ export class RemoteMechs {
     return this.remotes.get(id)?.weapon ?? -1;
   }
 
+  // The model someone is drawn with, or null if we have not seen them: for their gun's kick when they fire.
+  modelOf(id: number): MechModel | null {
+    return this.remotes.get(id)?.model ?? null;
+  }
+
   // Which way a mech faces as drawn right now, in radians, or NaN if we have not seen it.
   yawOf(id: number): number {
     return this.remotes.get(id)?.model.group.rotation.y ?? Number.NaN;

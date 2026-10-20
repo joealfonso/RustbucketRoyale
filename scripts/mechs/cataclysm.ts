@@ -14,6 +14,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { writeGlb, type MeshData, type NodeData } from "../assets/glbWrite";
 import { legJoints, mirrorX as mirrorPointX, mirrorZ as mirrorPointZ } from "./joints";
+import { mirrored, piston } from "./motion";
 import { box, convex, cylinder, empty, merge, mirrorX, prism, triangles, turn, type V3 } from "../../packages/client/src/dressing/shapes";
 
 const root = new URL("../..", import.meta.url).pathname;
@@ -140,6 +141,10 @@ const shinAt = (t: number, out = 0): V3 => add(lerp(knee, ankle, t), scale(shinO
 const thigh = frameOf(hip, knee); // thigh.up faces the sky and a little inward, thigh.side faces forward
 const thighAt = (t: number, side = 0, up = 0): V3 => add(add(lerp(hip, knee, t), scale(thigh.side, side)), scale(thigh.up, up));
 
+// The knee ram's mounts: its sleeve on the front of the thigh, its rod pinned to the shin beside the knee, so the
+// game slides the rod as the knee bends (gate V9b, motion below).
+const kneeRamA = thighAt(0.2, 0.31), kneeRamB = thighAt(1.0, 0.31);
+
 type Lod = 0 | 1 | 2;
 
 // Every part of the mech at one level of detail, by name.
@@ -153,8 +158,9 @@ function build(lod: Lod): Record<string, MeshData> {
   const drum = (c: V3, r: number, length: number, axis: "x" | "y" | "z", n = 8, end = r) => cylinder(c, r, length, axis, sides(n), end);
   const rod = (a: V3, b: V3, r: number, n = 6) => along(cylinder([0, 0, 0], r, dist(a, b), "z", sides(n)), a, b);
   // A hydraulic ram: a fat cylinder for the first part of its length, a thinner polished rod for the rest.
-  // Up close the cylinder ends in a gland collar, where the rod's seal sits.
-  const ram = (a: V3, b: V3, r: number) => (!near ? rod(a, b, r * 0.8) : merge(rod(a, lerp(a, b, 0.56), r), rod(lerp(a, b, 0.5), b, r * 0.6), rod(lerp(a, b, 0.53), lerp(a, b, 0.6), r * 1.3)));
+  // Up close the cylinder ends in a gland collar, where the rod's seal sits, and the rod runs on deep inside, out of
+  // sight, so it never pulls out as the knee bends (gate V9b: the game slides the knee rams' rods).
+  const ram = (a: V3, b: V3, r: number) => (!near ? rod(a, b, r * 0.8) : merge(rod(a, lerp(a, b, 0.56), r), rod(lerp(a, b, 0.2), b, r * 0.6), rod(lerp(a, b, 0.53), lerp(a, b, 0.6), r * 1.3)));
   const nearOnly = (...m: MeshData[]) => (near ? merge(...m) : empty());
   const notFar = (...m: MeshData[]) => (lod < 2 ? merge(...m) : empty());
   // A plate laid on one edge of the hull profile, between t0 and t1 of the way along it, standing `lift` off it.
@@ -287,13 +293,16 @@ function build(lod: Lod): Record<string, MeshData> {
     block([0, 2.77, 1.16], [0.96, 0.27, 0.3], 0.05), // the magazine bustle
   );
   const turretFrontAngle = -Math.atan2(0.15, 0.35);
-  // Soot on the turret front under the barrels, on the lip below it, in the vents, a sooty band behind each muzzle
-  // brake and the black bore in each muzzle.
+  // Soot on the turret front under the barrels, on the lip below it and in the vents.
   const turretScorch = merge(
     turn(box([0, 0, 0], [0.9, 0.06, 0.3]), [turretFrontAngle, 0, 0], [0, 0, 0], [0, 2.875 + 0.03 * Math.cos(turretFrontAngle), -0.125 + 0.03 * Math.sin(turretFrontAngle)]),
     notFar(box([0, 2.71, -0.33], [1.0, 0.14, 0.08])),
-    notFar(raise(merge(...[-barrelX, barrelX].map((x) => drum(at(x, 0, -2.75), 0.14, 0.2, "z", 10))))),
     nearOnly(...[-1, 1].map((s) => box([s * 0.645, 2.76, 0.55], [0.02, 0.16, 0.6]))),
+  );
+  // A sooty band behind each muzzle brake and the black bore in each muzzle: a part of their own, so they kick back
+  // with the barrels when the mortar fires (data/recoil.json).
+  const muzzleSoot = merge(
+    notFar(raise(merge(...[-barrelX, barrelX].map((x) => drum(at(x, 0, -2.75), 0.14, 0.2, "z", 10))))),
     nearOnly(raise(merge(...[-barrelX, barrelX].map((x) => drum(at(x, 0, -barrelLength - 0.005), 0.075, 0.02, "z", 6))))),
   );
 
@@ -395,7 +404,6 @@ function build(lod: Lod): Record<string, MeshData> {
       beam(shinAt(0.1, 0.03), shinAt(0.5, 0.03), 0.56, 0.5, 0.07), // upper shin plate
       beam(shinAt(0.54, 0.03), shinAt(0.86, 0.03), 0.6, 0.54, 0.07), // greave, a seam below the upper plate
     );
-  const kneeRamA = thighAt(0.2, 0.31), kneeRamB = thighAt(1.0, 0.31);
   const ankleRamA = shinAt(0.14, 0.31), ankleRamB = shinAt(0.9, 0.31);
   // A hinge cheek: a flat plate across an axle running front to back, round about the axle and tapering toward the
   // bone it is fixed to (`toward`, in x and y), standing between z0 and z1.
@@ -448,7 +456,7 @@ function build(lod: Lod): Record<string, MeshData> {
 
   return {
     Torso: torso, Hull_Camo: hullCamo, Hull_Scorch: hullScorch, Frame: merge(frame, sensorSlot), Sensor: sensor, Sensor_Lenses: sensorLenses,
-    Turret_Ring: turretRing, Turret_Band: turretBand, Turret: turret, Turret_Camo: turretCamo, Turret_Scorch: turretScorch,
+    Turret_Ring: turretRing, Turret_Band: turretBand, Turret: turret, Turret_Camo: turretCamo, Turret_Scorch: turretScorch, Muzzle_Soot: muzzleSoot,
     Barrels: barrels, Muzzle_Brakes: muzzleBrakes, Barrel_Sleeves: barrelSleeves,
     Arm_L: armL, Arm_R: armR, PD_Emitters: pdEmitters, Side_Gun: sideGun,
     ...leg("Leg_FL", legFL), ...leg("Leg_FR", legFR), ...leg("Leg_BL", legBL), ...leg("Leg_BR", legBR), Leg_Hoses: legHoses,
@@ -462,7 +470,7 @@ function build(lod: Lod): Record<string, MeshData> {
 // lightness): tan, the main armour, is light (76); the camouflage brown is mid (41), an umber cooler and greyer than
 // deep rust, so a fresh Cataclysm never reads as already rusted; the frame is near black (14).
 const scheme = { tan: "#D8B87E", rustBrown: "#7D5A3C", scorch: "#2E2A26", frame: "#26231F", lensGlow: "#FF6A3D", laserGlow: "#FF3B30" };
-type Look = { zone: "legs" | "arms" | "torso"; paint: string; finish?: "metal" | "rubber"; glow?: true; rusts?: false };
+type Look = { zone: "legs" | "arms" | "torso"; paint: string; finish?: "metal" | "rubber"; glow?: true; rusts?: false; noHit?: true };
 const steel = { finish: "metal", rusts: false } as const;
 const legLook = (shin: string): Look[] => [{ zone: "legs", paint: "tan" }, { zone: "legs", paint: shin }, { zone: "legs", paint: "frame", ...steel }];
 const looks: Record<string, Look> = {
@@ -477,6 +485,7 @@ const looks: Record<string, Look> = {
   Turret: { zone: "arms", paint: "tan" },
   Turret_Camo: { zone: "arms", paint: "rustBrown" },
   Turret_Scorch: { zone: "arms", paint: "scorch" },
+  Muzzle_Soot: { zone: "arms", paint: "scorch", noHit: true }, // inside the barrels' own boxes
   // Mid brown barrels stand out against the pale sky they are mostly seen against, and against the ground from above.
   Barrels: { zone: "arms", paint: "rustBrown" },
   Muzzle_Brakes: { zone: "arms", paint: "weapon", finish: "metal" },
@@ -510,6 +519,16 @@ const nodes: NodeData[] = [
 
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, writeGlb(nodes, { quantize: true }));
-writeFileSync(join(root, "scripts/mechs/cataclysm.kit.json"), `${JSON.stringify({ scheme, parts: looks }, null, 2)}\n`);
+// The knee rams slide (gate V9b). The ankle rams lie along the shin and stay as they are: four more moving rams would
+// cost eight more draw calls up close for a part that hardly shows under the greave. The gland collar sits just past
+// halfway (0.565 of the way), so `split` keeps it with the sleeve; the rod's middle is at 0.6.
+const kneeRamFR = piston("Knee_Ram_FR", ["Leg_FR_Hydraulics"], ["thigh_FR", kneeRamA], ["shin_FR", kneeRamB], 0.15, 0.58);
+const motion = [
+  kneeRamFR,
+  mirrored(kneeRamFR, mirrorPointX, { FR: "FL" }),
+  mirrored(kneeRamFR, mirrorPointZ, { FR: "BR" }),
+  mirrored(kneeRamFR, (p) => mirrorPointX(mirrorPointZ(p)), { FR: "BL" }),
+];
+writeFileSync(join(root, "scripts/mechs/cataclysm.kit.json"), `${JSON.stringify({ scheme, parts: looks, motion }, null, 2)}\n`);
 const count = (parts: Record<string, MeshData>) => Object.values(parts).reduce((s, m) => s + triangles(m), 0);
 console.log(`Wrote ${out} (${levels.map((parts, i) => `LOD${i} ${count(parts)}`).join(", ")} triangles)`);

@@ -17,7 +17,8 @@ async function rosterKit(id: string) {
   const gltf = await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), "");
   return kitFromScene(id, kits, gltf.scene);
 }
-const triangles = (g: THREE.BufferGeometry) => (g.index ? g.index.count : g.attributes.position!.count) / 3;
+// A leg piece can be empty at the nearest level when all it held there were moving parts (kitMotion.ts).
+const triangles = (g: THREE.BufferGeometry) => (g.index ? g.index.count : g.attributes.position?.count ?? 0) / 3;
 
 describe("leg rig", () => {
   // The Longshot is the jointless stand-in until gate 15c builds its model.

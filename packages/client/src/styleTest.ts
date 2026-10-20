@@ -5,6 +5,7 @@ import rosterJson from "../../../data/roster.json";
 import gaitJson from "../../../data/gait.json";
 import { parseGait } from "./gait";
 import { walkMech } from "./mechWalk";
+import { moveMechParts, rigMechMotion } from "./mechMotion";
 import chunksJson from "../../../data/chunks.json";
 import propsJson from "../../../data/props.json";
 import zonesJson from "../../../data/zones.json";
@@ -12,7 +13,8 @@ import paletteJson from "../../../data/palette.json";
 import lookJson from "../../../data/look.json";
 import damageFxJson from "../../../data/damageFx.json";
 import { parseDamageFx } from "./damageFx";
-import { createMechModel, setCrawlLook, setMechDamage, type MechModel } from "./mechModel";
+import { createMechModel, kickMech, moveGunsAndSensors, recoilConfig, setCrawlLook, setMechDamage, type MechModel } from "./mechModel";
+import { kickFor } from "./recoil";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import { SunShadows, castShadows } from "./sunShadows";
 import mechKitsJson from "../../../data/mechKits.json";
@@ -124,6 +126,7 @@ roster.forEach((r, i) => {
   model.group.position.set(i * 6 - ((roster.length - 1) * 6) / 2 + 5, 0, ROSTER_Z);
   model.group.rotation.y = Math.PI;
   scene.add(model.group);
+  rigMechMotion(model.body, model.legs, model.kitPieces); // gate V9b; does nothing once createMechModel rigs it
   rosterModels.push(model);
 });
 
@@ -147,13 +150,40 @@ function walkRoster(dt: number): void {
     const stats = statsFor(rosterStats.mechs.findIndex((m) => m.id === roster[i]!.id));
     const speed = mode === "standing" || mode === "in the air" || mode === "braced" ? 0 : mode === "walking" || mode === "limping" || mode === "side-stepping" ? stats.walkSpeed : mode === "dashing" ? stats.dashSpeed : stats.runSpeed;
     const yaw = model.group.rotation.y;
-    setMechDamage(model, mode === "limping" ? [zoneMaxHp[0]! * 0.3, zoneMaxHp[1]!, zoneMaxHp[2]!] : zoneMaxHp, false);
+    setMechDamage(model, mode === "limping" ? [zoneMaxHp[0]! * 0.3, zoneMaxHp[1]!, zoneMaxHp[2]!] : SENSOR_DAMAGE[sensorDamage]![1].map((f, z) => f * zoneMaxHp[z]!), false);
     walkMech(model, gait, {
       // Side-stepping moves along the mech's right (+x in its own frame) instead of its front.
       vx: (mode === "side-stepping" ? Math.cos(yaw) : -Math.sin(yaw)) * speed, vz: (mode === "side-stepping" ? -Math.sin(yaw) : -Math.cos(yaw)) * speed, yaw, grounded: mode !== "in the air", dashing: mode === "dashing",
       limping: mode === "limping", braced: mode === "braced", walkSpeed: stats.walkSpeed, runSpeed: stats.runSpeed,
     }, dt);
+    moveMechParts(model, dt);
   });
+}
+// Gate V9b, in the roster views (4, 6, 8): hold R and the roster fires the range's weapon (G changes it) at its rate,
+// each from its own muzzles in turn, to judge each gun's kick; Y kicks a Rail Shot; H steps every zone through
+// damage, to judge the sensors' flicker.
+const SENSOR_DAMAGE = [["whole", [1, 1, 1]], ["all damaged", [0.4, 0.4, 0.4]], ["arms broken", [1, 0, 1]]] as const;
+let sensorDamage = 0;
+let rosterFiring = false;
+let rosterShotIn = 0;
+let rosterShots = 0;
+const kitMuzzles = (mechKitsJson as { kits: Record<string, { muzzles?: number[][] }> }).kits;
+function kickRoster(kick: string): void {
+  roster.forEach((r, i) => {
+    const muzzles = kitMuzzles[r.id]?.muzzles ?? [[1.2]];
+    kickMech(rosterModels[i]!, kickFor(recoilConfig, kick), muzzles[rosterShots % muzzles.length]![0]!);
+  });
+  rosterShots++;
+}
+function fireRoster(dt: number): void {
+  rosterShotIn -= dt;
+  if (rosterFiring && rosterShotIn <= 0) {
+    kickRoster(weapons[rangeWeapon]!.id);
+    rosterShotIn = 1 / weapons[rangeWeapon]!.shotsPerSecond;
+  }
+  for (const model of rosterModels) moveGunsAndSensors(model, dt);
+  for (const model of damageRow) moveGunsAndSensors(model, dt);
+  if (kitModel) moveGunsAndSensors(kitModel, dt);
 }
 // Key 7: a firing range behind the chunk, to judge each weapon's flash, tracer and impacts (data/weaponFx.json).
 // F fires the weapon in hand, alternately at a rust wall and at a mech; G changes weapon.
@@ -272,9 +302,9 @@ function place(): void {
   label.textContent = `Light: ${toon.presets[preset]!.name} (L) · ` + (lookingAtProps
     ? "Props, standing and broken: crate, junk pile, barrel · 1 / 2 / 3: back to the damage row · Q / E: turn"
     : close
-    ? `${roster[closeUp]!.id} up close · W: ${WALKS[walk]} · X / Z: ${wrecked ? "stand back up" : "blow apart / lying"} · 6: next mech · Q / E: turn · 4: the whole roster`
+    ? `${roster[closeUp]!.id} up close · W: ${WALKS[walk]} · R (hold): fire ${weapons[rangeWeapon]!.name} · G: next weapon · Y: rail kick · H: sensors ${SENSOR_DAMAGE[sensorDamage]![0]} · T: ${rangeSlow ? "quarter speed" : "full speed"} · X / Z: ${wrecked ? "stand back up" : "blow apart / lying"} · 6: next mech · Q / E: turn · 4: the whole roster`
     : lookingAtRoster
-    ? `Roster: ${roster.map((r) => r.id).join(", ") || "none loaded"} · W: ${WALKS[walk]} · 1 / 2 / 3: back to the damage row · Q / E: turn`
+    ? `Roster: ${roster.map((r) => r.id).join(", ") || "none loaded"} · W: ${WALKS[walk]} · R (hold): fire ${weapons[rangeWeapon]!.name} · G: next weapon · Y: rail kick · H: sensors ${SENSOR_DAMAGE[sensorDamage]![0]} · 1 / 2 / 3: back to the damage row · Q / E: turn`
     : `Style test, ${distance} m · 1 / 2 / 3: 10, 50, 150 m · 4: the roster · 5: the props · Q / E: turn · front: stand-in kit mech${kit ? "" : " (failed to load)"} (D: damage ${["whole", "damaged", "arms broken", "legs broken"][kitDamage]}) · behind, left to right: you (clean), then 75%, 40%, 15%, arms and legs broken`);
 }
 window.addEventListener("keydown", (e) => {
@@ -302,9 +332,13 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "KeyE") turn += 0.3;
   if (e.code === "KeyW") walk = (walk + 1) % WALKS.length;
   if (e.code === "KeyL") { preset = (preset + 1) % toon.presets.length; toon.useLight(toon.presets[preset]!); }
+  if (e.code === "KeyR") rosterFiring = true;
+  if (e.code === "KeyY") kickRoster("railShot");
+  if (e.code === "KeyH") sensorDamage = (sensorDamage + 1) % SENSOR_DAMAGE.length;
   if (e.code === "KeyD") { kitDamage = (kitDamage + 1) % KIT_DAMAGE.length; showKitDamage(); }
   place();
 });
+window.addEventListener("keyup", (e) => { if (e.code === "KeyR") rosterFiring = false; });
 window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -318,6 +352,7 @@ renderer.setAnimationLoop(() => {
   walkRoster(dt);
   const fxDt = rangeSlow ? dt / 4 : dt;
   showFx(lookingAtFx || closeUp >= 0 ? fxDt : dt);
+  fireRoster(closeUp >= 0 || lookingAtRoster || lookingAtFx ? fxDt : dt);
   shotFx.update(fxDt, rangeWorld);
   shotFx.draw(camera, fxDt);
   sunShadows.follow(camera);

@@ -26,10 +26,11 @@
 // (past 25 m, data/mechKits.json lodDistances) keeps the new plates, rams and the pile driver's housing as plain shapes
 // but drops the small parts and turns the gun's six barrels into one drum; the far one (past 80 m) keeps only plain
 // blocks for the masses that make the silhouette.
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeGlb, type MeshData, type NodeData } from "../assets/glbWrite";
 import { bothLegs } from "./joints";
+import { leftOf, piston } from "./motion";
 import { box, convex, cylinder, empty, merge, mirrorX, prism, triangles, turn, type V3 } from "../../packages/client/src/dressing/shapes";
 
 type UV = [number, number];
@@ -222,6 +223,10 @@ const thighLength = length(HIP, KNEE), shinLength = length(KNEE, ANKLE);
 // The point a fraction `t` of the way down the bone from `a` to `b` in the side view, moved `back` metres toward the
 // back and set at `x` across.
 const onBone = (a: V3, b: V3, t: number, back: number, x: number): V3 => [x, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t + back];
+// The leg rams' mounts: the knee rams' sleeves hang from the thigh and their rods are pinned to the shin, the calf
+// ram's sleeve is on the shin and its rod on the heel. The game aims each end at the other (gate V9b, motion below).
+const ramTop = onBone(HIP, KNEE, 0.18, -0.07, 0), ramFoot = onBone(KNEE, ANKLE, 0.62, -0.12, 0);
+const calfTop = onBone(KNEE, ANKLE, 0.2, 0.2, LX), calfFoot: V3 = [LX, 0.3, ANKLE[2] + 0.32];
 const SHIELD_EDGE_X = -1.4;
 const PILE: [number, number] = [SHIELD_EDGE_X, 2.5];
 const UP: V3 = [0, 1, 0];
@@ -443,7 +448,6 @@ function build(lv: Level): Record<string, MeshData> {
       )),
       cylinder([1.465, 2.4, 0.02], 0.1, 0.04, "x", 8), // elbow hub caps
       cylinder([-1.465, 2.2, 0.1], 0.1, 0.04, "x", 8),
-      ...barrelAt.map(([x, y]) => cylinder([x, y, GUN[2] - 0.002], 0.032, 0.012, "z", 6)), // the barrels' bores
     )),
   );
 
@@ -502,13 +506,12 @@ function build(lv: Level): Record<string, MeshData> {
   // A joint round its own bone sits exactly between two bones, so which piece it lands in would be a coin toss that
   // could differ between levels of detail; 2 cm up its bone settles it (the knee rides the thigh, the ankle the shin).
   const kneeAt = toward(KNEE, HIP, 0.02), ankleAt = toward(ANKLE, KNEE, 0.02);
-  const ramTop = onBone(HIP, KNEE, 0.18, -0.07, 0), ramFoot = onBone(KNEE, ANKLE, 0.62, -0.12, 0);
-  // A knee ram at `x` across; thick, since the rams are what the side view shows of the hydraulics.
+  // A knee ram at `x` across; thick, since the rams are what the side view shows of the hydraulics. The rod runs deep
+  // into the sleeve, out of sight, so it never pulls out of it as the knee bends (gate V9b: the game slides it).
   const kneeRam = (x: number, r: number) => {
     const a: V3 = [x, ramTop[1], ramTop[2]], b: V3 = [x, ramFoot[1], ramFoot[2]];
-    return merge(rod(a, toward(a, b, 0.42), r, sides(8)), rod(toward(a, b, 0.38), b, r * 0.6, sides(6)));
+    return merge(rod(a, toward(a, b, 0.42), r, sides(8)), rod(toward(a, b, 0.15), b, r * 0.6, sides(6)));
   };
-  const calfTop = onBone(KNEE, ANKLE, 0.2, 0.2, LX), calfFoot: V3 = [LX, 0.3, ANKLE[2] + 0.32];
   const pistonsR = merge(
     cylinder([0.36, HIP[1], HIP[2]], 0.21, 0.2, "x", sides(10)), // hip joint
     cylinder([LX, kneeAt[1], kneeAt[2]], 0.24, 0.62, "x", sides(14)), // knee joint
@@ -517,7 +520,7 @@ function build(lv: Level): Record<string, MeshData> {
     kneeRam(0.89, 0.11), // outer
     notFar(() => kneeRam(0.24, 0.1)), // inner
     notFar(() => rod(calfTop, toward(calfTop, calfFoot, 0.3), 0.09, sides(8))), // calf sleeve
-    notFar(() => rod(toward(calfTop, calfFoot, 0.26), calfFoot, 0.055, sides(6))), // calf rod
+    notFar(() => rod(toward(calfTop, calfFoot, 0.1), calfFoot, 0.055, sides(6))), // calf rod
     only(() => merge(
       cylinder([0.89, ramTop[1] + 0.01, ramTop[2]], 0.075, 0.1, "x", 8), // pin at the outer sleeve's top
       cylinder([0.89, ramFoot[1], ramFoot[2]], 0.07, 0.1, "x", 8), // pin at the outer rod's foot
@@ -539,6 +542,11 @@ function build(lv: Level): Record<string, MeshData> {
     Frame: frame,
     Arm_R: armR,
     Autocannon: autocannon,
+    // The barrels' dark bores, a part of their own so they kick back with the gun (data/recoil.json). Past 25 m the
+    // barrels are one drum, and the drum's mouth gets one dark bore.
+    Autocannon_Bores: near
+      ? merge(...barrelAt.map(([x, y]) => cylinder([x, y, GUN[2] - 0.002], 0.032, 0.012, "z", 6)))
+      : cylinder([GUN[0], GUN[1], GUN[2] - 0.002], 0.12, 0.012, "z", sides(8)),
     Arm_L: armL,
     Shield: shield,
     Shield_Bands: shieldBands,
@@ -583,8 +591,22 @@ parts.push(
   ...bothLegs(HIP, KNEE, ANKLE),
 );
 
-const dir = join(new URL("../..", import.meta.url).pathname, "assets/models/mechs/ironclad");
+// The rams that slide (gate V9b): both knee rams and the calf ram on each leg, all in the Pistons part.
+const kneeRamAt = (x: number) => [[x, ramTop[1], ramTop[2]], [x, ramFoot[1], ramFoot[2]]] as [V3, V3];
+const [outerTop, outerFoot] = kneeRamAt(0.89), [innerTop, innerFoot] = kneeRamAt(0.24);
+const motionR = [
+  piston("Knee_Ram_Outer_R", ["Pistons"], ["thigh_R", outerTop], ["shin_R", outerFoot], 0.16),
+  piston("Knee_Ram_Inner_R", ["Pistons"], ["thigh_R", innerTop], ["shin_R", innerFoot], 0.15),
+  piston("Calf_Ram_R", ["Pistons"], ["shin_R", calfTop], ["foot_R", calfFoot], 0.13),
+];
+
+const root = new URL("../..", import.meta.url).pathname;
+const dir = join(root, "assets/models/mechs/ironclad");
 mkdirSync(dir, { recursive: true });
 writeFileSync(join(dir, "Mech_Ironclad.glb"), writeGlb(parts, { quantize: true }));
 const stored = parts.reduce((s, p) => s + (p.mesh ? triangles(p.mesh) : 0), 0);
 console.log(`Wrote ${join(dir, "Mech_Ironclad.glb")}: ${totals.join(" / ")} triangles drawn near / middle / far, ${stored} stored`);
+// The Ironclad's zones, paints and flags are kept by hand in its kit file; only the moving parts are written here.
+const kitPath = join(root, "scripts/mechs/ironclad.kit.json");
+const kitFile = JSON.parse(readFileSync(kitPath, "utf8"));
+writeFileSync(kitPath, `${JSON.stringify({ ...kitFile, motion: [...motionR, ...motionR.map(leftOf)] }, null, 2)}\n`);
