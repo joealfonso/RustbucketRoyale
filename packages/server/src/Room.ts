@@ -161,7 +161,7 @@ export class Room {
     this.seed = lobby?.seed ?? this.newSeed();
     this.map = lobby?.map ?? config.mapFor(tier, this.seed);
     this.resetProps();
-    this.finder = new Pathfinder(this.map.nav, config.bots.path);
+    this.finder = new Pathfinder(this.map.nav, config.bots.path, this.map.world.terrain);
     this.fixedBots = botCount;
     this.fillBots();
     this.prepareNextMap(); // the lobby usually lasts long enough that the first match never waits
@@ -604,7 +604,7 @@ export class Room {
     this.resetProps();
     this.pendingBlasts = [];
     this.decoys = [];
-    this.finder = new Pathfinder(this.map.nav, this.config.bots.path);
+    this.finder = new Pathfinder(this.map.nav, this.config.bots.path, this.map.world.terrain);
     for (const p of this.players.values()) p.bot?.setFinder(this.finder);
     this.fillBots();
     this.ring = makeRingSchedule(this.config.ring, this.tier, this.map.meters, this.random);
@@ -741,9 +741,10 @@ export class Room {
     stepMech(player.state, input, this.statsFor(player.state.mech), dt, this.map.world, ability);
     if (ability) this.afterAbilityStep(player, input, ability, abilityBefore, cooldownBefore);
     player.steps += Math.round(dt / STEP);
-    if (player.state.running) this.makeNoise(player, "run", player.state.x, player.state.z);
+    const footsteps = this.footstepShare(player.state);
+    if (player.state.running) this.makeNoise(player, "run", player.state.x, player.state.z, player.quietUntil, footsteps);
     if (player.state.jetting) this.makeNoise(player, "jets", player.state.x, player.state.z);
-    if (dashBefore <= 0 && player.state.dashTime > 0) this.makeNoise(player, "dash", player.state.x, player.state.z);
+    if (dashBefore <= 0 && player.state.dashTime > 0) this.makeNoise(player, "dash", player.state.x, player.state.z, player.quietUntil, footsteps);
 
     // Weapons switch when the client asks for a different slot than last time, not every step it keeps asking:
     // the server can change the weapon in hand itself (taking one into an empty slot), and an input already on its
@@ -1061,7 +1062,7 @@ export class Room {
         continue;
       }
       // Footsteps on the radar like the real thing. The owner is the source, so it does not hear its own decoys.
-      if (d.state.running) this.makeNoise(owner, "run", d.state.x, d.state.z, d.quietUntil);
+      if (d.state.running) this.makeNoise(owner, "run", d.state.x, d.state.z, d.quietUntil, this.footstepShare(d.state));
     }
   }
 
@@ -1291,15 +1292,15 @@ export class Room {
   // Something made a sound. Everyone within earshot hears it, at a spot a little off the real one, and bots go to look.
   // A mech makes at most one pulse of each kind every so often, so holding the jets is one pulse a beat, not sixty.
   // `quiet` is whose pulse timer to use, normally the source's own; a decoy has its own, so its footsteps and its
-  // owner's are heard separately.
-  private makeNoise(source: Player | null, kind: NoiseKind, x: number, z: number, quiet = source?.quietUntil): void {
+  // owner's are heard separately. `share` scales how far it carries: footsteps in water are muffled.
+  private makeNoise(source: Player | null, kind: NoiseKind, x: number, z: number, quiet = source?.quietUntil, share = 1): void {
     const { noise } = this.config;
     const k = NOISE_KINDS.indexOf(kind);
     if (quiet) {
       if (this.tickCount < quiet[k]!) return;
       quiet[k] = this.tickCount + Math.round(noise.pulseSeconds / STEP);
     }
-    const radius = noise.loudness[kind];
+    const radius = noise.loudness[kind] * share;
     for (const p of this.players.values()) {
       if (p === source) continue;
       const ear = p.bot ? p.state : this.viewFrom(p);
@@ -1314,6 +1315,11 @@ export class Room {
         p.heard.push({ x: fx, z: fz, kind: k });
       }
     }
+  }
+
+  // How far footsteps carry from a mech standing here: muffled while it wades, in full on dry ground.
+  private footstepShare(s: { x: number; y: number; z: number }): number {
+    return this.map.world.terrain?.wading(s.x, s.y, s.z) ? this.config.noise.wadingFootsteps : 1;
   }
 
   // Where a client is looking from: its own mech, or while knocked out the mech it is watching (or, if it has not

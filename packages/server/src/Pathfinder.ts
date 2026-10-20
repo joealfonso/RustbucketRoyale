@@ -1,4 +1,4 @@
-import { raised, type BotPathStats, type NavGrid } from "@rustbucket/shared";
+import { raised, type BotPathStats, type NavGrid, type Terrain } from "@rustbucket/shared";
 
 const DIAGONAL = Math.SQRT2;
 
@@ -6,7 +6,8 @@ const DIAGONAL = Math.SQRT2;
 // A coarse cell is blocked if anything a mech cannot step over stands up off the ground anywhere in it, so routes
 // keep to open ground and go round buildings and walls. Bare hillside never blocks: slopes are capped at walking
 // steepness when the map is made, so routes go straight over hills. Searches are capped, and when a goal cannot be
-// reached the route goes as near as it can, so a bot is never left without somewhere to head.
+// reached the route goes as near as it can, so a bot is never left without somewhere to head. Water never blocks
+// either, but it is slow, so routes cost more through it and go round ponds when going round is not much further.
 export class Pathfinder {
   private cell: number;
   private cols: number;
@@ -14,6 +15,7 @@ export class Pathfinder {
   private originX: number;
   private originZ: number;
   private blocked: Uint8Array;
+  private wet: Uint8Array; // 1 where most of a cell's ground is under wading water
   private region: Int32Array; // open cells that can reach each other share a number, blocked cells are -1
 
   // Scratch space, reused by every search. A stamp stands in for clearing the arrays each time.
@@ -28,6 +30,7 @@ export class Pathfinder {
   private best = 0; // after a search that fell short, the cell it got closest to
   private cells: number[] = [];
   private points: number[] = [];
+  private wetBefore: number[] = []; // for each route point, how many wet cells the route has crossed to reach it
   private searchesLeft: number;
   // Whether the last route found goes all the way, rather than stopping where the search ran out of cells. A whole
   // route stays good on a map that never changes, so a bot only needs a new one when it strays from it.
@@ -35,7 +38,7 @@ export class Pathfinder {
   // Cells the last search looked at: its cost, the same on any computer however busy.
   cellsSearched = 0;
 
-  constructor(nav: NavGrid, private stats: BotPathStats) {
+  constructor(nav: NavGrid, private stats: BotPathStats, terrain: Terrain | null = null) {
     this.searchesLeft = stats.searchesPerTick;
     const factor = Math.max(1, Math.round(stats.cellMeters / nav.cell));
     this.cell = nav.cell * factor;
@@ -49,6 +52,7 @@ export class Pathfinder {
         if (raised(nav, z * nav.cols + x) > nav.stepHeight) this.blocked[Math.floor(z / factor) * this.cols + Math.floor(x / factor)] = 1;
       }
     }
+    this.wet = this.findWater(nav, factor, terrain);
     const n = this.cols * this.rows;
     this.g = new Float32Array(n);
     this.f = new Float32Array(n);
@@ -56,6 +60,24 @@ export class Pathfinder {
     this.seenStamp = new Int32Array(n);
     this.closedStamp = new Int32Array(n);
     this.region = this.findRegions();
+  }
+
+  // A coarse cell counts as wet when more than half its nav cells are deep enough to wade in, the same test
+  // Terrain.wading makes for a mech's feet. A dry map has none.
+  private findWater(nav: NavGrid, factor: number, terrain: Terrain | null): Uint8Array {
+    const wet = new Uint8Array(this.cols * this.rows);
+    if (!terrain || terrain.waterLevelCm === null) return wet;
+    const under = new Uint16Array(this.cols * this.rows), total = new Uint16Array(this.cols * this.rows);
+    const surface = terrain.waterLevel - terrain.wadeMeters;
+    for (let z = 0; z < nav.rows; z++) {
+      for (let x = 0; x < nav.cols; x++) {
+        const c = Math.floor(z / factor) * this.cols + Math.floor(x / factor);
+        total[c]!++;
+        if (nav.ground[z * nav.cols + x]! < surface) under[c]!++;
+      }
+    }
+    for (let c = 0; c < wet.length; c++) if (under[c]! * 2 > total[c]!) wet[c] = 1;
+    return wet;
   }
 
   // Labels each patch of open cells that can be walked between, with the same moves the search makes.
@@ -186,10 +208,15 @@ export class Pathfinder {
     for (let c = end; c !== -1; c = this.parent[c]!) cells.push(c);
     cells.reverse();
 
-    const points = this.points;
+    const points = this.points, wetBefore = this.wetBefore;
     points.length = 0;
+    wetBefore.length = 0;
     points.push(startX, startZ);
-    for (let i = 1; i < cells.length; i++) points.push(this.centreX(cells[i]!), this.centreZ(cells[i]!));
+    wetBefore.push(0);
+    for (let i = 1; i < cells.length; i++) {
+      points.push(this.centreX(cells[i]!), this.centreZ(cells[i]!));
+      wetBefore.push(wetBefore[i - 1]! + this.wet[cells[i]!]!);
+    }
     if (reached && exact) points[points.length - 2] = goalX, points[points.length - 1] = goalZ;
     this.pull(points, out);
     return true;
@@ -201,7 +228,7 @@ export class Pathfinder {
   // distance still to go (`heuristicWeight`) pulls the search towards the goal: fewer cells looked at for slightly
   // longer routes (numbers in docs/PERF.md).
   private search(start: number, goal: number): boolean {
-    const { cols, rows, blocked, g, f, parent, seenStamp, closedStamp } = this;
+    const { cols, rows, blocked, wet, g, f, parent, seenStamp, closedStamp } = this;
     const goalX = goal % cols, goalZ = Math.floor(goal / cols);
     const stamp = ++this.stamp;
     this.heapSize = 0;
@@ -241,7 +268,7 @@ export class Pathfinder {
           const diagonal = dx !== 0 && dz !== 0;
           // No cutting across the corner of a blocked cell.
           if (diagonal && (blocked[cz * cols + nx] || blocked[nz * cols + cx])) continue;
-          const cost = here + (diagonal ? DIAGONAL : 1);
+          const cost = here + (diagonal ? DIAGONAL : 1) * (wet[next] ? this.stats.waterCost : 1);
           if (seenStamp[next] === stamp && cost >= g[next]!) continue;
           seenStamp[next] = stamp;
           g[next] = cost;
@@ -257,13 +284,17 @@ export class Pathfinder {
   }
 
   // Straightens the route: from each point, jump to the furthest later point that can be reached in a straight line.
+  // A straight line may only cross water where the route itself waded, or straightening would cut back across the
+  // pond the search went round.
   private pull(points: number[], out: number[]): void {
     const count = points.length / 2;
+    const wetBefore = this.wetBefore;
     let i = 0;
     while (i < count - 1) {
       let farthest = i + 1;
       for (let j = count - 1; j > i + 1; j--) {
-        if (this.lineClear(points[i * 2]!, points[i * 2 + 1]!, points[j * 2]!, points[j * 2 + 1]!)) { farthest = j; break; }
+        const wades = wetBefore[j]! > wetBefore[i]!;
+        if (this.lineClear(points[i * 2]!, points[i * 2 + 1]!, points[j * 2]!, points[j * 2 + 1]!, wades)) { farthest = j; break; }
       }
       out.push(points[farthest * 2]!, points[farthest * 2 + 1]!);
       i = farthest;
@@ -287,8 +318,8 @@ export class Pathfinder {
 
   // Samples the line every half cell. Straightening tries many lines per route, so this works out the cells inline,
   // the same way cellOf does.
-  private lineClear(ax: number, az: number, bx: number, bz: number): boolean {
-    const { blocked, cols, rows, originX, originZ, cell } = this;
+  private lineClear(ax: number, az: number, bx: number, bz: number, waterAllowed: boolean): boolean {
+    const { blocked, wet, cols, rows, originX, originZ, cell } = this;
     const steps = Math.ceil(Math.hypot(bx - ax, bz - az) / (cell * 0.5));
     const lastCol = cols - 1, lastRow = rows - 1;
     for (let s = 1; s < steps; s++) {
@@ -297,7 +328,7 @@ export class Pathfinder {
       let cz = Math.floor((az + (bz - az) * t - originZ) / cell);
       cx = cx < 0 ? 0 : cx > lastCol ? lastCol : cx;
       cz = cz < 0 ? 0 : cz > lastRow ? lastRow : cz;
-      if (blocked[cz * cols + cx]) return false;
+      if (blocked[cz * cols + cx] || (!waterAllowed && wet[cz * cols + cx])) return false;
     }
     return true;
   }

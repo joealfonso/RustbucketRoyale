@@ -18,7 +18,7 @@ const plain = (m: MapForRoom) => {
   const t = m.world.terrain;
   return {
     boxes: m.world.boxes, nav: { ...m.nav, top: Array.from(m.nav.top), ground: Array.from(m.nav.ground) }, spawns: m.spawns, meters: m.meters, props: m.props, propOfBox: Array.from(m.propOfBox),
-    terrain: t && { heights: Array.from(t.heights), meters: t.meters, cell: t.cell, snapMeters: t.snapMeters },
+    terrain: t && { heights: Array.from(t.heights), meters: t.meters, cell: t.cell, snapMeters: t.snapMeters, waterLevelCm: t.waterLevelCm, wadeMeters: t.wadeMeters },
   };
 };
 
@@ -41,6 +41,8 @@ describe("MapPool", () => {
     expect(made.maxHeight - made.minHeight).toBeGreaterThan(1); // a map with real hills, or this proves nothing
     expect(Array.from(hills.heights)).toEqual(Array.from(made.heights));
     expect([hills.meters, hills.cell, hills.snapMeters]).toEqual([made.meters, made.cell, made.snapMeters]);
+    expect(made.waterLevelCm).not.toBeNull(); // a map with water, or the water checks below prove nothing
+    expect([hills.waterLevelCm, hills.wadeMeters, hills.waterLevel]).toEqual([made.waterLevelCm, made.wadeMeters, made.waterLevel]);
     expect(Array.from(map.nav.ground)).toEqual(Array.from(original.nav.ground));
     // The rebuilt World stands on them: the same ground, and the same ray hits on the hillside.
     const a = { distance: 0, normalX: 0, normalY: 0, normalZ: 0, index: 0 }, b = { ...a };
@@ -49,8 +51,25 @@ describe("MapPool", () => {
       expect(map.world.groundAt(x, z)).toBe(original.world.groundAt(x, z));
       expect(map.world.raycast(x, 40, z, 0.6, -0.8, 0, 200, a)).toBe(original.world.raycast(x, 40, z, 0.6, -0.8, 0, 200, b));
       expect(a).toEqual(b);
+      expect(hills.waterDepthAt(x, z)).toBe(made.waterDepthAt(x, z));
     }
   });
+
+  it("keeps the water through the worker, so the server wades where clients wade", async () => {
+    for (const tier of ["small", "medium"]) {
+      const made = mainThread(tier, 77).world.terrain!;
+      const moved = (await pool.generate(tier, 77)).world.terrain!;
+      expect(made.waterLevelCm, tier).not.toBeNull();
+      expect([moved.waterLevelCm, moved.wadeMeters]).toEqual([made.waterLevelCm, made.wadeMeters]);
+      // Somewhere really under water: the lowest corner of the map.
+      let low = 0;
+      for (let k = 1; k < made.heights.length; k++) if (made.heights[k]! < made.heights[low]!) low = k;
+      const x = (low % made.corners) * made.cell - made.meters / 2, z = Math.floor(low / made.corners) * made.cell - made.meters / 2;
+      const feet = made.heightAt(x, z);
+      expect(made.wading(x, feet, z), tier).toBe(true);
+      expect(moved.wading(x, feet, z), tier).toBe(true);
+    }
+  }, 30_000);
 
   it("gives every caller the map for its own seed, and starts jobs in the order they were asked for", async () => {
     const one = new MapPool(1);

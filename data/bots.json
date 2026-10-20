@@ -82,7 +82,8 @@
     "minPathDistance": 20,
     "goalMoveReplan": 15,
     "searchesPerTick": 1,
-    "heuristicWeight": 1.5
+    "heuristicWeight": 1.5,
+    "waterCost": 2.5
   },
   "loot": {
     "searchMeters": 40,

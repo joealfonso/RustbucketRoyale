@@ -36,6 +36,34 @@ function hillFinder(walls: Box[]) {
   return new Pathfinder(nav, pathStats);
 }
 
+// Flat dry ground with a rectangle of water 0.8 m deep (the surface 10 cm under the dry ground, so it stays dry).
+function pondFinder(minX: number, minZ: number, maxX: number, maxZ: number) {
+  const cell = 4, meters = 200, corners = meters / cell + 1;
+  const heights = new Int32Array(corners * corners);
+  for (let j = 0; j < corners; j++) {
+    for (let i = 0; i < corners; i++) {
+      const x = i * cell - meters / 2, z = j * cell - meters / 2;
+      if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) heights[j * corners + i] = -80;
+    }
+  }
+  const terrain = new Terrain(meters, cell, heights, 0.5, -10, 0.1);
+  const nav = buildNavGrid([], meters, 0, 0, { cellMeters: 2, stepHeight: mech.stepHeight, mechHeight: mech.height }, terrain);
+  return new Pathfinder(nav, pathStats, terrain);
+}
+
+// Whether any leg of the route passes over the rectangle.
+function crosses(start: [number, number], path: number[], minX: number, minZ: number, maxX: number, maxZ: number): boolean {
+  let x = start[0], z = start[1];
+  for (let i = 0; i < path.length; i += 2) {
+    for (let t = 0; t <= 1; t += 0.02) {
+      const px = x + (path[i]! - x) * t, pz = z + (path[i + 1]! - z) * t;
+      if (px > minX && px < maxX && pz > minZ && pz < maxZ) return true;
+    }
+    x = path[i]!; z = path[i + 1]!;
+  }
+  return false;
+}
+
 function length(start: [number, number], path: number[]): number {
   let total = 0, x = start[0], z = start[1];
   for (let i = 0; i < path.length; i += 2) { total += Math.hypot(path[i]! - x, path[i + 1]! - z); x = path[i]!; z = path[i + 1]!; }
@@ -95,6 +123,30 @@ describe("Pathfinder", () => {
       }
       x = path[i]!; z = path[i + 1]!;
     }
+  });
+
+  it("goes round a pond when going round is only a little further", () => {
+    const path: number[] = [];
+    expect(pondFinder(-20, -20, 20, 20).findPath(-60, 0, 60, 0, path)).toBe(true);
+    expect(path.slice(-2)).toEqual([60, 0]);
+    // Inside the pond's shore by a few metres: the coarse cells along the very edge are mostly dry.
+    expect(crosses([-60, 0], path, -16, -16, 16, 16)).toBe(false);
+    expect(length([-60, 0], path)).toBeLessThan(160); // round the side, not off round the map
+  });
+
+  it("wades straight through when going round the water is far", () => {
+    // A long channel with a gap of dry ground only at the far ends of the map.
+    const path: number[] = [];
+    expect(pondFinder(-8, -88, 8, 88).findPath(-60, 0, 60, 0, path)).toBe(true);
+    expect(path.slice(-2)).toEqual([60, 0]);
+    expect(length([-60, 0], path)).toBeLessThan(140);
+  });
+
+  it("on a dry map, routes are what they were before water", () => {
+    const path: number[] = [];
+    const nav = buildNavGrid([], 200, 0, 0, { cellMeters: 2, stepHeight: mech.stepHeight, mechHeight: mech.height }, hill());
+    expect(new Pathfinder(nav, pathStats, hill()).findPath(-80, 0, 80, 0, path)).toBe(true);
+    expect(path).toEqual([80, 0]);
   });
 
   it("starts from, and aims at, a spot inside a blocked cell by using the nearest open one", () => {
