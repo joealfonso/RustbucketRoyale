@@ -251,6 +251,8 @@ crt.attachSwitch(document.getElementById("crtSwitch") as HTMLButtonElement);
 attachVfxQualityButton(document.getElementById("vfxSwitch") as HTMLButtonElement);
 // The mech is picked on the title screen only (gate 14a); the Menu button in the room bar goes back there.
 document.getElementById("menuButton")!.addEventListener("click", () => { location.href = location.pathname; });
+// The Esc bar mid-match has the only way back to the title outside a room bar.
+hint.addEventListener("click", (e) => { if ((e.target as Element).closest("#resumeMenu")) location.href = location.pathname; });
 // Play from the title screen: the match starts the first time you click into the game, so it never counts down while
 // you are still reading the screen. Only on the page Play opened: a reload or an invite link waits for Enter as before.
 let autoStart = params.has("play");

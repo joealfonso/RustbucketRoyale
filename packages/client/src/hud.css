@@ -305,6 +305,8 @@ body.titleScreen > :not(#menu, #game) { display: none !important; }
 #hint.resume { inset: auto 0 auto 0; top: 22%; background: none; pointer-events: none; }
 #hint.resume .screen { display: none; }
 #hint.resume .resumeLine { display: block; pointer-events: auto; margin: 0; padding: 0.6rem 1.2rem; font: 700 1.1rem var(--hud-word); letter-spacing: 0.1em; cursor: pointer; }
+#hint.resume .resumeLine button { display: block; margin: 0.5rem auto 0; font: 700 0.8rem var(--hud-word); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; border: var(--hud-border) solid var(--hud-amber); border-radius: 0; padding: 0.35rem 0.8rem; background: transparent; color: var(--hud-amber); }
+#hint.resume .resumeLine button:hover { background: var(--hud-amber); color: var(--hud-soot); }
 #hint.resume .resumeLine small { display: block; margin-top: 0.2rem; font: 500 0.75rem var(--hud-word); letter-spacing: 0.08em; color: var(--hud-amber-dim); }
 #hint h2 { margin: 0; font: 700 2.2rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.08em; color: var(--hud-amber); }
 #hint .screen.panel { cursor: pointer; }

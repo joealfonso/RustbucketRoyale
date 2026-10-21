@@ -64,7 +64,8 @@ export class Input {
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
     document.addEventListener("contextmenu", (e) => { if (this.locked) e.preventDefault(); });
 
-    hint.addEventListener("click", () => this.lock());
+    // Buttons on the overlay (settings, main menu) do their own thing without grabbing the mouse.
+    hint.addEventListener("click", (e) => { if (!(e.target as Element).closest("button")) this.lock(); });
     canvas.addEventListener("click", () => { if (!this.locked) this.lock(); });
     document.addEventListener("pointerlockchange", () => {
       this.locked = document.pointerLockElement === canvas;
