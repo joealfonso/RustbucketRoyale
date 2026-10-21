@@ -64,4 +64,24 @@ describe("ground look", () => {
     bad.wet.dampStrength = 3;
     expect(() => parseGroundLook(bad)).toThrow(/wet/);
   });
+
+  it("washes a faint tone over all the ground, and refuses a loud one", () => {
+    const g = parseGroundLook(groundJson);
+    const code = groundShaderCode(g);
+    expect(code).toContain(g.tone.scale.toFixed(4));
+    expect(code).toContain((g.tone.amount * 2).toFixed(4));
+    const loud = copy();
+    loud.tone.amount = 0.5;
+    expect(() => parseGroundLook(loud)).toThrow(/tone/);
+  });
+
+  it("leaves how far into dirt and rock each spot is, from the same edges as the colours", () => {
+    const g = parseGroundLook(groundJson);
+    const code = groundShaderCode(g);
+    expect(code).toContain("vec2 groundDetailMeters;");
+    for (const edge of [g.regions.dirt.above, g.hills.dirt.rise, g.hills.rock.rise, g.gravel.above, g.hills.flatBelow]) {
+      expect(code).toContain(`, ${edge.toFixed(4)}, `);
+    }
+    expect(code.lastIndexOf("fwidth(")).toBeGreaterThan(code.lastIndexOf("if (")); // derivatives outside any branch
+  });
 });

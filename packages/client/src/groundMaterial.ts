@@ -43,11 +43,16 @@ export interface GroundLook {
   // waver by up to `raggedMeters` of height, with noise `scale` cells a metre. An island's shore is sand up to
   // `beach.meters` above the sea (setGroundBeach), so it reads as a coast, not a flooded field.
   wet: { bed: string; damp: string; dampMeters: number; dampStrength: number; raggedMeters: number; scale: number; beach: { color: string; meters: number } };
+  // A faint lighter and darker wash over everything, `scale` noise cells a metre plus a finer octave, up to `amount`
+  // either way. It never fades, so the far ground has a little of the life the close-range detail gives the near
+  // ground, and the line where that detail fades out does not show as a band.
+  tone: { scale: number; amount: number };
 }
 
 export function parseGroundLook(raw: unknown): GroundLook {
   const g = raw as GroundLook;
-  if (!g?.regions || !g.breakup || !g.gravel || !g.brush || !g.oil || !g.tracks || !g.hills || !g.wet) throw new Error("ground.json: needs regions, breakup, gravel, brush, oil, tracks, hills and wet");
+  if (!g?.regions || !g.breakup || !g.gravel || !g.brush || !g.oil || !g.tracks || !g.hills || !g.wet || !g.tone) throw new Error("ground.json: needs regions, breakup, gravel, brush, oil, tracks, hills, wet and tone");
+  if (!(g.tone.scale > 0 && g.tone.amount >= 0 && g.tone.amount <= 0.2)) throw new Error("ground.json: tone scale above 0, amount between 0 and 0.2");
   if (!(g.wet.dampMeters > 0 && g.wet.raggedMeters >= 0 && g.wet.dampStrength >= 0 && g.wet.dampStrength <= 1)) throw new Error("ground.json: wet dampMeters above 0, raggedMeters 0 or more, dampStrength between 0 and 1");
   if (!(typeof g.wet.beach?.color === "string" && g.wet.beach.meters > 0)) throw new Error("ground.json: wet needs beach color and meters above 0");
   const { hills } = g;
@@ -79,13 +84,20 @@ const GROUND_GLSL = `
   }
   // 1 while a feature of this size in metres is several pixels wide, 0 once a pixel covers most of it: fine detail
   // fades out with distance instead of shimmering.
-  float gKeep(float size, float pixel) { return 1.0 - smoothstep(size * 0.25, size * 0.6, pixel); }`;
+  float gKeep(float size, float pixel) { return 1.0 - smoothstep(size * 0.25, size * 0.6, pixel); }
+  // Roughly how many metres past edge a value is (negative before it), from how much it changes across a pixel
+  // (change, its fwidth) and how wide a pixel is. The floor stops a nearly level value reading as far from its edge.
+  float gPast(float value, float edge, float change, float pixel) { return (value - edge) * pixel / max(change, pixel * 0.001); }`;
 
 // The ground's fragment code: picks a colour for this spot from the patches, then the bands light it as usual.
+// It also leaves `groundDetailMeters` for the close-range detail (paint/groundDetail.ts): how far into dirt (x) and into
+// rock (y) this spot is, in metres, negative before the edge. The same thresholds as the colours, so the detail's
+// ragged crossing is centred on each hard colour edge.
 export function groundShaderCode(g: GroundLook): string {
-  const { regions, breakup, gravel, brush, oil, tracks, hills, wet } = g;
+  const { regions, breakup, gravel, brush, oil, tracks, hills, wet, tone } = g;
   const angle = (brush.angleDegrees * Math.PI) / 180;
   return `
+    vec2 groundDetailMeters;
     {
       vec2 gp = vGroundPos;
       float pixel = length(fwidth(gp));
@@ -147,7 +159,16 @@ export function groundShaderCode(g: GroundLook): string {
         if (aboveWater < groundBeach) c = groundSand;
         if (aboveWater < ${f(wet.dampMeters)}) c = mix(c, groundDamp, ${f(wet.dampStrength)});
       }
+      float wash = gNoise(gp * ${f(tone.scale)} + 91.0) * 0.6 + gNoise(gp * ${f(tone.scale * 2.7)} + 23.0) * 0.4;
+      c *= 1.0 + (wash - 0.5) * ${f(tone.amount * 2)};
       diffuseColor.rgb = c;
+
+      // Dirt is bare dirt, slope dirt, gravel, sand and the bed; rock is the steep faces, unless sand covers them.
+      float dRise = fwidth(rise), dWater = fwidth(aboveWater);
+      float pastSand = gPast(-aboveWater, -max(groundBeach, 0.0), dWater, pixel);
+      float pastGravel = min(gPast(gr, ${f(gravel.above)}, fwidth(gr), pixel), -gPast(rise, ${f(hills.flatBelow)}, dRise, pixel));
+      float pastDirt = max(max(gPast(n, ${f(regions.dirt.above)}, fwidth(n), pixel), gPast(rise, ${f(hills.dirt.rise)}, dRise, pixel)), max(pastGravel, pastSand));
+      groundDetailMeters = vec2(pastDirt, min(gPast(rise, ${f(hills.rock.rise)}, dRise, pixel), -pastSand));
     }`;
 }
 

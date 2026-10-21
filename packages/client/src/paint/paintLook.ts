@@ -1,3 +1,5 @@
+import { parseGroundDetailLook, parseGroundTileLook, type GroundDetailLook, type GroundTileLook } from "./groundDetailLook";
+
 // The painted detail on top of the toon colours (data/paint.json, gate V7b): what the generated atlas holds and how
 // strongly each kind of surface shows it. Colours are palette names or hex, like everywhere else in the look.
 
@@ -26,6 +28,13 @@ export interface PaintLook {
   seed: number;
   tileSize: number; // pixels per side of each layer, a power of two
   anisotropy: number;
+  // How many differently painted layers each of metal, concrete and wood has; every tile cell picks one by hash.
+  variants: number;
+  // Each tile cell's brightness is nudged up to this share either way, faded with the marks.
+  cellTone: number;
+  // A soft brightness drift `meters` across, up to `strength` either way, that never fades, so a far wall is not
+  // flat where the marks have gone.
+  farTone: { meters: number; strength: number };
   colors: { rust: string; rustDark: string; grime: string; tape: string };
   // The share of tiles that keep their strip of tape: one on every tile would show the repeat.
   tapeShare: number;
@@ -33,22 +42,14 @@ export interface PaintLook {
   fade: { startMeters: number; endMeters: number };
   surfaces: Record<SurfaceKind, SurfaceLook>;
   // The ground detail, read twice at two sizes and turns so its tile never shows as a grid.
-  ground: {
-    metersPerTile: number;
-    secondScale: number;
-    secondTurnDegrees: number;
-    fade: { startMeters: number; endMeters: number };
-    grit: number;
-    grass: number;
-    cracks: number;
-    // Grass blades only on ground this green (its green over its red and over its blue), cracks only on the rest.
-    grassTest: { greenOverRed: number; greenOverBlue: number };
-  };
+  ground: GroundDetailLook;
   // How much of each mark the generator paints into each layer. Positions and sizes are in tile widths.
-  metal: { brushStrokes: number; plateColumns: number; plateRows: number; rivetSpacing: number; rivetRadius: number; seamWidth: number; streaks: number; chips: number };
-  concrete: { brushStrokes: number; pourLifts: number; boardJoints: number; cracks: number; streaks: number; chips: number };
-  wood: { planks: number; grainStrokes: number; knots: number; streaks: number; chips: number };
-  groundTile: { grit: number; pebbles: number; stones: number; tufts: number; cracks: number };
+  // `brushWidth` and `grainWidth` are a stroke's least and most half width. `studs`: boards end on this many
+  // upright joints across the tile.
+  metal: { brushStrokes: number; brushWidth: [number, number]; plateColumns: number; plateRows: number; rivetSpacing: number; rivetRadius: number; seamWidth: number; scratches: number; streaks: number; chips: number };
+  concrete: { brushStrokes: number; brushWidth: [number, number]; pourLifts: number; boardJoints: number; cracks: number; streaks: number; chips: number };
+  wood: { planks: number; studs: number; grainStrokes: number; grainWidth: [number, number]; knots: number; streaks: number; chips: number };
+  groundTile: GroundTileLook;
   // Which kind of surface each breakable prop model's pieces are (keyed by prop id, then by a piece's paint).
   props: Record<string, { default: SurfaceKind; paints: Record<string, SurfaceKind> }>;
 }
@@ -66,6 +67,10 @@ export function parsePaintLook(raw: unknown): PaintLook {
     throw new Error("paint.json: tileSize must be a power of two from 64 to 2048");
   }
   if (!isShare(p.tapeShare)) throw new Error("paint.json: tapeShare must be between 0 and 1");
+  if (!(Number.isInteger(p.anisotropy) && p.anisotropy >= 1 && p.anisotropy <= 16)) throw new Error("paint.json: anisotropy must be a whole number from 1 to 16");
+  if (!(Number.isInteger(p.variants) && p.variants >= 1 && p.variants <= 4)) throw new Error("paint.json: variants must be a whole number from 1 to 4");
+  if (!(p.cellTone >= 0 && p.cellTone <= 0.25)) throw new Error("paint.json: cellTone must be from 0 to 0.25");
+  if (!(p.farTone?.meters > 0 && p.farTone.strength >= 0 && p.farTone.strength <= 0.25)) throw new Error("paint.json: farTone needs meters above 0 and strength from 0 to 0.25");
   for (const fade of [p.fade, p.ground.fade]) {
     if (!(fade.startMeters >= 0 && fade.endMeters > fade.startMeters)) throw new Error("paint.json: a fade must end after it starts");
   }
@@ -76,11 +81,16 @@ export function parsePaintLook(raw: unknown): PaintLook {
     if (!(s.metersPerTile > 0 && s.edgeMeters >= 0)) throw new Error(`paint.json: ${kind} needs metersPerTile above 0 and edgeMeters 0 or more`);
     for (const k of ["shade", "rust", "grime", "bare", "topRust"] as const) if (!isShare(s[k])) throw new Error(`paint.json: ${kind} ${k} must be between 0 and 1`);
   }
-  const g = p.ground;
-  if (!(g.metersPerTile > 0 && g.secondScale > 0)) throw new Error("paint.json: ground metersPerTile and secondScale above 0");
-  for (const k of ["grit", "grass", "cracks"] as const) if (!isShare(g[k])) throw new Error(`paint.json: ground ${k} must be between 0 and 1`);
-  for (const [name, counts] of Object.entries({ metal: p.metal, concrete: p.concrete, wood: p.wood, groundTile: p.groundTile })) {
+  parseGroundDetailLook(p.ground);
+  parseGroundTileLook(p.groundTile);
+  for (const [name, counts] of Object.entries({ metal: p.metal, concrete: p.concrete, wood: p.wood })) {
     for (const [k, v] of Object.entries(counts)) {
+      if (k === "brushWidth" || k === "grainWidth") {
+        const pair: unknown[] = Array.isArray(v) ? v : [];
+        const [low, high] = pair as number[];
+        if (!(pair.length === 2 && low! > 0 && high! >= low! && high! < 0.05)) throw new Error(`paint.json: ${name} ${k} must be [least, most], above 0 and below 0.05`);
+        continue;
+      }
       const whole = !["rivetSpacing", "rivetRadius", "seamWidth"].includes(k);
       if (whole ? !isCount(v) : !(typeof v === "number" && v > 0 && v < 0.25)) throw new Error(`paint.json: ${name} ${k} is out of range`);
     }
@@ -91,7 +101,7 @@ export function parsePaintLook(raw: unknown): PaintLook {
       if (!SURFACES.includes(kind)) throw new Error(`paint.json: props ${id} names surface ${kind}, not one of ${SURFACES.join(", ")}`);
     }
   }
-  if (p.metal.plateColumns < 1 || p.metal.plateRows < 1 || p.concrete.pourLifts < 1 || p.wood.planks < 1) throw new Error("paint.json: plates, lifts and planks need at least one");
+  if (p.metal.plateColumns < 1 || p.metal.plateRows < 1 || p.concrete.pourLifts < 1 || p.wood.planks < 1 || p.wood.studs < 1) throw new Error("paint.json: plates, lifts, planks and studs need at least one");
   return p;
 }
 
