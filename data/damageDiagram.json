@@ -1,7 +1,7 @@
 {
   "widthPx": 90,
   "heightPx": 120,
-  "labelRowPx": 14,
+  "labelRowPx": 0,
   "paddingPx": 6,
   "minBoxArea": 0.03,
   "hatchSpacingPx": 4,

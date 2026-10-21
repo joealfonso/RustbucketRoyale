@@ -21,8 +21,6 @@
 .damageDiagram .ddZone .plateLine rect { fill: none; stroke: var(--hud-amber, #FFB000); stroke-width: 2; }
 .damageDiagram .ddZone.plate-partial .plateLine rect { stroke-dasharray: 3 2; }
 .damageDiagram .ddZone .plateCover rect { fill: var(--hud-soot, #2a2f2e); }
-.damageDiagram .ddLabel { font-family: var(--hud-num, "Share Tech Mono", ui-monospace, monospace); font-size: 10px; fill: var(--hud-amber, #FFB000); }
-.damageDiagram .ddLabel.broken { fill: var(--hud-warn, #FF4D3D); }
 /* Where you were hit. Each dot is soot with a light rim or light with a soot rim, so it shows on the amber body of
    an intact part and on the soot of a damaged or broken one. The three kinds differ in size and fill, not only colour:
    a plate dent is a small soot hole, a hit into the part a bigger pale spot, a hit that breaks a part the biggest. */

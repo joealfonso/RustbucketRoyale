@@ -5,7 +5,7 @@ import "./damageDiagram.css";
 export interface DiagramConfig {
   widthPx: number;
   heightPx: number;
-  labelRowPx: number; // the strip under the mech for the percent left on each zone
+  labelRowPx: number; // a strip kept free under the mech (0 now the Parts box shows the percent left)
   paddingPx: number;
   minBoxArea: number; // square metres seen from the front; smaller boxes (bolts, barrels) only clutter a doll this size
   hatchSpacingPx: number;
@@ -99,7 +99,6 @@ export function plateLook(armor: number, platePoints: number): PlateLook {
 
 // Torso first so legs and arms sit over it where they overlap, as they do on the model.
 const DRAW_ORDER = [ZONE_TORSO, ZONE_LEGS, ZONE_ARMS];
-const LABELS = ["L", "A", "T"];
 const SVG = "http://www.w3.org/2000/svg";
 const HATCH_ID = "damageDiagramHatch";
 
@@ -114,14 +113,12 @@ function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<strin
 const LAYERS = ["plateLine", "plateCover", "line", "body", "hatch", "cross"] as const;
 
 // The always-on schematic of your own mech in the HUD. Rebuilt only when you change mech; after that it only
-// touches the page when a zone's look, its percent or its armour frame changes.
+// touches the page when a zone's look or its armour frame changes. The percent left is in the Parts box (hud.ts).
 export class DamageDiagram {
   private svg: SVGSVGElement;
   private zones: SVGGElement[] = [];
-  private labels: SVGTextElement[] = [];
   private shownMech = -1;
   private shownState = [-1, -1, -1];
-  private shownPercent = [-1, -1, -1];
   private shownPlate: (PlateLook | "")[] = ["", "", ""];
   private dots: HitDots;
 
@@ -141,12 +138,6 @@ export class DamageDiagram {
         this.shownPlate[zone] = plate;
         const look = zoneLook(state);
         this.zones[zone]!.setAttribute("class", `ddZone ${look} plate-${plate}`);
-        this.labels[zone]!.setAttribute("class", `ddLabel ${look}`);
-      }
-      const percent = percentLeft(hp[zone]!, set.zones[zone]!.hp);
-      if (percent !== this.shownPercent[zone]) {
-        this.shownPercent[zone] = percent;
-        this.labels[zone]!.textContent = `${LABELS[zone]}${percent}`;
       }
     }
   }
@@ -160,7 +151,6 @@ export class DamageDiagram {
     const c = this.config;
     this.shownMech = mech;
     this.shownState.fill(-1);
-    this.shownPercent.fill(-1);
     this.shownPlate.fill("");
     this.svg.replaceChildren();
 
@@ -195,12 +185,5 @@ export class DamageDiagram {
     }
     this.dots.attach(this.svg, view.rects, view.frame);
 
-    this.labels = [];
-    const labelY = c.heightPx - 3;
-    [ZONE_LEGS, ZONE_ARMS, ZONE_TORSO].forEach((zone, column) => {
-      const label = svgEl("text", { x: round((c.widthPx * (column + 0.5)) / 3), y: labelY, "text-anchor": "middle", class: "ddLabel intact" });
-      this.labels[zone] = label;
-      this.svg.appendChild(label);
-    });
   }
 }
