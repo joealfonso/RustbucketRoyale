@@ -1,4 +1,3 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   FireGate, FIRE_NONE, FIRE_SECONDARY, STEP, altSpin, createAltFireState, createAltShot, stepAltFire, type AltShot, ZONE_ARMS, ZONE_COUNT, ZONE_LEGS, ZONE_TORSO, applyDamage, propsInReach, computeShot, createGrenade, createHealth, createMechInput,
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule, partToRepair, ringOnLand,
@@ -354,7 +353,7 @@ export class Room {
     const id = this.nextId++;
     const mech = this.dealtMech(id);
     const player: Player = {
-      id, slot, bot: null, send, gone: false, goneTick: 0, rejoinToken: randomBytes(16).toString("hex"), mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(), alt: createAltFireState(),
+      id, slot, bot: null, send, gone: false, goneTick: 0, rejoinToken: rejoinSecret(), mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(), alt: createAltFireState(),
       queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, launchX: 0, launchZ: 0, cause: CAUSE_NONE, causeBefore: CAUSE_NONE, tally: createTally(), rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, reel: null, quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
@@ -440,7 +439,8 @@ export class Room {
     if (!message) return true;
 
     if (message.t === "start") {
-      if (id === this.hostId && this.state === "lobby") this.beginCountdown();
+      // A tier with no ring in ring.json (offline practice's shooting range) cannot hold a match, so it stays a lobby.
+      if (id === this.hostId && this.state === "lobby" && this.config.ring.tiers[this.tier]) this.beginCountdown();
       return true;
     }
     if (message.t === "tune") {
@@ -971,6 +971,14 @@ export class Room {
     player.dead = true;
     player.hp[ZONE_COUNT - 1] = 0;
     player.respawnTick = this.tickCount + Math.ceil(this.config.combat.respawnSeconds / STEP);
+  }
+
+  // Offline practice's R key (client localRoom.ts): back on your spawn at once, whole, as a knockout outside a match
+  // brings you back after its wait. Only outside a match, where nothing can be lost, and never during the countdown,
+  // when everyone hangs over their drop spot.
+  respawn(id: number): void {
+    const player = this.players.get(id);
+    if (player && (this.state === "lobby" || this.state === "results")) this.respawnForPractice(player);
   }
 
   private respawnForPractice(player: Player): void {
@@ -2203,8 +2211,20 @@ export class Room {
   }
 }
 
-// Compares two rejoin secrets in the same time however much of them matches.
+// 16 random bytes as hex, for a dropped player to prove who they were. Web Crypto, so a room runs in Node and in a
+// browser (offline practice, client localRoom.ts) alike.
+function rejoinSecret(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let hex = "";
+  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+  return hex;
+}
+
+// Compares two rejoin secrets in the same time however much of them matches: every character is looked at, so how
+// long a wrong guess takes says nothing about how much of it was right.
 function sameSecret(a: string, b: string): boolean {
-  const x = Buffer.from(a), y = Buffer.from(b);
-  return x.length === y.length && x.length > 0 && timingSafeEqual(x, y);
+  if (a.length !== b.length || a.length === 0) return false;
+  let differ = 0;
+  for (let i = 0; i < a.length; i++) differ |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return differ === 0;
 }

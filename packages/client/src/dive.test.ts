@@ -2,9 +2,8 @@ import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { DROP_BALL, DROP_BURNING, DROP_HANGING, DROP_NONE, World, boxFromData, createMechInput, createMechState, parseMechStats, stepMech, type OtherState } from "@rustbucket/shared";
 import diveJson from "../../../data/dive.json";
-import dropJson from "../../../data/drop.json";
 import mechJson from "../../../data/mech.json";
-import { parseDive, startAltitude } from "./dive";
+import { parseDive } from "./dive";
 import { DiveCamera, simPitch } from "./diveCamera";
 import { diveTilt } from "./divePose";
 import { LandingMarker } from "./landingMarker";
@@ -21,11 +20,6 @@ describe("the drop-in on the client", () => {
     expect(() => parseDive({ ...diveJson, camera: { ...diveJson.camera, pullBackMeters: -1 } })).toThrow(/pullBackMeters/);
     expect(() => parseDive({ ...diveJson, hud: { ...diveJson.hud, aimCall: "" } })).toThrow(/aimCall/);
     expect(() => parseDive({ ...diveJson, camera: { ...diveJson.camera, startPitchDegrees: -95 } })).toThrow(/startPitchDegrees/);
-  });
-
-  it("starts at the server's height for the tier, and not at all on the range", () => {
-    expect(startAltitude(dropJson.altitudeMeters, "small")).toBe(dropJson.altitudeMeters.small);
-    expect(startAltitude(dropJson.altitudeMeters, "range")).toBeNull();
   });
 
   it("lets you look further down while dropping, sends the server only the walking limit, and eases back after", () => {

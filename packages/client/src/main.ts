@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import {
-  FireGate, Predictor, STEP, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
+  FireGate, Predictor, STEP, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createShot,
   parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, itemArmorZone, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
   FIRE_NONE, FIRE_SECONDARY, chargeShare, createAltFireState, createAltShot, stepAltFire, flightSteps, reelPoint, SURFACE_NUDGE, type HarpoonMessage, type RivetMessage,
-  createRayHit, parseDropsConfig, parseTitanConfig, DROP_BALL, DROP_BURNING, DROP_HANGING, DROP_NONE, dropping, hangAtSpot, parseDropSpotStats, planDropSpots, releaseDrop, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot, type WeaponStats,
+  createRayHit, parseDropsConfig, parseTitanConfig, DROP_BALL, DROP_BURNING, DROP_HANGING, DROP_NONE, dropping, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot, type WeaponStats,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import audioJson from "../../../data/audio.json";
@@ -101,6 +101,7 @@ import { AltFireFx, pinLookOf } from "./altFireFx";
 import { RivetView } from "./rivetView";
 import { ANCHOR_MECH, ANCHOR_PICKUP, ANCHOR_WORLD, HarpoonView } from "./harpoonView";
 import { NetClient, type Session } from "./net";
+import type { LocalRoom } from "./localRoom";
 import { Radar } from "./radar";
 import { parseRadar } from "./radarData";
 import radarJson from "../../../data/radar.json";
@@ -131,9 +132,7 @@ import { TitanView } from "./titanView";
 import { carFuseSeconds, carLanding, loadCarModel } from "./thrownCars";
 import { bossBarShown } from "./hud";
 import diveJson from "../../../data/dive.json";
-import dropJson from "../../../data/drop.json";
-import matchJson from "../../../data/match.json";
-import { parseDive, share, startAltitude } from "./dive";
+import { parseDive, share } from "./dive";
 import { DiveCamera, simPitch } from "./diveCamera";
 import { DiveHud } from "./diveHud";
 import { StepEase, parseStepEase } from "./stepEase";
@@ -146,14 +145,12 @@ import { DropSprites } from "./fx/dropSprites";
 import { ScrapBalls } from "./scrapBall";
 import { AimRing } from "./aimRing";
 
-const KILL_HEIGHT = -50;
-
 const mechStats = parseMechStats(mechJson);
 const weaponSet = parseWeapons(weaponsJson);
 const lootConfig = parseLootConfig(lootJson, weaponSet, parsePropConfig(propsJsonForLoot));
 const weaponColors = weaponSet.weapons.map((w) => w.color);
 const upgradeSet = parseUpgrades(upgradesJson);
-// The start weapon is what offline practice uses, and what the tuning panel edits.
+// The start weapon: what you fire before the first snapshot says what you carry.
 const weaponStats = weaponSet.weapons[weaponSet.start]!;
 const cameraStats = parseCameraStats(cameraJson);
 const netStats = parseNetStats(netJson);
@@ -175,7 +172,8 @@ setCrawlLook(damageFxConfig.crawl, zoneSet.damagedBelowFraction);
 //   ?create&tier=medium&bots=5   make a new room on the local server with 5 bots, then share the link it shows.
 //                                &difficulty=easy|normal|hard|mixed sets how hard its bots are (mixed if left out).
 //   ?room=ABCD                   join that room
-//   ?offline&tier=small&seed=5   practice alone, any tier or "range", any seed. Add &overview to look down on the map.
+//   ?offline&tier=small&seed=5   practice in a room of your own in this page, any tier or "range", any seed. Add &bots=3
+//                                for company, &overview to look down on the map.
 //   ?server=ws://host:port       use another server than the local one
 const params = new URLSearchParams(location.search);
 const offline = params.has("offline");
@@ -216,25 +214,36 @@ function savedSession(): Session | null {
   } catch { return null; }
 }
 const keepSession = (s: Session | null) => { try { if (s) sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); else sessionStorage.removeItem(SESSION_KEY); } catch { /* private window: no reload rejoin */ } };
-const net = online ? new NetClient(serverAddress(), netStats.rejoinGraceSeconds, savedSession()) : null;
-if (net) net.onSession = keepSession;
 let tier = params.get("tier") ?? "medium";
-let seed = params.has("seed") ? Number(params.get("seed")) : Math.floor(Math.random() * 0x100000000);
+let seed = 0;
 let roomCode = "";
+// Offline practice runs the server's own room in this page (localRoom.ts), so it plays by exactly the online rules.
+// Loaded only for practice: online play never downloads it.
+let practice: LocalRoom | null = null;
+let net: NetClient;
 
 // A blinking cursor after the message while connecting and building (motion.css), so a long build never looks stuck.
 hint.classList.add("busy");
 try {
-  if (net) {
+  if (offline) {
+    hint.textContent = `Building ${tier} map...`;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const { LocalRoom, practiceOptions } = await import("./localRoom");
+    practice = new LocalRoom(practiceOptions(params));
+    practice.start();
+    net = new NetClient("practice", netStats.rejoinGraceSeconds, null, practice.connect);
+  } else {
     hint.textContent = "Connecting...";
-    const welcome = await net.welcome;
-    ({ tier, seed } = welcome);
-    roomCode = welcome.code;
-    if (picked !== null) net.sendMech(picked);
-    // Reloading the page now rejoins this room.
-    // Keep the room settings in the address too. If the server restarts, reloading brings the room back the same way.
-    history.replaceState(null, "", `?${rejoinQuery(params, roomCode, tier)}`);
+    net = new NetClient(serverAddress(), netStats.rejoinGraceSeconds, savedSession());
+    net.onSession = keepSession;
   }
+  const welcome = await net.welcome;
+  ({ tier, seed } = welcome);
+  roomCode = welcome.code;
+  if (picked !== null) net.sendMech(picked);
+  // Reloading the page now rejoins this room.
+  // Keep the room settings in the address too. If the server restarts, reloading brings the room back the same way.
+  if (!practice) history.replaceState(null, "", `?${rejoinQuery(params, roomCode, tier)}`);
   hint.textContent = `Building ${tier} map...`;
   // Let the message paint before the map build holds the thread.
   await new Promise((resolve) => setTimeout(resolve, 30));
@@ -351,7 +360,6 @@ const landingImpact = new LandingImpact(dropSprites, chunks, dive.impact, dive.i
 const speedLines = new SpeedLines(dive.speedLines, dropSprites);
 const diveHud = new DiveHud(dive.hud);
 const scrapBalls = new ScrapBalls(scene, toon, dropSprites, chunks, dive);
-const dropSpotStats = parseDropSpotStats(dropJson.spots);
 scene.add(propView.group);
 let treeView = makeTrees();
 // What the map casts in the sun. The dressing and the near edge wall mark their own as they rebuild near you.
@@ -374,7 +382,7 @@ const railFrom = { x: 0, y: 0, z: 0 };
 // Where a charging mech is and which way it aims: yours from your own aim, anyone else's from how they are drawn
 // (their aim up and down is not sent, so their laser runs level).
 const railPoseOf = (id: number, out: RailPose): boolean => {
-  if (net && id === net.id) { out.x = mech.x; out.y = mech.y; out.z = mech.z; out.yaw = aim.yaw; out.pitch = aim.pitch; return true; }
+  if (id === net.id) { out.x = mech.x; out.y = mech.y; out.z = mech.z; out.yaw = aim.yaw; out.pitch = aim.pitch; return true; }
   if (!remotes.positionOf(id, out)) return false;
   out.yaw = remotes.yawOf(id); // models face -z turned by their yaw, the same convention as aim
   out.pitch = 0;
@@ -390,7 +398,7 @@ contactShadows.setMap(map.boxes, map.world);
 const fadeContacts = () => contactShadows.fadeNear(sunShadows.meters, sunShadows.meters + sunShadows.ahead, lookConfig.shadows.contactNear);
 fadeContacts();
 onVfxQuality(fadeContacts);
-const radar = net ? new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters, parseRadar(radarJson)) : null;
+const radar = new Radar(hudStats.radarRangeMeters, hudStats.detectRangeMeters, parseRadar(radarJson));
 
 // Each mech is drawn as its roster mech's kit, by the mech number the server sends. ?kit=grey draws everyone as the
 // grey-box mech, ?kit=<name> everyone as one kit.
@@ -418,11 +426,7 @@ const altLooks = weaponLooks.map((l) => l.alt);
 const showSurfaces = () => shotFx.impacts.setSurfaces(map.palette.map((c) => toon.color(c)), map.colors);
 showSurfaces();
 const sound = new Sound(audioJson as AudioConfig);
-shotFx.onImpact = (x, y, z, weapon, nx, ny, nz) => {
-  sound.play("impact", { x, y, z });
-  // Offline there is no server to say where a rivet stuck: it sticks where its tracer lands.
-  if (net === null && weapon === rivetGun) stickOfflineRivet(x, y, z, nx, ny, nz);
-};
+shotFx.onImpact = (x, y, z) => sound.play("impact", { x, y, z });
 // Splashes and their sounds. `splashAt` is reused so a splash allocates nothing of ours.
 const splashAt = { x: 0, y: 0, z: 0 };
 function splashSound(x: number, y: number, z: number, look: { loudness: number; pitch: number }): void {
@@ -518,7 +522,7 @@ const pinLook = pinLookOf(altLooks);
 // Gate 18b: the rivet gun's stuck rivets and the magnet harpoon's head and cable (rivetView.ts, harpoonView.ts).
 const rivetGun = weaponSet.weapons.findIndex((w) => w.projectile.kind === "rivet");
 const harpoonGun = weaponSet.weapons.findIndex((w) => w.projectile.kind === "harpoon");
-const selfId = () => net?.id ?? 0; // offline you are 0
+const selfId = () => net.id;
 const drawnMech = (id: number): MechModel | null => (id === selfId() ? ownModel : remotes.modelOf(id));
 // Read live, so tuning the rivet gun in F1 shows at once.
 const rivetStats = () => { const p = weaponSet.weapons[rivetGun]?.projectile; return p?.kind === "rivet" ? p : null; };
@@ -526,18 +530,7 @@ const rivetLook = weaponLooks[rivetGun]?.rivet;
 const rivetView = rivetLook
   ? new RivetView(scene, rivetLook, toon.ownMaterial(rivetLook.head), (c) => toon.color(c), drawnMech, () => rivetStats()?.blastRadius ?? 0)
   : null;
-if (rivetView) {
-  rivetView.popOwnFuses = net === null;
-  rivetView.onPop = (x, y, z, radius) => showRivetPop(x, y, z, radius);
-}
-let offlineRivetId = 1;
-function stickOfflineRivet(x: number, y: number, z: number, nx: number, ny: number, nz: number): void {
-  const stats = rivetStats();
-  if (!rivetView || !stats) return;
-  if (rivetView.countOf(0) >= stats.maxStuck) rivetView.popOldest(0);
-  rivetView.stick({ owner: 0, id: offlineRivetId++, x, y, z, outX: nx, outY: ny, outZ: nz, mech: -1, fuseSeconds: stats.fuseSeconds });
-  sound.play("rivetStick", { x, y, z });
-}
+if (rivetView) rivetView.onPop = (x, y, z, radius) => showRivetPop(x, y, z, radius);
 // A rivet's pop: the explosion look at its size, its own short bang, and a shake if it is near.
 function showRivetPop(x: number, y: number, z: number, radius: number): void {
   fallHints.blast(performance.now() / 1000, x, z, radius);
@@ -614,9 +607,6 @@ function fireOwnHarpoon(s: Shot, weapon: WeaponStats, reel: boolean, seq: number
     reelPoint(hx + reelHit.normalX * n, hy + reelHit.normalY * n, hz + reelHit.normalZ * n, reelHit.normalX, reelHit.normalY, reelHit.normalZ, sec, reelTo);
     predictor.pullAfter(seq + flightSteps(reelHit.distance, weapon), reelTo.x, reelTo.y, reelTo.z, sec.speed, sec.maxSeconds, sec.stopMeters, 0);
     harpoonView.latch(selfId(), ANCHOR_WORLD, -1, hx, hy, hz, true, sec.maxSeconds);
-  } else if (net === null) {
-    // Offline a harpoon into the map just bites and lets go: there is nothing there to drag.
-    harpoonView.latch(selfId(), ANCHOR_WORLD, -1, hx, hy, hz, false);
   }
 }
 // The server's word on where a harpoon landed and how long it pulls.
@@ -725,7 +715,7 @@ const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgrad
 const pickupPop = new PickupPop(pickupLook.text);
 const pickupNames = { weapons: weaponSet.weapons.map((w) => w.name), upgrades: upgradeSet.upgrades.map((u) => u.name), zones: zoneSet.zones.map((z) => z.name) };
 const poppedLines: PickupLine[] = [];
-if (net) net.viewDelayMs = () => remotes.viewDelayMs;
+net.viewDelayMs = () => remotes.viewDelayMs;
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
 // The kill replay (gate 13b): the last seconds again from over your killer's shoulder, then you watch them.
@@ -735,13 +725,13 @@ killReplay.onExplode = (x, y, z) => showBlast(x, y, z);
 killReplay.onTitan = (m) => showTitan(m);
 killReplay.onGrenade = (_id, x, y, z, vx, vy, vz) => { grenades.spawn(x, y, z, vx, vy, vz); sound.play("grenadeThrow", { x, y, z }); };
 // The replay puts your mech back together (it is alive at the start of the clip) and blows it apart again here.
-killReplay.onVictimDown = (model, awayX, awayZ) => deathFx.blowApart(model, awayX, awayZ, net?.id ?? 0);
+killReplay.onVictimDown = (model, awayX, awayZ) => deathFx.blowApart(model, awayX, awayZ, net.id);
 // Over, played out or skipped: watch the killer. The click that skipped it must not also switch who you watch.
 // Your wreck lies where it is live, even if the clip ended before it went down.
 killReplay.onEnd = (killerId) => {
   spectateId = killerId;
   input.takeClick();
-  if (ownModel.dead && !ownModel.blownApart) deathFx.lieDown(ownModel, net?.id ?? 0);
+  if (ownModel.dead && !ownModel.blownApart) deathFx.lieDown(ownModel, net.id);
 };
 const input = new Input(canvas, hint, () => mechStats.sprintDoubleTapSeconds);
 // Live tuning works on copies of the raw data files. A change is checked and parsed like loading the file, then
@@ -757,7 +747,7 @@ const applyLocally = (file: string, path: string, value: number) => {
   const parsed = applyTune(tuningRaws, file, path, value);
   if (parsed !== null) assignDeep(liveData[file as TunableFile], parsed);
 };
-// Offline a change applies at once. Online it goes to the server, which sends it back to everyone, this client too.
+// A change goes to the room (the server's, or practice's in this page), which sends it back to everyone, this client too.
 const frameMs = new FrameTimes(240);
 const workMs = new FrameTimes(240); // time spent on the frame before the GPU takes over: the headroom a locked 60 fps hides
 const gpuTimer = new GpuTimer(renderer.getContext() as WebGL2RenderingContext);
@@ -779,7 +769,7 @@ let panelLoading = false;
 let serverTuning: boolean | null = null;
 async function loadPanel(): Promise<DebugPanel> {
   const { DebugPanel } = await import("./debugPanel");
-  const p = new DebugPanel(mechStats, tuningRaws, cameraStats, (file, path, value) => (net ? net.sendTune(file, path, value) : applyLocally(file, path, value)));
+  const p = new DebugPanel(mechStats, tuningRaws, cameraStats, (file, path, value) => net.sendTune(file, path, value));
   p.addGait(gaitConfig);
   p.addHud(crt.setting, (v) => crt.setIntensity(v));
   addVfxQualityControl(p.gui);
@@ -793,29 +783,25 @@ function togglePanel(p: DebugPanel): void {
   if (open) input.unlock();
   else input.lock();
 }
-if (net) {
-  net.onTuned = (file, path, value) => { applyLocally(file, path, value); panel?.refresh(); };
-  void net.welcome.then((w) => { serverTuning = w.tuning; panel?.setServerTuning(w.tuning); }, () => {});
-}
+net.onTuned = (file, path, value) => { applyLocally(file, path, value); panel?.refresh(); };
+void net.welcome.then((w) => { serverTuning = w.tuning; panel?.setServerTuning(w.tuning); }, () => {});
 // The rig re-applies the field of view from the tuning value every frame, so the slider needs no callback.
 
 const [spawnX, spawnY, spawnZ] = map.spawn;
 // Yaw PI faces +Z.
 const predictor = new Predictor(statsFor, map.world, spawnX, spawnY, spawnZ, Math.PI, abilityOf);
 const mech = predictor.state;
-// Online, your own ram ploughs through props in prediction on the same step the server smashes them (the shared rule,
+// Your own ram ploughs through props in prediction on the same step the server smashes them (the shared rule,
 // propsInReach), so a charge through a row of trees is not stopped by each trunk until the server's word arrives.
-// Only their collision goes here: they break on screen when the server says so. Offline nothing breaks them.
+// Only their collision goes here: they break on screen when the server says so.
 const smashScratch: number[] = [], smashed: number[] = [];
-if (net) {
-  predictor.afterStep = (s) => {
-    const ram = abilityOf(s.mech);
-    if (ram?.kind !== "ram" || s.abilityTime <= 0) return;
-    const count = propsInReach(map.world, map.propOfBox, s.x, s.y, s.z, ram.hitRadius, statsFor(s.mech).height, smashScratch, smashed);
-    for (let i = 0; i < count; i++) map.world.disable(map.props[smashed[i]!]!.boxIndex);
-  };
-}
-mech.mech = shownMech; // offline this is the mech you drive; online the first snapshot says
+predictor.afterStep = (s) => {
+  const ram = abilityOf(s.mech);
+  if (ram?.kind !== "ram" || s.abilityTime <= 0) return;
+  const count = propsInReach(map.world, map.propOfBox, s.x, s.y, s.z, ram.hitRadius, statsFor(s.mech).height, smashScratch, smashed);
+  for (let i = 0; i < count; i++) map.world.disable(map.props[smashed[i]!]!.boxIndex);
+};
+mech.mech = shownMech; // until the first snapshot says which mech the room gave you
 const aim = { yaw: Math.PI, pitch: 0 };
 const diveCamera = new DiveCamera(dive.camera, mechStats);
 const landingMarker = new LandingMarker(dive.marker, toon.color(dive.marker.color), mechStats);
@@ -888,7 +874,7 @@ remotes.onSpinStep = (model, weapon, spin) => {
   sound.play(kind === "windup" ? "windupWhine" : "chargeHum", { x: p.x, y: p.y + 2, z: p.z }, 1, 0.8 + spin * 0.6);
 };
 let health: HealthState = { hp: [...zoneMaxHp], dead: false, respawnIn: 0 };
-// What you carry. Online the server's word is final and arrives with every snapshot. Offline it never changes.
+// What you carry. The server's word is final and arrives with every snapshot.
 let loadout: Loadout = { slots: [weaponSet.start, -1], active: 0, grenades: lootConfig.grenadesStart, armor: [0, 0, 0], upgrades: [-1, -1] };
 let lastSnapLoadout = loadout;
 let serverActive = 0;
@@ -898,14 +884,16 @@ let looting = 0; // how far through looting a wreck, 0 to 1, from the server
 let repairing = 0; // how far through repairing a part, 0 to 1, from the server
 const sum = (values: readonly number[]) => values.reduce((a, b) => a + b, 0);
 
-// Match state. Offline there is no match, so this just stays quiet.
+// Match state, from the room.
 let progress: MatchProgress = { state: "lobby", seconds: 0, alive: 1, total: 1 };
 let progressAt = performance.now();
 let hostId = 0;
 let myPlace: number | null = null;
 let spectateId = 0;
 const spectatePos = { x: 0, y: 0, z: 0 };
-const hud = new Hud(() => net?.sendStart(), copyInviteLink);
+const hud = new Hud(() => net.sendStart(), copyInviteLink);
+// Practice is a room of one in this page: nobody to invite.
+if (practice) document.getElementById("copyLink")!.classList.add("hidden");
 
 function copyInviteLink(): void {
   void navigator.clipboard.writeText(`${location.origin}/?room=${roomCode}`);
@@ -950,13 +938,13 @@ function swapMap(newSeed: number, newTier: string): void {
   predictor.setWorld(map.world);
 }
 
-if (net) net.watchId = () => (health.dead ? spectateId : 0);
+net.watchId = () => (health.dead ? spectateId : 0);
 
-const name = (id: number | null) => (id === null ? "the zone" : id === net?.id ? "You" : remotes.isBot(id) ? `Bot ${id}` : `Player ${id}`);
-const cardNames: Names = { roster, weapons: weaponSet, abilities: abilitySet, player: (id) => name(id), get selfId() { return net?.id ?? null; } };
+const name = (id: number | null) => (id === null ? "the zone" : id === net.id ? "You" : remotes.isBot(id) ? `Bot ${id}` : `Player ${id}`);
+const cardNames: Names = { roster, weapons: weaponSet, abilities: abilitySet, player: (id) => name(id), get selfId() { return net.id; } };
 
-// Online: wait for the first snapshot before stepping, so we start from where the server put us.
-let ready = net === null;
+// Wait for the first snapshot before stepping, so we start from where the server put us.
+let ready = false;
 let lastCorrection = 0;
 // The visual offset left by a correction, faded out so the mech glides instead of snapping.
 let offX = 0, offY = 0, offZ = 0;
@@ -965,202 +953,202 @@ let prevX = mech.x, prevY = mech.y, prevZ = mech.z;
 // Eases the drawn mech up stairs, which the sim climbs in one tick (stepEase.ts).
 const stepEase = new StepEase(parseStepEase(stepEaseJson));
 
-if (net) {
-  net.onSnapshot = (snap) => {
-    const error = predictor.reconcile(snap.ack, snap.you, STEP);
-    lastCorrection = error;
-    if (!ready) {
-      ready = true;
-      prevX = mech.x; prevY = mech.y; prevZ = mech.z;
-      stepEase.reset();
-      offX = offY = offZ = 0;
-    } else if (error > netStats.snapDistance) {
-      offX = offY = offZ = 0;
-      prevX = mech.x; prevY = mech.y; prevZ = mech.z;
-      stepEase.reset();
-    } else {
-      offX += predictor.correctionX; offY += predictor.correctionY; offZ += predictor.correctionZ;
-      prevX -= predictor.correctionX; prevY -= predictor.correctionY; prevZ -= predictor.correctionZ;
+net.onSnapshot = (snap) => {
+  const error = predictor.reconcile(snap.ack, snap.you, STEP);
+  lastCorrection = error;
+  if (!ready) {
+    ready = true;
+    prevX = mech.x; prevY = mech.y; prevZ = mech.z;
+    stepEase.reset();
+    offX = offY = offZ = 0;
+  } else if (error > netStats.snapDistance) {
+    offX = offY = offZ = 0;
+    prevX = mech.x; prevY = mech.y; prevZ = mech.z;
+    stepEase.reset();
+  } else {
+    offX += predictor.correctionX; offY += predictor.correctionY; offZ += predictor.correctionZ;
+    prevX -= predictor.correctionX; prevY -= predictor.correctionY; prevZ -= predictor.correctionZ;
+  }
+  // Hurt when hit points or armor went down. Picked something up when grenades or armor went up.
+  const before = sum(health.hp) + sum(loadout.armor);
+  const old = loadout;
+  const oldState = progress.state;
+  progress = snap.match;
+  progressAt = performance.now();
+  const wasDead = health.dead;
+  health = snap.health;
+  loadout = snap.loadout;
+  if (sum(health.hp) + sum(loadout.armor) < before) {
+    flashHurt();
+    if (loadout.grenades > 0) tips.offer("grenade"); // under fire with a grenade in hand: the moment to say G
+  }
+  if (loadout.grenades > old.grenades || loadout.armor.some((a, zone) => a > old.armor[zone]!)) sound.play("pickup");
+  // Say what was just taken. Not across a respawn or a new match, where the loadout is simply handed out fresh.
+  // Against the last snapshot's loadout, not `old`: a thrown grenade is taken off `old` ahead of the server.
+  if (!wasDead && !health.dead && snap.match.state === oldState) pickupPop.show(pickupLines(lastSnapLoadout, loadout, pickupNames, pickupLook.text, poppedLines));
+  lastSnapLoadout = loadout;
+  if (loadout.slots[0] !== old.slots[0] || loadout.slots[1] !== old.slots[1]) sound.play("swap");
+  if (!wasDead && snap.match.state === oldState && loadout.upgrades.some((u) => u >= 0 && !old.upgrades.includes(u))) sound.play("upgrade");
+  // When the server changes the weapon in hand itself (taking a weapon into an empty slot), follow it.
+  if (loadout.active !== serverActive) { serverActive = loadout.active; input.setSlot(loadout.active); }
+  if (snap.pickups) {
+    pickupsNow = snap.pickups;
+    pickupView.sync(snap.pickups);
+  }
+  // A rattle every quarter of the way through looting, so holding E sounds like work being done.
+  if (Math.floor(snap.looting * 4) > Math.floor(looting * 4)) sound.play("loot");
+  looting = snap.looting;
+  // A clank for every fifth of a repair, like work being done.
+  if (Math.floor(snap.repairing * 5) > Math.floor(repairing * 5)) sound.play("repair");
+  repairing = snap.repairing;
+  ownModel.repairing = repairing > 0;
+  if (!killReplay.playing) {
+    setMechDamage(ownModel, health.hp, health.dead); // the replay shows your mech as it was
+    if (health.dead && !wasDead) {
+      const from = knockedFrom.get(net.id);
+      knockedFrom.delete(net.id);
+      deathFx.blowApart(ownModel, from ? mech.x - from.x : 0, from ? mech.z - from.z : 0, net.id);
     }
-    // Hurt when hit points or armor went down. Picked something up when grenades or armor went up.
-    const before = sum(health.hp) + sum(loadout.armor);
-    const old = loadout;
-    const oldState = progress.state;
-    progress = snap.match;
-    progressAt = performance.now();
-    const wasDead = health.dead;
-    health = snap.health;
-    loadout = snap.loadout;
-    if (sum(health.hp) + sum(loadout.armor) < before) {
-      flashHurt();
-      if (loadout.grenades > 0) tips.offer("grenade"); // under fire with a grenade in hand: the moment to say G
+  }
+  net.noteSnapshot(snap.ack, snap.ackAgeMs, performance.now());
+  remotes.push(snap.others, snap.tick, performance.now());
+  if (snap.titan) askTitanKit();
+  titanView.push(snap.titan, snap.tick * STEP * 1000, performance.now());
+  for (const n of snap.noises) radar?.hear(n.x, n.z, n.kind, performance.now());
+};
+// A scattergun's pellets each arrive as their own shot, a few milliseconds apart: one sound per pull, not one per
+// pellet, or a blast stacks into a harsh chorus.
+const lastShotSound = new Map<number, number>();
+const showShot = (id: number, s: Shot, weapon: number, hitMech: boolean, alt: number) => {
+  if (weapon === harpoonGun && harpoonView) {
+    shotFx.flash(s, weapon, alt);
+    harpoonView.fire(id, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, s.length, alt >= 0);
+  } else {
+    shotFx.show(s, weapon, hitMech, alt);
+  }
+  fallHints.shot(performance.now() / 1000, s.ox, s.oz, s.dx, s.dz, s.length);
+  const now = performance.now();
+  if (now - (lastShotSound.get(id) ?? -Infinity) < 40) return;
+  lastShotSound.set(id, now);
+  const stats = weaponSet.weapons[weapon];
+  const altLook = stats !== undefined && usesAltLook(stats.secondary.kind, alt);
+  sound.play(alt >= 0 ? sound.altShotFor(stats?.id) : sound.shotFor(stats?.id), { x: s.ox, y: s.oy, z: s.oz });
+  // once a pull, like the sound
+  kickShooter(id === net.id ? ownModel : remotes.modelOf(id), stats ? kickIdFor(recoilConfig, stats.id, altLook) : undefined, s.ox, s.oz);
+};
+killReplay.onShot = showShot;
+net.onShot = (s) => {
+  // Your own shots come back too: the replay draws them, live they already showed the moment you fired.
+  const weapon = s.id === net.id ? loadout.slots[firingSlot]! : remotes.weaponOf(s.id);
+  const alt = s.alt ?? -1;
+  killReplay.shot(performance.now(), s.id, s, weapon, s.hitMech, alt);
+  if (s.id === net.id || killReplay.playing) return;
+  showShot(s.id, s, weapon, s.hitMech, alt);
+};
+net.onHurt = (h) => damageDiagram.hit(h.zone, h.x, h.y, h.kind);
+net.onHit = (h) => {
+  flashHitMarker(h.killed);
+  showHit(h.zone, h.damage, h.killed, h.targetId === TITAN_ID);
+  sound.play("hitMarker");
+  shotFx.hitMech(h.x, h.y, h.z, loadout.slots[firingSlot]!, lastOwnAlt);
+};
+net.onGrenade = (g) => {
+  killReplay.grenade(performance.now(), g.id, g.x, g.y, g.z, g.vx, g.vy, g.vz);
+  if (g.id === net.id || killReplay.playing) return; // our own grenade is already in the air
+  grenades.spawn(g.x, g.y, g.z, g.vx, g.vy, g.vz);
+  sound.play("grenadeThrow", { x: g.x, y: g.y, z: g.z });
+};
+net.onTitan = (m) => {
+  killReplay.titan(performance.now(), m);
+  if (!killReplay.playing) showTitan(m);
+};
+net.onExplode = (e) => {
+  killReplay.explode(performance.now(), e.x, e.y, e.z);
+  if (killReplay.playing) return;
+  // A rivet popping: drawn by its rivet, in its turn if a detonation's ripple is running, or here if it was never seen.
+  if (e.rivet !== undefined) { if (!rivetView?.popById(e.rivet)) showRivetPop(e.x, e.y, e.z, rivetStats()?.blastRadius ?? 0); return; }
+  showBlast(e.x, e.y, e.z);
+};
+net.onRivet = showRivet;
+net.onHarpoon = showHarpoon;
+// Your own start and landing already showed from prediction; anyone's ram or slam connecting shows here. The
+// warning ring for a strike is always the server's, yours too, so everyone sees the same spot.
+net.onAbility = (a) => {
+  killReplay.ability(performance.now(), a);
+  if (!killReplay.playing) showAbilityMoment(a);
+};
+killReplay.onAbility = (a) => showAbilityMoment(a);
+const showAbilityMoment = (a: AbilityMessage) => {
+  const own = a.id === net.id;
+  if (a.kind === "rail") {
+    if (a.event === "start") {
+      railFx.charge(a.id, railChargeOf(own ? mech.mech : remotes.mechOf(a.id)), performance.now());
+      sound.play("railCharge", { x: a.x, y: a.y + 2, z: a.z });
+    } else if (a.event === "hit") {
+      if (!railPoseOf(a.id, railPose)) { railPose.x = a.x; railPose.y = a.y; railPose.z = a.z; }
+      railFx.muzzleAt(railPose, railFrom);
+      railFx.fire(a.id, railFrom, a.x, a.y, a.z, performance.now());
+      kickShooter(own ? ownModel : remotes.modelOf(a.id), "railShot", railFrom.x, railFrom.z);
+      sound.play("railShot", { x: railFrom.x, y: railFrom.y + 2, z: railFrom.z });
+      showAbilityHit(a.x, a.y, a.z);
     }
-    if (loadout.grenades > old.grenades || loadout.armor.some((a, zone) => a > old.armor[zone]!)) sound.play("pickup");
-    // Say what was just taken. Not across a respawn or a new match, where the loadout is simply handed out fresh.
-    // Against the last snapshot's loadout, not `old`: a thrown grenade is taken off `old` ahead of the server.
-    if (!wasDead && !health.dead && snap.match.state === oldState) pickupPop.show(pickupLines(lastSnapLoadout, loadout, pickupNames, pickupLook.text, poppedLines));
-    lastSnapLoadout = loadout;
-    if (loadout.slots[0] !== old.slots[0] || loadout.slots[1] !== old.slots[1]) sound.play("swap");
-    if (!wasDead && snap.match.state === oldState && loadout.upgrades.some((u) => u >= 0 && !old.upgrades.includes(u))) sound.play("upgrade");
-    // When the server changes the weapon in hand itself (taking a weapon into an empty slot), follow it.
-    if (loadout.active !== serverActive) { serverActive = loadout.active; input.setSlot(loadout.active); }
-    if (snap.pickups) {
-      pickupsNow = snap.pickups;
-      pickupView.sync(snap.pickups);
+    return;
+  }
+  if (a.event === "hit") showAbilityHit(a.x, a.y, a.z);
+  else if (a.event === "pop") showPop(a.id, a.x, a.y, a.z);
+  else if (a.event === "land") { if (!own) showSlam(a.x, a.y, a.z, slamRadiusOf(remotes.mechOf(a.id))); }
+  else if (a.kind === "barrage") showStrike(a.id, own, a.x, a.y, a.z);
+  // Others get nothing for decoys going out: they are meant to be fooled.
+  else if (a.kind === "decoy") { if (own) showOwnDecoys(a.ids ?? []); }
+  else if (!own) showAbilityStart(a.kind, a.x, a.y, a.z);
+};
+net.onPropDestroyed = propDestroyed;
+net.onRoom = (r) => {
+  const wasCountdown = progress.state === "countdown";
+  hostId = r.hostId;
+  if (r.seed !== map.seed || r.tier !== map.tier) swapMap(r.seed, r.tier);
+  ringView.setSchedule(r.ring);
+  dropView.setDrops(r.drops);
+  hud.setRoom(r, net.id);
+  // The shooting range has no ring, so its room never starts a match (Room.receive): no start button for nothing.
+  if (r.tier === "range") document.getElementById("startButton")!.classList.add("hidden");
+  if (r.state === "countdown") { hud.hideResult(); myPlace = null; killReplay.clear(); knockedFrom.clear(); titanView.clear(); rivetView?.clear(); harpoonView?.clear(); }
+  if (r.state === "active" && wasCountdown) hud.flash("GO", 900);
+  progress = { ...progress, state: r.state };
+};
+net.onEliminated = (e) => {
+  if (e.killerId === net.id) knockedFrom.set(e.id, { x: mech.x, z: mech.z });
+  else if (e.killerId !== null && remotes.positionOf(e.killerId, killerAt)) knockedFrom.set(e.id, { x: killerAt.x, z: killerAt.z });
+  const byTitan = e.killerId === null && (e.how?.causes.at(-1) ?? "").startsWith("titan:");
+  hud.feed(e.left ? `${name(e.id)} dropped out` : byTitan && e.id !== net.id ? `The Junk Titan flattened ${name(e.id)}` : e.killerId === null && e.id !== net.id ? `${name(e.id)} fell to the zone` : `${name(e.killerId)} knocked out ${name(e.id)}`);
+  if (e.id === net.id) {
+    myPlace = e.place;
+    // Knocked out by a mech you saw: the replay first, and the server keeps sending what is round the killer.
+    if (!e.left && killReplay.knockedOut(performance.now(), net.id, e.killerId)) spectateId = e.killerId!;
+    // Who got you and how (gate 14c), up as the replay or the spectate camera takes over.
+    if (!e.left) {
+      const words = knockoutWords(e.killerId, e.how, cardNames);
+      hud.showKnockout(words.title, words.by, words.how, hudStats.knockoutCardSeconds);
     }
-    // A rattle every quarter of the way through looting, so holding E sounds like work being done.
-    if (Math.floor(snap.looting * 4) > Math.floor(looting * 4)) sound.play("loot");
-    looting = snap.looting;
-    // A clank for every fifth of a repair, like work being done.
-    if (Math.floor(snap.repairing * 5) > Math.floor(repairing * 5)) sound.play("repair");
-    repairing = snap.repairing;
-    ownModel.repairing = repairing > 0;
-    if (!killReplay.playing) {
-      setMechDamage(ownModel, health.hp, health.dead); // the replay shows your mech as it was
-      if (health.dead && !wasDead) {
-        const from = knockedFrom.get(net.id);
-        knockedFrom.delete(net.id);
-        deathFx.blowApart(ownModel, from ? mech.x - from.x : 0, from ? mech.z - from.z : 0, net.id);
-      }
-    }
-    net.noteSnapshot(snap.ack, snap.ackAgeMs, performance.now());
-    remotes.push(snap.others, snap.tick, performance.now());
-    if (snap.titan) askTitanKit();
-    titanView.push(snap.titan, snap.tick * STEP * 1000, performance.now());
-    for (const n of snap.noises) radar?.hear(n.x, n.z, n.kind, performance.now());
-  };
-  // A scattergun's pellets each arrive as their own shot, a few milliseconds apart: one sound per pull, not one per
-  // pellet, or a blast stacks into a harsh chorus.
-  const lastShotSound = new Map<number, number>();
-  const showShot = (id: number, s: Shot, weapon: number, hitMech: boolean, alt: number) => {
-    if (weapon === harpoonGun && harpoonView) {
-      shotFx.flash(s, weapon, alt);
-      harpoonView.fire(id, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, s.length, alt >= 0);
-    } else {
-      shotFx.show(s, weapon, hitMech, alt);
-    }
-    fallHints.shot(performance.now() / 1000, s.ox, s.oz, s.dx, s.dz, s.length);
-    const now = performance.now();
-    if (now - (lastShotSound.get(id) ?? -Infinity) < 40) return;
-    lastShotSound.set(id, now);
-    const stats = weaponSet.weapons[weapon];
-    const altLook = stats !== undefined && usesAltLook(stats.secondary.kind, alt);
-    sound.play(alt >= 0 ? sound.altShotFor(stats?.id) : sound.shotFor(stats?.id), { x: s.ox, y: s.oy, z: s.oz });
-    // once a pull, like the sound
-    kickShooter(id === net.id ? ownModel : remotes.modelOf(id), stats ? kickIdFor(recoilConfig, stats.id, altLook) : undefined, s.ox, s.oz);
-  };
-  killReplay.onShot = showShot;
-  net.onShot = (s) => {
-    // Your own shots come back too: the replay draws them, live they already showed the moment you fired.
-    const weapon = s.id === net.id ? loadout.slots[firingSlot]! : remotes.weaponOf(s.id);
-    const alt = s.alt ?? -1;
-    killReplay.shot(performance.now(), s.id, s, weapon, s.hitMech, alt);
-    if (s.id === net.id || killReplay.playing) return;
-    showShot(s.id, s, weapon, s.hitMech, alt);
-  };
-  net.onHurt = (h) => damageDiagram.hit(h.zone, h.x, h.y, h.kind);
-  net.onHit = (h) => {
-    flashHitMarker(h.killed);
-    showHit(h.zone, h.damage, h.killed, h.targetId === TITAN_ID);
-    sound.play("hitMarker");
-    shotFx.hitMech(h.x, h.y, h.z, loadout.slots[firingSlot]!, lastOwnAlt);
-  };
-  net.onGrenade = (g) => {
-    killReplay.grenade(performance.now(), g.id, g.x, g.y, g.z, g.vx, g.vy, g.vz);
-    if (g.id === net.id || killReplay.playing) return; // our own grenade is already in the air
-    grenades.spawn(g.x, g.y, g.z, g.vx, g.vy, g.vz);
-    sound.play("grenadeThrow", { x: g.x, y: g.y, z: g.z });
-  };
-  net.onTitan = (m) => {
-    killReplay.titan(performance.now(), m);
-    if (!killReplay.playing) showTitan(m);
-  };
-  net.onExplode = (e) => {
-    killReplay.explode(performance.now(), e.x, e.y, e.z);
-    if (killReplay.playing) return;
-    // A rivet popping: drawn by its rivet, in its turn if a detonation's ripple is running, or here if it was never seen.
-    if (e.rivet !== undefined) { if (!rivetView?.popById(e.rivet)) showRivetPop(e.x, e.y, e.z, rivetStats()?.blastRadius ?? 0); return; }
-    showBlast(e.x, e.y, e.z);
-  };
-  net.onRivet = showRivet;
-  net.onHarpoon = showHarpoon;
-  // Your own start and landing already showed from prediction; anyone's ram or slam connecting shows here. The
-  // warning ring for a strike is always the server's, yours too, so everyone sees the same spot.
-  net.onAbility = (a) => {
-    killReplay.ability(performance.now(), a);
-    if (!killReplay.playing) showAbilityMoment(a);
-  };
-  killReplay.onAbility = (a) => showAbilityMoment(a);
-  const showAbilityMoment = (a: AbilityMessage) => {
-    const own = a.id === net.id;
-    if (a.kind === "rail") {
-      if (a.event === "start") {
-        railFx.charge(a.id, railChargeOf(own ? mech.mech : remotes.mechOf(a.id)), performance.now());
-        sound.play("railCharge", { x: a.x, y: a.y + 2, z: a.z });
-      } else if (a.event === "hit") {
-        if (!railPoseOf(a.id, railPose)) { railPose.x = a.x; railPose.y = a.y; railPose.z = a.z; }
-        railFx.muzzleAt(railPose, railFrom);
-        railFx.fire(a.id, railFrom, a.x, a.y, a.z, performance.now());
-        kickShooter(own ? ownModel : remotes.modelOf(a.id), "railShot", railFrom.x, railFrom.z);
-        sound.play("railShot", { x: railFrom.x, y: railFrom.y + 2, z: railFrom.z });
-        showAbilityHit(a.x, a.y, a.z);
-      }
-      return;
-    }
-    if (a.event === "hit") showAbilityHit(a.x, a.y, a.z);
-    else if (a.event === "pop") showPop(a.id, a.x, a.y, a.z);
-    else if (a.event === "land") { if (!own) showSlam(a.x, a.y, a.z, slamRadiusOf(remotes.mechOf(a.id))); }
-    else if (a.kind === "barrage") showStrike(a.id, own, a.x, a.y, a.z);
-    // Others get nothing for decoys going out: they are meant to be fooled.
-    else if (a.kind === "decoy") { if (own) showOwnDecoys(a.ids ?? []); }
-    else if (!own) showAbilityStart(a.kind, a.x, a.y, a.z);
-  };
-  net.onPropDestroyed = propDestroyed;
-  net.onRoom = (r) => {
-    const wasCountdown = progress.state === "countdown";
-    hostId = r.hostId;
-    if (r.seed !== map.seed || r.tier !== map.tier) swapMap(r.seed, r.tier);
-    ringView.setSchedule(r.ring);
-    dropView.setDrops(r.drops);
-    hud.setRoom(r, net.id);
-    if (r.state === "countdown") { hud.hideResult(); myPlace = null; killReplay.clear(); knockedFrom.clear(); titanView.clear(); rivetView?.clear(); harpoonView?.clear(); }
-    if (r.state === "active" && wasCountdown) hud.flash("GO", 900);
-    progress = { ...progress, state: r.state };
-  };
-  net.onEliminated = (e) => {
-    if (e.killerId === net.id) knockedFrom.set(e.id, { x: mech.x, z: mech.z });
-    else if (e.killerId !== null && remotes.positionOf(e.killerId, killerAt)) knockedFrom.set(e.id, { x: killerAt.x, z: killerAt.z });
-    const byTitan = e.killerId === null && (e.how?.causes.at(-1) ?? "").startsWith("titan:");
-    hud.feed(e.left ? `${name(e.id)} dropped out` : byTitan && e.id !== net.id ? `The Junk Titan flattened ${name(e.id)}` : e.killerId === null && e.id !== net.id ? `${name(e.id)} fell to the zone` : `${name(e.killerId)} knocked out ${name(e.id)}`);
-    if (e.id === net.id) {
-      myPlace = e.place;
-      // Knocked out by a mech you saw: the replay first, and the server keeps sending what is round the killer.
-      if (!e.left && killReplay.knockedOut(performance.now(), net.id, e.killerId)) spectateId = e.killerId!;
-      // Who got you and how (gate 14c), up as the replay or the spectate camera takes over.
-      if (!e.left) {
-        const words = knockoutWords(e.killerId, e.how, cardNames);
-        hud.showKnockout(words.title, words.by, words.how, hudStats.knockoutCardSeconds);
-      }
-    }
-  };
-  net.onResult = (r) => {
-    const won = r.winnerId === net.id;
-    hud.hideKnockout();
-    hud.showResult(won ? "Victory!" : r.winnerId === null ? "Nobody wins" : `${name(r.winnerId)} wins`, myPlace && !won ? myPlace : null, progress.total, statLines(r.stats, name));
-    sound.play("uiWhoosh");
-  };
-  net.onClose = (reason) => {
-    ready = false;
-    hint.classList.remove("hidden");
-    hint.textContent = reason;
-  };
-  // A dropped connection: the mech waits on the server while this tries to get back to it.
-  net.onNotice = (text) => hud.feed(text);
-  net.onReconnecting = (trying) => hud.feed(trying ? "Connection lost. Reconnecting..." : "Back in.");
-  // Too late to get back into that match: join the room afresh. The address already names the room and its settings
-  // (rejoinQuery), so after a server restart the room comes back the way it was.
-  net.onRejoinFailed = () => { keepSession(null); location.reload(); };
-}
+  }
+};
+net.onResult = (r) => {
+  const won = r.winnerId === net.id;
+  hud.hideKnockout();
+  hud.showResult(won ? "Victory!" : r.winnerId === null ? "Nobody wins" : `${name(r.winnerId)} wins`, myPlace && !won ? myPlace : null, progress.total, statLines(r.stats, name));
+  sound.play("uiWhoosh");
+};
+net.onClose = (reason) => {
+  ready = false;
+  hint.classList.remove("hidden");
+  hint.textContent = reason;
+};
+// A dropped connection: the mech waits on the server while this tries to get back to it.
+net.onNotice = (text) => hud.feed(text);
+net.onReconnecting = (trying) => hud.feed(trying ? "Connection lost. Reconnecting..." : "Back in.");
+// Too late to get back into that match: join the room afresh. The address already names the room and its settings
+// (rejoinQuery), so after a server restart the room comes back the way it was.
+net.onRejoinFailed = () => { keepSession(null); location.reload(); };
 
 const crosshair = document.getElementById("crosshair")!;
 const hurtOverlay = document.getElementById("hurt")!;
@@ -1342,46 +1330,11 @@ function swapOwnMech(m: number): void {
   shownNext = -2; // says the HUD line is out of date
 }
 
-// Offline practice drops in like a match: hanging as a ball over the first of the match's drop spots (shared
-// dropSpots.ts, the server's rule) through a countdown that starts once you click in, then falling. The range has
-// no drop-in.
-let offlineDropIn = 0;
-function startDropOffline(): void {
-  const altitude = startAltitude(dropJson.altitudeMeters, map.tier);
-  if (altitude === null) return;
-  const spot = planDropSpots(map.seed, 1, map.world, map.meters, dropSpotStats)[0]!;
-  hangAtSpot(mech, spot.x, spot.z, map.world, altitude);
-  prevX = mech.x; prevY = mech.y; prevZ = mech.z;
-  stepEase.reset();
-  faceDrop();
-  offlineDropIn = matchJson.countdownSeconds;
-}
-
 // Hanging over your spot: the view looks down toward the middle of the map, where most of the fight will be.
 // (Yaw 0 faces -z: the middle at (0, 0) is straight ahead at atan2(x, z).)
 function faceDrop(): void {
   if (Math.hypot(mech.x, mech.z) > 1) aim.yaw = Math.atan2(mech.x, mech.z);
   aim.pitch = dive.camera.startPitchDegrees * Math.PI / 180;
-}
-
-function respawnOffline(): void {
-  Object.assign(mech, createMechState(statsFor(mech.mech), spawnX, spawnY, spawnZ, aim.yaw, mech.mech));
-  startDropOffline();
-}
-if (net === null) startDropOffline();
-
-// The offline countdown, ticking only while you are in the game: "DROP IN 3", then the ball falls.
-function countDownOffline(dt: number): void {
-  if (offlineDropIn <= 0 || !input.locked) return;
-  offlineDropIn -= dt;
-  if (offlineDropIn > 0) {
-    progress = { state: "countdown", seconds: offlineDropIn, alive: 1, total: 1 };
-    return;
-  }
-  progress = { state: "lobby", seconds: 0, alive: 1, total: 1 };
-  releaseDrop(mech);
-  hud.flash("GO", 900);
-  sound.play("go");
 }
 
 window.addEventListener("resize", () => {
@@ -1414,16 +1367,16 @@ function frame(now: number): void {
       });
     }
   }
-  if (net === null && input.wasPressed("KeyR")) respawnOffline();
+  // Practice only: back on your spawn (the room's rule for a knockout outside a match, without the wait).
+  if (practice && input.wasPressed("KeyR")) practice.respawn();
   if (input.wasPressed("KeyM")) hud.feed(sound.toggleMute() ? "Sound off (M)" : "Sound on (M)");
-  if (input.takeEnter() && net && hostId === net.id && progress.state === "lobby") net.sendStart();
-  if (autoStart && clickedIn && net && hostId === net.id && progress.state === "lobby") { autoStart = false; net.sendStart(); }
+  if (input.takeEnter() && hostId === net.id && progress.state === "lobby") net.sendStart();
+  if (autoStart && clickedIn && hostId === net.id && progress.state === "lobby") { autoStart = false; net.sendStart(); }
 
   // Look is applied every frame so the camera answers the mouse at once, not once per sim step.
   input.takeLook(look);
   // Slower while scoped, so aim keeps pace on screen. Dropping in, you can look further down (diveCamera.ts).
   diveCamera.look(aim, look.dx * rig.zoomShare, look.dy * rig.zoomShare, mechStats, dropping(mech) && !health.dead, frameTime);
-  if (net === null) countDownOffline(frameTime);
 
   if (ready) accumulator += frameTime;
   else accumulator = 0;
@@ -1466,8 +1419,7 @@ function frame(now: number): void {
     const moment = ownAbility ? abilityMoment(abilityBefore, mech.abilityTime, ownAbility.kind) : null;
     if (moment === "start") showAbilityStart(ownAbility!.kind, prevX, prevY, prevZ);
     else if (moment === "land") showSlam(mech.x, mech.y, mech.z, slamRadiusOf(mech.mech));
-    net?.sendInput(seq, mechInput, droppingNow);
-    if (net === null && mech.y < KILL_HEIGHT) respawnOffline();
+    net.sendInput(seq, mechInput, droppingNow);
 
     simTime += STEP;
     const wasOverheated = altState.overheat > 0;
@@ -1504,18 +1456,17 @@ function frame(now: number): void {
       kickMech(ownModel, kickFor(recoilConfig, kickIdFor(recoilConfig, weapon.id, altLook)), muzzle[0]!);
     }
     if (!wasOverheated && altState.overheat > 0) sound.play("overheat", { x: mech.x, y: mech.y + 2, z: mech.z });
-    // Online a grenade needs one in the bag. Count it down here so a held key does not throw twice before the server says.
-    const hasGrenade = (net === null || loadout.grenades > 0) && !armsBroken();
+    // A grenade needs one in the bag. Count it down here so a held key does not throw twice before the server says.
+    const hasGrenade = loadout.grenades > 0 && !armsBroken();
     if (mechInput.grenade && hasGrenade && grenadeGate.tryFire(simTime, 1 / grenadeStats.cooldownSeconds)) {
-      if (net) loadout = { ...loadout, grenades: loadout.grenades - 1 };
+      loadout = { ...loadout, grenades: loadout.grenades - 1 };
       throwGrenade(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, grenadeStats, thrown);
       grenades.spawn(thrown.x, thrown.y, thrown.z, thrown.vx, thrown.vy, thrown.vz);
       sound.play("grenadeThrow", { x: thrown.x, y: thrown.y, z: thrown.z });
     }
     shotFx.update(STEP, map.world);
     harpoonView?.update(STEP);
-    // Offline there is no server to send the blast, so it goes off when the fuse ends.
-    grenades.update(STEP, map.world, net === null ? showBlast : undefined);
+    grenades.update(STEP, map.world);
     titanView.step(map.world);
     accumulator -= STEP;
   }
@@ -1547,7 +1498,7 @@ function frame(now: number): void {
   remotes.forEachDrop(dropRemote);
   if ((mech.dropPhase === DROP_HANGING || mech.dropPhase === DROP_BALL) && !health.dead) scrapBalls.ball(x, y, z, mech.vx, mech.vy, mech.vz, 0);
   scrapBalls.end();
-  killReplay.record(performance.now(), net?.id ?? 0, ownModel, mech, health, remotes);
+  killReplay.record(performance.now(), net.id, ownModel, mech, health, remotes);
   // Effects keep the replay's slow motion (tracers move on the sim step and stay at full speed).
   const fxTime = frameTime * killReplay.timeScale;
 
@@ -1587,7 +1538,7 @@ function frame(now: number): void {
   diveCamera.update(rig, ownDrop, -mech.vy, frameTime);
   rig.setFovKick(mech.dashTime > 0 ? mech.dashTime / mechStats.dashSeconds : 0, frameTime);
   // A knocked out player (or someone who arrived mid match) watches a mech that is still standing.
-  const spectating = net !== null && progress.state === "active" && health.dead;
+  const spectating = progress.state === "active" && health.dead;
   let viewX = x, viewY = y, viewZ = z;
   if (replaying) {
     viewX = killReplay.focus.x; viewY = killReplay.focus.y; viewZ = killReplay.focus.z;
@@ -1630,7 +1581,7 @@ function frame(now: number): void {
   else if (dropView.news === "open") { hud.feed("Supply drop open"); dropTipDue = false; }
   if (radar && progress.state === "active") dropView.forEachMarked(matchSeconds, markDrop);
   const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);
-  if (net || progress.state === "countdown") hud.setProgress(progress, ring, mech.dropPhase === DROP_HANGING ? dive.hud.countdownWords : "");
+  hud.setProgress(progress, ring, mech.dropPhase === DROP_HANGING ? dive.hud.countdownWords : "");
 
   // Sound: the ears go where the camera is, jets hiss while firing, and the countdown beeps each second then says go.
   rig.camera.getWorldDirection(camForward);
@@ -1698,7 +1649,8 @@ function frame(now: number): void {
   setMechGear(ownModel, weaponColors[loadout.slots[loadout.active]!] ?? weaponStats.color, loadout.armor);
   pickupView.update(performance.now(), frameTime);
   // Tips, once each in this browser, at the moment they help (tips.ts). Only while you are playing, not watching.
-  const playing = !health.dead && !spectating && input.locked && (net === null || progress.state === "active");
+  // Practice is a lobby, where there is all the time in the world to learn; online the lobby is only a wait.
+  const playing = !health.dead && !spectating && input.locked && (practice !== null || progress.state === "active");
   // Hanging or falling, the one thing to know about the drop.
   if (!health.dead && input.locked && dropping(mech)) tips.offer("drop");
   else if (playing) {
@@ -1742,7 +1694,7 @@ function frame(now: number): void {
     hud.setPrompt(`Repairing ${zoneSet.zones[partToRepair(health.hp, zoneSet)]?.name ?? ""}... ${Math.round(repairing * 100)}%`);
   } else if (!health.dead && remotes.fullWreckNear(mech.x, mech.z, lootConfig.interactRange)) {
     hud.setPrompt("Hold E: loot wreck");
-  } else if (!health.dead && net && partToRepair(health.hp, zoneSet) >= 0) {
+  } else if (!health.dead && partToRepair(health.hp, zoneSet) >= 0) {
     hud.setPrompt(`Hold F: repair ${zoneSet.zones[partToRepair(health.hp, zoneSet)]!.name}`);
   } else {
     hud.setPrompt(tipNow);
@@ -1753,7 +1705,7 @@ function frame(now: number): void {
     : health.dead && progress.state !== "active" ? `Destroyed. Back in ${Math.ceil(health.respawnIn)}...` : "";
   fuelBar.classList.toggle("locked", mech.fuel.locked);
   staminaBar.classList.toggle("locked", mech.stamina.locked);
-  if (panel?.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection, net?.rttMs ?? 0, net ? remotes.viewDelayMs : 0);
+  if (panel?.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection, net.rttMs, remotes.viewDelayMs);
 
   shotFx.draw(rig.camera, fxTime);
   harpoonView?.draw(rig.camera);

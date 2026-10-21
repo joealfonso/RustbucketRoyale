@@ -7,14 +7,14 @@ import type { MechModel } from "./mechModel";
 import { fuseBlink, type RivetLook } from "./weaponFxData";
 
 // The rivet gun's rivets (gate 18b): each one drawn stuck where it hit, in a wall, the ground or riding on a mech at
-// its spot on the body, with a fuse light blinking faster in steps until it pops. Online the server pops them (its
-// explode messages are matched to the rivet they came from, so the pop is drawn rivet sized); offline there is no
-// server, so this pops them itself when the fuse runs out. Detonating them all pops them one after another, a ripple.
+// its spot on the body, with a fuse light blinking faster in steps until it pops. The server pops them (its
+// explode messages are matched to the rivet they came from, so the pop is drawn rivet sized); on the style test page
+// there is no server, so this pops them itself when the fuse runs out. Detonating them all pops them one after another, a ripple.
 // Everything is pooled: a rivet is a slot, drawn as one instance of one mesh.
 
 export interface StuckRivet {
   owner: number; // who fired it
-  id: number; // the server's id for it, or a local one offline
+  id: number; // the server's id for it, or a local one on the style test page
   x: number; y: number; z: number; // where it is in the world (on a mech: where it was when it stuck)
   outX: number; outY: number; outZ: number; // the way its head faces, out of what it hit
   mech: number; // the mech it rides on, or -1 for the map
@@ -55,7 +55,7 @@ export class RivetView {
   private scale = new THREE.Vector3(1, 1, 1);
   // Draws a pop: the explosion look at the rivet's spot, `radius` metres.
   onPop?: (x: number, y: number, z: number, radius: number) => void;
-  // Offline only: pops when the fuse runs out, as the server would.
+  // With no server (the style test page): pops when the fuse runs out, as the server would.
   popOwnFuses = false;
 
   // `radius` is a pop's size (weapons.json blastRadius, read live so tuning shows); `modelOf` finds a mech as drawn.
@@ -121,8 +121,8 @@ export class RivetView {
     return n;
   }
 
-  // Every one of `owner`'s rivets goes, one after another, about oldest first. Offline this is
-  // the whole detonation; online the server's blasts that follow are matched to rivets already popping and skipped.
+  // Every one of `owner`'s rivets goes, one after another, about oldest first. Without a server (the style test page)
+  // this is the whole detonation; in a room the server's blasts that follow are matched to rivets already popping and skipped.
   detonate(owner: number): number {
     let order = 0;
     for (const s of this.slots) {
@@ -142,13 +142,6 @@ export class RivetView {
       return true;
     }
     return false;
-  }
-
-  // Offline, at the cap: the oldest of `owner`'s rivets pops to make room, as the server does.
-  popOldest(owner: number): void {
-    let oldest: Slot | null = null;
-    for (const s of this.slots) if (s.live && s.owner === owner && s.popIn < 0 && (!oldest || s.age > oldest.age)) oldest = s;
-    if (oldest) oldest.popIn = 0;
   }
 
   clear(): void {

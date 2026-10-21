@@ -16,7 +16,7 @@ export class ShotFx {
   private altFlashes: MuzzleFlashes;
   readonly impacts: ImpactFx;
   // Called where a bullet hits the map, for the sound; with the weapon (index in weapons.json) and the face it hit,
-  // so offline a rivet can stick there.
+  // so the style test page can stick a rivet there.
   onImpact?: (x: number, y: number, z: number, weapon: number, nx: number, ny: number, nz: number) => void;
   // Called where a bullet the shooter was told hit a mech arrives (the style page's firing range sticks rivets there).
   onMechImpact?: (x: number, y: number, z: number, weapon: number) => void;

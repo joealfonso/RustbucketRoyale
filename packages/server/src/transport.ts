@@ -1,11 +1,11 @@
 import { createServer, type IncomingMessage } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { STEP, SnapshotMemory, encodeServerBinary, parseBotDifficulty, parseRejoin, type ServerMessage } from "@rustbucket/shared";
+import { SnapshotMemory, encodeServerBinary, parseBotDifficulty, parseRejoin, type ServerMessage } from "@rustbucket/shared";
 import type { RoomManager, Ticket } from "./RoomManager";
 import type { StaticSite } from "./staticSite";
+import { startTickLoop } from "./tickLoop";
 
 const MAX_MESSAGE_BYTES = 4096;
-const MAX_CATCH_UP_TICKS = 5;
 const MAX_BOTS_REQUESTED = 64; // the room trims this to what the map has spawns for
 // A client sends nothing before its welcome, so messages while its room is prepared are dropped. This many is the
 // burst a joined player may send before the room's flood kick (net.json: 150 a second, kicked at 100 over), so an
@@ -139,23 +139,7 @@ export function startServer(
     socket.on("error", () => socket.close());
   });
 
-  // Drift corrected loop: run as many ticks as are owed, so a slow tick does not slow the game down.
-  let next = performance.now();
-  let timer: NodeJS.Timeout;
-  const loop = () => {
-    const now = performance.now();
-    let ticks = 0;
-    while (next <= now && ticks < MAX_CATCH_UP_TICKS) {
-      const started = performance.now();
-      manager.tick();
-      onTick?.(performance.now() - started, started - next);
-      next += STEP * 1000;
-      ticks++;
-    }
-    if (next <= now) next = now; // fell too far behind, skip ahead
-    timer = setTimeout(loop, Math.max(1, next - performance.now()));
-  };
-  loop();
+  const stopTicking = startTickLoop(() => manager.tick(), onTick);
 
   return new Promise((resolve) => {
     http.listen(port, () => {
@@ -164,7 +148,7 @@ export function startServer(
       resolve({
         port: actualPort,
         close: () => new Promise((done) => {
-          clearTimeout(timer);
+          stopTicking();
           clearInterval(heartbeat);
           for (const client of wss.clients) client.terminate();
           wss.close(() => http.close(() => done()));
