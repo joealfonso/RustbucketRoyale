@@ -77,28 +77,73 @@ export function waterGeometry(terrain: Terrain, seaMeters = 0): THREE.BufferGeom
 
 const f = (n: number) => n.toFixed(4);
 
-// The surface's colour for this spot, by depth, with the slow streaks. Same sin-free hash as the ground, for the
-// same reason: sin() of large world coordinates differs between graphics cards.
+// The surface's colour and see-through for this spot (gate V11): by depth, with the drifting streaks and glints, the
+// sky's hue on the far water and foam along the bank. Same sin-free hash as the ground, for the same reason: sin()
+// of large world coordinates differs between graphics cards. Every step is hard, so it stays flat toon colour.
 export function waterShaderCode(look: WaterLook["surface"]): string {
-  const { shore, deep, ragged, streaks } = look;
+  const { shallow, deep, ragged, streaks, glints, sky, foam } = look;
   const angle = (streaks.angleDegrees * Math.PI) / 180;
+  const ripple = foam.ripple;
+  const skySteps = sky.steps.map((t) => `if (facing < ${f(t.facingBelow)}) toSky = ${f(t.amount)};`).join("\n      ");
   return `
     {
+      // Slopes first: derivatives are only sure to be right before any pixel of the quad is discarded.
+      vec2 wp = vWaterPos.xz;
+      vec2 px = dFdx(wp), py = dFdy(wp);
+      float dx = dFdx(vWaterDepth), dy = dFdy(vWaterDepth);
       if (vWaterDepth <= 0.0) discard;
-      vec2 wp = vWaterPos;
-      float pixel = length(fwidth(wp));
-      float depth = vWaterDepth + (wNoise(wp * ${f(ragged.scale)}) - 0.5) * ${f(ragged.meters * 2)};
-      // Long light streaks drifting along their length, one band lighter than the water under them, faded out
-      // before they are thinner than a pixel.
+      float pixel = length(abs(px) + abs(py)); // metres across a pixel, as fwidth would give
+      float n = wNoise(wp * ${f(ragged.scale)});
+      float depth = vWaterDepth + (n - 0.5) * ${f(ragged.meters * 2)};
+      // Metres from the bank: the depth runs straight across each triangle, so its slope over the ground says how
+      // far away it reaches zero. Flat beds have no slope and are far from any bank.
+      float det = px.x * py.y - px.y * py.x;
+      vec2 grad = abs(det) > 1e-12 ? vec2(dx * py.y - dy * px.y, dy * px.x - dx * py.x) / det : vec2(0.0);
+      float bank = vWaterDepth / max(length(grad), 1e-4) + (n - 0.5) * ${f(foam.raggedMeters * 2)};
+
+      // Long thin light streaks drifting along their length: one contour line of a long stretched noise, so they wander
+      // like wind lines. Dropped once they would be thinner than a pixel, before they shimmer.
       vec2 sp = vec2(wp.x * ${f(Math.cos(angle))} + wp.y * ${f(Math.sin(angle))}, -wp.x * ${f(Math.sin(angle))} + wp.y * ${f(Math.cos(angle))});
       sp.x += waterTime * ${f(streaks.driftMetersPerSecond)};
       float streak = wNoise(vec2(sp.x * ${f(streaks.scale / streaks.stretch)}, sp.y * ${f(streaks.scale)}) + 19.0);
-      float keep = 1.0 - smoothstep(${f(0.25 / streaks.scale)}, ${f(0.6 / streaks.scale)}, pixel);
-      bool lit = streak > ${f(streaks.above)} && keep > 0.5;
-      vec3 c = lit ? waterStreak : waterMain;
-      if (depth < ${f(shore.belowMeters)}) c = waterShore;
-      else if (depth > ${f(deep.aboveMeters)}) c = lit ? waterMain : waterDeep;
+      // Broken where the still ragged noise is low, so they come and go in pieces as they drift.
+      bool lit = abs(streak - ${f(streaks.level)}) < ${f(streaks.thickness / 2)} && n > ${f(streaks.gapsBelow)} && pixel < ${f(streaks.thickness / streaks.scale)};
+
+      // Glints: at most one short dash per cell, somewhere in it, swelling and shrinking on the cell's own beat.
+      vec2 gp = sp / ${f(glints.cellMeters)};
+      vec2 cell = floor(gp);
+      vec2 offset = (vec2(wHash(cell + 3.1), wHash(cell + 5.7)) - 0.5) * ${f(glints.cellMeters - glints.lengthMeters)};
+      vec2 gl = (fract(gp) - 0.5) * ${f(glints.cellMeters)} - offset;
+      float beat = fract(waterTime / ${f(glints.seconds)} + wHash(cell + 11.3) * 13.0) / ${f(Math.max(glints.share, 1e-4))};
+      float swell = 1.0 - abs(2.0 * beat - 1.0);
+      bool glint = beat < 1.0 && abs(gl.x) < ${f(glints.lengthMeters / 2)} * swell && abs(gl.y) < ${f(glints.widthMeters / 2)} * swell && pixel < ${f(glints.widthMeters)};
+
+      vec3 c = depth > ${f(deep.aboveMeters)} ? waterDeep : waterMain;
+      float alpha = ${f(look.opacity)};
+      if (depth < ${f(shallow.belowMeters)}) { c = waterShallow; alpha = ${f(shallow.opacity)}; }
+      else if (lit) c = waterStreak;
+
+      // The flatter the look, the more of the sky's hue. The hemisphere light's sky colour is each preset's sky.
+      vec3 toEye = cameraPosition - vWaterPos;
+      vec2 rp = vec2(wp.x, wp.y + waterTime * ${f(sky.ripple.driftMetersPerSecond)}) * ${f(sky.ripple.scale)} + 43.0;
+      float facing = toEye.y / length(toEye) + (wNoise(rp) - 0.5) * ${f(sky.ripple.facing * 2)};
+      float toSky = 0.0;
+      ${skySteps}
+      #if NUM_HEMI_LIGHTS > 0
+        vec3 skyLight = hemisphereLights[0].skyColor;
+        c = mix(c, skyLight / max(max(skyLight.r, max(skyLight.g, skyLight.b)), 1e-4) * ${f(sky.lightness)}, toSky);
+      #endif
+      if (glint && depth >= ${f(shallow.belowMeters)}) c = waterGlint;
+
+      // Foam along the bank, and a thin ripple rolling in to it, swelling then thinning as it comes, a little later
+      // or sooner along each stretch of bank.
+      float wave = fract(waterTime / ${f(ripple.seconds)} + n * ${f(ripple.unevenShare)});
+      float ringHalf = ${f(ripple.widthMeters)} * min(wave, 1.0 - wave);
+      bool ring = abs(bank - ${f(foam.meters)} - ${f(ripple.fromMeters)} * (1.0 - wave)) < ringHalf && ringHalf * 2.0 > pixel;
+      // Never thinner than a pixel, so far off it is a steady light line round the water, not a flicker.
+      if (bank < max(${f(foam.meters)}, pixel) || ring) { c = waterFoam; alpha = ${f(foam.opacity)}; }
       diffuseColor.rgb = c;
+      diffuseColor.a = alpha;
     }`;
 }
 
@@ -111,33 +156,38 @@ const WATER_GLSL = `
   }`;
 
 // The water's material: the toon bands (so it is lit like the ground under every light preset, and fogged the same),
-// no rim, no gloss, the colour picked by depth. A touch see-through at most, so wading legs sink into it.
+// no rim, no gloss, the colour and see-through picked per spot. Mostly a touch see-through, so wading legs sink into
+// it; more so in the shallows, where the muddy bed shows and the bank meets it softly.
 export function waterMaterial(look: WaterLook["surface"], ramp: THREE.Texture, color: (name: string) => string, time: { value: number }): THREE.MeshToonMaterial {
-  const m = new THREE.MeshToonMaterial({ color: color(look.main), gradientMap: ramp, transparent: look.opacity < 1, opacity: look.opacity });
+  const seeThrough = Math.min(look.opacity, look.shallow.opacity, look.foam.opacity) < 1;
+  const m = new THREE.MeshToonMaterial({ color: color(look.main), gradientMap: ramp, transparent: seeThrough, opacity: look.opacity });
   // Pulled a hair toward the camera, so where it meets the shore the water wins instead of flickering with the ground.
   m.polygonOffset = true;
   m.polygonOffsetFactor = -1;
   m.polygonOffsetUnits = -1;
-  const colors: Record<string, string> = { waterMain: look.main, waterShore: look.shore.color, waterDeep: look.deep.color, waterStreak: look.streaks.color };
+  const colors: Record<string, string> = {
+    waterMain: look.main, waterShallow: look.shallow.color, waterDeep: look.deep.color, waterStreak: look.streaks.color,
+    waterGlint: look.glints.color, waterFoam: look.foam.color,
+  };
   const code = waterShaderCode(look);
   m.onBeforeCompile = (shader) => {
     for (const [name, value] of Object.entries(colors)) shader.uniforms[name] = { value: new THREE.Color(color(value)) };
     shader.uniforms.waterTime = time;
     shader.vertexShader = shader.vertexShader
-      .replace("void main() {", "attribute float waterDepth;\nvarying float vWaterDepth;\nvarying vec2 vWaterPos;\nvoid main() {")
+      .replace("void main() {", "attribute float waterDepth;\nvarying float vWaterDepth;\nvarying vec3 vWaterPos;\nvoid main() {")
       .replace("#include <begin_vertex>", `#include <begin_vertex>
         vWaterDepth = waterDepth;
-        vWaterPos = (modelMatrix * vec4(transformed, 1.0)).xz;`);
+        vWaterPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
     const declarations = Object.keys(colors).map((name) => `uniform vec3 ${name};`).join("\n");
     shader.fragmentShader = shader.fragmentShader
-      .replace("void main() {", `varying float vWaterDepth;\nvarying vec2 vWaterPos;\nuniform float waterTime;\n${declarations}\n${WATER_GLSL}\nvoid main() {`)
+      .replace("void main() {", `varying float vWaterDepth;\nvarying vec3 vWaterPos;\nuniform float waterTime;\n${declarations}\n${WATER_GLSL}\nvoid main() {`)
       .replace("#include <color_fragment>", `#include <color_fragment>\n${code}`);
   };
   m.customProgramCacheKey = () => "toon-water";
   return m;
 }
 
-// Streaks drift for this long and then start over, so the time stays small enough for float precision.
+// Streaks, glints and ripples drift for this long and then start over, so the time stays small enough for float precision.
 const TIME_WRAP_SECONDS = 3600;
 
 // The water of the current map. The material is made once; a new map only swaps the geometry.

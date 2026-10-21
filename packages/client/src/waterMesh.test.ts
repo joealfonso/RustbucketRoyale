@@ -114,10 +114,13 @@ describe("water look", () => {
   const look = parseWaterLook(waterJson);
 
   it("loads the data file and refuses bands out of order", () => {
-    expect(look.surface.shore.belowMeters).toBeLessThan(look.surface.deep.aboveMeters);
+    expect(look.surface.shallow.belowMeters).toBeLessThan(look.surface.deep.aboveMeters);
     const bad = JSON.parse(JSON.stringify(waterJson)) as typeof waterJson;
-    bad.surface.shore.belowMeters = 2;
-    expect(() => parseWaterLook(bad)).toThrow(/shore/);
+    bad.surface.shallow.belowMeters = 2;
+    expect(() => parseWaterLook(bad)).toThrow(/shallow/);
+    const sky = JSON.parse(JSON.stringify(waterJson)) as typeof waterJson;
+    sky.surface.sky.steps.reverse();
+    expect(() => parseWaterLook(sky)).toThrow(/sky steps/);
     const drops = JSON.parse(JSON.stringify(waterJson)) as typeof waterJson;
     drops.splashes.wade.dropSpeed = [5, 1];
     expect(() => parseWaterLook(drops)).toThrow(/dropSpeed/);
@@ -134,5 +137,6 @@ describe("water look", () => {
     expect(m.fog).toBe(true);
     expect(m.gradientMap).toBeTruthy();
     expect(m.opacity).toBe(look.surface.opacity);
+    expect(m.transparent).toBe(true); // the shallows are see-through even if the rest is not
   });
 });

@@ -2,15 +2,15 @@
   "regions": {
     "scale": 0.022,
     "darkMoss": {
-      "color": "#4F6C34",
+      "color": "#587939",
       "below": 0.3
     },
     "dryGrass": {
-      "color": "#848049",
+      "color": "#918D51",
       "above": 0.65
     },
     "dirt": {
-      "color": "#76624A",
+      "color": "#836D52",
       "above": 0.76
     }
   },

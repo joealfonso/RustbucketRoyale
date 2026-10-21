@@ -1,6 +1,29 @@
 {
   "radiusMeters": 120,
-  "scatterPerChunk": 40,
+  "scatterPerChunk": 18,
+  "scatter": {
+    "pileSize": [
+      2,
+      4
+    ],
+    "spreadMeters": 1.8,
+    "wallGapMeters": [
+      1.0,
+      2.2
+    ],
+    "anchorAboveMeters": 1.2,
+    "openShare": 0.2,
+    "bushByTree": 0.35,
+    "mix": {
+      "tyreFlat": 14,
+      "tyreStack": 10,
+      "tyreLeaning": 6,
+      "pipe": 18,
+      "plate": 26,
+      "drum": 12,
+      "bush": 14
+    }
+  },
   "buildAtOnce": 2,
   "triangleBudget": {
     "perCubicMetre": 60,
@@ -12,12 +35,23 @@
     "fadeMeters": 12,
     "cellMeters": 8,
     "recheckMeters": 1.5,
-    "triesPerCell": 64,
-    "patchMeters": 16,
-    "patchFloor": 0.3,
+    "triesPerCell": 56,
+    "patchMeters": 18,
+    "patchEdge": [
+      0.32,
+      0.4
+    ],
+    "patchFloor": 0.01,
+    "pathMeters": 34,
+    "pathWidth": 0.03,
+    "pileMeters": 6,
+    "pileEdge": [
+      0.55,
+      0.66
+    ],
     "clearMeters": 0.3,
     "padMeters": 3,
-    "padDensity": 0.35,
+    "padDensity": 0.22,
     "shoreMeters": 0.6,
     "slopeAbove": 0.3,
     "treeMeters": 4.5,
@@ -48,37 +82,37 @@
       },
       "rubble": {
         "scale": [
-          0.8,
-          1.6
+          1.3,
+          2.2
         ]
       },
       "scrap": {
         "scale": [
-          0.9,
-          1.5
+          1.4,
+          2.1
         ]
       }
     },
     "mixes": {
       "open": {
-        "grass": 62,
-        "weeds": 14,
-        "fern": 4,
-        "rubble": 8,
-        "scrap": 12
+        "grass": 80,
+        "weeds": 6,
+        "fern": 6,
+        "rubble": 0,
+        "scrap": 0
       },
       "slope": {
-        "grass": 40,
-        "weeds": 8,
-        "fern": 30,
-        "rubble": 20,
-        "scrap": 2
+        "grass": 50,
+        "weeds": 4,
+        "fern": 40,
+        "rubble": 0,
+        "scrap": 0
       },
       "trees": {
         "grass": 30,
-        "weeds": 5,
-        "fern": 60,
-        "rubble": 5,
+        "weeds": 4,
+        "fern": 62,
+        "rubble": 0,
         "scrap": 0
       },
       "shore": {
@@ -90,10 +124,10 @@
       },
       "pad": {
         "grass": 0,
-        "weeds": 12,
+        "weeds": 10,
         "fern": 0,
-        "rubble": 52,
-        "scrap": 36
+        "rubble": 50,
+        "scrap": 40
       }
     }
   },

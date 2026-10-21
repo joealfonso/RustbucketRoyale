@@ -1,26 +1,67 @@
 {
   "surface": {
-    "main": "#687A64",
-    "shore": {
-      "color": "#A4A98E",
-      "belowMeters": 0.16
+    "main": "#506A62",
+    "opacity": 0.9,
+    "shallow": {
+      "color": "#6B6F55",
+      "belowMeters": 0.25,
+      "opacity": 0.6
     },
     "deep": {
-      "color": "#4E604F",
-      "aboveMeters": 0.75
+      "color": "#36505A",
+      "aboveMeters": 0.7
     },
-    "opacity": 0.9,
     "ragged": {
       "scale": 0.4,
       "meters": 0.05
     },
     "streaks": {
-      "color": "#7D8F78",
+      "color": "#9CB0A2",
       "scale": 0.22,
-      "stretch": 9,
+      "stretch": 5,
       "angleDegrees": 28,
-      "above": 0.7,
+      "level": 0.62,
+      "thickness": 0.05,
+      "gapsBelow": 0.45,
       "driftMetersPerSecond": 0.35
+    },
+    "glints": {
+      "color": "#E4E0C8",
+      "cellMeters": 4,
+      "lengthMeters": 1.2,
+      "widthMeters": 0.12,
+      "share": 0.18,
+      "seconds": 1.8
+    },
+    "sky": {
+      "lightness": 0.42,
+      "steps": [
+        {
+          "facingBelow": 0.45,
+          "amount": 0.22
+        },
+        {
+          "facingBelow": 0.2,
+          "amount": 0.4
+        }
+      ],
+      "ripple": {
+        "scale": 0.12,
+        "facing": 0.05,
+        "driftMetersPerSecond": 0.6
+      }
+    },
+    "foam": {
+      "color": "#D6D0B2",
+      "opacity": 0.9,
+      "meters": 0.45,
+      "raggedMeters": 0.25,
+      "ripple": {
+        "fromMeters": 2.5,
+        "widthMeters": 0.25,
+        "seconds": 4.5,
+        "unevenShare": 0.4
+      }
     }
   },
   "splashes": {

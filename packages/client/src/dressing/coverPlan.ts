@@ -11,7 +11,9 @@ import { rng, seedOf } from "./kinds";
 //  - "trees": round a trunk, ferns;
 //  - "slope": steeper ground, more ferns and stones;
 //  - "open": the rest, mostly grass.
-// A slow noise over the map makes lush and bare patches, so the cover is uneven on purpose.
+// Plants grow in clear patches with bare dirt between and bare paths winding through them, and junk on a pad gathers
+// in a few piles along the walls, so the ground reads as shapes rather than an even sprinkle (V11). Loose junk on open
+// ground is the scatter's job (scatter.ts), in a few bigger piles.
 
 export interface CoverMap {
   meters: number;
@@ -121,6 +123,12 @@ function patchNoise(seed: number, salt: number, spacing: number, x: number, z: n
   return top + (bottom - top) * sz;
 }
 
+// 0 below lo, 1 above hi, a smooth step between.
+function ramp([lo, hi]: number[], v: number): number {
+  const t = Math.min(1, Math.max(0, (v - lo!) / (hi! - lo!)));
+  return t * t * (3 - 2 * t);
+}
+
 function pickKind(mix: Record<CoverKind, number>, roll: number): number {
   let total = 0;
   for (const k of COVER_KINDS) total += mix[k];
@@ -146,7 +154,13 @@ export function planCell(sites: CoverSites, map: CoverMap, c: CoverConfig, cx: n
     const lush = patchNoise(map.seed, 0x1a5, c.patchMeters, x, z);
     const ground = sites.groundAt(x, z);
     if (!ground) continue;
-    const density = (c.patchFloor + (1 - c.patchFloor) * lush) * (ground === "pad" ? c.padDensity : 1);
+    let density: number;
+    if (ground === "pad") density = c.padDensity * ramp(c.pileEdge, patchNoise(map.seed, 0x9a1, c.pileMeters, x, z));
+    else {
+      // A path is where a second, larger noise crosses its middle: a line that wanders, never a grid.
+      const onPath = Math.abs(patchNoise(map.seed, 0x7a7, c.pathMeters, x, z) - 0.5) < c.pathWidth;
+      density = onPath ? 0 : c.patchFloor + (1 - c.patchFloor) * ramp(c.patchEdge, lush);
+    }
     if (keep >= density) continue;
     const kind = pickKind(c.mixes[ground], roll);
     const [lo, hi] = c.kinds[COVER_KINDS[kind]!].scale as [number, number];

@@ -98,6 +98,35 @@ describe("ground cover", () => {
     expect(problems.slice(0, 5)).toEqual([]);
   });
 
+  it("leaves open ground to plants: junk only gathers round buildings, and bare ground stays mostly bare", () => {
+    const junk = new Set(["rubble", "scrap"].map((k) => COVER_KINDS.indexOf(k as never)));
+    let open = 0;
+    const problems: string[] = [];
+    for (const item of itemsAround(map.spawn[0], map.spawn[2])) {
+      // Clumps are stored as 32-bit floats, so one on a slope right at the limit can read back as open ground.
+      if (sites.groundAt(item[1]!, item[3]!) !== "open" || sites.slopeAt(item[1]!, item[3]!) > config.slopeAbove - 0.02) continue;
+      open++;
+      if (junk.has(item[0]!)) problems.push(`a ${COVER_KINDS[item[0]!]} on open ground at ${item[1]!.toFixed(1)}, ${item[3]!.toFixed(1)}`);
+    }
+    expect(open).toBeGreaterThan(500);
+    expect(problems.slice(0, 5)).toEqual([]);
+  });
+
+  it("grows grass in patches with bare ground between, not an even sprinkle", () => {
+    // Clumps per 2 m square over the 13 by 13 cells round the spawn: plenty of squares are bare, and of the rest
+    // most are lush rather than a lone clump. Before V11 only about one square in seven was bare.
+    const squares = new Map<string, number>();
+    for (const item of itemsAround(map.spawn[0], map.spawn[2])) {
+      const key = `${Math.floor(item[1]! / 2)},${Math.floor(item[3]! / 2)}`;
+      squares.set(key, (squares.get(key) ?? 0) + 1);
+    }
+    const counts = [...squares.values()];
+    const all = ((13 * config.cellMeters) / 2) ** 2;
+    const lush = counts.filter((n) => n >= 3).length, sparse = counts.filter((n) => n === 1).length;
+    expect(1 - counts.length / all).toBeGreaterThan(0.35);
+    expect(lush).toBeGreaterThan(sparse * 2);
+  });
+
   it("sits on the ground and stays low enough never to read as cover", () => {
     const problems: string[] = [];
     for (const item of itemsAround(map.spawn[0], map.spawn[2], 3)) {

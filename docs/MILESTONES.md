@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none in progress (13c, 12c and M10 done)
-Current visual milestone: none in progress (V10 and S1 done)
+Current visual milestone: V11 built, waiting for Joseph's playtest
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -178,3 +178,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-20: Sound gate S1 built (Joseph: "the sounds need to be improved", guns and explosions first, from free packs), waiting for his ears. Autocannon (3 takes), scattergun (3), spike driver (2), Rail Shot, explosions (3) and the Titan's fall are recordings from two CC0 packs, layered and pitched for mech-sized guns; 13 files, about 250 kB. Loudness matched to the old sounds by measurement only: nobody has listened yet. Volumes in data/audio.json.
 - 2026-10-20: V10, the mech outline fix and sound gate S1 passed by Joseph's playtest ("both look good").
 - 2026-10-20: Gate 12c and M10 (the friend test over the internet) passed by Joseph's call ("pass both"), without numbers recorded here.
+- 2026-10-20: V11 built on Joseph's go ("plan and build the cleaner, brighter world gate"), waiting for his playtest. The world is inked like the mechs (no pale halos round props, rocks, buildings, pickups); golden afternoon's sun higher and stronger so flat ground is lit, overcast with real shadows, stronger rim and contact darkening, ground colours about 10% lighter; water reads as water (slate surface apart from the grass, foam along the bank, ripples rolling in, sky tint at a distance, broken streaks and glints, muddy shallows); grass grows in patches with bare paths, junk only in piles by walls and buildings, the confetti litter gone. GPU unchanged, 10% fewer triangles. Check: a pond up close and from afar, open ground at each map size, dusk water (not seen here). Values in data/look.json, ground.json, water.json, dressing.json.

@@ -14,7 +14,12 @@ export interface CoverConfig {
   recheckMeters: number; // the view must move this far before the instances are rewritten
   triesPerCell: number; // spots tried per cell where the ground is at its lushest
   patchMeters: number; // the size of lush and bare patches, so the cover is uneven on purpose
-  patchFloor: number; // how much of the full density the barest patches keep (0 to 1)
+  patchEdge: number[]; // the patch noise is bare below the first value and full above the second: a clear edge, not a fade
+  patchFloor: number; // how much of the full density bare ground keeps (0 to 1), a stray clump or two
+  pathMeters: number; // the size of the noise whose middle line is a bare path winding through the grass
+  pathWidth: number; // how far either side of that line (in noise units, 0 to 0.5) stays bare
+  pileMeters: number; // the size of the noise that gathers junk round buildings into piles
+  pileEdge: number[]; // like patchEdge, for the piles: no junk below the first value, full above the second
   clearMeters: number; // kept between cover and any box footprint
   padMeters: number; // the level hard ground round a building: rubble and junk, no plants
   padDensity: number; // the share of tries kept on a pad or under a roof
@@ -31,13 +36,20 @@ export function parseCover(raw: unknown): CoverConfig {
   const c = raw as CoverConfig;
   const fail = (what: string) => { throw new Error(`dressing.json: cover.${what}`); };
   if (!c || typeof c !== "object") fail("is missing");
-  for (const key of ["radiusMeters", "fadeMeters", "cellMeters", "recheckMeters", "triesPerCell", "patchMeters", "patchFloor", "clearMeters",
+  for (const key of ["radiusMeters", "fadeMeters", "cellMeters", "recheckMeters", "triesPerCell", "patchMeters", "patchFloor", "pathMeters",
+    "pathWidth", "pileMeters", "clearMeters",
     "padMeters", "padDensity", "shoreMeters", "slopeAbove", "treeMeters", "maxPerKind"] as const) {
     if (typeof c[key] !== "number" || !(c[key] >= 0)) fail(`${key} must be a number, 0 or more`);
   }
   if (!(c.fadeMeters < c.radiusMeters)) fail("fadeMeters must be less than radiusMeters");
   if (!(c.cellMeters > 0) || !(c.recheckMeters > 0)) fail("cellMeters and recheckMeters must be above 0");
   if (c.patchFloor > 1 || c.padDensity > 1) fail("patchFloor and padDensity are shares, 0 to 1");
+  if (!(c.patchMeters > 0) || !(c.pathMeters > 0) || !(c.pileMeters > 0)) fail("patchMeters, pathMeters and pileMeters must be above 0");
+  if (c.pathWidth >= 0.5) fail("pathWidth is in noise units, under 0.5");
+  for (const key of ["patchEdge", "pileEdge"] as const) {
+    const e = c[key];
+    if (!Array.isArray(e) || e.length !== 2 || !(e[0]! >= 0) || !(e[1]! > e[0]!) || e[1]! > 1) fail(`${key} must be [low, high], 0 to 1, low under high`);
+  }
   if (!Array.isArray(c.dryTint) || c.dryTint.length !== 3) fail("dryTint must be [r, g, b]");
   for (const kind of COVER_KINDS) {
     const s = c.kinds?.[kind]?.scale;

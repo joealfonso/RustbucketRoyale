@@ -30,8 +30,8 @@ export interface LookConfig {
   bands: number[]; // brightness of each band, darkest first
   bandEdges: number[]; // where one band turns into the next, 0 (facing away from the light) to 1 (facing it)
   rim: { strength: number; width: number; color: string };
-  // `darken` scales the colour in linear light, which reads lighter on screen than the number says (0.35 shows as
-  // about 62%). Mechs use `mechDarken`, a share of the brightness you see, so their outlines read as ink, not a halo.
+  // Both darkens are a share of the brightness you see, so outlines read as ink, not a pale halo (scaling in linear
+  // light made 0.35 show as about 62%). Mechs are inked a little darker than the world so they stand out from it.
   outline: { widthMeters: number; darken: number; mechDarken: number; mechWidthMeters: number };
   // Damage eats paint to rust: `cover` share of a part at zero hit points, in patches `scale` per metre, with a dark
   // rim `rim` wide (in noise units) round each patch.
@@ -80,6 +80,9 @@ export function parsePalette(raw: unknown): Palette {
   for (const [name, hex] of Object.entries(p.colors)) if (!/^#[0-9a-fA-F]{6}$/.test(hex)) throw new Error(`palette.json: ${name} is not a colour`);
   return p;
 }
+
+// A colour darkened to a share of its on-screen brightness, as a working (linear) colour.
+const ink = (hex: string, share: number) => new THREE.Color(hex).convertLinearToSRGB().multiplyScalar(share).convertSRGBToLinear();
 
 export function parseLook(raw: unknown): LookConfig {
   const l = raw as LookConfig;
@@ -400,7 +403,7 @@ export class Toon {
     const hex = this.color(name);
     let m = this.outlines.get(hex);
     if (!m) {
-      m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(this.look.outline.darken), side: THREE.BackSide });
+      m = new THREE.MeshBasicMaterial({ color: ink(hex, this.look.outline.darken), side: THREE.BackSide });
       this.outlines.set(hex, m);
     }
     return m;
@@ -415,8 +418,7 @@ export class Toon {
     let m = this.shellOutlines.get(key);
     if (!m) {
       const { outline } = this.look;
-      const color = mech ? new THREE.Color(hex).convertLinearToSRGB().multiplyScalar(outline.mechDarken).convertSRGBToLinear() : new THREE.Color(hex).multiplyScalar(outline.darken);
-      m = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
+      m = new THREE.MeshBasicMaterial({ color: ink(hex, mech ? outline.mechDarken : outline.darken), side: THREE.BackSide });
       const width = mech ? outline.mechWidthMeters : outline.widthMeters;
       m.onBeforeCompile = (shader) => {
         // outlineNormal (outlineNormals.ts) keeps flat-shaded shells closed at the edges; every geometry drawn with

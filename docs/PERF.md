@@ -510,3 +510,6 @@ Same method and view as the budget measurement above (roster view, five mechs at
 ### Bot on bot knockouts (2026-10-20)
 Soak seeds 11 to 13, small and medium, knockouts of a bot by a bot by how far the nearest living stand-in person was (within 150 m is radar range). Before / after hunting and personDistanceScale 1.6: small within 150 m 10 / 13, zone deaths 0 / 1; medium within 150 m 2 / 3, 150 to 300 m 18 / 12, more than 300 m (fought on paper) 19 / 31, zone deaths 25 / 20. Match length and bandwidth unchanged (20 to 29 kbps, tick p99 0.13 to 0.19 ms).
 
+### V11 cleaner world (2026-10-20)
+Production builds of the commit before and after, served side by side, headless Chrome 1600 x 900 on the M4, offline medium spawn: seed 11 triangles 1.32M -> 1.20M, seed 23 1.41M -> 1.28M, draw calls unchanged (249 and 243). GPU median before / after, three rounds on seed 11: 5.95 / 6.83, 7.98 / 7.16, 7.28 / 7.20 ms; seed 23 7.60 / 7.53 ms: no change beyond the run-to-run swing. Scatter over a whole medium map 704k -> 328k triangles. The water shader does one more noise lookup and three hashes per water pixel.
+

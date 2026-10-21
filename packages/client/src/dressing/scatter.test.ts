@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { triangleCount } from "./builderChecks";
 import type { DressBox } from "./kinds";
-import { scatter } from "./scatter";
+import dressingJson from "../../../../data/dressing.json";
+import { parseScatterLook, scatter } from "./scatter";
 
 const chunk = { minX: 0, minZ: 0, size: 50, seed: 12345 };
 const blockers: DressBox[] = [
@@ -50,6 +51,30 @@ describe("scatter", () => {
       }
     });
     expect(problems.slice(0, 5)).toEqual([]);
+  });
+
+  it("gathers junk in piles along the walls rather than spreading it evenly", () => {
+    // Each piece's middle, measured to the nearest blocker's footprint.
+    let near = 0, all = 0;
+    for (const seed of [1, 2, 3, 99, 12345]) {
+      for (const { mesh } of scatter({ ...chunk, seed }, blockers, 18)) {
+        let x = 0, z = 0;
+        const p = mesh.positions;
+        for (let i = 0; i < p.length; i += 3) { x += p[i]!; z += p[i + 2]!; }
+        x /= p.length / 3; z /= p.length / 3;
+        const d = Math.min(...blockers.map((b) => Math.hypot(Math.max(b.min[0] - x, 0, x - b.max[0]), Math.max(b.min[2] - z, 0, z - b.max[2]))));
+        all++;
+        if (d < 4.5) near++;
+      }
+    }
+    expect(all).toBeGreaterThan(0);
+    expect(near / all).toBeGreaterThan(0.6);
+  });
+
+  it("rejects a pile mix with no weight", () => {
+    const bad = structuredClone(dressingJson.scatter);
+    for (const key of Object.keys(bad.mix)) bad.mix[key as keyof typeof bad.mix] = 0;
+    expect(() => parseScatterLook(bad)).toThrow(/mix/);
   });
 
   it("stays cheap", () => {

@@ -9,13 +9,13 @@
     0.68
   ],
   "rim": {
-    "strength": 0.35,
+    "strength": 0.45,
     "width": 0.25,
     "color": "warmLight"
   },
   "outline": {
     "widthMeters": 0.06,
-    "darken": 0.35,
+    "darken": 0.3,
     "mechDarken": 0.22,
     "mechWidthMeters": 0.04
   },
@@ -25,17 +25,17 @@
         "name": "golden afternoon",
         "key": {
           "color": "warmLight",
-          "intensity": 2.4,
+          "intensity": 2.6,
           "direction": [
-            -0.85,
-            0.42,
-            0.18
+            -0.72,
+            0.62,
+            0.2
           ],
           "shadow": 1.0
         },
         "fillSky": "fillBlue",
         "fillGround": "bounceWarm",
-        "fillIntensity": 0.65,
+        "fillIntensity": 0.55,
         "sky": {
           "zenith": "skyPale",
           "sun": "sunDisc"
@@ -54,7 +54,7 @@
         "name": "hazy dusk",
         "key": {
           "color": "duskAmber",
-          "intensity": 2.3,
+          "intensity": 2.5,
           "direction": [
             0.8,
             0.37,
@@ -64,7 +64,7 @@
         },
         "fillSky": "duskFill",
         "fillGround": "duskBounce",
-        "fillIntensity": 0.6,
+        "fillIntensity": 0.52,
         "sky": {
           "zenith": "duskZenith",
           "sun": "duskSun"
@@ -83,17 +83,17 @@
         "name": "overcast",
         "key": {
           "color": "overcastLight",
-          "intensity": 1.6,
+          "intensity": 2.1,
           "direction": [
             -0.45,
             0.9,
             -0.3
           ],
-          "shadow": 0.45
+          "shadow": 0.7
         },
         "fillSky": "overcastFill",
         "fillGround": "overcastBounce",
-        "fillIntensity": 0.95,
+        "fillIntensity": 0.72,
         "sky": {
           "zenith": "overcastZenith",
           "sun": "overcastSun"
@@ -132,7 +132,7 @@
   },
   "ao": {
     "heightMeters": 1.2,
-    "strength": 0.5,
+    "strength": 0.6,
     "steps": 2,
     "ragged": 0.35,
     "directShare": 0.5
