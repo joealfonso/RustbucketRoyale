@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { DROP_BURNING, DROP_DIVING, DROP_NONE, DROP_RIDING, World, boxFromData, createMechInput, createMechState, parseMechStats, stepMech, type OtherState } from "@rustbucket/shared";
+import { DROP_BURNING, DROP_DIVING, DROP_NONE, DROP_RIDING, DROP_SHELL, World, boxFromData, createMechInput, createMechState, parseMechStats, stepMech, type OtherState } from "@rustbucket/shared";
 import diveJson from "../../../data/dive.json";
 import dropJson from "../../../data/drop.json";
 import mechJson from "../../../data/mech.json";
@@ -61,6 +61,24 @@ describe("the drop-in on the client", () => {
     // The coarse step lands within a few metres of the fine one over a dive of a few hundred.
     expect(Math.hypot(marker.at.x - s.x, marker.at.z - s.z)).toBeLessThan(6);
     expect(marker.at.y).toBeCloseTo(0, 3);
+  });
+
+  it("aboard the ship, marks where a shot out of the cannon now would come down", () => {
+    const marker = new LandingMarker(dive.marker, "#ffffff", stats);
+    const s = createMechState(stats, 0, 300, 0, 0);
+    s.dropPhase = DROP_RIDING;
+    s.vx = 20; // carried along by the ship
+    const input = createMechInput();
+    input.aimPitch = -30 * DEG; input.moveY = 1;
+    marker.update(s, input, stats, ground, null, new THREE.Vector3(0, 300, 10), 1 / 60);
+    expect(marker.group.visible).toBe(true);
+    // The real thing: fired with Space, then the shell and the dive at the game's own step.
+    input.jet = true;
+    stepMech(s, input, stats, 1 / 60, ground);
+    expect(s.dropPhase).toBe(DROP_SHELL);
+    input.jet = false;
+    while (s.dropPhase !== DROP_NONE) stepMech(s, input, stats, 1 / 60, ground);
+    expect(Math.hypot(marker.at.x - s.x, marker.at.z - s.z)).toBeLessThan(8);
   });
 
   it("says when someone else's retro-jets light and when they touch down", () => {

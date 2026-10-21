@@ -46,6 +46,9 @@ export interface SpriteLook {
   fadeFromMeters?: number; fadeToMeters?: number; // marks further than this from the camera dissolve away
   // Sprites this close to the camera dissolve away, so smoke from the mech you watch never fills the screen.
   clearFromMeters?: number; clearToMeters?: number;
+  // A hand-drawn outline round the shape and round the holes it dissolves into (the drop-in's effects, gate 16b):
+  // its colour, its width as a share of INK_SPAN (0 to 1), and how wide the inked rim of a dissolving hole is (0 to 1).
+  ink?: { color: string; width: number; holeWidth: number };
 }
 
 let sheet: THREE.DataTexture | null = null;
@@ -96,6 +99,11 @@ const FRAGMENT = /* glsl */ `
   uniform vec3 band0;
   uniform vec3 band1;
   uniform vec3 band2;
+  #ifdef INKED
+  uniform vec3 inkColor;
+  uniform float inkWidth;
+  uniform float holeWidth;
+  #endif
   varying vec2 vUv;
   varying vec3 vLook;
   #include <fog_pars_fragment>
@@ -108,6 +116,10 @@ const FRAGMENT = /* glsl */ `
     if (ink.a < 0.5 || ink.g < vLook.y) discard;
     float band = floor(ink.r * 3.0 + vLook.z);
     vec3 color = band < 0.5 ? band0 : band < 1.5 ? band1 : band2;
+    #ifdef INKED
+    // The outline: near the shape's edge, or at the rim of a hole it is dissolving into (only once it has begun to).
+    if (ink.b < inkWidth || (vLook.y > 0.001 && ink.g < vLook.y + holeWidth)) color = inkColor;
+    #endif
     gl_FragColor = vec4(color, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -155,6 +167,12 @@ export class SpritePool {
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { sheet: { value: null }, band0: { value: c0 }, band1: { value: c1 }, band2: { value: c2 } }]),
     });
     material.uniforms.sheet!.value = spriteSheet();
+    if (spriteLook.ink) {
+      material.defines = { INKED: "" };
+      material.uniforms.inkColor = { value: new THREE.Color(color(spriteLook.ink.color)) };
+      material.uniforms.inkWidth = { value: spriteLook.ink.width };
+      material.uniforms.holeWidth = { value: spriteLook.ink.holeWidth };
+    }
     if (spriteLook.layer === "ground") { material.polygonOffset = true; material.polygonOffsetFactor = -2; material.polygonOffsetUnits = -4; }
     this.mesh = new THREE.Mesh(this.geometry, material);
     this.mesh.frustumCulled = false; // the sprites are placed in the shader, so the quad's own bounds mean nothing
@@ -198,6 +216,7 @@ export class SpritePool {
     for (let i = 0; i < this.immediateUsed; i++) n = this.write(this.immediate[i]!, n, camera);
     this.immediateUsed = 0;
     this.geometry.instanceCount = n;
+    this.mesh.visible = n > 0; // no draw call for a pool with nothing alive
     if (n > 0) for (const a of this.attributes) a.needsUpdate = true;
   }
 

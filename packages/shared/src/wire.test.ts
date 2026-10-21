@@ -65,16 +65,19 @@ describe("snapshot wire format", () => {
   });
 
   // The drop-in (gate 16a): your own phase and landing stun as two more of your numbers, sent only while not 0, and
-  // every other mech's phase in two spare bits of a byte it already has.
+  // every other mech's phase in three spare bits of a byte it already has (the shell, gate 16b, is phase 4).
   it("carries the drop-in phase, yours and everyone else's, at no cost once everyone is down", () => {
-    const s = snapshot([other(1, 2), other(2, 3), other(3, 4)]);
+    // The fifth roster mech and the shell together: the mech's top bit and the phase's top bit must not meet.
+    const s = snapshot([other(1, 2), other(2, 3), other(3, 4), { ...other(5, 6), mech: 4, dropPhase: 4, ability: true }]);
     const down = encodeSnapshot(s).length;
     s.you.dropPhase = 2;
     s.you.dropTime = 0.375;
     const back = decodeSnapshot(encodeSnapshot(s))!;
     expect(back.you.dropPhase).toBe(2);
     expect(back.you.dropTime).toBe(0.375);
-    expect(back.others.map((o) => o.dropPhase)).toEqual([1, 2, 3]);
+    expect(back.others.map((o) => o.dropPhase)).toEqual([1, 2, 3, 4]);
+    expect(back.others[3]!.mech).toBe(4);
+    expect(back.others[3]!.ability).toBe(true);
     expect(encodeSnapshot(s).length - down).toBe(8);
   });
 

@@ -92,7 +92,7 @@ export class Bot {
   private dangerZ = 0;
   private dangerRadius = 0;
   private drop = new DropBrain();
-  private dropAim: DropAim = { yaw: 0, pitch: 0, moveY: 0 };
+  private dropAim: DropAim = { yaw: 0, pitch: 0, moveY: 0, fire: false };
 
   constructor(
     private stats: BotStats,
@@ -166,13 +166,18 @@ export class Bot {
   }
 
   // The drop-in at the start of a match. Nothing to do but steer the dive (botDrop.ts): no weapons until it is down.
-  // Riding up top, it waits. The spot is chosen as the dive begins.
+  // Aboard the ship it chooses its spot at once, and fires itself out (the jet) when the brain says so. Its aim snaps
+  // to the shot rather than turning, since nobody can see where a rider looks.
   thinkDrop(self: MechState, plan: DropPlan, mech: MechStats, dt: number, out: MechInput): void {
     out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.grenade = false; out.interact = false; out.repair = false; out.ability = false;
-    if (self.dropPhase !== DROP_RIDING) {
-      if (!this.drop.chosen) this.drop.choose(self, plan, mech, this.random);
-      const aim = this.dropAim;
-      this.drop.steer(self, mech, plan.stats, aim);
+    if (!this.drop.chosen) this.drop.choose(self, plan, mech, this.random);
+    const aim = this.dropAim;
+    this.drop.steer(self, plan, mech, aim);
+    if (self.dropPhase === DROP_RIDING) {
+      this.aimYaw = aim.yaw;
+      this.aimPitch = aim.pitch;
+      out.jet = aim.fire;
+    } else {
       // Turned at its usual speed, so its dive swings round like a person's rather than snapping.
       const maxTurn = this.stats.turnDegreesPerSecond * DEG * dt;
       const diff = Math.atan2(Math.sin(aim.yaw - this.aimYaw), Math.cos(aim.yaw - this.aimYaw));
@@ -184,7 +189,7 @@ export class Bot {
     out.aimPitch = this.aimPitch;
   }
 
-  // Where it means to land, for checks. Only meaningful once the dive has begun.
+  // Where it means to land, for checks. Chosen aboard the ship.
   get dropSpot(): { x: number; z: number } | null {
     return this.drop.chosen ? { x: this.drop.spotX, z: this.drop.spotZ } : null;
   }

@@ -6,6 +6,8 @@ import { hash01 } from "./flipbook";
 //    sheet serves every palette (fire, smoke, dust, sparks) and a puff can darken by shifting its bands.
 //  - G: dissolve order, low first. A sprite fades by eating away its lowest values, in hard-edged steps, never by
 //    going see-through.
+//  - B: how far in from the shape's edge, 0 at the edge to 1 at INK_SPAN in, so an inked pool (sprites.ts) can draw
+//    a hand-drawn outline of any width along it. Pools without ink ignore it.
 //  - A: the shape, soft over a few pixels so its edge stays clean when the shader cuts it at one half.
 // Shapes are drawn wobbly on purpose, like a brush, from a fixed hash so the sheet is the same every time.
 
@@ -21,7 +23,12 @@ export const FRAMES = {
   scorch: { first: 11, count: 3 },
   flame: { first: 14, count: 3 },
   spark: { first: 17, count: 1 },
+  streak: { first: 18, count: 1 },
 } as const;
+
+// How far in from the edge, in cell units (the cell runs -1 to 1), the B channel reaches 1: an ink line can be up to
+// an eighth of a cell wide.
+export const INK_SPAN = 0.25;
 
 interface Ink { band: number; dissolve: number; inside: number } // band 0 to 3, dissolve 0 to 1, inside as a signed distance in cell units
 
@@ -127,6 +134,14 @@ function spark(x: number, v: number): Ink {
   return { band: s < 0.35 ? s / 0.35 : s < 0.7 ? 1 + (s - 0.35) / 0.35 : 2 + Math.min(0.99, s - 0.7), dissolve: 1 - v, inside: Math.min(head, 0.97 - v) };
 }
 
+// A comic speed streak: a long thin spear, fattest a third of the way along and tapering to a point at both ends,
+// lit along its middle. Drawn along the cell from v = 0 to v = 1.
+function streak(x: number, v: number): Ink {
+  const half = 0.7 * Math.sin(Math.PI * Math.min(1, v ** 0.75));
+  const s = Math.abs(x) / Math.max(0.01, half);
+  return { band: s < 0.5 ? s / 0.5 : 1 + Math.min(1.99, (s - 0.5) / 0.25), dissolve: v, inside: Math.min(half - Math.abs(x), 0.98 - Math.abs(v * 2 - 1)) };
+}
+
 function inkAt(frame: number, u: number, v: number): Ink {
   const x = u * 2 - 1, y = v * 2 - 1;
   const f = FRAMES;
@@ -135,7 +150,8 @@ function inkAt(frame: number, u: number, v: number): Ink {
   if (frame < f.scorch.first) return ring(x, y, frame - f.ring.first);
   if (frame < f.flame.first) return scorch(x, y, frame - f.scorch.first);
   if (frame < f.spark.first) return flame(x, v, frame - f.flame.first);
-  return spark(x, v);
+  if (frame < f.streak.first) return spark(x, v);
+  return streak(x, v);
 }
 
 const SOFT_EDGE = 8; // how quickly the shape edge goes from out to in, per cell unit: about four pixels
@@ -144,7 +160,7 @@ const SOFT_EDGE = 8; // how quickly the shape edge goes from out to in, per cell
 export function paintSpriteSheet(): Uint8Array {
   const width = COLUMNS * CELL, height = ROWS * CELL;
   const data = new Uint8Array(width * height * 4);
-  const used = FRAMES.spark.first + FRAMES.spark.count;
+  const used = FRAMES.streak.first + FRAMES.streak.count;
   for (let frame = 0; frame < used; frame++) {
     const cx = (frame % COLUMNS) * CELL, cy = Math.floor(frame / COLUMNS) * CELL;
     for (let j = 0; j < CELL; j++) {
@@ -153,7 +169,7 @@ export function paintSpriteSheet(): Uint8Array {
         const at = ((cy + j) * width + cx + i) * 4;
         data[at] = Math.round(Math.max(0, Math.min(2.999, ink.band)) / 3 * 255);
         data[at + 1] = Math.round(Math.max(0, Math.min(1, ink.dissolve)) * 255);
-        data[at + 2] = 0;
+        data[at + 2] = Math.round(Math.max(0, Math.min(1, ink.inside / INK_SPAN)) * 255);
         data[at + 3] = Math.round(Math.max(0, Math.min(1, 0.5 + ink.inside * SOFT_EDGE)) * 255);
       }
     }

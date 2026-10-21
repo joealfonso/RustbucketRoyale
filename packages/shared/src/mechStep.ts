@@ -210,7 +210,12 @@ function stepDrop(s: MechState, input: MechInput, stats: MechStats, dt: number, 
   s.running = false;
   s.jetting = s.dropPhase === DROP_BURNING;
   steerDrop(s, input, stats, dt, world.terrain?.heightAt(s.x, s.z) ?? 0);
-  if (s.dropPhase === DROP_RIDING) return;
+  // Aboard the ship: carried along at its speed, through nothing, so a rider's prediction is exact.
+  if (s.dropPhase === DROP_RIDING) {
+    s.x += s.vx * dt;
+    s.z += s.vz * dt;
+    return;
+  }
   s.grounded = false;
   const before = s.y;
   moveHorizontal(s, stats, s.vx * dt, 0, world);

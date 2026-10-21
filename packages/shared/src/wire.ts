@@ -41,8 +41,9 @@ const DELTA_BIT = 2;
 const DETAILS_BIT = 4;
 // A roster mech's number is 3 bits: two in the mech's flags byte, the top one here (gate 15b's fifth mech).
 const MECH_HIGH_BIT = 8;
-// The drop-in phase (drop.ts), 0 to 3, in the two spare bits of the same byte.
+// The drop-in phase (drop.ts), 0 to 4, in the three spare bits of the same byte (64 was free for the shell).
 const DROP_SHIFT = 4;
+const DROP_MASK = 7;
 const LOADOUT_BYTES = 9;
 const LOOTING_BYTES = 2; // how far through looting a wreck, then through a repair, 0 to 255 each
 const PICKUP_BYTES = 9;
@@ -114,7 +115,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
     const was = memory.others.get(other.id);
     const delta = was !== undefined && fitsByte(now.x - was.x) && fitsByte(now.y - was.y) && fitsByte(now.z - was.z);
     const details = was === undefined || now.details.some((b, i) => b !== was.details[i]);
-    kinds.push((other.ability ? ABILITY_BIT : 0) | (delta ? DELTA_BIT : 0) | (details ? DETAILS_BIT : 0) | (other.mech & 4 ? MECH_HIGH_BIT : 0) | ((other.dropPhase & 3) << DROP_SHIFT));
+    kinds.push((other.ability ? ABILITY_BIT : 0) | (delta ? DELTA_BIT : 0) | (details ? DETAILS_BIT : 0) | (other.mech & 4 ? MECH_HIGH_BIT : 0) | ((other.dropPhase & DROP_MASK) << DROP_SHIFT));
     otherBytes += OTHER_HEAD_BYTES + (delta ? POSITION_DELTA_BYTES : POSITION_BYTES) + YAW_BYTES + (details ? DETAIL_BYTES : 0);
     seen.set(other.id, now);
   }
@@ -250,7 +251,7 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
     others.push({
       id, x: qx * POSITION_STEP, y: qy * HEIGHT_STEP, z: qz * POSITION_STEP, yaw,
       running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, repairing: (bits & 32) !== 0, bot: (bits & 8) !== 0,
-      hp: [d![0]!, d![1]!, d![2]!], weapon: d![3]!, armor: [d![4]!, d![5]!, d![6]!], upgrades: [slot(d![7]!), slot(d![8]!)], mech: (bits >> 6) | (kind & MECH_HIGH_BIT ? 4 : 0), ability: (kind & ABILITY_BIT) !== 0, dropPhase: (kind >> DROP_SHIFT) & 3,
+      hp: [d![0]!, d![1]!, d![2]!], weapon: d![3]!, armor: [d![4]!, d![5]!, d![6]!], upgrades: [slot(d![7]!), slot(d![8]!)], mech: (bits >> 6) | (kind & MECH_HIGH_BIT ? 4 : 0), ability: (kind & ABILITY_BIT) !== 0, dropPhase: (kind >> DROP_SHIFT) & DROP_MASK,
     });
   }
   if (bytes.length < o + 1) return null;

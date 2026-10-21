@@ -11,7 +11,7 @@ import {
   ITEM_ARMOR_FIRST, ITEM_GRENADE, type DropsConfig, type SupplyDrop,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
   titanHitBoxes, type TitanConfig, type TitanState,
-  DROP_DIVING, DROP_RIDING, dropping,
+  DROP_RIDING, boardShip, dropping, launchDrop, planShipPath, shipEndsAt, type ShipPath,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
 import { parseBotAbilities, type BotAbilityStats } from "./botAbilities";
@@ -141,6 +141,8 @@ export class Room {
   private titanHost: TitanHost;
   private landed: Player[] = []; // the mechs on the ground this tick, the only ones the Titan knows about
   private dropPlan: DropPlan | null = null; // this match's map and first circle, for bots choosing where to land
+  private ship: ShipPath | null = null; // the Rustbucket's line for this match's drop-in, null without one
+  private shipEndAt = 0; // the match-clock second the ship throws out everyone still aboard
 
   private botInput = createMechInput();
   private botTargets: BotTarget[] = [];
@@ -265,6 +267,11 @@ export class Room {
     return this.titan;
   }
 
+  // This match's Rustbucket line, for checks. Null in the lobby or without a drop-in.
+  get shipPath(): ShipPath | null {
+    return this.state === "lobby" ? null : this.ship;
+  }
+
   get mapMeters(): number {
     return this.map.meters;
   }
@@ -338,7 +345,7 @@ export class Room {
     };
     this.players.set(id, player);
     if (this.hostId === 0) this.hostId = id;
-    if (this.state === "countdown") this.placeForDrop(player);
+    if (this.state === "countdown") this.placeForDrop(player, this.shipClock());
 
     // In the lobby a person arriving takes a bot's place. Mid match nothing changes.
     if (this.state === "lobby") this.fillBots();
@@ -417,7 +424,7 @@ export class Room {
     if (!message) return true;
 
     if (message.t === "start") {
-      if (id === this.hostId && this.state === "lobby") this.beginCountdown();
+      if (id === this.hostId && this.state === "lobby") this.beginCountdown(false);
       return true;
     }
     if (message.t === "tune") {
@@ -476,7 +483,7 @@ export class Room {
 
     if (this.state === "countdown" && this.tickCount >= this.phaseEndTick) this.beginMatch();
     else if (this.state === "results" && this.tickCount >= this.phaseEndTick) this.afterResults();
-    else if (this.state === "lobby" && this.startWanted) this.beginCountdown();
+    else if (this.state === "lobby" && this.startWanted) this.beginCountdown(true);
 
     if (this.state === "active" && this.ring) ringAt(this.ring, this.elapsedSeconds(), this.ringNow);
     this.anchors = this.humans().filter((p) => p.participant && !p.dead);
@@ -507,6 +514,7 @@ export class Room {
       this.recordHistory(player);
     }
 
+    if (this.state === "active" && this.ship && this.elapsedSeconds() >= this.shipEndAt) this.throwOutRiders();
     this.stepDecoys();
     this.settleFarFights();
     this.stepGrenades();
@@ -542,7 +550,8 @@ export class Room {
     // Diving in: nothing to think about but where to land. A bot far from everyone steers a few times a second, like
     // its walking, but it still dives and lands.
     if (dropping(player.state)) {
-      const far = !this.nearAnyPerson(player, lod.fullRangeMeters);
+      // Aboard the ship it thinks every tick: riding costs nothing, and firing late would miss its spot.
+      const far = player.state.dropPhase !== DROP_RIDING && !this.nearAnyPerson(player, lod.fullRangeMeters);
       if (far && (this.tickCount + player.slot) % lod.cheapEveryTicks !== 0) return;
       const dt = far ? lod.cheapEveryTicks * STEP : STEP;
       if (this.dropPlan) bot.thinkDrop(player.state, this.dropPlan, this.statsFor(player.state.mech), dt, input);
@@ -818,7 +827,8 @@ export class Room {
   // Swaps in the next map, puts everyone on a spawn, and starts the countdown. If the map is still being built the
   // room stays as it is (lobby or results) and tries again each tick, so a slow machine holds the countdown back
   // rather than stalling every room in the process.
-  private beginCountdown(): void {
+  // `inTick`: called at the top of a tick, before anyone steps, rather than between ticks (the ship clock differs).
+  private beginCountdown(inTick: boolean): void {
     const next = this.takeNextMap();
     this.startWanted = next === null;
     if (!next) return;
@@ -833,6 +843,9 @@ export class Room {
     this.fillBots();
     this.ring = makeRingSchedule(this.config.ring, this.tier, this.map.meters, this.random, ringOnLand(this.map.world.terrain));
     this.drops = planDrops(this.config.drops, this.tier, this.ring, this.map, this.random);
+    this.ship = this.planShip(this.ring);
+    this.shipEndAt = this.ship ? shipEndsAt(this.ship) : 0;
+    this.phaseEndTick = this.tickCount + Math.ceil(this.config.match.countdownSeconds / STEP); // the ship's clock needs it now
     this.dropsLanded = 0;
     this.dropsOpened = 0;
     this.grenades = [];
@@ -850,26 +863,48 @@ export class Room {
       clearCauses(player);
       clearTally(player.tally);
       player.state = this.freshState(player.slot, player.mech);
-      this.placeForDrop(player);
+      // At the top of a tick the steps still to come this tick already carry the riders one step along.
+      this.placeForDrop(player, this.shipClock() - (inTick ? STEP : 0));
       player.bot?.forgetDrop();
       player.queue.length = 0;
     }
     this.dropPlan = this.makeDropPlan(this.ring);
     this.state = "countdown";
-    this.phaseEndTick = this.tickCount + Math.ceil(this.config.match.countdownSeconds / STEP);
     this.broadcastRoom();
   }
 
-  // High above its spawn, held there through the countdown, to dive in when the match starts.
-  private placeForDrop(player: Player): void {
-    const altitude = this.config.drop?.altitudeMeters[this.tier];
-    if (altitude === undefined) return;
-    const s = player.state;
-    const ground = this.map.world.groundAt(s.x, s.z);
-    s.y = (Number.isFinite(ground) ? ground : s.y) + altitude;
-    s.vx = 0; s.vy = 0; s.vz = 0;
-    s.grounded = false;
-    s.dropPhase = DROP_RIDING;
+  // Aboard the Rustbucket, in this mech's slot by the cannon, at match-clock second `seconds`.
+  private placeForDrop(player: Player, seconds: number): void {
+    if (this.ship && this.config.drop) boardShip(player.state, this.ship, seconds, player.slot, this.config.drop.ship);
+  }
+
+  // The match clock between ticks: negative in the countdown, elapsed seconds once live. The ship flies by it.
+  private shipClock(): number {
+    return (this.tickCount - (this.state === "active" ? this.matchStartTick : this.phaseEndTick)) * STEP;
+  }
+
+  // This match's line, from the match seed (shared shipPath.ts, so offline practice picks the same one).
+  private planShip(ring: RingSchedule): ShipPath | null {
+    const drop = this.config.drop;
+    const altitude = drop?.altitudeMeters[this.tier];
+    const speed = drop?.ship.speedMeters[this.tier];
+    if (!drop || altitude === undefined || speed === undefined) return null;
+    const first = ring.stages[0] ?? ring.initial;
+    return planShipPath(this.seed, this.map.world, this.map.meters, first, altitude, speed, drop.ship, this.config.match.countdownSeconds);
+  }
+
+  // The end of the line: anyone still aboard is fired out, looking at the middle of the first circle, as far as a
+  // shot carries. A bot or a person who waited this long wants to get there.
+  private throwOutRiders(): void {
+    const first = this.ring ? this.ring.stages[0] ?? this.ring.initial : null;
+    for (const p of this.players.values()) {
+      const s = p.state;
+      if (s.dropPhase !== DROP_RIDING) continue;
+      const stats = this.statsFor(s.mech);
+      const yaw = first ? Math.atan2(-(first.cx - s.x), -(first.cz - s.z)) : s.bodyYaw;
+      launchDrop(s, yaw, (stats.launchLevelPitch * Math.PI) / 180, stats);
+      s.bodyYaw = yaw;
+    }
   }
 
   // What bots choose a landing spot from. Null without a drop-in.
@@ -879,13 +914,12 @@ export class Room {
     if (!drop) return null;
     return {
       world: this.map.world, propOfBox: this.map.propOfBox, props: this.map.props, scenery: this.config.props.types.map((t) => t.scenery === true),
-      cx: first.cx, cz: first.cz, radius: first.radius, half: this.map.meters / 2, taken: [], stats: drop.bots,
+      cx: first.cx, cz: first.cz, radius: first.radius, half: this.map.meters / 2, taken: [], stats: drop.bots, ship: this.ship,
     };
   }
 
   private beginMatch(): void {
-    // Everyone riding up top goes at once.
-    for (const p of this.players.values()) if (p.state.dropPhase === DROP_RIDING) p.state.dropPhase = DROP_DIVING;
+    // Everyone stays aboard: from now on each fires out when they like (the jet), or at the end of the line.
     this.state = "active";
     this.matchStartTick = this.tickCount;
     this.startedWith = this.players.size;
@@ -956,7 +990,7 @@ export class Room {
   }
 
   private afterResults(): void {
-    if (this.config.match.autoNextMatch && this.players.size > 0) this.beginCountdown();
+    if (this.config.match.autoNextMatch && this.players.size > 0) this.beginCountdown(true);
     else {
       this.state = "lobby";
       this.broadcastRoom();
@@ -1634,6 +1668,7 @@ export class Room {
       t: "room", code: this.code, tier: this.tier, state: this.state, seed: this.seed, hostId: this.hostId,
       players: this.humans().length, ring: this.state === "lobby" ? null : this.ring, matchSeconds: this.config.match.matchSeconds,
       drops: this.state === "lobby" ? null : this.drops,
+      ship: this.state === "lobby" ? null : this.ship,
       difficulty: this.difficulty,
     };
     for (const p of this.players.values()) p.send(message);

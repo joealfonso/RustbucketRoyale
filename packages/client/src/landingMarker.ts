@@ -1,10 +1,11 @@
 import * as THREE from "three";
-import { DROP_DIVING, DROP_NONE, DROP_RIDING, createMechInput, createMechState, stepMech, type AbilityStats, type MechInput, type MechState, type MechStats, type World } from "@rustbucket/shared";
+import { DROP_NONE, DROP_RIDING, createMechInput, createMechState, launchDrop, stepMech, type AbilityStats, type MechInput, type MechState, type MechStats, type World } from "@rustbucket/shared";
 import type { DiveConfig } from "./dive";
 
 // Where you would come down if you held what you are holding now: a copy of your mech is stepped through the rest
 // of the dive with the shared stepMech, the same rules the server runs, at a coarse step and a few times a second.
-// The answer is drawn as a ring on the ground. While still riding up top it predicts the dive about to start.
+// The answer is drawn as a ring on the ground. While still riding in the ship it predicts a shot out of the cannon
+// now (the shell's arc, then the dive), with what you are looking at and holding.
 export class LandingMarker {
   readonly group = new THREE.Group();
   private ghost: MechState;
@@ -54,10 +55,11 @@ export class LandingMarker {
     g.x = s.x; g.y = s.y; g.z = s.z; g.vx = s.vx; g.vy = s.vy; g.vz = s.vz;
     g.bodyYaw = s.bodyYaw; g.mech = s.mech; g.grounded = false;
     g.fuelScale = s.fuelScale; g.speedScale = s.speedScale;
-    g.dropTime = 0;
-    g.dropPhase = s.dropPhase === DROP_RIDING ? DROP_DIVING : s.dropPhase;
+    g.dropTime = s.dropTime; // in the shell, the time it has left
+    g.dropPhase = s.dropPhase;
     const i = this.input;
     i.aimYaw = input.aimYaw; i.aimPitch = input.aimPitch; i.moveX = input.moveX; i.moveY = input.moveY;
+    if (g.dropPhase === DROP_RIDING) launchDrop(g, i.aimYaw, i.aimPitch, stats);
     for (let n = 0; n < this.config.maxSteps && g.dropPhase !== DROP_NONE; n++) stepMech(g, i, stats, this.config.stepSeconds, world, ability);
     if (g.dropPhase !== DROP_NONE) return false;
     this.at.x = g.x; this.at.y = g.y; this.at.z = g.z;

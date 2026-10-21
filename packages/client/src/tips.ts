@@ -2,7 +2,7 @@
 // is said once, at the moment it is useful, in the same prompt box as "Hold F: repair". Each tip is shown once per
 // player, remembered in this browser, and a real prompt (take, loot, repair) always wins over a tip.
 
-export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "dive"] as const;
+export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "dive", "launch"] as const;
 export type TipId = (typeof TIP_IDS)[number];
 
 export interface TipsConfig {

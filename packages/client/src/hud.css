@@ -203,6 +203,11 @@ body.dropping #diveHud { display: flex; }
 #diveHud div .label { min-width: 2.6rem; }
 #diveHud .num { font-size: 1.5rem; color: var(--hud-text); min-width: 4ch; text-align: right; }
 #diveHud small { font: 400 0.75rem var(--hud-num); color: var(--hud-amber-dim); }
+/* Aboard the Rustbucket once the match is live (gate 16b): the one thing to do, under the middle of the view. */
+#launchCall { display: none; left: 50%; bottom: 22%; transform: translateX(-50%); flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.5rem 1.1rem; }
+#launchCall.shown { display: flex; }
+#launchCall strong { font: 700 1.5rem var(--hud-word); letter-spacing: 0.06em; color: var(--hud-amber); }
+#launchCall .label { color: var(--hud-text); }
 
 /* Title screen: over the hangar scene, so only three things stand on it: the name top left, one panel of choices
    on the right, the mech cards along the bottom. The middle stays open for the mech in the loading bay. */

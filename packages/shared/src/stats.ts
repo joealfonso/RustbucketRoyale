@@ -38,6 +38,9 @@ export interface MechStats {
   diveLevelPitch: number; diveSteepPitch: number;
   diveLevelFall: number; diveSteepFall: number; diveLevelGlide: number; diveSteepGlide: number; diveAcceleration: number;
   burnMeters: number; burnDeceleration: number; burnGlide: number; landingFall: number; landingStunSeconds: number;
+  // Fired out of the Rustbucket's cannon (gate 16b): the speed, the pitch range a shot is held to (degrees, level
+  // end then steep end, both looking down), and how long the unsteered shell flies before the dive.
+  launchSpeed: number; launchLevelPitch: number; launchSteepPitch: number; shellSeconds: number;
 }
 
 // One weapon's tuning and look. Every gun is just data: balance changes never touch code.
@@ -206,6 +209,7 @@ const MECH_KEYS: (keyof MechStats & string)[] = [
   "dashSpeed", "dashSeconds", "dashCooldown", "dashStaminaCost", "sprintDoubleTapSeconds",
   "diveLevelPitch", "diveSteepPitch", "diveLevelFall", "diveSteepFall", "diveLevelGlide", "diveSteepGlide", "diveAcceleration",
   "burnMeters", "burnDeceleration", "burnGlide", "landingFall", "landingStunSeconds",
+  "launchSpeed", "launchLevelPitch", "launchSteepPitch", "shellSeconds",
 ];
 const WEAPON_KEYS: (keyof WeaponStats & string)[] = [
   "shotsPerSecond", "projectileSpeed", "projectileLifetime", "spreadDegrees", "maxAimDistance", "shakeForce", "damage", "pellets",

@@ -516,3 +516,6 @@ Production builds of the commit before and after, served side by side, headless 
 ### V12 hangar (2026-10-20)
 Title screen, production builds side by side (before V11 and V12 / after), headless Chrome 1600 x 900 on the M4, three rounds: GPU median 1.49 / 1.60, 1.55 / 1.71, 1.83 / 2.00 ms; draw calls 367 -> 393; triangles 88k -> 121k. The title screen's script went from 24 to 61 kB raw; no new model or texture files.
 
+### 16b drop-in (2026-10-20)
+The Rustbucket model is about 950 kB raw (14,940 / 7,972 / 2,412 triangles by level), merged to 2 draw calls; drop effects add at most 4 inked sprite pools (none drawn while empty) and 2 for shells. In the bay at the start of medium seed 23 a frame went from 144 draw calls to 110 once the ship was merged. Soaks: small 29 kbps, medium 40, large 23, tick p99 0.20 to 0.22 ms, worst correction 0.01 cm. Times from the match going live: median landing small 15 to 17 s, medium 26 to 33 s, large 45 to 51 s.
+

@@ -1,43 +1,46 @@
 import { DROP_BURNING, DROP_DIVING } from "@rustbucket/shared";
 import type { DiveConfig } from "./dive";
-import type { FxSprites } from "./fx/fxSprites";
+import type { DropSprites } from "./fx/dropSprites";
 import type { MechModel } from "./mechModel";
-import { AXIS } from "./fx/sprites";
 import { FRAMES } from "./fx/spriteArt";
+import type { Sprite } from "./fx/sprites";
 
-// A smoke trail behind every mech diving in, so from anywhere you can see who is coming down and where. Each puff is
-// stretched along the way the mech falls, so a few a second join up into one streak; they come from the shared smoke
-// pool, so a sky full of divers costs no more draw calls. Only for others: your own would run between the camera and
-// your mech and hide the ground you are aiming at (you get speed lines instead).
+// A smoke trail behind every mech diving in, so from anywhere you can see who is coming down and where. Gate 16b
+// draws it as a chain of chunky inked puffs, one every few metres of travel, left hanging in the air where the mech
+// passed and swelling in hard steps as they darken a band and dissolve, like a cartoon's smoke rather than a soft
+// streak. They come from the inked smoke pool, so a sky full of divers is one draw call. Only for others: your own
+// would run between the camera and your mech and hide the ground you are aiming at (you get speed lines instead).
 export class DiveTrails {
-  private timers = new WeakMap<MechModel, number>();
+  private travelled = new WeakMap<MechModel, number>(); // metres since each mech's last puff
 
-  constructor(private sprites: FxSprites, private config: DiveConfig["trail"]) {}
+  constructor(private sprites: DropSprites, private config: DiveConfig["trail"]) {}
 
   // One mech this frame, at its drop phase and speed in m/s.
   emit(model: MechModel, phase: number, vx: number, vy: number, vz: number, dt: number): void {
     if ((phase !== DROP_DIVING && phase !== DROP_BURNING) || model.dead) return;
-    const c = this.config, every = 1 / c.puffsPerSecond;
-    // Never more than one puff a frame: a long frame leaves a gap rather than a clump.
-    const t = Math.min(every, (this.timers.get(model) ?? Math.random() * every) + dt);
-    if (t < every) { this.timers.set(model, t); return; }
-    this.timers.set(model, t - every);
+    const c = this.config;
     const speed = Math.hypot(vx, vy, vz);
-    if (speed < 1) return;
-    const s = this.sprites.smoke.spawn();
-    if (!s) return;
-    const p = model.group.position;
-    const dx = vx / speed, dy = vy / speed, dz = vz / speed;
-    // Long enough to reach the last puff, so the streak has no gaps.
-    const length = speed * every * c.overlap;
-    s.mode = AXIS;
-    s.ax = dx; s.ay = dy; s.az = dz;
-    s.x = p.x - dx * length * 0.5; s.y = p.y + c.centerMeters - dy * length * 0.5; s.z = p.z - dz * length * 0.5;
-    s.vy = c.rise; s.drag = 0.5;
-    s.life = c.seconds;
-    s.size0 = c.width; s.size1 = c.width * c.grow;
-    s.aspect = Math.max(1, length / c.width);
-    s.frame0 = FRAMES.smoke.first + Math.floor(Math.random() * FRAMES.smoke.count);
-    s.fadeShare = 0.7;
+    // Never more than one puff a frame: a long frame leaves a gap rather than a clump.
+    const d = Math.min(c.spacingMeters, (this.travelled.get(model) ?? Math.random() * c.spacingMeters) + speed * dt);
+    if (d < c.spacingMeters) { this.travelled.set(model, d); return; }
+    this.travelled.set(model, d - c.spacingMeters);
+    puff(this.sprites, model.group.position.x, model.group.position.y + c.centerMeters, model.group.position.z, c.width, c.grow, c.seconds, c.rise);
   }
+}
+
+// One chunky inked smoke puff: it pops in at full width, swells in steps, slides a band darker and dissolves from
+// inside with inked holes. Shared with the ship's engines and the cannon.
+export function puff(sprites: DropSprites, x: number, y: number, z: number, width: number, grow: number, seconds: number, rise: number): Sprite | null {
+  const s = sprites.smoke.spawn();
+  if (!s) return null;
+  const jitter = width * 0.25;
+  s.x = x + (Math.random() - 0.5) * jitter; s.y = y + (Math.random() - 0.5) * jitter; s.z = z + (Math.random() - 0.5) * jitter;
+  s.vy = rise; s.drag = 0.6;
+  s.life = seconds * (0.85 + Math.random() * 0.3);
+  s.size0 = width * (0.85 + Math.random() * 0.3); s.size1 = s.size0 * grow;
+  s.frame0 = FRAMES.smoke.first + Math.floor(Math.random() * FRAMES.smoke.count);
+  s.spin = (Math.random() - 0.5) * 0.8; // a little only: the bands are lit from the upper left, as the world is
+  s.shade0 = 0; s.shade1 = 1;
+  s.fadeShare = 0.45;
+  return s;
 }

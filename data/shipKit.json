@@ -1,0 +1,335 @@
+{
+  "lodDistances": [
+    320,
+    700
+  ],
+  "kits": {
+    "rustbucket": {
+      "file": "models/ship/Ship_Rustbucket.glb",
+      "scheme": {
+        "hull": "#77736A",
+        "green": "#5F7C63",
+        "blue": "#4A7896",
+        "red": "#A23B2C",
+        "cream": "#DCCFA8",
+        "crane": "#D9A324",
+        "hazard": "#FFC93C",
+        "stripe": "#1E1C1A",
+        "rust": "#C4622D",
+        "coil": "#B5793F",
+        "iron": "#3B3633",
+        "soot": "#26231F",
+        "steel": "#9AA1A4",
+        "glass": "#2B3438",
+        "rubber": "#1F2123",
+        "lamp": "#FFD27A",
+        "navRed": "#E8442E",
+        "navGreen": "#5BD46A"
+      },
+      "parts": {
+        "Hull": {
+          "zone": "torso",
+          "paint": "hull",
+          "finish": "paint",
+          "rusts": false,
+          "noHit": true
+        },
+        "Plates_Green": {
+          "zone": "torso",
+          "paint": "green",
+          "finish": "paint",
+          "rusts": false,
+          "noHit": true
+        },
+        "Plates_Blue": {
+          "zone": "torso",
+          "paint": "blue",
+          "finish": "paint",
+          "rusts": false,
+          "noHit": true
+        },
+        "Plates_Red": {
+          "zone": "torso",
+          "paint": "red",
+          "finish": "paint",
+          "rusts": false,
+          "noHit": true
+        },
+        "Plates_Cream": {
+          "zone": "torso",
+          "paint": "cream",
+          "finish": "paint",
+          "rusts": false,
+          "noHit": true
+        },
+        "Crane": {
+          "zone": "torso",
+          "paint": "crane",
+          "finish": "paint",
+          "rusts": false,
+          "noHit": true
+        },
+        "Hazard": {
+          "zone": "torso",
+          "paint": "hazard",
+          "finish": "paint",
+          "rusts": false,
+          "noHit": true
+        },
+        "Stripes": {
+          "zone": "torso",
+          "paint": "stripe",
+          "finish": "paint",
+          "rusts": false,
+          "noHit": true
+        },
+        "Rust": {
+          "zone": "torso",
+          "paint": "rust",
+          "finish": "metal",
+          "rusts": false,
+          "noHit": true
+        },
+        "Coils": {
+          "zone": "torso",
+          "paint": "coil",
+          "finish": "metal",
+          "rusts": false,
+          "noHit": true
+        },
+        "Iron": {
+          "zone": "torso",
+          "paint": "iron",
+          "finish": "metal",
+          "rusts": false,
+          "noHit": true
+        },
+        "Soot": {
+          "zone": "torso",
+          "paint": "soot",
+          "finish": "metal",
+          "rusts": false,
+          "noHit": true
+        },
+        "Steel": {
+          "zone": "torso",
+          "paint": "steel",
+          "finish": "metal",
+          "rusts": false,
+          "noHit": true
+        },
+        "Glass": {
+          "zone": "torso",
+          "paint": "glass",
+          "finish": "metal",
+          "rusts": false,
+          "noHit": true
+        },
+        "Rubber": {
+          "zone": "torso",
+          "paint": "rubber",
+          "finish": "rubber",
+          "rusts": false,
+          "noHit": true
+        },
+        "Lamps": {
+          "zone": "torso",
+          "paint": "lamp",
+          "glow": true,
+          "rusts": false,
+          "noHit": true
+        },
+        "Nav_Red": {
+          "zone": "torso",
+          "paint": "navRed",
+          "glow": true,
+          "rusts": false,
+          "noHit": true
+        },
+        "Nav_Green": {
+          "zone": "torso",
+          "paint": "navGreen",
+          "glow": true,
+          "rusts": false,
+          "noHit": true
+        }
+      }
+    }
+  },
+  "mounts": {
+    "cannonMuzzle": {
+      "at": [
+        0,
+        -39.357,
+        61.378
+      ],
+      "direction": [
+        0,
+        -0.423,
+        0.906
+      ]
+    },
+    "cannonBreech": {
+      "at": [
+        0,
+        -14,
+        7
+      ]
+    },
+    "bay": {
+      "at": [
+        0,
+        -17,
+        -20
+      ]
+    },
+    "camera": {
+      "at": [
+        7,
+        -10,
+        -6
+      ],
+      "look": [
+        0.15,
+        -0.501,
+        0.852
+      ]
+    },
+    "slots": [
+      [
+        -4.5,
+        -16.7,
+        -32.5
+      ],
+      [
+        4.5,
+        -16.7,
+        -32.5
+      ],
+      [
+        -4.5,
+        -16.7,
+        -27.5
+      ],
+      [
+        4.5,
+        -16.7,
+        -27.5
+      ],
+      [
+        -4.5,
+        -16.7,
+        -22.5
+      ],
+      [
+        4.5,
+        -16.7,
+        -22.5
+      ],
+      [
+        -4.5,
+        -16.7,
+        -17.5
+      ],
+      [
+        4.5,
+        -16.7,
+        -17.5
+      ],
+      [
+        -4.5,
+        -16.7,
+        -12.5
+      ],
+      [
+        4.5,
+        -16.7,
+        -12.5
+      ],
+      [
+        -4.5,
+        -16.7,
+        -7.5
+      ],
+      [
+        4.5,
+        -16.7,
+        -7.5
+      ]
+    ],
+    "engines": [
+      {
+        "at": [
+          -27,
+          -4.518,
+          -23.264
+        ],
+        "direction": [
+          0,
+          -0.94,
+          0.342
+        ]
+      },
+      {
+        "at": [
+          27,
+          -4.518,
+          -23.264
+        ],
+        "direction": [
+          0,
+          -0.94,
+          0.342
+        ]
+      },
+      {
+        "at": [
+          -27,
+          -4.518,
+          32.736
+        ],
+        "direction": [
+          0,
+          -0.94,
+          0.342
+        ]
+      },
+      {
+        "at": [
+          27,
+          -4.518,
+          32.736
+        ],
+        "direction": [
+          0,
+          -0.94,
+          0.342
+        ]
+      },
+      {
+        "at": [
+          -7,
+          3,
+          76
+        ],
+        "direction": [
+          0,
+          0,
+          1
+        ]
+      },
+      {
+        "at": [
+          7,
+          3,
+          76
+        ],
+        "direction": [
+          0,
+          0,
+          1
+        ]
+      }
+    ]
+  }
+}

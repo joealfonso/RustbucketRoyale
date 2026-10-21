@@ -35,7 +35,7 @@ describe("paintSpriteSheet", () => {
     const data = paintSpriteSheet();
     const width = COLUMNS * CELL;
     expect(data.length).toBe(width * ROWS * CELL * 4);
-    const last = FRAMES.spark.first + FRAMES.spark.count;
+    const last = FRAMES.streak.first + FRAMES.streak.count;
     for (let frame = 0; frame < last; frame++) {
       let inside = 0;
       const cx = (frame % COLUMNS) * CELL, cy = Math.floor(frame / COLUMNS) * CELL;

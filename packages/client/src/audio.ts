@@ -12,7 +12,7 @@ export type SoundName =
   | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz" | "wade" | "splash" | "treeFall" | "treeLand"
   | "uiHover" | "uiClick" | "uiPick" | "uiWhoosh" | "railCharge" | "railShot"
   | "titanStep" | "titanStomp" | "titanThrow" | "titanRoar" | "titanFall"
-  | "diveWind" | "landingBurn" | "landingImpact";
+  | "diveWind" | "landingBurn" | "landingImpact" | "cannonFire" | "shellBurst";
 
 export interface AudioConfig {
   master: number;
@@ -364,6 +364,20 @@ export class Sound {
         this.clank(into, 130 * p, 0.6, 0.45, 0.01);
         this.crunch(into, 0.5, "lowpass", 1500 * p, 1.2, 0.002);
         return this.burst(into, 1.4, "lowpass", 380 * p, 0.7, 0.04);
+      // The Rustbucket's scrap cannon: a gunpowder bang far too big, the barrel ringing like a struck pipe, and a
+      // long boom rolling off across the sky. A stand-in until a recorded file is listed in audio.json.
+      case "cannonFire":
+        this.crunch(into, 0.25, "lowpass", 2600 * p, 1.4, 0.001);
+        this.body(into, 70 * p, 22 * p, 1.1, 1.8, 0.002);
+        this.clank(into, 95 * p, 1.1, 0.35, 0.02);
+        return this.burst(into, 2.2, "lowpass", 260 * p, 0.8, 0.05);
+      // The shell flying apart: a sharp pop, plates clattering off in a quick spray, a puff of flame.
+      case "shellBurst":
+        this.burst(into, 0.04, "highpass", 1500, 0.8, 0.0005);
+        this.clank(into, 260 * p, 0.35, 0.3, 0.01);
+        this.clank(into, 410 * p, 0.3, 0.22, 0.06);
+        this.clank(into, 330 * p, 0.25, 0.18, 0.11);
+        return this.crunch(into, 0.5, "bandpass", 900 * p, 0.7, 0.003);
       case "jets": case "diveWind": return 0;
     }
   }

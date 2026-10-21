@@ -21,6 +21,10 @@
     "Junk": {
       "maxTriangles": 20000,
       "states": []
+    },
+    "Ship": {
+      "maxTriangles": 20000,
+      "states": []
     }
   }
 }

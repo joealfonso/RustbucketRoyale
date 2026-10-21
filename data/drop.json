@@ -15,6 +15,20 @@
     "lootWeight": 0.6,
     "nearMeters": 20,
     "clearMeters": 4,
-    "holdBackMeters": 6
+    "holdBackMeters": 6,
+    "lastChanceSeconds": 1
+  },
+  "ship": {
+    "speedMeters": {
+      "arena": 12,
+      "small": 14,
+      "medium": 30,
+      "large": 50
+    },
+    "edgeMeters": 15,
+    "passShare": 0.5,
+    "tries": 10,
+    "slotMeters": 3,
+    "slotsPerRow": 4
   }
 }

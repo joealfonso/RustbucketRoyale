@@ -1,30 +1,21 @@
-import * as THREE from "three";
+import type * as THREE from "three";
 import type { DiveConfig } from "./dive";
 import { share } from "./dive";
+import type { DropSprites } from "./fx/dropSprites";
+import { AXIS } from "./fx/sprites";
+import { FRAMES } from "./fx/spriteArt";
 
-// Thin streaks of wind rushing past the camera while you dive, more of them showing the faster you fall. One line
-// mesh made at the start; each streak is a spot near the camera that drifts against your fall and wraps round when
-// it passes, so nothing is made while playing. Kept off the middle of the view, where the ground you aim at is.
+// Comic speed lines while you dive (gate 16b): a few tapered, inked streaks rushing past the camera, more of them the
+// faster you fall, like the action lines in a cartoon panel. Each is a spot near the camera that drifts against your
+// fall and wraps round when it passes; drawn as one-frame sprites from the inked streak pool, so nothing is made
+// while playing. Kept off the middle of the view, where the ground you aim at is.
 export class SpeedLines {
-  readonly mesh: THREE.LineSegments;
-  private material: THREE.LineBasicMaterial;
-  private positions: Float32Array;
   private spots: Float32Array; // x, y, z of each streak, relative to the camera
-  private attribute: THREE.BufferAttribute;
 
-  constructor(private config: DiveConfig["speedLines"], color: string) {
+  constructor(private config: DiveConfig["speedLines"], private sprites: DropSprites) {
     const n = Math.floor(config.count);
-    this.positions = new Float32Array(n * 6);
     this.spots = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) this.place(i, Math.random() * 2 - 1, 0, -1, 0);
-    const geometry = new THREE.BufferGeometry();
-    this.attribute = new THREE.BufferAttribute(this.positions, 3);
-    this.attribute.setUsage(THREE.DynamicDrawUsage);
-    geometry.setAttribute("position", this.attribute);
-    this.material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, fog: false });
-    this.mesh = new THREE.LineSegments(geometry, this.material);
-    this.mesh.frustumCulled = false;
-    this.mesh.visible = false;
   }
 
   // Each frame: where the camera is and how you are moving (m/s). Fast enough, the streaks show.
@@ -32,28 +23,29 @@ export class SpeedLines {
     const c = this.config;
     const speed = Math.hypot(vx, vy, vz);
     const strength = share(speed, c.fromSpeed, c.fullSpeed);
-    this.mesh.visible = strength > 0;
-    if (!this.mesh.visible) return;
-    this.material.opacity = strength * c.opacity;
+    if (strength <= 0) return;
     const dx = vx / speed, dy = vy / speed, dz = vz / speed;
     const n = this.spots.length / 3;
+    // Only some of them at a slow fall: the panel fills with lines as you speed up.
+    const shown = Math.ceil(n * strength);
     for (let i = 0; i < n; i++) {
       const o = i * 3;
       // The air stands still, so seen from the camera it comes at you against your travel.
-      let x = this.spots[o]! - vx * dt, y = this.spots[o + 1]! - vy * dt, z = this.spots[o + 2]! - vz * dt;
-      const along = x * dx + y * dy + z * dz;
-      if (along < -c.radiusMeters) {
-        this.place(i, 1, dx, dy, dz);
-        x = this.spots[o]!; y = this.spots[o + 1]!; z = this.spots[o + 2]!;
-      } else {
-        this.spots[o] = x; this.spots[o + 1] = y; this.spots[o + 2] = z;
-      }
-      // Each streak runs back from its spot along the way the air goes past.
-      const p = i * 6, tail = c.lengthMeters * (0.5 + strength * 0.5);
-      this.positions[p] = camera.x + x; this.positions[p + 1] = camera.y + y; this.positions[p + 2] = camera.z + z;
-      this.positions[p + 3] = camera.x + x - dx * tail; this.positions[p + 4] = camera.y + y - dy * tail; this.positions[p + 5] = camera.z + z - dz * tail;
+      const x = this.spots[o]! - vx * dt, y = this.spots[o + 1]! - vy * dt, z = this.spots[o + 2]! - vz * dt;
+      if (x * dx + y * dy + z * dz < -c.radiusMeters) this.place(i, 1, dx, dy, dz);
+      else { this.spots[o] = x; this.spots[o + 1] = y; this.spots[o + 2] = z; }
+      if (i >= shown) continue;
+      const s = this.sprites.streaks.draw();
+      if (!s) return;
+      // Each streak runs back from its spot along the way the air goes past; the sprite grows from its foot.
+      const length = c.lengthMeters * (0.6 + strength * 0.4) * (0.7 + 0.6 * ((i * 0.618) % 1));
+      s.mode = AXIS;
+      s.x = camera.x + this.spots[o]! - dx * length; s.y = camera.y + this.spots[o + 1]! - dy * length; s.z = camera.z + this.spots[o + 2]! - dz * length;
+      s.ax = dx; s.ay = dy; s.az = dz;
+      s.size0 = s.size1 = c.widthMeters;
+      s.aspect = length / c.widthMeters;
+      s.frame0 = FRAMES.streak.first;
     }
-    this.attribute.needsUpdate = true;
   }
 
   // A fresh spot for a streak, `ahead` (-1 to 1) of the camera along the travel (dx, dy, dz), somewhere in a ring round

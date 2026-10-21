@@ -1,7 +1,7 @@
 import type { MechModel } from "../mechModel";
 import { hash01 } from "./flipbook";
 import type { FxSprites } from "./fxSprites";
-import { AXIS } from "./sprites";
+import { AXIS, type SpritePool } from "./sprites";
 import { FRAMES } from "./spriteArt";
 
 // Jet looks, from data/thrusterFx.json: a flame under each nozzle while jetting, a burst out of the back on a dash or
@@ -55,8 +55,9 @@ export class Thrusters {
   }
 
   // One mech this frame: whether its jets fire, whether it is dashing (or ramming), whether it is on the ground, and
-  // how fast it rises. `flameScale` makes the flames longer and wider, for the retro-jets braking a drop-in.
-  drive(model: MechModel, jetting: boolean, dashing: boolean, grounded: boolean, vy: number, dt: number, flameScale = 1): void {
+  // how fast it rises. `flameScale` makes the flames longer and wider, and `flames` draws them from another pool, for
+  // the retro-jets braking a drop-in (the inked toon fire, fx/dropSprites.ts).
+  drive(model: MechModel, jetting: boolean, dashing: boolean, grounded: boolean, vy: number, dt: number, flameScale = 1, flames: SpritePool = this.sprites.fire): void {
     let state = this.states.get(model);
     if (!state) {
       state = { air: 0, lowest: 0, dashing, grounded };
@@ -71,7 +72,7 @@ export class Thrusters {
       const [tx, ty, tz] = flame.tilt;
       for (let i = 0; i < nozzles.length; i++) {
         const length = flameLength(flame, true, vy, this.time, i) * flameScale;
-        const s = this.sprites.fire.draw();
+        const s = flames.draw();
         if (!s) break;
         const [nx, ny, nz] = nozzles[i]!;
         s.mode = AXIS;
