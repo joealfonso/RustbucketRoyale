@@ -14,7 +14,11 @@ export type SoundName =
   | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz" | "wade" | "splash" | "treeFall" | "treeLand"
   | "uiHover" | "uiClick" | "uiPick" | "uiWhoosh" | "railCharge" | "railShot"
   | "titanStep" | "titanStomp" | "titanThrow" | "titanRoar" | "titanFall"
-  | "diveWind" | "landingBurn" | "landingImpact" | "shellBurst";
+  | "diveWind" | "landingBurn" | "landingImpact" | "shellBurst"
+  | "windupWhine" | "overheat" | "slugShot" | "chargeHum" | "chargeShot";
+
+// The sounds held for as long as something lasts, set every frame with a level rather than played (gate 18a).
+export type HeldSound = "windupWhine" | "chargeHum";
 
 export interface AudioConfig {
   master: number;
@@ -27,6 +31,7 @@ export interface AudioConfig {
   mix: MixConfig;
   variation: { pitch: number; level: number }; // each play is this much higher or lower, louder or quieter, at random
   weaponShots: Record<string, SoundName>; // weapon id to its shot sound
+  weaponAltShots: Record<string, SoundName>; // weapon id to its right-click shot sound; a weapon not listed uses its own
   // `echo` is how much of the sound goes into the shared space, 0 to 1.
   sounds: Record<SoundName, { volume: number; echo?: number; file: string | string[] | null }>;
 }
@@ -43,6 +48,7 @@ export class Sound {
   private voices: { name: string; level: number; gain: GainNode; timer: number }[] = [];
   private jets: { source: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
   private wind: { source: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
+  private held = new Map<HeldSound, { tones: OscillatorNode[]; gain: GainNode; wobble: GainNode; level: number }>();
   private ears = { x: 0, y: 0, z: 0 };
   muted = false;
 
@@ -101,6 +107,11 @@ export class Sound {
   // The shot sound for a weapon, by its id in data/weapons.json.
   shotFor(weaponId: string | undefined): SoundName {
     return (weaponId && this.config.weaponShots[weaponId]) || "shot";
+  }
+
+  // The right-click shot sound for a weapon: its own when audio.json lists one, otherwise its normal shot.
+  altShotFor(weaponId: string | undefined): SoundName {
+    return (weaponId && this.config.weaponAltShots[weaponId]) || this.shotFor(weaponId);
   }
 
   // Plays a sound. With a position it comes from that spot in the world, without one it plays in your head (UI sounds).
@@ -209,6 +220,41 @@ export class Sound {
     }
     this.wind.gain.gain.setTargetAtTime(this.config.sounds.diveWind.volume * level, ctx.currentTime, 0.15);
     this.wind.filter.frequency.setTargetAtTime(300 + level * 1300, ctx.currentTime, 0.2);
+  }
+
+  // Your own gun's held sounds: the autocannon's whine as it spins up and the spike driver's hum as it charges.
+  // `level` 0 is silent, 1 fully spun or charged, and the pitch climbs with it so you hear it getting there. `full`
+  // shakes the hum, the cue that letting go now pierces. Stand-in tones; a `file` would not loop here yet.
+  setHeld(name: HeldSound, level: number, full = false): void {
+    const ctx = this.ctx, out = this.out;
+    if (!ctx || !out) return;
+    let h = this.held.get(name);
+    if (!h) {
+      if (level <= 0) return;
+      const whine = name === "windupWhine";
+      const filter = new BiquadFilterNode(ctx, { type: "lowpass", frequency: whine ? 2600 : 1800, Q: whine ? 4 : 1.2 });
+      const gain = new GainNode(ctx, { gain: 0 });
+      const tremolo = new GainNode(ctx, { gain: 1 });
+      const lfo = new OscillatorNode(ctx, { type: "square", frequency: whine ? 0 : 14 });
+      const wobble = new GainNode(ctx, { gain: 0 });
+      lfo.connect(wobble).connect(tremolo.gain);
+      lfo.start();
+      const tones = [new OscillatorNode(ctx, { type: whine ? "sawtooth" : "square" }), new OscillatorNode(ctx, { type: "sine" })];
+      for (const t of tones) { t.connect(filter); t.start(); }
+      filter.connect(tremolo).connect(gain).connect(out);
+      h = { tones: [...tones, lfo], gain, wobble, level: -1 };
+      this.held.set(name, h);
+    }
+    // Only a change touches the nodes, so holding steady costs nothing a frame.
+    const shown = Math.round(level * 50) / 50 + (full ? 10 : 0);
+    if (shown === h.level) return;
+    h.level = shown;
+    const t = ctx.currentTime;
+    const base = name === "windupWhine" ? 260 + level * 900 : 110 + level * 330;
+    h.tones[0]!.frequency.setTargetAtTime(base, t, 0.04);
+    h.tones[1]!.frequency.setTargetAtTime(base * 2.01, t, 0.04);
+    h.gain.gain.setTargetAtTime(level > 0 ? this.config.sounds[name].volume * (0.35 + 0.65 * level) : 0, t, level > 0 ? 0.03 : 0.06);
+    h.wobble.gain.setTargetAtTime(full ? 0.5 : 0, t, 0.02);
   }
 
   private playFile(name: SoundName, into: AudioNode, pitch: number): number {
@@ -414,6 +460,31 @@ export class Sound {
         this.clank(into, 410 * p, 0.3, 0.22, 0.06);
         this.clank(into, 330 * p, 0.25, 0.18, 0.11);
         return this.crunch(into, 0.5, "bandpass", 900 * p, 0.7, 0.003);
+      // Overheat: steam blowing off the barrel in a long hiss, a hard clank of the lock and a falling groan of the motor.
+      case "overheat":
+        this.clank(into, 320 * p, 0.25, 0.4);
+        this.burst(into, 1.4, "highpass", 2400, 0.55, 0.02);
+        this.burst(into, 0.9, "bandpass", 1200, 0.3, 0.05, 0.05);
+        return this.glide(into, 900 * p, 140 * p, 0.7, "sawtooth", 0.12);
+      // Slug: one deep, dry blast much heavier than the pellets, a chest punch, and the pump racking slow.
+      case "slugShot":
+        this.burst(into, 0.025, "highpass", 1800, 0.8, 0.0005);
+        this.crunch(into, 0.28, "lowpass", 2400 * p, 1.6, 0.001);
+        this.body(into, 95 * p, 28 * p, 0.5, 1.4);
+        this.body(into, 210 * p, 80 * p, 0.2, 0.7);
+        this.burst(into, 0.9, "lowpass", 480 * p, 0.6, 0.02);
+        this.clank(into, 480 * p, 0.08, 0.2, 0.5);
+        return this.clank(into, 380 * p, 0.09, 0.18, 0.62);
+      // A full charge letting go: a bright crack, the rails snapping, a huge thunk and the spike screaming away.
+      case "chargeShot":
+        this.burst(into, 0.03, "highpass", 3200, 0.9, 0.0005);
+        this.glide(into, 4200 * p, 300 * p, 0.25, "sawtooth", 0.2);
+        this.body(into, 170 * p, 38 * p, 0.45, 1.5);
+        this.clank(into, 1100 * p, 0.6, 0.22);
+        return this.burst(into, 0.7, "lowpass", 700 * p, 0.45, 0.01);
+      // Played as one-shots for someone else's gun winding up (yours is held, setHeld): a short rising whine or hum.
+      case "windupWhine": return this.glide(into, 420 * p, 900 * p, 0.28, "sawtooth", 0.12, 0, true);
+      case "chargeHum": this.glide(into, 160 * p, 330 * p, 0.3, "square", 0.1, 0, true); return this.glide(into, 320 * p, 660 * p, 0.3, "sine", 0.08, 0, true);
       case "jets": case "diveWind": return 0;
     }
   }

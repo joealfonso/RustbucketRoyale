@@ -232,18 +232,21 @@ let rangeWeapon = 0;
 let rangeShots = 0;
 let lookingAtRange = false;
 let rangeSlow = false; // quarter speed, to see each flipbook frame
-function fireAtRange(): void {
+// `alt` fires the weapon's right-click look instead (C): a slug, a windup round or a full charge (gate 18a).
+function fireAtRange(alt = false): void {
   const w = weapons[rangeWeapon]!;
+  const pellets = alt && w.secondary.kind === "slug" ? 1 : w.pellets;
+  const spreadDegrees = alt && w.secondary.kind !== "charge" ? w.secondary.spreadDegrees : w.spreadDegrees;
   const atMech = rangeShots++ % 2 === 1;
   const ox = -4.5, oy = 2.4, oz = RANGE_Z + 9;
   const tx = atMech ? 3.5 : -1.5, ty = atMech ? 2.4 : 2, tz = atMech ? RANGE_Z + 3 : RANGE_Z + 0.5;
-  for (let p = 0; p < w.pellets; p++) {
-    const spread = (w.spreadDegrees * Math.PI) / 180;
+  for (let p = 0; p < pellets; p++) {
+    const spread = (spreadDegrees * Math.PI) / 180;
     let dx = tx - ox + (Math.random() - 0.5) * spread * 20, dy = ty - oy + (Math.random() - 0.5) * spread * 20, dz = tz - oz;
     const length = Math.hypot(dx, dy, dz);
     dx /= length; dy /= length; dz /= length;
     Object.assign(rangeShot, { ox, oy, oz, dx, dy, dz, length: atMech ? length - 1 : length + 5 }); // a mech hit ends on its armour
-    shotFx.show(rangeShot, rangeWeapon, atMech);
+    shotFx.show(rangeShot, rangeWeapon, atMech, alt ? 1 : -1);
   }
 }
 // Key 8: effects (V5a), the roster seen from in front. B sets off a blast behind it, in turn as big as a grenade's,
@@ -330,7 +333,7 @@ function place(): void {
   if (lookingAtRange) {
     camera.position.set(3 + (turn - 0.6) * 4, 3, RANGE_Z + 11);
     camera.lookAt(-0.5, 2.2, RANGE_Z + 3);
-    label.textContent = `Firing range · F: fire ${weapons[rangeWeapon]!.name} (wall, then mech) · G: next weapon · T: ${rangeSlow ? "quarter speed" : "full speed"} · effects ${vfxQuality()} · 1 / 2 / 3: back`;
+    label.textContent = `Firing range · F: fire ${weapons[rangeWeapon]!.name} (wall, then mech) · C: its right-click · G: next weapon · T: ${rangeSlow ? "quarter speed" : "full speed"} · effects ${vfxQuality()} · 1 / 2 / 3: back`;
     return;
   }
   const target = close ? close.group.position.clone().setY(1.6) : lookingAtProps ? new THREE.Vector3(3, 0.5, half + 4) : new THREE.Vector3(5, 2, lookingAtRoster ? ROSTER_Z : half + 12);
@@ -362,6 +365,7 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "KeyV") setVfxQuality(vfxQuality() === "low" ? "normal" : "low");
   if (e.code === "Digit7") lookingAtRange = true;
   if (e.code === "KeyF") fireAtRange();
+  if (e.code === "KeyC" && lookingAtRange) fireAtRange(true);
   if (e.code === "KeyG") rangeWeapon = (rangeWeapon + 1) % weapons.length;
   if (e.code === "KeyT") rangeSlow = !rangeSlow;
   // Far enough back for the whole line-up: 14 m framed four mechs 6 m apart, and the roster grows.

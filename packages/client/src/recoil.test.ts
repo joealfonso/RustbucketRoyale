@@ -8,7 +8,7 @@ import kitsJson from "../../../data/mechKits.json";
 import paletteJson from "../../../data/palette.json";
 import lookJson from "../../../data/look.json";
 import deathFxJson from "../../../data/deathFx.json";
-import { createSpring, kickFor, kickSpring, parseRecoil, stepSpring } from "./recoil";
+import { createSpring, kickFor, kickIdFor, kickSpring, parseRecoil, stepSpring } from "./recoil";
 import { kitFromScene, parseKits } from "./mechKit";
 import { createMechModel, kickMech, moveGunsAndSensors, setMechDamage, type MechModel } from "./mechModel";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
@@ -184,5 +184,20 @@ describe("recoil on a mech", () => {
       }
     }
     for (const n of perSide) expect(n).toBeLessThanOrEqual(deathFxJson.meshesPerPiece);
+  });
+});
+
+describe("right-click kicks (gate 18a)", () => {
+  const config = parseRecoil(recoilJson.recoil);
+  it("kicks a slug and a full charge harder than the gun's own shot", () => {
+    expect(kickIdFor(config, "scattergun", true)).toBe("scattergunAlt");
+    expect(kickIdFor(config, "spikeDriver", true)).toBe("spikeDriverAlt");
+    expect(kickFor(config, "spikeDriverAlt").backMeters).toBeGreaterThan(kickFor(config, "spikeDriver").backMeters);
+    expect(kickFor(config, "scattergunAlt").climbDegrees).toBeGreaterThan(kickFor(config, "scattergun").climbDegrees);
+  });
+
+  it("falls back to the gun's own kick when it has no alt one, or the shot is not in the alt look", () => {
+    expect(kickIdFor(config, "autocannon", true)).toBe("autocannon");
+    expect(kickIdFor(config, "spikeDriver", false)).toBe("spikeDriver");
   });
 });

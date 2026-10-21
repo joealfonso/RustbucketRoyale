@@ -98,6 +98,15 @@
     "searchMeters": 250,
     "personDistanceScale": 1.6
   },
+  "secondaries": {
+    "slugMinRange": 30,
+    "windupMaxRange": 45,
+    "windupHeatLimit": 0.8,
+    "windupResumeHeat": 0.3,
+    "chargeMinRange": 60,
+    "chargeStillSpeed": 2,
+    "chargeChancePerSecond": 0.8
+  },
   "abilities": {
     "ramChancePerSecond": 0.6,
     "ramMaxAngleDegrees": 20,

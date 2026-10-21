@@ -18,6 +18,7 @@ export interface InputMessage {
   jet: boolean;
   dash: boolean;
   fire: boolean;
+  altFire: boolean;
   grenade: boolean;
   slot: number;
   interact: boolean;
@@ -110,6 +111,8 @@ export interface SelfState {
   fuelScale: number;
   speedScale: number;
   dropPhase: number; dropTime: number; // the drop-in (drop.ts): phase 0 down, 1 hanging, 2 ball, 3 braking; landing stun left
+  heat: number; overheat: number; windup: number; charge: number; // your secondary fire (altFire.ts AltFireState)
+  pinTime: number; pinSpeed: number; // pinned by a full charge spike: seconds left, share of speed kept
   mech: number; // which roster mech you are driving. Can change between matches.
 }
 
@@ -131,6 +134,9 @@ export interface OtherState {
   upgrades: number[]; // the two upgrades fitted, -1 for none, for drawing the parts bolted on
   mech: number; // which roster mech to draw, and whose hit boxes the crosshair checks
   ability: boolean; // using its ability right now (ramming, or in the air on a pounce)
+  pinned: boolean; // held by a full charge spike
+  overheated: boolean; // its windup gun is venting
+  spin: number; // 0 to 1: its windup gun's spin, or its spike's charge, so the barrel is seen and heard winding up
 }
 
 // What you are carrying. Slots hold a weapon index, or -1 when empty.
@@ -170,6 +176,8 @@ export interface ShotMessage {
   dx: number; dy: number; dz: number;
   length: number; // how far the shot travelled before it hit something
   hitMech: boolean;
+  alt?: number; // a secondary shot: its damage share, 0 to 1 (1 for a slug or a full charge). Left out for a primary
+  pierce?: boolean; // a full charge spike, passing through
 }
 
 // Sent to the shooter only: what they hit. zone is -1 for splash damage.
@@ -303,6 +311,7 @@ export function sanitizeInput(m: Record<string, unknown>): InputMessage | null {
     jet: m.jet,
     dash: m.dash,
     fire: m.fire,
+    altFire: m.altFire === true,
     grenade: m.grenade,
     slot: m.slot === 1 ? 1 : 0,
     interact: m.interact,
@@ -323,6 +332,7 @@ export function toMechInput(message: InputMessage, out: MechInput): void {
   out.jet = message.jet;
   out.dash = message.dash;
   out.fire = message.fire;
+  out.altFire = message.altFire;
   out.grenade = message.grenade;
   out.slot = message.slot;
   out.interact = message.interact;

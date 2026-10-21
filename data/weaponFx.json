@@ -45,7 +45,21 @@
         ]
       },
       "tracer": { "pool": 48, "length": 5, "width": 0.16, "core": "#FFF2B8", "coreShare": 0.4 },
-      "impact": { "sparks": [4, 6], "sparkSpeed": 10, "spread": 0.8, "grit": 1, "gritScale": 1, "mechSparks": 6, "mechFlashScale": 1 }
+      "impact": { "sparks": [4, 6], "sparkSpeed": 10, "spread": 0.8, "grit": 1, "gritScale": 1, "mechSparks": 6, "mechFlashScale": 1 },
+      "alt": {
+        "name": "Spin-up",
+        "flash": {
+          "pool": 12, "points": 5, "inner": 0.32, "aspect": 1.2, "coreScale": 0.5, "core": "#FFF6D8", "frameSeconds": 0.025,
+          "frames": [
+            { "size": 1.1, "spin": 0, "plume": 1.5, "width": 0.55 },
+            { "size": 0.7, "spin": 36, "plume": 0.8, "width": 0.38 }
+          ]
+        },
+        "tracer": { "pool": 72, "length": 6.5, "width": 0.18, "core": "#FFF6D8", "coreShare": 0.46 },
+        "impact": { "sparks": [4, 7], "sparkSpeed": 11, "spread": 0.85, "grit": 1, "gritScale": 1, "mechSparks": 6, "mechFlashScale": 1 },
+        "glow": { "pool": "fire", "steps": 4, "sizes": [0.6, 1.5], "flickerFps": 16, "forwardMeters": 0, "fullFlashScale": 1 },
+        "vent": { "everySeconds": 0.06, "size": [0.5, 1.6], "lifeSeconds": 0.9, "rise": 2.6 }
+      }
     },
     "scattergun": {
       "flash": {
@@ -57,7 +71,20 @@
         ]
       },
       "tracer": { "pool": 64, "length": 2.2, "width": 0.08, "core": "#E6F6FF", "coreShare": 0.34 },
-      "impact": { "sparks": [2, 3], "sparkSpeed": 8, "spread": 0.9, "grit": 1, "gritScale": 0.6, "mechSparks": 3, "mechFlashScale": 0.7 }
+      "impact": { "sparks": [2, 3], "sparkSpeed": 8, "spread": 0.9, "grit": 1, "gritScale": 0.6, "mechSparks": 3, "mechFlashScale": 0.7 },
+      "alt": {
+        "name": "Slug",
+        "flash": {
+          "pool": 4, "points": 8, "inner": 0.4, "aspect": 1.4, "coreScale": 0.5, "core": "#F2FBFF", "frameSeconds": 0.04,
+          "frames": [
+            { "size": 2.1, "spin": 0, "plume": 2.4, "width": 1.0 },
+            { "size": 1.6, "spin": 22, "plume": 1.6, "width": 0.8 },
+            { "size": 0.9, "spin": 40, "plume": 0.8, "width": 0.45 }
+          ]
+        },
+        "tracer": { "pool": 8, "length": 4, "width": 0.36, "core": "#F2FBFF", "coreShare": 0.45 },
+        "impact": { "sparks": [9, 12], "sparkSpeed": 14, "spread": 0.75, "grit": 3, "gritScale": 1.8, "mechSparks": 14, "mechFlashScale": 1.9 }
+      }
     },
     "spikeDriver": {
       "flash": {
@@ -69,7 +96,22 @@
         ]
       },
       "tracer": { "pool": 12, "length": 9, "width": 0.24, "core": "#FCEBFF", "coreShare": 0.36 },
-      "impact": { "sparks": [8, 10], "sparkSpeed": 15, "spread": 0.7, "grit": 2, "gritScale": 1.7, "mechSparks": 12, "mechFlashScale": 1.8 }
+      "impact": { "sparks": [8, 10], "sparkSpeed": 15, "spread": 0.7, "grit": 2, "gritScale": 1.7, "mechSparks": 12, "mechFlashScale": 1.8 },
+      "alt": {
+        "name": "Charged spike",
+        "flash": {
+          "pool": 4, "points": 4, "inner": 0.14, "aspect": 0.65, "coreScale": 0.55, "core": "#FCEBFF", "frameSeconds": 0.045,
+          "frames": [
+            { "size": 1.6, "spin": 0, "plume": 4.6, "width": 0.55 },
+            { "size": 2.0, "spin": 45, "plume": 3.2, "width": 0.42 },
+            { "size": 1.0, "spin": 0, "plume": 1.6, "width": 0.24 }
+          ]
+        },
+        "tracer": { "pool": 6, "length": 14, "width": 0.42, "core": "#FCEBFF", "coreShare": 0.42 },
+        "impact": { "sparks": [12, 16], "sparkSpeed": 17, "spread": 0.7, "grit": 3, "gritScale": 2.1, "mechSparks": 18, "mechFlashScale": 2.3 },
+        "glow": { "pool": "sparks", "steps": 5, "sizes": [0.5, 1.5], "flickerFps": 0, "forwardMeters": -0.3, "fullFlashScale": 1.35 },
+        "pin": { "everySeconds": 0.14, "sparks": 3, "sparkSpeed": 4, "ringMeters": 2.2, "ringSeconds": 0.45 }
+      }
     }
   }
 }

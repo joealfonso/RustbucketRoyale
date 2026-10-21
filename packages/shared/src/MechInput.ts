@@ -9,6 +9,7 @@ export interface MechInput {
   jet: boolean;
   dash: boolean; // true for the one step on which Shift was pressed
   fire: boolean;
+  altFire: boolean; // right mouse held: the gun's secondary fire (altFire.ts)
   grenade: boolean;
   slot: number; // which weapon slot is wanted in hand, 0 or 1
   interact: boolean; // E held: a press takes the weapon in front of you, holding loots a wreck
@@ -21,5 +22,5 @@ export interface MechInput {
 }
 
 export function createMechInput(): MechInput {
-  return { moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0, run: false, jet: false, dash: false, fire: false, grenade: false, slot: 0, interact: false, repair: false, ability: false, targetX: 0, targetY: 0, targetZ: 0 };
+  return { moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0, run: false, jet: false, dash: false, fire: false, altFire: false, grenade: false, slot: 0, interact: false, repair: false, ability: false, targetX: 0, targetY: 0, targetZ: 0 };
 }

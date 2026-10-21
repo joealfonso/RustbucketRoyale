@@ -8,7 +8,7 @@ import { RemoteMechs } from "./remoteMechs";
 
 const config = parseReplay(replayJson);
 const HP = [60, 60, 100];
-const other = (id: number, x: number, hp = HP): OtherState => ({ id, x, y: 0, z: -20, yaw: 0, running: false, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp, weapon: 0, armor: [0, 0, 0], upgrades: [-1, -1], mech: 0, ability: false, dropPhase: 0 });
+const other = (id: number, x: number, hp = HP): OtherState => ({ id, x, y: 0, z: -20, yaw: 0, running: false, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp, weapon: 0, armor: [0, 0, 0], upgrades: [-1, -1], mech: 0, ability: false, pinned: false, overheated: false, spin: 0, dropPhase: 0 });
 const still = { vx: 0, vy: 0, vz: 0, jetting: false, running: false, abilityTime: 0 };
 const open = new World([]);
 

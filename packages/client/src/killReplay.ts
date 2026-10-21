@@ -80,7 +80,7 @@ export class KillReplay {
   // Where the killer is in the replay, for whatever follows the view (the map's detail, the radar).
   readonly focus = { x: 0, y: 0, z: 0 };
   // The recorded effects, fired again as the replay reaches them. Wired to the same functions the live ones use.
-  onShot?: (id: number, shot: Shot, weapon: number, hitMech: boolean) => void;
+  onShot?: (id: number, shot: Shot, weapon: number, hitMech: boolean, alt: number) => void;
   onExplode?: (x: number, y: number, z: number) => void;
   onGrenade?: (id: number, x: number, y: number, z: number, vx: number, vy: number, vz: number) => void;
   onAbility?: (moment: AbilityMessage) => void;
@@ -178,8 +178,8 @@ export class KillReplay {
   }
 
   // The effects, as they are shown live. Nothing is kept while the replay plays: it would record itself.
-  shot(nowMs: number, id: number, shot: Shot, weapon: number, hitMech: boolean): void {
-    if (this.phase !== "playing") this.events.shot(nowMs, id, shot, weapon, hitMech);
+  shot(nowMs: number, id: number, shot: Shot, weapon: number, hitMech: boolean, alt = -1): void {
+    if (this.phase !== "playing") this.events.shot(nowMs, id, shot, weapon, hitMech, alt);
   }
 
   explode(nowMs: number, x: number, y: number, z: number): void {
@@ -301,7 +301,7 @@ export class KillReplay {
       const kind = events.kindAt(age);
       if (kind === SHOT) {
         events.readShot(age, this.shotOut);
-        this.onShot?.(events.idAt(age), this.shotOut, events.weaponAt(age), events.hitMechAt(age));
+        this.onShot?.(events.idAt(age), this.shotOut, events.weaponAt(age), events.hitMechAt(age), events.altAt(age));
       } else if (kind === EXPLODE) {
         this.onExplode?.(events.valueAt(age, 0), events.valueAt(age, 1), events.valueAt(age, 2));
       } else if (kind === GRENADE) {

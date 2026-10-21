@@ -6,6 +6,7 @@
     "ability": "Q: {ability} ready",
     "grenade": "G: throw a grenade",
     "weapons": "1 / 2 or the wheel: switch weapons",
-    "drop": "Look where you want to land"
+    "drop": "Look where you want to land",
+    "secondary": "Right-click: {secondary}"
   }
 }

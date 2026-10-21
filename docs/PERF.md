@@ -519,3 +519,6 @@ Title screen, production builds side by side (before V11 and V12 / after), headl
 ### 16b drop-in (2026-10-20)
 The Rustbucket model is about 950 kB raw (14,940 / 7,972 / 2,412 triangles by level), merged to 2 draw calls; drop effects add at most 4 inked sprite pools (none drawn while empty) and 2 for shells. In the bay at the start of medium seed 23 a frame went from 144 draw calls to 110 once the ship was merged. Soaks: small 29 kbps, medium 40, large 23, tick p99 0.20 to 0.22 ms, worst correction 0.01 cm. Times from the match going live: median landing small 15 to 17 s, medium 26 to 33 s, large 45 to 51 s.
 
+### 18a secondaries (2026-10-20)
+Your own snapshot grows to 29 numbers (4-byte mask; zero numbers cost nothing, worst case 25 bytes more); other mechs carry pinned in a spare bit and one byte of spin or venting only while not 0; a shot message is 19 bytes. Soaks per starting gun, kbps per player: small 24 / 27 / 27, medium 25 / 37 / 26, large 21 / 17 / 17 (autocannon / scattergun / spike driver), tick p99 0.09 to 0.26 ms. A large seed (704082781) fails with a one-snapshot 14.85 m correction that predates 18a (same on 16c): the pretend player's world holds a box the server no longer has, likely a prop broken out of its sight.
+

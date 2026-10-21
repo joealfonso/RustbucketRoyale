@@ -44,3 +44,11 @@ describe("tips", () => {
     expect(() => parseTips({ ...tipsJson, tips: { sprint: "x" } })).toThrow(/tips.json/);
   });
 });
+
+describe("the right-click tip (gate 18a)", () => {
+  it("names the gun's secondary", () => {
+    const tips = new Tips(config, memory());
+    tips.offer("secondary", "Slug");
+    expect(tips.current(0.1)).toBe("Right-click: Slug");
+  });
+});

@@ -5,7 +5,7 @@ import weaponsJson from "../../../data/weapons.json";
 import weaponFxJson from "../../../data/weaponFx.json";
 import { SlotRing } from "./fx/flipbook";
 import { SpritePool } from "./fx/sprites";
-import { capFor, flashFrame, nearestFamily, parseWeaponFx, sparkVelocity, weaponFxFor } from "./weaponFxData";
+import { capFor, flashFrame, nearestFamily, parseWeaponFx, sparkVelocity, usesAltLook, weaponFxFor } from "./weaponFxData";
 
 const config = parseWeaponFx(weaponFxJson);
 
@@ -87,5 +87,31 @@ describe("grit colours", () => {
   it("picks the family nearest the surface colour", () => {
     expect(nearestFamily("#c4622d", ["#5e7f3a", "#c4622d", "#6e7b80"])).toBe(1);
     expect(nearestFamily("#707c82", ["#5e7f3a", "#c4622d", "#6e7b80"])).toBe(2);
+  });
+});
+
+describe("right-click looks (gate 18a)", () => {
+  it("has a named alt look for every weapon, with the look its kind needs", () => {
+    const weapons = parseWeapons(weaponsJson).weapons;
+    for (const [i, fx] of weaponFxFor(config, weapons).entries()) {
+      expect(fx.alt.name.length).toBeGreaterThan(0);
+      const kind = weapons[i]!.secondary.kind;
+      if (kind === "windup") { expect(fx.alt.glow).toBeDefined(); expect(fx.alt.vent).toBeDefined(); }
+      if (kind === "charge") { expect(fx.alt.glow).toBeDefined(); expect(fx.alt.pin).toBeDefined(); }
+    }
+  });
+
+  it("refuses a weapon with no alt look", () => {
+    const raw = JSON.parse(JSON.stringify(weaponFxJson));
+    delete raw.weapons.autocannon.alt;
+    expect(() => parseWeaponFx(raw)).toThrow(/autocannon.alt/);
+  });
+
+  it("draws a partial charge as a plain spike and everything else right-click in the alt look", () => {
+    expect(usesAltLook("charge", 0.6)).toBe(false);
+    expect(usesAltLook("charge", 1)).toBe(true);
+    expect(usesAltLook("slug", 1)).toBe(true);
+    expect(usesAltLook("windup", 1)).toBe(true);
+    expect(usesAltLook("windup", -1)).toBe(false);
   });
 });

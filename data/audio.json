@@ -32,6 +32,10 @@
     "scattergun": "shotScattergun",
     "spikeDriver": "shotSpikeDriver"
   },
+  "weaponAltShots": {
+    "scattergun": "slugShot",
+    "spikeDriver": "chargeShot"
+  },
   "sounds": {
     "shot": {
       "volume": 1.56,
@@ -239,6 +243,11 @@
       "volume": 0.9,
       "echo": 0.4,
       "file": null
-    }
+    },
+    "windupWhine": { "volume": 0.32, "echo": 0, "file": null },
+    "overheat": { "volume": 1.1, "echo": 0.35, "file": null },
+    "slugShot": { "volume": 2.6, "echo": 0.55, "file": null },
+    "chargeHum": { "volume": 0.3, "echo": 0, "file": null },
+    "chargeShot": { "volume": 2.2, "echo": 0.5, "file": null }
   }
 }

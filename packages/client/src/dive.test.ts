@@ -78,7 +78,7 @@ describe("the drop-in on the client", () => {
     const remotes = new RemoteMechs(new THREE.Scene(), 15, 400, 50, [60, 60, 100]);
     const seen: [number, number][] = [];
     remotes.onDropPhase = (_m, from, to) => seen.push([from, to]);
-    const other = (dropPhase: number): OtherState => ({ id: 3, x: 0, y: 0, z: 0, yaw: 0, running: false, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp: [60, 60, 100], weapon: 0, armor: [0, 0, 0], upgrades: [-1, -1], mech: 0, ability: false, dropPhase });
+    const other = (dropPhase: number): OtherState => ({ id: 3, x: 0, y: 0, z: 0, yaw: 0, running: false, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp: [60, 60, 100], weapon: 0, armor: [0, 0, 0], upgrades: [-1, -1], mech: 0, ability: false, pinned: false, overheated: false, spin: 0, dropPhase });
     remotes.push([other(DROP_BALL)], 1, 0); // first seen mid fall: nothing to say yet
     remotes.push([other(DROP_BURNING)], 2, 50);
     remotes.push([other(DROP_NONE)], 3, 100);

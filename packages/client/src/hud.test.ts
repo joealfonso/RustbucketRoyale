@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COOLDOWN_STEPS, bossBarShown, clock, cooldownStep, plateText, ringLabel } from "./hud";
+import { ALT_STEPS, COOLDOWN_STEPS, altMeter, bossBarShown, clock, cooldownStep, plateText, ringLabel } from "./hud";
 
 describe("cooldownStep", () => {
   it("is full, meaning ready, once the cooldown is over", () => {
@@ -55,5 +55,24 @@ describe("bossBarShown", () => {
 
   it("goes once it has fallen", () => {
     expect(bossBarShown(true, true, 10, 0, 150)).toBe(false);
+  });
+});
+
+describe("altMeter", () => {
+  const m = { step: 0, label: "", state: "" as const } as Parameters<typeof altMeter>[3];
+  it("fills a windup's heat bar in steps, turns hot near the top and says OVERHEAT when locked", () => {
+    expect(altMeter("windup", 0.5, false, m)).toMatchObject({ step: ALT_STEPS / 2, state: "", label: "" });
+    expect(altMeter("windup", 0.8, false, m).state).toBe("hot");
+    expect(altMeter("windup", 1, true, m)).toMatchObject({ step: ALT_STEPS, state: "overheat", label: "OVERHEAT" });
+  });
+
+  it("fills a charge ring and says PIERCE once full", () => {
+    expect(altMeter("charge", 0.25, false, m)).toMatchObject({ step: ALT_STEPS / 4, state: "" });
+    expect(altMeter("charge", 1, true, m)).toMatchObject({ state: "full", label: "PIERCE" });
+  });
+
+  it("lights the slug's dot when it is ready", () => {
+    expect(altMeter("slug", 0, true, m)).toMatchObject({ step: ALT_STEPS, state: "ready" });
+    expect(altMeter("slug", 0, false, m)).toMatchObject({ step: 0, state: "" });
   });
 });

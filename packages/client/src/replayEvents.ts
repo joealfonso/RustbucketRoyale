@@ -15,7 +15,9 @@ export class ReplayEvents {
   private kinds: Uint8Array;
   private ids: Int32Array; // who fired, threw or used the ability
   private codes: Int16Array; // the weapon of a shot, or the ability's kind
-  private marks: Uint8Array; // a shot that hit a mech, or the ability's event
+  // A shot: bit 0 hit a mech, the bits above its right-click share in hundredths plus one (0 for a primary shot).
+  // An ability: its event.
+  private marks: Uint8Array;
   private values: Float32Array;
   private next = 0;
   private filled = 0;
@@ -38,8 +40,10 @@ export class ReplayEvents {
     this.filled = 0;
   }
 
-  shot(timeMs: number, id: number, shot: Shot, weapon: number, hitMech: boolean): void {
-    const at = this.push(timeMs, SHOT, id, weapon, hitMech ? 1 : 0);
+  // `alt` is -1 for a primary shot, or the right-click shot's share, 0 to 1.
+  shot(timeMs: number, id: number, shot: Shot, weapon: number, hitMech: boolean, alt = -1): void {
+    const altCode = alt < 0 ? 0 : 1 + Math.round(Math.min(1, alt) * 100);
+    const at = this.push(timeMs, SHOT, id, weapon, (hitMech ? 1 : 0) | (altCode << 1));
     this.set(at, shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz, shot.length);
   }
 
@@ -94,7 +98,13 @@ export class ReplayEvents {
   }
 
   hitMechAt(age: number): boolean {
-    return this.marks[this.slot(age)] === 1;
+    return (this.marks[this.slot(age)]! & 1) === 1;
+  }
+
+  // A shot's right-click share, or -1 for a primary shot.
+  altAt(age: number): number {
+    const code = this.marks[this.slot(age)]! >> 1;
+    return code === 0 ? -1 : (code - 1) / 100;
   }
 
   // The n-th value of an event: 0-2 a place, 3-5 a direction or velocity, 6 a shot's length.

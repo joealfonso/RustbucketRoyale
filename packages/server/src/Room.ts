@@ -1,10 +1,10 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
-  FireGate, STEP, ZONE_ARMS, ZONE_COUNT, ZONE_LEGS, ZONE_TORSO, applyDamage, propsInReach, computeShot, createGrenade, createHealth, createMechInput,
+  FireGate, FIRE_NONE, FIRE_SECONDARY, STEP, altSpin, createAltFireState, createAltShot, stepAltFire, type AltShot, ZONE_ARMS, ZONE_COUNT, ZONE_LEGS, ZONE_TORSO, applyDamage, propsInReach, computeShot, createGrenade, createHealth, createMechInput,
   createMechState, createRayHit, createRingNow, createShot, createZoneHit, isDestroyed, isOutsideRing, makeRingSchedule, partToRepair, ringOnLand,
   decodeInput, parseClientMessage, ringAt, rollLoot, itemWeapon, weaponItem, raycastMech, stepGrenade, stepMech, throwGrenade, toMechInput, writeSelf,
   NOISE_KINDS, type BotConfig, type CombatStats, type NoiseKind, type NoiseStats, type PropConfig, type PropInstance, type GrenadeState, type GrenadeStats, type MatchConfig, type MatchState, type MechInput,
-  type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage, type Terrain,
+  type MechStats, type NetStats, type OtherState, type RingConfig, type RingNow, type RingSchedule, type ServerMessage, type ShotMessage, type Terrain,
   takenWithE, itemUpgrade, upgradeItem, upgradeScale, applyTune, assignDeep, parseTunable, setNumberAt, TUNABLE_FILES, type TuningRaws, type UpgradeSet,
   makeZonesFor, makeMuzzlesFor, mechStatsFor, rosterIndex, abilityFor, barrageTarget, type Roster, type AbilitySet, type AbilityStats, type BarrageStats, type RailStats,
   type BotDifficulty, type DecoyStats, type PounceStats, type RamStats,
@@ -27,6 +27,8 @@ import { Pickups } from "./Pickups";
 import { planDrops } from "./supplyDrops";
 import { TITAN_ID, Titan, placeTitan, type TitanHost } from "./Titan";
 import type { Player } from "./Player";
+
+const NO_PLAYERS: readonly Player[] = [];
 
 const KILL_HEIGHT = -50;
 const CHEST_HEIGHT = 1.7; // where splash damage measures to
@@ -104,6 +106,11 @@ export class Room {
   private nextId = 1;
   private tickCount = 0;
   private shot = createShot();
+  private altShot = createAltShot();
+  // Secondary fire so far, by everyone: trigger pulls (all, and by kind), mechs hit by a pierce past the first, and pins.
+  // For tests and the soak.
+  readonly secondaryCount = { shots: 0, windup: 0, slug: 0, charge: 0, pierced: 0, pinned: 0 };
+  private pierced: Player[] = []; // mechs one piercing shot has already gone through
   private newGrenade = createGrenade();
   private worldHit = createRayHit();
   private zoneHit = createZoneHit();
@@ -226,7 +233,7 @@ export class Room {
     const mech = this.dealtMech(id);
     this.players.set(id, {
       id, slot, bot: this.newBot(), send: () => {}, gone: false, goneTick: 0, rejoinToken: "", mech, state: this.freshState(slot, mech),
-      gate: new FireGate(), grenadeGate: new FireGate(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
+      gate: new FireGate(), grenadeGate: new FireGate(), alt: createAltFireState(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
       hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, launchX: 0, launchZ: 0, cause: CAUSE_NONE, causeBefore: CAUSE_NONE, tally: createTally(), rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
@@ -332,7 +339,7 @@ export class Room {
     const id = this.nextId++;
     const mech = this.dealtMech(id);
     const player: Player = {
-      id, slot, bot: null, send, gone: false, goneTick: 0, rejoinToken: randomBytes(16).toString("hex"), mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(),
+      id, slot, bot: null, send, gone: false, goneTick: 0, rejoinToken: randomBytes(16).toString("hex"), mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(), alt: createAltFireState(),
       queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, launchX: 0, launchZ: 0, cause: CAUSE_NONE, causeBefore: CAUSE_NONE, tally: createTally(), rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
@@ -566,7 +573,8 @@ export class Room {
       this.botTargets.length = 0;
       const dt = lod.cheapEveryTicks * STEP;
       bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, dt, input);
-      input.fire = false; input.grenade = false; input.dash = false; input.ability = false;
+      input.fire = false; input.altFire = false; input.grenade = false; input.dash = false; input.ability = false;
+      player.alt.charge = 0; // or letting go of the button would fire it
       this.processInput(player, input, dt);
       return;
     }
@@ -581,6 +589,8 @@ export class Room {
     // The Titan is one more thing to shoot, aimed at high up its body. Being the nearest is what makes it the target.
     if (titan) this.botTargets.push({ id: TITAN_ID, x: titan.x, y: titan.y, z: titan.z, aimHeight: this.config.titan.aimHeight });
     this.warnOfLasers(player);
+    bot.secondary = this.config.weapons.weapons[activeWeapon(player.loadout)]?.secondary ?? null;
+    bot.alt = player.alt;
     bot.think(player.state, this.botTargets, this.botZone(player), this.map.world, STEP, input);
     this.processInput(player, input);
   }
@@ -999,12 +1009,12 @@ export class Room {
     // A destroyed or frozen mech can look around but not move, jet, or fire.
     // Players watch from the lobby phases too, and everyone stands still during the countdown.
     if (player.dead || this.state === "countdown") {
-      input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.grenade = false; input.ability = false;
+      input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.altFire = false; input.grenade = false; input.ability = false;
     }
     // Diving in, or stunned by the landing: no weapons, grenades, ability, looting or repair, whatever the client asks.
     // Steering the dive is still allowed. (The shared step already ignores jets, dash and the ability here.)
     const held = dropping(player.state) || player.state.dropTime > 0;
-    if (held) { input.fire = false; input.grenade = false; input.ability = false; input.interact = false; input.repair = false; }
+    if (held) { input.fire = false; input.altFire = false; input.grenade = false; input.ability = false; input.interact = false; input.repair = false; }
     const dashBefore = player.state.dashTime;
     const ability = this.abilityFor(player.state.mech);
     // Hit while charging a Rail Shot: the charge breaks and the shot is lost (the cooldown is still spent).
@@ -1031,7 +1041,7 @@ export class Room {
       player.askedSlot = input.slot;
       if (!player.dead && selectSlot(player.loadout, input.slot)) player.gate.holdUntil(player.steps * STEP + this.config.loot.switchSeconds);
     }
-    if (input.fire) this.tryShoot(player, input);
+    this.stepTriggers(player, input, dt);
     if (input.grenade) this.tryThrow(player, input);
     if (!player.dead && player.participant && this.state !== "countdown" && !held) {
       this.interact(player, input.interact, dt);
@@ -1051,19 +1061,30 @@ export class Room {
     else player.state = this.freshState(player.slot, player.mech);
   }
 
-  private tryShoot(player: Player, input: MechInput): void {
+  // Both triggers, every step: the same shared step the shooter's client runs, so rate, heat, spin and charge are
+  // checked here whatever the client claims. A charge held through death or the drop is simply lost.
+  private stepTriggers(player: Player, input: MechInput, dt: number): void {
+    const alt = player.alt;
+    if (player.dead) { alt.heat = 0; alt.overheat = 0; alt.windup = 0; alt.charge = 0; }
+    // The same rule as the client's: a charge held when the guns go away (knocked out, diving, landing stun, the
+    // countdown) is thrown away unfired. Letting go of the button would otherwise fire it on the next step.
+    if (player.dead || dropping(player.state) || player.state.dropTime > 0 || this.state === "countdown") alt.charge = 0;
     const weaponIndex = activeWeapon(player.loadout);
     const weapon = this.config.weapons.weapons[weaponIndex];
-    if (!weapon || !player.gate.tryFire(player.steps * STEP, weapon.shotsPerSecond * upgradeScale(player.loadout, this.config.upgrades, "fireRate"))) return;
+    if (!weapon) return;
+    const shot = this.altShot;
+    if (!stepAltFire(alt, player.gate, input, weapon, player.steps * STEP, dt, upgradeScale(player.loadout, this.config.upgrades, "fireRate"), shot)) return;
     // A mech with two guns fires them in turn; every pellet of one pull leaves the same muzzle.
     const muzzles = this.muzzlesFor(player.state.mech);
     const muzzle = muzzles[player.shotsFired++ % muzzles.length]!;
     // A scattergun fires several pellets with one pull. Each is its own shot, with its own spread and its own hit.
-    for (let i = 0; i < weapon.pellets; i++) this.firePellet(player, input, weapon, weaponIndex, muzzle);
+    if (shot.mode === FIRE_SECONDARY) { this.secondaryCount.shots++; this.secondaryCount[weapon.secondary.kind]++; }
+    for (let i = 0; i < shot.weapon.pellets; i++) this.firePellet(player, input, shot.weapon, weaponIndex, muzzle, shot);
     this.makeNoise(player, "shot", player.state.x, player.state.z);
   }
 
-  private firePellet(player: Player, input: MechInput, weapon: WeaponStats, weaponIndex: number, muzzle: readonly number[]): void {
+  // `alt` says what kind of shot this is; FIRE_NONE in it is a plain shot with nothing extra.
+  private firePellet(player: Player, input: MechInput, weapon: WeaponStats, weaponIndex: number, muzzle: readonly number[], alt: AltShot | null = null): void {
     // The aim point is only a direction hint, so it cannot send a shot faster or from anywhere but the barrel.
     // A broken arm still fires, just nowhere near where it is pointed.
     const spread = player.hp[ZONE_ARMS]! <= 0 ? this.config.zones.brokenArmsSpreadMultiplier : 1;
@@ -1092,24 +1113,57 @@ export class Room {
       const zone = this.titanHit.zone;
       this.hurtTitan(player, weapon.damage * this.titan!.zoneMultiplier(zone), zone, s.ox + s.dx * reach, s.oy + s.dy * reach, s.oz + s.dz * reach);
     } else if (target) {
-      const damage = weapon.damage * this.shieldFactor(target, s.dx, s.dz);
-      const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, damage, target.loadout.armor);
-      this.hurt(target, weaponCause(weaponIndex), player, taken);
-      const killed = !target.dead && isDestroyed(target.hp);
-      player.send({
-        t: "hit", targetId: target.id, zone: this.zoneHit.zone, damage: taken, killed,
-        x: s.ox + s.dx * reach, y: s.oy + s.dy * reach, z: s.oz + s.dz * reach,
-      });
-      if (killed) this.eliminate(target, player);
+      this.shotHits(player, target, weapon, weaponIndex, reach, alt);
+      // A full charge goes on through: the next mech along the same line, up to the wall, as many times as it pierces.
+      const pierce = alt?.pierce ?? 0;
+      if (pierce > 0) {
+        const wall = hitBox >= 0 ? this.worldHit.distance : weapon.maxAimDistance;
+        this.pierced.length = 0;
+        this.pierced.push(target);
+        let left = pierce;
+        while (left > 0) {
+          const next = this.findTarget(player, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, wall, this.pierced);
+          if (!next) { reach = wall; break; }
+          reach = this.zoneHit.distance;
+          this.shotHits(player, next, weapon, weaponIndex, reach, alt);
+          this.secondaryCount.pierced++;
+          this.pierced.push(next);
+          left--;
+        }
+      }
     } else if (hitBox >= 0 && this.state !== "countdown") {
       const prop = this.map.propOfBox[hitBox]!;
       if (prop >= 0) this.damageProp(prop, weapon.damage, player);
     }
 
-    const message: ServerMessage = {
+    const message: ShotMessage = {
       t: "shot", id: player.id, ox: s.ox, oy: s.oy, oz: s.oz, dx: s.dx, dy: s.dy, dz: s.dz, length: reach, hitMech: target !== null || decoy !== null || titanHit,
     };
+    if (alt?.mode === FIRE_SECONDARY) {
+      message.alt = alt.share;
+      if (alt.pierce > 0) message.pierce = true;
+    }
     this.sendNear(s.ox, s.oz, message, player);
+  }
+
+  // Damage from one shot to one mech at `reach` along this.shot, with the zone in this.zoneHit, and the pin if the
+  // shot carries one.
+  private shotHits(player: Player, target: Player, weapon: WeaponStats, weaponIndex: number, reach: number, alt: AltShot | null): void {
+    const s = this.shot;
+    const damage = weapon.damage * this.shieldFactor(target, s.dx, s.dz);
+    const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, damage, target.loadout.armor);
+    this.hurt(target, weaponCause(weaponIndex), player, taken);
+    if (alt && alt.mode !== FIRE_NONE && alt.pinSeconds > 0) {
+      target.state.pinTime = Math.max(target.state.pinTime, alt.pinSeconds);
+      target.state.pinSpeed = alt.pinSpeedShare;
+      this.secondaryCount.pinned++;
+    }
+    const killed = !target.dead && isDestroyed(target.hp);
+    player.send({
+      t: "hit", targetId: target.id, zone: this.zoneHit.zone, damage: taken, killed,
+      x: s.ox + s.dx * reach, y: s.oy + s.dy * reach, z: s.oz + s.dz * reach,
+    });
+    if (killed) this.eliminate(target, player);
   }
 
   // A ramming mech has its shield out in front: a shot coming at it head on, against the charge, does only part of
@@ -1126,7 +1180,8 @@ export class Room {
 
   // Finds the nearest living mech along the shot, checked at where it stood a moment ago, because
   // the shooter was looking at a slightly old picture. Result zone and distance are left in this.zoneHit.
-  private findTarget(shooter: Player, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, reach: number): Player | null {
+  // `skip`: mechs a piercing shot has already gone through.
+  private findTarget(shooter: Player, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, reach: number, skip: readonly Player[] = NO_PLAYERS): Player | null {
     // Rewind by what this shooter actually saw, never more than the cap, so the shot lands where they aimed.
     const lagMs = Math.min(shooter.lagMs, this.config.combat.lagCompensationMs);
     const rewindTicks = Math.min(this.historyLength - 1, Math.round(lagMs / (STEP * 1000)));
@@ -1137,7 +1192,7 @@ export class Room {
 
     for (const target of this.players.values()) {
       // A mech still in the air cannot be hit: the drop is safe, the landing is not.
-      if (target === shooter || target.dead || !target.participant || dropping(target.state)) continue;
+      if (target === shooter || target.dead || !target.participant || dropping(target.state) || skip.includes(target)) continue;
       const index = ((wanted % this.historyLength) + this.historyLength) % this.historyLength;
       const old = target.historyTick[index] === wanted;
       const x = old ? target.history[index * 4]! : target.state.x;
@@ -1732,6 +1787,12 @@ export class Room {
     }
   }
 
+  // How wound up the gun in a player's hands is, for other clients to see and hear (altFire.ts altSpin).
+  private spinOf(p: Player): number {
+    const weapon = this.config.weapons.weapons[activeWeapon(p.loadout)];
+    return weapon && !p.dead ? altSpin(p.alt, weapon) : 0;
+  }
+
   // Whether a client is near enough the Titan to be sent it, with the same give at the edge as for mechs, so it does
   // not flicker in and out. Its place in the interest list is TITAN_ID.
   private seesTitan(player: Player, view: { x: number; z: number }, titan: TitanState): boolean {
@@ -1752,6 +1813,7 @@ export class Room {
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
         running: p.state.running, jetting: p.state.jetting, dead: p.dead, looted: p.looted, repairing: p.repairZone >= 0, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
         weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil), upgrades: p.loadout.upgrades, mech: p.state.mech, ability: p.state.abilityTime > 0, dropPhase: p.state.dropPhase,
+        pinned: p.state.pinTime > 0, overheated: p.alt.overheat > 0, spin: this.spinOf(p),
       });
     }
     // A decoy is drawn exactly as its owner is right now, damage and all, so nothing on it gives it away but how it
@@ -1763,7 +1825,7 @@ export class Room {
       everyone.push({
         id: d.id, x: s.x, y: s.y, z: s.z, yaw: s.bodyYaw, running: s.running, jetting: s.jetting, dead: false, looted: false, repairing: false, dropPhase: 0,
         bot: owner.bot !== null, hp: owner.hp.map(Math.ceil), weapon: Math.max(0, activeWeapon(owner.loadout)), armor: owner.loadout.armor.map(Math.ceil),
-        upgrades: owner.loadout.upgrades, mech: s.mech, ability: false,
+        upgrades: owner.loadout.upgrades, mech: s.mech, ability: false, pinned: false, overheated: owner.alt.overheat > 0, spin: this.spinOf(owner),
       });
     }
     const match = this.progress();
@@ -1785,7 +1847,7 @@ export class Room {
         others.push(o);
       }
       player.send({
-        t: "snapshot", tick: this.tickCount, ack: player.lastSeq, ackAgeMs: (this.tickCount - player.ackTick) * STEP * 1000, you: writeSelf(player.state),
+        t: "snapshot", tick: this.tickCount, ack: player.lastSeq, ackAgeMs: (this.tickCount - player.ackTick) * STEP * 1000, you: writeSelf(player.state, player.alt),
         health: { hp: player.hp.map(Math.ceil), dead: player.dead, respawnIn: player.dead && this.state !== "active" ? Math.max(0, (player.respawnTick - this.tickCount) * STEP) : 0 }, match,
         others, noises: player.heard.splice(0),
         loadout: {

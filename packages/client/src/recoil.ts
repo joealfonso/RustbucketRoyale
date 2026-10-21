@@ -41,6 +41,13 @@ export function kickFor(config: RecoilConfig, weaponId: string | undefined): Kic
   return (weaponId !== undefined ? config.kicks[weaponId] : undefined) ?? config.kicks[config.fallback]!;
 }
 
+// The kick for a shot: a right-click shot drawn in its alt look (a slug, a full charge) kicks with `<weapon>Alt` when
+// recoil.json has one, otherwise with the weapon's own.
+export function kickIdFor(config: RecoilConfig, weaponId: string, altLook: boolean): string {
+  const id = `${weaponId}Alt`;
+  return altLook && config.kicks[id] ? id : weaponId;
+}
+
 // One spring, in shots' worth of kick: 1 is one full shot back, 0 at rest.
 export interface Spring { x: number; v: number }
 

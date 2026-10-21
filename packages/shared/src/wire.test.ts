@@ -5,12 +5,12 @@ import type { InputMessage, OtherState, ServerMessage, ShotMessage, TitanState }
 
 type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
 
-const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12], upgrades: [3, -1], mech: id % 4, ability: id % 2 === 1, dropPhase: id % 4 });
+const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12], upgrades: [3, -1], mech: id % 4, ability: id % 2 === 1, dropPhase: id % 4, pinned: id % 3 === 0, overheated: id % 5 === 0, spin: 0 });
 const snapshot = (others: OtherState[]): Snapshot => ({
   t: "snapshot", tick: 123456, ack: 99, ackAgeMs: 12.4,
   you: {
     x: -321.123456, y: 4.5, z: 888.25, vx: 3.5, vz: -2.25, vy: 0.5, bodyYaw: 2.75, grounded: true, running: false, jetting: true, crawling: true,
-    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, abilityTime: 0.35, abilityCooldown: 5.5, abilityX: -0.8, abilityZ: 0.6, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0, fuelScale: 1.6, speedScale: 1.2, dropPhase: 0, dropTime: 0, mech: 3,
+    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, abilityTime: 0.35, abilityCooldown: 5.5, abilityX: -0.8, abilityZ: 0.6, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0, fuelScale: 1.6, speedScale: 1.2, dropPhase: 0, dropTime: 0, heat: 0, overheat: 0, windup: 0, charge: 0, pinTime: 0, pinSpeed: 0, mech: 3,
   },
   health: { hp: [60, 12, 88], dead: false, respawnIn: 0 },
   match: { state: "active", seconds: 91.5, alive: 7, total: 24 },
@@ -95,12 +95,12 @@ describe("snapshot wire format", () => {
   // Your own ability timers added 16 bytes (four float32s) and the ability byte one per other mech. The Junk Titan
   // (gate 13c) added a byte to every snapshot saying whether it is near, and 11 more when it is. The drop-in (16a)
   // added two of your numbers, which only go while you are dropping, so the worst case went from 127 to 135 bytes.
-  it("is small: under 140 bytes with nobody else near, 21 bytes per extra mech, 9 per pickup, 11 for the Titan", () => {
+  it("is small: under 165 bytes with nobody else near (every one of your own numbers changing), 21 bytes per extra mech, 9 per pickup, 11 for the Titan", () => {
     expect(encodeSnapshot(snapshot([])).length).toBe(snapshotSize(0, 0, 0, 20)); // staminaTimer is 0
-    expect(snapshotSize(0)).toBeLessThan(140);
+    expect(snapshotSize(0)).toBeLessThan(165);
     expect(snapshotSize(10) - snapshotSize(0)).toBe(210);
     expect(snapshotSize(0, 0, 10) - snapshotSize(0)).toBe(90);
-    expect(snapshotSize(0, 0, 0, 23, true) - snapshotSize(0)).toBe(11);
+    expect(snapshotSize(0, 0, 0, 29, true) - snapshotSize(0)).toBe(11);
   });
 
   it("carries the Junk Titan when it is near, to a mech's steps, and null when it is not", () => {
@@ -265,11 +265,51 @@ describe("shot wire format", () => {
     expect(Math.hypot(back.dx, back.dy, back.dz)).toBeCloseTo(1, 6);
   });
 
-  it("is 18 bytes, its origin to 5 cm anywhere on the largest map", () => {
-    expect(encodeShot(shot).length).toBe(18);
+  it("is 19 bytes, its origin to 5 cm anywhere on the largest map", () => {
+    expect(encodeShot(shot).length).toBe(19);
     const far = decodeShot(encodeShot({ ...shot, ox: -1012.33, oy: 61.07, oz: 999.98 }))!;
     expect(Math.abs(far.ox - -1012.33)).toBeLessThanOrEqual(0.025 + 1e-9);
     expect(Math.abs(far.oz - 999.98)).toBeLessThanOrEqual(0.025 + 1e-9);
+  });
+
+  it("carries a secondary shot's share and pierce, and leaves both out of a primary shot", () => {
+    const plain = decodeShot(encodeShot(shot))!;
+    expect(plain.alt).toBeUndefined();
+    expect(plain.pierce).toBeUndefined();
+    const spike = decodeShot(encodeShot({ ...shot, alt: 1, pierce: true }))!;
+    expect(spike).toMatchObject({ alt: 1, pierce: true, hitMech: true });
+    expect(decodeShot(encodeShot({ ...shot, alt: 0.5, hitMech: false }))!.alt).toBeCloseTo(0.5, 2);
+    expect(decodeShot(encodeShot({ ...shot, alt: 0 }))!.alt).toBeGreaterThan(0); // still a secondary
+  });
+});
+
+describe("secondary fire on the wire (gate 18a)", () => {
+  it("sends your heat, vent, spin, charge and pin, and others' pinned and venting bits", () => {
+    const s = snapshot([other(3, 1), other(5, 2), other(7, 3)]);
+    s.you = { ...s.you, heat: 0.4, overheat: 1.5, windup: 0.75, charge: 0.9, pinTime: 1.25, pinSpeed: 0.35 };
+    const back = decodeSnapshot(encodeSnapshot(s))!;
+    for (const key of ["heat", "overheat", "windup", "charge", "pinTime", "pinSpeed"] as const) expect(back.you[key]).toBeCloseTo(s.you[key], 5);
+    expect(back.others.map((o) => [o.pinned, o.overheated])).toEqual([[true, false], [false, true], [false, false]]);
+    expect(back.others.map((o) => o.spin)).toEqual([0, 0, 0]);
+    expect(back.others.map((o) => o.dropPhase)).toEqual([3, 1, 3]);
+  });
+
+  it("sends another mech's spin or charge as one byte only while it is not 0", () => {
+    const still = encodeSnapshot(snapshot([{ ...other(1, 0), overheated: false, spin: 0 }])).length;
+    const spun = encodeSnapshot(snapshot([{ ...other(1, 0), overheated: false, spin: 0.6 }]));
+    expect(spun.length - still).toBe(1);
+    expect(decodeSnapshot(spun)!.others[0]!.spin).toBeCloseTo(0.6, 2);
+    expect(decodeSnapshot(encodeSnapshot(snapshot([{ ...other(1, 0), overheated: false, spin: 0.001 }])))!.others[0]!.spin).toBe(0); // rounds to nothing
+    const venting = decodeSnapshot(encodeSnapshot(snapshot([{ ...other(1, 0), overheated: true, spin: 0 }])))!.others[0]!;
+    expect([venting.overheated, venting.spin]).toEqual([true, 0]);
+  });
+
+  it("packs the right button into the input", () => {
+    const m: InputMessage = { t: "input", seq: 4, ...createMechInput(), altFire: true };
+    const back = decodeInput(encodeInput(m, false))!;
+    expect(back.altFire).toBe(true);
+    expect(back.fire).toBe(false);
+    expect(decodeInput(encodeInput({ ...m, altFire: false }, false))!.altFire).toBe(false);
   });
 });
 

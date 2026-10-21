@@ -2,7 +2,8 @@ import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
   parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
-  createRayHit, parseDropsConfig, parseTitanConfig, DROP_BALL, DROP_BURNING, DROP_HANGING, DROP_NONE, dropping, hangAtSpot, parseDropSpotStats, planDropSpots, releaseDrop, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
+  FIRE_SECONDARY, chargeShare, createAltFireState, createAltShot, stepAltFire,
+  createRayHit, parseDropsConfig, parseTitanConfig, DROP_BALL, DROP_BURNING, DROP_HANGING, DROP_NONE, dropping, hangAtSpot, parseDropSpotStats, planDropSpots, releaseDrop, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot, type WeaponStats,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import audioJson from "../../../data/audio.json";
@@ -90,7 +91,8 @@ import { parseBackdrop } from "./backdrop/layout";
 import { Ranges, parseRanges } from "./backdrop/ranges";
 import chunksJsonForDressing from "../../../data/chunks.json";
 import { createMechModel, kickMech, legsLimping, moveGunsAndSensors, recoilConfig, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
-import { kickFor } from "./recoil";
+import { kickFor, kickIdFor } from "./recoil";
+import { AltFireFx, pinLookOf } from "./altFireFx";
 import { NetClient, type Session } from "./net";
 import { Radar } from "./radar";
 import { parseRadar } from "./radarData";
@@ -107,7 +109,7 @@ import { Tips, browserTipStore, parseTips } from "./tips";
 import tipsJson from "../../../data/tips.json";
 import dropsJson from "../../../data/drops.json";
 import { ShotFx } from "./shotFx";
-import { parseWeaponFx } from "./weaponFxData";
+import { parseWeaponFx, usesAltLook, weaponFxFor } from "./weaponFxData";
 import weaponFxJson from "../../../data/weaponFx.json";
 import { addVfxQualityControl, mostOf, onVfxQuality, vfxConfig, vfxLevel, vfxQuality } from "./fx/quality";
 import { ThirdPersonCamera } from "./thirdPersonCamera";
@@ -395,7 +397,10 @@ let mechGroup = ownModel.group;
 scene.add(mechGroup);
 
 // Muzzle flashes, tracers and impacts in each weapon's look (data/weaponFx.json), the grit in the colours of the map.
-const shotFx = new ShotFx(scene, parseWeaponFx(weaponFxJson), weaponSet.weapons, (c) => toon.color(c), vfxConfig.sprites.growSteps, vfxQuality);
+const weaponFxConfig = parseWeaponFx(weaponFxJson);
+const shotFx = new ShotFx(scene, weaponFxConfig, weaponSet.weapons, (c) => toon.color(c), vfxConfig.sprites.growSteps, vfxQuality);
+// Each weapon's right-click look (gate 18a), by index in weapons.json: its name for the HUD, glow, vent and pin.
+const altLooks = weaponFxFor(weaponFxConfig, weaponSet.weapons).map((l) => l.alt);
 const showSurfaces = () => shotFx.impacts.setSurfaces(map.palette.map((c) => toon.color(c)), map.colors);
 showSurfaces();
 const sound = new Sound(audioJson as AudioConfig);
@@ -488,12 +493,15 @@ const grenades = new ClientGrenades(scene, 8, grenadeStats);
 const grenadeGate = new FireGate();
 const thrown = createGrenade();
 const damageFx = new DamageFx(fxSprites, damageFxConfig, zoneSet);
+const altFireFx = new AltFireFx(scene, (c) => toon.color(c), fxSprites, altLooks);
+const pinLook = pinLookOf(altLooks);
 let fxDt = 0;
 const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
 const moveGuns = (model: MechModel) => moveGunsAndSensors(model, fxDt);
 // Someone's gun kicks for a shot that left from (ox, oz) in the world: which gun goes by where the shot started, in
 // the mech's own frame (the inverse of computeShot's turn), so the Arbiter's two guns kick in turn.
 const kickShooter = (model: MechModel | null, kick: string | undefined, ox: number, oz: number) => {
+  if (kick === undefined) return;
   if (!model) return;
   const p = model.group.position, yaw = model.group.rotation.y;
   kickMech(model, kickFor(recoilConfig, kick), Math.cos(yaw) * (ox - p.x) - Math.sin(yaw) * (oz - p.z));
@@ -678,6 +686,49 @@ const mechInput = createMechInput();
 const look = { dx: 0, dy: 0 };
 const shot: Shot = createShot();
 const gate = new FireGate();
+// Both triggers of the gun in hand (gate 18a): stepped here exactly as the server steps them, so your own spin up,
+// heat, charge and shots match what it decides.
+const altState = createAltFireState();
+const altShot = createAltShot();
+let lastOwnAlt = -1; // the right-click share of your last shot, -1 for a primary: how its hits on mechs look
+// A held slug reaches as far as the slug does, so the crosshair converges on what it can actually hit.
+const aimRangeOf = (weapon: WeaponStats, altHeld: boolean) =>
+  altHeld && weapon.secondary.kind === "slug" ? weapon.secondary.maxAimDistance : weapon.maxAimDistance;
+// Your own right-click on your mech, in the HUD and in your ears, once a frame.
+function showOwnAltFire(dt: number): void {
+  const index = loadout.slots[firingSlot]!;
+  const weapon = weaponSet.weapons[index];
+  const live = weapon !== undefined && !health.dead && !dropping(mech) && altState.weaponId === weapon.id;
+  const kind = weapon?.secondary.kind ?? "slug";
+  const charge = live ? chargeShare(altState, weapon) : 0;
+  const muzzles = muzzlesFor(mech.mech);
+  const muzzle = muzzles[shotsFired % muzzles.length]!;
+  const now = performance.now() / 1000;
+  if (live && kind === "windup" && altState.windup > 0) altFireFx.glow(ownModel, muzzle, index, altState.windup, false, now);
+  if (live && kind === "charge" && charge > 0) altFireFx.glow(ownModel, muzzle, index, charge, charge >= 1, now);
+  if (live && altState.overheat > 0) altFireFx.vent(ownModel, muzzle, index, dt);
+  if (mech.pinTime > 0 && pinLook >= 0) altFireFx.pin(ownModel, pinLook, dt);
+  const whine = live && kind === "windup" && mechInput.altFire && altState.overheat <= 0 ? Math.max(0.05, altState.windup) : 0;
+  sound.setHeld("windupWhine", whine);
+  sound.setHeld("chargeHum", charge, charge >= 1);
+  const value = kind === "windup" ? (altState.overheat > 0 ? 1 : altState.heat) : charge;
+  const flag = kind === "windup" ? altState.overheat > 0 : kind === "charge" ? charge >= 1 : gate.ready(simTime);
+  hud.setAltFire(weapon ? altLooks[index]!.name : null, kind, value, flag);
+}
+// Someone else pinned or venting: what the snapshots say, drawn from their gun and feet.
+function showRemoteAlt(model: MechModel, mechIndex: number, weapon: number, pinned: boolean, overheated: boolean, spin: number): void {
+  const muzzle = muzzlesFor(Math.max(0, mechIndex))[0]!;
+  if (spin > 0) altFireFx.glow(model, muzzle, weapon, spin, weaponSet.weapons[weapon]?.secondary.kind === "charge" && spin >= 1, performance.now() / 1000);
+  if (overheated) altFireFx.vent(model, muzzle, weapon, fxDt);
+  if (pinned && pinLook >= 0) altFireFx.pin(model, pinLook, fxDt);
+}
+// Someone else's gun winding up, heard in steps from where they stand, climbing in pitch as it gets there.
+remotes.onSpinStep = (model, weapon, spin) => {
+  const kind = weaponSet.weapons[weapon]?.secondary.kind;
+  if (kind !== "windup" && kind !== "charge") return;
+  const p = model.group.position;
+  sound.play(kind === "windup" ? "windupWhine" : "chargeHum", { x: p.x, y: p.y + 2, z: p.z }, 1, 0.8 + spin * 0.6);
+};
 let health: HealthState = { hp: [...zoneMaxHp], dead: false, respawnIn: 0 };
 // What you carry. Online the server's word is final and arrives with every snapshot. Offline it never changes.
 let loadout: Loadout = { slots: [weaponSet.start, -1], active: 0, grenades: lootConfig.grenadesStart, armor: [0, 0, 0], upgrades: [-1, -1] };
@@ -809,28 +860,32 @@ if (net) {
   // A scattergun's pellets each arrive as their own shot, a few milliseconds apart: one sound per pull, not one per
   // pellet, or a blast stacks into a harsh chorus.
   const lastShotSound = new Map<number, number>();
-  const showShot = (id: number, s: Shot, weapon: number, hitMech: boolean) => {
-    shotFx.show(s, weapon, hitMech);
+  const showShot = (id: number, s: Shot, weapon: number, hitMech: boolean, alt: number) => {
+    shotFx.show(s, weapon, hitMech, alt);
     fallHints.shot(performance.now() / 1000, s.ox, s.oz, s.dx, s.dz, s.length);
     const now = performance.now();
     if (now - (lastShotSound.get(id) ?? -Infinity) < 40) return;
     lastShotSound.set(id, now);
-    sound.play(sound.shotFor(weaponSet.weapons[weapon]?.id), { x: s.ox, y: s.oy, z: s.oz });
-    kickShooter(id === net.id ? ownModel : remotes.modelOf(id), weaponSet.weapons[weapon]?.id, s.ox, s.oz); // once a pull, like the sound
+    const stats = weaponSet.weapons[weapon];
+    const altLook = stats !== undefined && usesAltLook(stats.secondary.kind, alt);
+    sound.play(alt >= 0 ? sound.altShotFor(stats?.id) : sound.shotFor(stats?.id), { x: s.ox, y: s.oy, z: s.oz });
+    // once a pull, like the sound
+    kickShooter(id === net.id ? ownModel : remotes.modelOf(id), stats ? kickIdFor(recoilConfig, stats.id, altLook) : undefined, s.ox, s.oz);
   };
   killReplay.onShot = showShot;
   net.onShot = (s) => {
     // Your own shots come back too: the replay draws them, live they already showed the moment you fired.
     const weapon = s.id === net.id ? loadout.slots[firingSlot]! : remotes.weaponOf(s.id);
-    killReplay.shot(performance.now(), s.id, s, weapon, s.hitMech);
+    const alt = s.alt ?? -1;
+    killReplay.shot(performance.now(), s.id, s, weapon, s.hitMech, alt);
     if (s.id === net.id || killReplay.playing) return;
-    showShot(s.id, s, weapon, s.hitMech);
+    showShot(s.id, s, weapon, s.hitMech, alt);
   };
   net.onHit = (h) => {
     flashHitMarker(h.killed);
     showHit(h.zone, h.damage, h.killed, h.targetId === TITAN_ID);
     sound.play("hitMarker");
-    shotFx.hitMech(h.x, h.y, h.z, loadout.slots[firingSlot]!);
+    shotFx.hitMech(h.x, h.y, h.z, loadout.slots[firingSlot]!, lastOwnAlt);
   };
   net.onGrenade = (g) => {
     killReplay.grenade(performance.now(), g.id, g.x, g.y, g.z, g.vx, g.vy, g.vz);
@@ -1202,16 +1257,19 @@ function frame(now: number): void {
     const droppingNow = dropping(mech);
     aimOnGround = droppingNow
       ? setAimTarget(rig.camera, map.world, dive.aim.rangeMeters, mechInput)
-      : setAimTarget(rig.camera, map.world, weapon.maxAimDistance, mechInput, aimAtMechs);
+      : setAimTarget(rig.camera, map.world, aimRangeOf(weapon, mechInput.altFire), mechInput, aimAtMechs);
     mechInput.targetX = Math.fround(mechInput.targetX); mechInput.targetY = Math.fround(mechInput.targetY); mechInput.targetZ = Math.fround(mechInput.targetZ);
     // A destroyed mech can only look around, and nobody moves during the countdown: the same rules the server applies,
     // so prediction does not run ahead and get pulled back.
     if (health.dead || progress.state === "countdown") {
       mechInput.moveX = 0; mechInput.moveY = 0; mechInput.run = false; mechInput.jet = false;
-      mechInput.fire = false; mechInput.grenade = false; mechInput.ability = false;
+      mechInput.fire = false; mechInput.altFire = false; mechInput.grenade = false; mechInput.ability = false;
     }
     // No guns or grenades while dropping in or stunned by the landing; the server refuses them too.
-    if (dropping(mech) || mech.dropTime > 0) { mechInput.fire = false; mechInput.grenade = false; }
+    if (dropping(mech) || mech.dropTime > 0) { mechInput.fire = false; mechInput.altFire = false; mechInput.grenade = false; }
+    // GUESS: a charge held when the guns are taken away (knocked out, dropping) is lost rather than fired on the
+    // release that follows. The server should agree; see the 18a report.
+    if (!mechInput.altFire && (health.dead || dropping(mech) || mech.dropTime > 0 || progress.state === "countdown")) altState.charge = 0;
 
     const dashBefore = mech.dashTime;
     const abilityBefore = mech.abilityTime;
@@ -1226,19 +1284,26 @@ function frame(now: number): void {
     if (net === null && mech.y < KILL_HEIGHT) respawnOffline();
 
     simTime += STEP;
-    if (mechInput.fire && gate.tryFire(simTime, weapon.shotsPerSecond * upgradeScale(loadout, upgradeSet, "fireRate"))) {
-      // Each pellet is drawn at once, with this client's own spread. The server decides what they hit.
+    const wasOverheated = altState.overheat > 0;
+    if (stepAltFire(altState, gate, mechInput, weapon, simTime, STEP, upgradeScale(loadout, upgradeSet, "fireRate"), altShot)) {
+      // Each pellet is drawn at once, with this client's own spread. The server decides what they hit. `fired` is the
+      // gun with the right-click's numbers laid over it (a slug's one pellet, the windup's spread, a charge's damage).
+      const fired = altShot.weapon;
+      const alt = altShot.mode === FIRE_SECONDARY ? altShot.share : -1;
+      const altLook = usesAltLook(weapon.secondary.kind, alt);
+      lastOwnAlt = alt;
       const muzzles = muzzlesFor(mech.mech);
       const muzzle = muzzles[shotsFired++ % muzzles.length]!;
-      for (let i = 0; i < weapon.pellets; i++) {
-        computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, weapon, Math.random, shot, armsBroken() ? zoneSet.brokenArmsSpreadMultiplier : 1, muzzle);
-        shotFx.show(shot, weaponSet.weapons.indexOf(weapon));
+      for (let i = 0; i < fired.pellets; i++) {
+        computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, fired, Math.random, shot, armsBroken() ? zoneSet.brokenArmsSpreadMultiplier : 1, muzzle);
+        shotFx.show(shot, weaponSet.weapons.indexOf(weapon), false, alt);
         fallHints.shot(performance.now() / 1000, shot.ox, shot.oz, shot.dx, shot.dz, shot.length);
       }
-      sound.play(sound.shotFor(weapon.id), { x: shot.ox, y: shot.oy, z: shot.oz });
-      rig.addShake(weapon.shakeForce);
-      kickMech(ownModel, kickFor(recoilConfig, weapon.id), muzzle[0]!);
+      sound.play(alt >= 0 ? sound.altShotFor(weapon.id) : sound.shotFor(weapon.id), { x: shot.ox, y: shot.oy, z: shot.oz });
+      rig.addShake(fired.shakeForce);
+      kickMech(ownModel, kickFor(recoilConfig, kickIdFor(recoilConfig, weapon.id, altLook)), muzzle[0]!);
     }
+    if (!wasOverheated && altState.overheat > 0) sound.play("overheat", { x: mech.x, y: mech.y + 2, z: mech.z });
     // Online a grenade needs one in the bag. Count it down here so a held key does not throw twice before the server says.
     const hasGrenade = (net === null || loadout.grenades > 0) && !armsBroken();
     if (mechInput.grenade && hasGrenade && grenadeGate.tryFire(simTime, 1 / grenadeStats.cooldownSeconds)) {
@@ -1408,6 +1473,8 @@ function frame(now: number): void {
   hud.setAbility(ownAbilityStats?.name ?? null, mech.abilityCooldown, ownAbilityStats?.cooldownSeconds ?? 0);
   damageFx.emitFrom(ownModel, frameTime);
   remotes.forEachModel(emitDamage);
+  showOwnAltFire(fxTime);
+  remotes.forEachAlt(showRemoteAlt);
   if (titanView.shown && !titanView.fallen) damageFx.emitFrom(titanView.model, fxTime);
   contactShadows.beginMoving();
   contactShadows.addObject(mechGroup);
@@ -1415,6 +1482,7 @@ function frame(now: number): void {
   contactShadows.endMoving();
   deathFx.update(fxTime, rig.camera.position);
   fxSprites.update(fxTime, rig.camera.position);
+  altFireFx.update(rig.camera.position);
   dropSprites.update(fxTime, rig.camera.position);
   hud.setLoadout(loadout, weaponSet.weapons, lootConfig.armorPlates, upgradeSet.upgrades);
   hud.setReplay(killReplay.playing, killReplay.progress);
@@ -1430,6 +1498,8 @@ function frame(now: number): void {
     tips.walking(frameTime, mech.grounded && !mech.running && Math.hypot(mech.vx, mech.vz) > 1);
     if (ownAbilityStats && mech.abilityCooldown <= 0) tips.offer("ability", ownAbilityStats.name);
     if (loadout.slots[1]! >= 0) tips.offer("weapons");
+    const inHand = loadout.slots[firingSlot]!;
+    if (inHand >= 0 && altLooks[inHand]) tips.offer("secondary", altLooks[inHand]!.name);
   }
   const tipNow = tips.current(frameTime);
   // Standing by a weapon, say what E would do.

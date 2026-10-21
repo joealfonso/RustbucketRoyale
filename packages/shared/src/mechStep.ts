@@ -36,6 +36,8 @@ export interface MechState {
   abilityX: number; abilityZ: number; // direction of the ram, leap, strike or decoys, unit length
   dropPhase: number; // the drop-in at the start of a match (drop.ts): 0 down, 1 hanging, 2 ball, 3 braking
   dropTime: number; // seconds of landing stun left: no moving, jets, dash or ability
+  pinTime: number; // seconds left pinned by a full charge spike. Set by the server on the hit
+  pinSpeed: number; // share of walk and run speed kept while pinned
   fuel: Meter;
   stamina: Meter;
 }
@@ -44,7 +46,7 @@ export function createMechState(stats: MechStats, x: number, y: number, z: numbe
   return {
     x, y, z, vx: 0, vz: 0, vy: 0, bodyYaw: yaw, mech,
     grounded: false, running: false, jetting: false, fuelScale: 1, speedScale: 1, crawling: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
-    abilityTime: 0, abilityCooldown: 0, abilityX: 0, abilityZ: 0, dropPhase: 0, dropTime: 0,
+    abilityTime: 0, abilityCooldown: 0, abilityX: 0, abilityZ: 0, dropPhase: 0, dropTime: 0, pinTime: 0, pinSpeed: 1,
     fuel: new Meter(stats.fuelMax), stamina: new Meter(stats.staminaMax),
   };
 }
@@ -71,6 +73,8 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   // Ends with under half a step left, as the ram does: the time crosses the wire as a float32, and an exact count to
   // zero would end a step later on the client than on the server.
   if (stunned) s.dropTime = s.dropTime - dt < dt * 0.5 ? 0 : s.dropTime - dt;
+  const pinned = s.pinTime > 0;
+  if (pinned) s.pinTime = s.pinTime - dt < dt * 0.5 ? 0 : s.pinTime - dt;
 
   // 0 means the body always faces where you look. Above 0 it swings round at that many degrees a second, which feels heavier.
   s.bodyYaw = stats.turnSpeedDegrees > 0 ? moveTowardsAngle(s.bodyYaw, input.aimYaw, stats.turnSpeedDegrees * DEG * dt) : input.aimYaw;
@@ -161,7 +165,8 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
     // Dash over: bleed the extra speed off so the mech slides out of it instead of keeping a 38 m/s run.
     if (s.dashTime <= 0) capToRunSpeed(s, stats);
   } else {
-    const legs = (s.crawling ? stats.walkSpeed * stats.crawlSpeedMultiplier : s.running ? stats.runSpeed : stats.walkSpeed) * s.speedScale;
+    // A pin slows the legs only: a dash or the jets still get you out, which is the escape.
+    const legs = (s.crawling ? stats.walkSpeed * stats.crawlSpeedMultiplier : s.running ? stats.runSpeed : stats.walkSpeed) * s.speedScale * (pinned ? s.pinSpeed : 1);
     const topSpeed = world.terrain?.wading(s.x, s.y, s.z) ? legs * stats.waterSpeedMultiplier : legs;
     const rate = (moving ? stats.acceleration : stats.deceleration) * (s.grounded ? 1 : stats.airControl);
     const toX = wishX * topSpeed - s.vx;

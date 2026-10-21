@@ -22,6 +22,11 @@ export class FireGate {
     return true;
   }
 
+  // Whether a shot could go now, without spending it: a charge only builds while the gun is ready.
+  ready(time: number): boolean {
+    return time >= this.nextShot;
+  }
+
   // No firing before `time`, for the moment after changing weapon.
   holdUntil(time: number): void {
     this.nextShot = Math.max(this.nextShot, time);

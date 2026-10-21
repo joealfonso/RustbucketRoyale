@@ -1,4 +1,4 @@
-import { createRayHit, type AbilityStats, type BotPathStats, type BotStats, type MechInput, type MechState, type MechStats, type RingNow, type World } from "@rustbucket/shared";
+import { createRayHit, type AbilityStats, type AltFireState, type SecondaryStats, type BotPathStats, type BotStats, type MechInput, type MechState, type MechStats, type RingNow, type World } from "@rustbucket/shared";
 import type { BotAbilityStats } from "./botAbilities";
 import { DropBrain, type DropAim, type DropPlan } from "./botDrop";
 import type { Pathfinder } from "./Pathfinder";
@@ -66,6 +66,16 @@ export class Bot {
   // Set by the room: the size of the mech this bot drives, for stepping round trunks and crates in its way. Null
   // steers round nothing, which the tests of aim and routes rely on.
   body: SteerBody | null = null;
+  // Set by the room before each think: the right-click of the gun in hand and the player's heat and charge, so it
+  // can back off before overheating and release a charge when it is full. Null: never right-clicks.
+  secondary: SecondaryStats | null = null;
+  alt: AltFireState | null = null;
+  private venting = false; // let go of a spun up autocannon to cool, until the heat is down again
+  private charging = false; // holding a spike driver charge
+  private trackId = 0; // the target whose speed is being watched, for charging on one that stands still
+  private trackX = 0;
+  private trackZ = 0;
+  private targetSpeed = Infinity;
   private steering = createSteerMemory();
   private steered = { x: 0, z: 0 };
   private healthMark = Infinity;
@@ -168,7 +178,7 @@ export class Bot {
   // The drop-in at the start of a match. Nothing to do but aim the ball at its spot (botDrop.ts): no weapons until it
   // is down. Its view turns at its usual speed, so it swings round like a person's rather than snapping.
   thinkDrop(self: MechState, plan: DropPlan, mech: MechStats, dt: number, out: MechInput): void {
-    out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.grenade = false; out.interact = false; out.repair = false; out.ability = false;
+    out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.altFire = false; out.grenade = false; out.interact = false; out.repair = false; out.ability = false;
     if (!this.drop.chosen) this.drop.choose(self, plan, mech, this.random);
     const aim = this.dropAim;
     this.drop.steer(self, aim);
@@ -189,7 +199,7 @@ export class Bot {
 
   think(self: MechState, targets: readonly BotTarget[], ring: RingNow | null, world: World, dt: number, out: MechInput): void {
     this.drop.forget(); // down: the next drop picks afresh
-    out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.grenade = false; out.interact = false; out.repair = false; out.ability = false;
+    out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.altFire = false; out.grenade = false; out.interact = false; out.repair = false; out.ability = false;
     const s = this.stats;
     this.retargetIn -= dt;
     this.strafeIn -= dt;
@@ -236,9 +246,12 @@ export class Bot {
         out.grenade = true;
         out.targetX = target.x; out.targetY = target.y; out.targetZ = target.z;
       }
+      this.watchSpeed(target, dt);
+      this.useSecondary(distance, dt, out);
       if (this.abilityKind && this.abilities) this.useAbility(self, target, distance, dt, out);
     } else {
       this.lastTargetId = 0;
+      this.charging = false;
       // Out of sight is as safe as it gets: stop and repair, unless the ring is coming.
       if (this.needsRepair && (!ring || Math.hypot(self.x - ring.cx, self.z - ring.cz) < ring.radius - this.stats.ringMargin)) {
         out.repair = true;
@@ -329,6 +342,39 @@ export class Bot {
     }
     out.aimYaw = this.aimYaw;
     out.aimPitch = this.aimPitch;
+  }
+
+  // How fast the current target is moving, from where it was on the last think.
+  private watchSpeed(target: BotTarget, dt: number): void {
+    if (target.id !== this.trackId) this.targetSpeed = Infinity;
+    else if (dt > 0) this.targetSpeed = Math.hypot(target.x - this.trackX, target.z - this.trackZ) / dt;
+    this.trackId = target.id; this.trackX = target.x; this.trackZ = target.z;
+  }
+
+  // Right-click in a fight, decided once the left button already would fire (lined up, in range, reacted): slugs at
+  // range, a spun up autocannon up close that lets go before it overheats, and a spike charged on a target that is
+  // far off or standing still, let go only once it is full and lined up again.
+  private useSecondary(distance: number, dt: number, out: MechInput): void {
+    const sec = this.secondary, alt = this.alt, b = this.abilities?.secondary;
+    if (!sec || !alt || !b) { this.charging = false; return; }
+    const lined = out.fire;
+    if (sec.kind !== "charge") this.charging = false;
+    if (sec.kind === "slug") {
+      if (lined && distance >= b.slugMinRange && distance <= sec.maxAimDistance) { out.fire = false; out.altFire = true; }
+    } else if (sec.kind === "windup") {
+      if (alt.heat >= b.windupHeatLimit || alt.overheat > 0) this.venting = true;
+      else if (alt.heat <= b.windupResumeHeat) this.venting = false;
+      if (lined && distance <= b.windupMaxRange && !this.venting) { out.fire = false; out.altFire = true; }
+    } else if (this.charging) {
+      out.fire = false;
+      // The release step is the one that fires, toward the aim point this think set for the left button.
+      if (alt.charge >= sec.chargeSeconds && lined) this.charging = false;
+      else out.altFire = true;
+    } else if (lined && (distance >= b.chargeMinRange || this.targetSpeed <= b.chargeStillSpeed) && this.random() < b.chargeChancePerSecond * dt) {
+      this.charging = true;
+      out.fire = false;
+      out.altFire = true;
+    }
   }
 
   // Q in a fight: a ram once the target is close and lined up dead ahead, since it charges the way the bot looks, a

@@ -3,14 +3,17 @@ import type { Shot, WeaponStats, World } from "@rustbucket/shared";
 import { ImpactFx } from "./impactFx";
 import { MuzzleFlashes } from "./muzzleFlash";
 import { Projectiles } from "./projectiles";
-import { capFor, weaponFxFor, type WeaponFx, type WeaponFxConfig } from "./weaponFxData";
+import { capFor, usesAltLook, weaponFxFor, type WeaponFx, type WeaponFxConfig } from "./weaponFxData";
 
 // Shows a shot: the muzzle flash, the tracer, and the impact where it lands, each in the look of the weapon that
 // fired it (data/weaponFx.json). Used for our own shots and for shots the server says others fired.
 export class ShotFx {
   private fx: WeaponFx[];
+  private altFx: WeaponFx[]; // each weapon's right-click look (gate 18a)
   private tracers: Projectiles[];
+  private altTracers: Projectiles[];
   private flashes: MuzzleFlashes;
+  private altFlashes: MuzzleFlashes;
   readonly impacts: ImpactFx;
   // Called where a bullet hits the map, for the sound.
   onImpact?: (x: number, y: number, z: number) => void;
@@ -22,12 +25,21 @@ export class ShotFx {
     scene: THREE.Scene, config: WeaponFxConfig, private weapons: readonly WeaponStats[], color: (name: string) => string,
     growSteps: number, quality: () => string,
   ) {
-    this.fx = weaponFxFor(config, weapons);
+    const looks = weaponFxFor(config, weapons);
+    this.fx = looks;
+    this.altFx = looks.map((l) => l.alt);
     const cap = (pool: number) => capFor(pool, quality(), config.lowShare);
-    this.flashes = new MuzzleFlashes(scene, this.fx, weapons.map((w) => color(w.color)), color, cap);
+    const colors = weapons.map((w) => color(w.color));
+    this.flashes = new MuzzleFlashes(scene, this.fx, colors, color, cap);
+    this.altFlashes = new MuzzleFlashes(scene, this.altFx, colors, color, cap);
     this.impacts = new ImpactFx(scene, config, color, growSteps, cap);
-    this.tracers = this.fx.map((fx, i) => {
-      const tracer = new Projectiles(scene, fx.tracer, color(weapons[i]!.color), color(fx.tracer.core), () => cap(fx.tracer.pool));
+    this.tracers = this.makeTracers(scene, this.fx, color, cap);
+    this.altTracers = this.makeTracers(scene, this.altFx, color, cap);
+  }
+
+  private makeTracers(scene: THREE.Scene, looks: WeaponFx[], color: (name: string) => string, cap: (pool: number) => number): Projectiles[] {
+    return looks.map((fx, i) => {
+      const tracer = new Projectiles(scene, fx.tracer, color(this.weapons[i]!.color), color(fx.tracer.core), () => cap(fx.tracer.pool));
       tracer.onImpact = (x, y, z, nx, ny, nz, box) => {
         this.impacts.world(fx.impact, x, y, z, nx, ny, nz, box);
         this.onImpact?.(x, y, z);
@@ -40,23 +52,29 @@ export class ShotFx {
 
   // `weapon` is the index in weapons.json; anything unknown (a shooter we have not seen yet) draws as the first.
   // The tracer lives just long enough to reach where the shot ended, so it lands when the hit does.
-  show(shot: Shot, weapon: number, hitMech = false): void {
+  // `alt` is -1 for a primary shot, or the right-click shot's share (1 for a slug or a full charge).
+  show(shot: Shot, weapon: number, hitMech = false, alt = -1): void {
     const w = this.tracers[weapon] ? weapon : 0;
     const stats = this.weapons[w]!;
     const lifetime = Math.min(stats.projectileLifetime, shot.length / stats.projectileSpeed);
-    this.tracers[w]!.spawn(shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz, stats.projectileSpeed, lifetime, hitMech);
-    this.flashes.spawn(w, shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz);
+    const altLook = usesAltLook(stats.secondary.kind, alt);
+    (altLook ? this.altTracers : this.tracers)[w]!.spawn(shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz, stats.projectileSpeed, lifetime, hitMech);
+    (altLook ? this.altFlashes : this.flashes).spawn(w, shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz);
   }
 
   // The server says one of our shots hit a mech here.
-  hitMech(x: number, y: number, z: number, weapon: number): void {
-    this.impacts.mech((this.fx[weapon] ?? this.fx[0]!).impact, x, y, z);
+  hitMech(x: number, y: number, z: number, weapon: number, alt = -1): void {
+    const w = this.fx[weapon] ? weapon : 0;
+    const look = usesAltLook(this.weapons[w]!.secondary.kind, alt) ? this.altFx[w]! : this.fx[w]!;
+    this.impacts.mech(look.impact, x, y, z);
   }
 
   // On the sim clock: bullets fly and hit things, flipbooks count their frames.
   update(dt: number, world: World): void {
     for (const t of this.tracers) t.update(dt, world);
+    for (const t of this.altTracers) t.update(dt, world);
     this.flashes.update(dt);
+    this.altFlashes.update(dt);
     this.impacts.update(dt);
   }
 
@@ -64,7 +82,9 @@ export class ShotFx {
   draw(camera: THREE.Camera, dt: number): void {
     camera.updateMatrixWorld();
     for (const t of this.tracers) t.draw(camera);
+    for (const t of this.altTracers) t.draw(camera);
     this.flashes.draw(camera);
+    this.altFlashes.draw(camera);
     this.impacts.draw(camera, dt);
   }
 }

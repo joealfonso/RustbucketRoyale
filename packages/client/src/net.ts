@@ -70,10 +70,11 @@ export class NetClient {
   private stopped = false; // refused, or gave up: no more tries
   private welcomed: (map: { seed: number; tier: string; code: string; tuning: boolean }) => void = () => {};
   private failed: (reason: Error) => void = () => {};
+  private altHeld = false; // right-click was held on the last input sent
   // Reused every send so the frame loop does not build a new object each time.
   private message: InputMessage = {
     t: "input", seq: 0, moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0,
-    run: false, jet: false, dash: false, fire: false, grenade: false, slot: 0, interact: false, repair: false, ability: false, targetX: 0, targetY: 0, targetZ: 0,
+    run: false, jet: false, dash: false, fire: false, grenade: false, slot: 0, interact: false, repair: false, ability: false, altFire: false, targetX: 0, targetY: 0, targetZ: 0,
   };
 
   // `graceSeconds`: how long the server holds a dropped mech (net.json rejoinGraceSeconds), so how long to keep trying.
@@ -200,9 +201,12 @@ export class NetClient {
     m.watchId = watching > 0 ? watching : undefined;
     m.moveX = input.moveX; m.moveY = input.moveY;
     m.aimYaw = input.aimYaw; m.aimPitch = input.aimPitch;
-    m.run = input.run; m.jet = input.jet; m.dash = input.dash; m.fire = input.fire; m.grenade = input.grenade; m.slot = input.slot; m.interact = input.interact; m.repair = input.repair; m.ability = input.ability;
+    m.run = input.run; m.jet = input.jet; m.dash = input.dash; m.fire = input.fire; m.altFire = input.altFire; m.grenade = input.grenade; m.slot = input.slot; m.interact = input.interact; m.repair = input.repair; m.ability = input.ability;
     m.targetX = input.targetX; m.targetY = input.targetY; m.targetZ = input.targetZ;
     // The aim point only matters on a step that shoots, throws, pounces or steers the drop, so it is left out of the rest.
-    this.socket.send(encodeInput(m, input.fire || input.grenade || dropping).buffer as ArrayBuffer);
+    // A charge fires on the step the right button comes up, so that step carries it too.
+    const released = this.altHeld && !input.altFire;
+    this.altHeld = input.altFire;
+    this.socket.send(encodeInput(m, input.fire || input.grenade || dropping || released).buffer as ArrayBuffer);
   }
 }

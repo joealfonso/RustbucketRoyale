@@ -13,6 +13,9 @@ export interface SoakOptions {
   maxCorrection?: number; // metres, the largest prediction correction allowed outside respawns and new maps
   fill?: number; // people plus bots in the room, in place of the tier's number in bots.json, for trying other counts
   titanHp?: number; // the Junk Titan's hit points in place of titan.json's, to see it fall within a match
+  // The gun everyone starts with, by weapons.json id. Left out it goes round the guns by seed, so the nightly soaks
+  // put every gun's secondary fire (gate 18a) through whole matches, not only the usual starting autocannon.
+  startWeapon?: string;
 }
 
 export interface SoakReport {
@@ -36,6 +39,12 @@ export interface SoakReport {
   lastLandingSeconds: number; // how long after the start the last mech came down from the drop-in
   medianLandingSeconds: number;
   medianSteerMeters: number; // how far mechs came down from where they hung, median
+  secondaryShots: number; // right-click trigger pulls by everyone in the match (gate 18a)
+  secondaryByKind: { windup: number; slug: number; charge: number };
+  startWeapon: string;
+  headlessSecondaryShots: number; // ...of which by the headless players, through the real input path
+  pierced: number; // mechs a full charge spike went on through to
+  pinned: number; // mechs pinned by one
 }
 
 const CONTACT_METERS = 150; // the radar's range: anything closer can be seen or heard to matter
@@ -67,11 +76,15 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
   const base = loadRoomConfig({ maps: "generated", roster: true });
   const bots = options.fill === undefined ? base.bots : { ...base.bots, fill: { ...base.bots.fill, [tier]: options.fill } };
   const titan = options.titanHp === undefined ? base.titan : { ...base.titan, hp: options.titanHp };
-  const config = { ...base, bots, titan, random: lcg(seed), mapLater: (t: string, s: number) => pool.generate(t, s) };
+  const guns = base.weapons.weapons;
+  const start = options.startWeapon === undefined ? seed % guns.length : guns.findIndex((w) => w.id === options.startWeapon);
+  if (start < 0) throw new Error(`soak: no weapon "${options.startWeapon}"`);
+  const weapons = { ...base.weapons, start };
+  const config = { ...base, bots, titan, weapons, random: lcg(seed), mapLater: (t: string, s: number) => pool.generate(t, s) };
   const chunks = parseChunkSet(readData("chunks.json"));
   const tiers = parseTiers(readData("tiers.json"));
   const room = new Room("SOAK", tier, config, null);
-  const players = Array.from({ length: fakePlayers }, (_, i) => new HeadlessPlayer(room, config.mech, config.bots, chunks, tiers, parsePropConfig(readData("props.json")), lcg(seed + i + 1), config.roster ?? null, i, config.abilities, config.botAbilities, config.titan, config.drop?.bots ?? null));
+  const players = Array.from({ length: fakePlayers }, (_, i) => new HeadlessPlayer(room, config.mech, config.bots, chunks, tiers, parsePropConfig(readData("props.json")), lcg(seed + i + 1), config.roster ?? null, i, config.abilities, config.botAbilities, config.titan, config.drop?.bots ?? null, config.weapons));
   const problems: string[] = [];
   const problem = (text: string) => { if (problems.length < 20) problems.push(text); };
 
@@ -175,6 +188,7 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
   const worstCorrection = Math.max(...players.map((p) => p.worstCorrection));
   if (worstCorrection > maxCorrection) problem(`prediction drifted ${worstCorrection.toFixed(3)} m from the server, over ${maxCorrection}`);
   if (players.every((p) => p.corrections === 0)) problem("no snapshot was ever checked for prediction");
+  if (room.secondaryCount.shots === 0) problem("nobody ever used a secondary fire");
 
   const contacts = players.map((p) => firstContact.get(p.id) ?? activeTicks * STEP).sort((a, b) => a - b);
   const matchMinutes = Math.max(activeTicks * STEP, 1) / 60;
@@ -188,6 +202,10 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
     lastLandingSeconds: Math.max(0, ...landedAt.values()),
     medianLandingSeconds: median([...landedAt.values()]),
     medianSteerMeters: median(steered),
+    startWeapon: config.weapons.weapons[config.weapons.start]!.id,
+    secondaryShots: room.secondaryCount.shots,
+    secondaryByKind: { windup: room.secondaryCount.windup, slug: room.secondaryCount.slug, charge: room.secondaryCount.charge }, headlessSecondaryShots: players.reduce((n, p) => n + p.secondaryShots, 0),
+    pierced: room.secondaryCount.pierced, pinned: room.secondaryCount.pinned,
   };
 }
 

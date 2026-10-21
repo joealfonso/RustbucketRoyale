@@ -2,13 +2,13 @@
 // is said once, at the moment it is useful, in the same prompt box as "Hold F: repair". Each tip is shown once per
 // player, remembered in this browser, and a real prompt (take, loot, repair) always wins over a tip.
 
-export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "drop"] as const;
+export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "drop", "secondary"] as const;
 export type TipId = (typeof TIP_IDS)[number];
 
 export interface TipsConfig {
   showSeconds: number;
   walkSecondsBeforeSprint: number; // the sprint tip waits for this much plain walking
-  tips: Record<TipId, string>; // "{ability}" is replaced by the mech's ability name
+  tips: Record<TipId, string>; // "{ability}" is replaced by the mech's ability name, "{secondary}" by the gun's right-click
 }
 
 export function parseTips(raw: unknown): TipsConfig {
@@ -42,12 +42,12 @@ export class Tips {
     this.shown = new Set(store.load());
   }
 
-  // Shows a tip unless it was shown before. `ability` fills in the ability tip's name.
-  offer(id: TipId, ability = ""): void {
+  // Shows a tip unless it was shown before. `name` fills in the ability tip's ability or the secondary tip's fire.
+  offer(id: TipId, name = ""): void {
     if (this.shown.has(id) || this.showingFor > 0) return;
     this.shown.add(id);
     this.store.save([...this.shown]);
-    this.text = this.config.tips[id].replace("{ability}", ability);
+    this.text = this.config.tips[id].replace("{ability}", name).replace("{secondary}", name);
     this.showingFor = this.config.showSeconds;
   }
 

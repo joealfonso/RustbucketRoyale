@@ -46,6 +46,25 @@ export function bossBarShown(shown: boolean, fallen: boolean, dx: number, dz: nu
   return shown && !fallen && dx * dx + dz * dz <= meters * meters;
 }
 
+// The right-click meter beside the gun in hand (gate 18a), in whole steps so the page changes only when it moves.
+// windup: `value` is heat, `flag` overheated; charge: `value` is the charge share, `flag` full; slug: `flag` ready.
+export const ALT_STEPS = 20;
+export interface AltMeter { step: number; label: string; state: "" | "hot" | "overheat" | "full" | "ready" }
+export function altMeter(kind: "windup" | "slug" | "charge", value: number, flag: boolean, out: AltMeter): AltMeter {
+  out.step = kind === "slug" ? (flag ? ALT_STEPS : 0) : Math.max(0, Math.min(ALT_STEPS, Math.round(value * ALT_STEPS)));
+  if (kind === "windup") {
+    out.state = flag ? "overheat" : value >= 0.7 ? "hot" : "";
+    out.label = flag ? "OVERHEAT" : "";
+  } else if (kind === "charge") {
+    out.state = flag ? "full" : "";
+    out.label = flag ? "PIERCE" : "";
+  } else {
+    out.state = flag ? "ready" : "";
+    out.label = "";
+  }
+  return out;
+}
+
 // All the plain text and buttons for rooms and matches. Only touches the page when a value actually changes.
 export class Hud {
   private roomBar = byId("roomBar");
@@ -65,6 +84,13 @@ export class Hud {
   private lastText = new Map<HTMLElement, string>();
   private lastShown = new Map<HTMLElement, string>();
   private loadoutBox = byId("loadout");
+  // Made here rather than in the page, and moved under the slot in hand each time the slots are redrawn.
+  private altBox = document.createElement("div");
+  private altName = document.createElement("span");
+  private altGauge = document.createElement("i");
+  private altLabel = document.createElement("span");
+  private altShown = { name: "", kind: "", step: -1, state: "" };
+  private altScratch: AltMeter = { step: 0, label: "", state: "" };
   private mechBox = byId("mechTitle");
   private abilityBox = byId("ability");
   private abilityName = byId("abilityName");
@@ -95,6 +121,13 @@ export class Hud {
   private shownPlates = [-1, -1, -1];
 
   constructor(onStart: () => void, onCopy: () => void) {
+    this.altBox.id = "altFire";
+    const key = document.createElement("span");
+    key.className = "key";
+    key.textContent = "RMB";
+    this.altGauge.appendChild(document.createElement("b"));
+    this.altLabel.className = "altLabel";
+    this.altBox.append(key, this.altName, this.altGauge, this.altLabel);
     this.startButton.addEventListener("click", onStart);
     byId("copyLink").addEventListener("click", onCopy);
   }
@@ -176,6 +209,7 @@ export class Hud {
       const fitted = l.upgrades.filter((u) => u >= 0).map((u) => `<span class="swatch" style="background:${upgrades[u]?.color ?? "#fff"}"></span>${upgrades[u]?.name ?? "?"}`);
       const html = `${slot(0)}${slot(1)}<div class="on"><span class="key">G</span>Grenades <span class="num">x${l.grenades}</span></div>${fitted.length ? `<div class="upgrades">${fitted.join("")}</div>` : ""}`;
       this.loadoutBox.innerHTML = html;
+      this.loadoutBox.children[l.active]?.after(this.altBox);
     }
     for (let zone = 0; zone < this.plateCells.length; zone++) {
       const points = l.armor[zone] ?? 0;
@@ -187,6 +221,24 @@ export class Hud {
       value.classList.toggle("empty", points <= 0);
       cell.style.setProperty("--fill", String(Math.min(1, points / (plates[zone] || 1))));
     }
+  }
+
+  // The gun in hand's right-click: its name, and a heat bar (OVERHEAT when it locks), a charge ring (it kicks and says
+  // PIERCE when full) or a ready dot. Hidden with a null name.
+  setAltFire(name: string | null, kind: "windup" | "slug" | "charge", value: number, flag: boolean): void {
+    const m = altMeter(kind, value, flag, this.altScratch);
+    const shown = this.altShown;
+    const shownName = name ?? "";
+    if (shown.name === shownName && shown.kind === kind && shown.step === m.step && shown.state === m.state) return;
+    const newly = m.state !== shown.state;
+    if (shown.name !== shownName) { shown.name = shownName; this.altBox.style.display = name ? "flex" : "none"; this.altName.textContent = shownName; }
+    if (shown.kind !== kind) { shown.kind = kind; this.altGauge.className = kind; }
+    shown.step = m.step;
+    shown.state = m.state;
+    this.altBox.dataset.state = m.state;
+    this.altGauge.style.setProperty("--fill", String(m.step / ALT_STEPS));
+    this.altLabel.textContent = m.label;
+    if (newly && (m.state === "full" || m.state === "overheat")) replay(this.altGauge);
   }
 
   // The mech you are driving, and the one you picked for next match if it is a different one.

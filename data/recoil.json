@@ -66,6 +66,24 @@
         "cap": 1,
         "torsoMeters": 0.16,
         "torsoHz": 3
+      },
+      "scattergunAlt": {
+        "backMeters": 0.34,
+        "climbDegrees": 11,
+        "hz": 4.5,
+        "damping": 0.42,
+        "cap": 1.2,
+        "torsoMeters": 0.13,
+        "torsoHz": 4
+      },
+      "spikeDriverAlt": {
+        "backMeters": 0.42,
+        "climbDegrees": 13,
+        "hz": 3,
+        "damping": 0.45,
+        "cap": 1,
+        "torsoMeters": 0.18,
+        "torsoHz": 3
       }
     },
     "fallback": "autocannon"

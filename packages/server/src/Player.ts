@@ -1,6 +1,6 @@
 import type { Bot } from "./Bot";
 import type { Tally } from "./matchStats";
-import type { FireGate, Loadout, MechInput, MechState, NoiseEvent, ServerMessage } from "@rustbucket/shared";
+import type { AltFireState, FireGate, Loadout, MechInput, MechState, NoiseEvent, ServerMessage } from "@rustbucket/shared";
 
 // One person in a room. Plain data: the room moves it, this file just names the fields.
 export interface Player {
@@ -18,6 +18,7 @@ export interface Player {
   state: MechState;
   gate: FireGate;
   grenadeGate: FireGate;
+  alt: AltFireState; // the gun's secondary fire: heat, spin, charge (shared altFire.ts)
   queue: { seq: number; input: MechInput }[];
   lastSeq: number; // highest input processed, sent back as the ack
   ackTick: number; // the server tick on which that input was processed, so a client can subtract the wait from its ping

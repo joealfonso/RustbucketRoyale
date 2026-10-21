@@ -9,6 +9,7 @@ export class Input {
   private mouseDx = 0;
   private mouseDy = 0;
   private mouseDown = false;
+  private rightDown = false; // right mouse held: the weapon's secondary fire
   locked = false;
 
   private dashQueued = false;
@@ -40,7 +41,7 @@ export class Input {
       if (e.code === "KeyW") this.sprint.forwardReleased();
       this.keys.delete(e.code);
     });
-    window.addEventListener("blur", () => { this.keys.clear(); this.mouseDown = false; this.sprint.forwardReleased(); });
+    window.addEventListener("blur", () => { this.keys.clear(); this.mouseDown = false; this.rightDown = false; this.sprint.forwardReleased(); });
 
     // The mouse wheel flips between the two weapon slots.
     window.addEventListener("wheel", (e) => { if (this.locked && e.deltaY !== 0) this.slot = 1 - this.slot; });
@@ -50,11 +51,18 @@ export class Input {
       this.mouseDy += e.movementY;
     });
     window.addEventListener("mousedown", (e) => {
+      if (e.button === 2) { this.rightDown = true; return; }
       if (e.button !== 0) return;
       this.mouseDown = true;
       if (this.locked) this.clickQueued = true;
     });
-    window.addEventListener("mouseup", (e) => { if (e.button === 0) this.mouseDown = false; });
+    window.addEventListener("mouseup", (e) => {
+      if (e.button === 0) this.mouseDown = false;
+      if (e.button === 2) this.rightDown = false;
+    });
+    // Right-click is the secondary fire, so the browser's menu must never open over the game, locked or not.
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    document.addEventListener("contextmenu", (e) => { if (this.locked) e.preventDefault(); });
 
     hint.addEventListener("click", () => this.lock());
     canvas.addEventListener("click", () => { if (!this.locked) this.lock(); });
@@ -66,7 +74,7 @@ export class Input {
       if (this.locked) this.played = true;
       else if (this.played) hint.classList.add("resume");
       hint.classList.toggle("hidden", this.locked || this.panelOpen);
-      if (!this.locked) this.mouseDown = false;
+      if (!this.locked) { this.mouseDown = false; this.rightDown = false; }
     });
   }
 
@@ -122,6 +130,7 @@ export class Input {
     out.dash = active && this.dashQueued;
     this.dashQueued = false;
     out.fire = active && this.mouseDown;
+    out.altFire = active && this.rightDown;
     out.grenade = active && this.keys.has("KeyG");
     out.slot = this.slot;
     // Held E loots a wreck. A press too quick to span a sim step still counts for one step, so taking a weapon never misses.

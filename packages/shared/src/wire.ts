@@ -25,8 +25,9 @@ export const isBinaryType = (first: number) => first === TYPE_SNAPSHOT || first 
 // stamina, the fuel scale, the facing while standing). A 3-byte mask says which are sent; one left out is the same
 // float as last time (0 for a fresh memory), so prediction replays from exactly the numbers the server has. Then one
 // byte of flags.
-const SELF_FLOATS = 23;
-const SELF_MASK_BYTES = 3;
+// Gate 18a added six more (heat, vent, spin, charge, pin time and pin speed) and a fourth mask byte.
+const SELF_FLOATS = 29;
+const SELF_MASK_BYTES = 4;
 // Another mech: id, a byte saying what follows, its flags, its position, its yaw, then its details (hit points,
 // weapon, armour, upgrades). Once a client has been sent a mech, the position goes as the change since last time,
 // 1 byte an axis, and the details only when one changes, so a mech in view usually costs 9 bytes instead of 21.
@@ -44,13 +45,25 @@ const MECH_HIGH_BIT = 8;
 // The drop-in phase (drop.ts), 0 to 3, in two spare bits of the same byte.
 const DROP_SHIFT = 4;
 const DROP_MASK = 3;
+// Pinned by a full charge spike (gate 18a), in the next bit of the same byte. The last bit says one more byte follows
+// about its secondary fire: the barrel's spin or the spike's charge as 1 to 254 of 254, or 255 for a windup gun
+// venting. Venting resets the spin, so the two never need sending at once.
+const PINNED_BIT = 64;
+const ALT_BIT = 128;
+const ALT_BYTES = 1;
+const ALT_VENTING = 255;
+const ALT_SPIN_MAX = 254;
+// The byte for one mech's secondary fire, 0 for nothing to send.
+const altByte = (o: OtherState) => (o.overheated ? ALT_VENTING : Math.round(Math.max(0, Math.min(1, o.spin)) * ALT_SPIN_MAX));
 const LOADOUT_BYTES = 9;
 const LOOTING_BYTES = 2; // how far through looting a wreck, then through a repair, 0 to 255 each
 const PICKUP_BYTES = 9;
 const NOISE_BYTES = 5;
 const NOISE_STEP = 0.5; // metres: noises are shown fuzzy anyway
 const SNAPSHOT_HEADER_BYTES = 23;
-const SHOT_BYTES = 18;
+const SHOT_BYTES = 19;
+const SHOT_HIT_BIT = 1;
+const SHOT_PIERCE_BIT = 2;
 // A shot's origin, rounded to 5 cm: it only places a tracer and a muzzle flash, and 16 bits reach 1638 m, past the
 // largest map's edge.
 const SHOT_ORIGIN_STEP = 0.05;
@@ -95,7 +108,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
   const noises = m.noises.slice(0, 255);
   const pickups = m.pickups?.slice(0, PICKUPS_UNCHANGED - 1) ?? [];
   const s = m.you;
-  const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale, s.speedScale, s.dropPhase, s.dropTime];
+  const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale, s.speedScale, s.dropPhase, s.dropTime, s.heat, s.overheat, s.windup, s.charge, s.pinTime, s.pinSpeed];
   let mask = 0, present = 0;
   selfNumbers.forEach((n, i) => { if (!Object.is(Math.fround(n), memory.self[i])) { mask |= 1 << i; present++; } });
 
@@ -115,8 +128,8 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
     const was = memory.others.get(other.id);
     const delta = was !== undefined && fitsByte(now.x - was.x) && fitsByte(now.y - was.y) && fitsByte(now.z - was.z);
     const details = was === undefined || now.details.some((b, i) => b !== was.details[i]);
-    kinds.push((other.ability ? ABILITY_BIT : 0) | (delta ? DELTA_BIT : 0) | (details ? DETAILS_BIT : 0) | (other.mech & 4 ? MECH_HIGH_BIT : 0) | ((other.dropPhase & DROP_MASK) << DROP_SHIFT));
-    otherBytes += OTHER_HEAD_BYTES + (delta ? POSITION_DELTA_BYTES : POSITION_BYTES) + YAW_BYTES + (details ? DETAIL_BYTES : 0);
+    kinds.push((other.ability ? ABILITY_BIT : 0) | (delta ? DELTA_BIT : 0) | (details ? DETAILS_BIT : 0) | (other.mech & 4 ? MECH_HIGH_BIT : 0) | ((other.dropPhase & DROP_MASK) << DROP_SHIFT) | (other.pinned ? PINNED_BIT : 0) | (altByte(other) > 0 ? ALT_BIT : 0));
+    otherBytes += OTHER_HEAD_BYTES + (delta ? POSITION_DELTA_BYTES : POSITION_BYTES) + YAW_BYTES + (details ? DETAIL_BYTES : 0) + (altByte(other) > 0 ? ALT_BYTES : 0);
     seen.set(other.id, now);
   }
 
@@ -136,7 +149,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
   v.setUint8(o, m.health.dead ? 1 : 0); o += 1;
   v.setUint8(o, u8(Math.ceil(m.health.respawnIn))); o += 1;
 
-  for (let i = 0; i < SELF_MASK_BYTES; i++) { v.setUint8(o, (mask >> (i * 8)) & 255); o += 1; }
+  for (let i = 0; i < SELF_MASK_BYTES; i++) { v.setUint8(o, (mask >>> (i * 8)) & 255); o += 1; }
   selfNumbers.forEach((n, i) => { if (mask & (1 << i)) { v.setFloat32(o, n, true); o += 4; } });
   memory.self.set(selfNumbers);
   v.setUint8(o, (s.grounded ? 1 : 0) | (s.running ? 2 : 0) | (s.jetting ? 4 : 0) | (s.fuelLocked ? 8 : 0) | (s.staminaLocked ? 16 : 0) | (s.crawling ? 32 : 0)); o += 1;
@@ -155,6 +168,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
     }
     v.setUint16(o, encodeYaw(other.yaw), true); o += 2;
     if (kind & DETAILS_BIT) for (const b of now.details) { v.setUint8(o, b); o += 1; }
+    if (kind & ALT_BIT) { v.setUint8(o, altByte(other)); o += ALT_BYTES; }
   });
   memory.others = seen;
   v.setUint8(o, noises.length); o += 1;
@@ -208,7 +222,7 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
   const dead = v.getUint8(o) === 1; o += 1;
   const respawnIn = v.getUint8(o); o += 1;
 
-  const mask = v.getUint8(o) | (v.getUint8(o + 1) << 8) | (v.getUint8(o + 2) << 16); o += SELF_MASK_BYTES;
+  const mask = v.getUint32(o, true); o += SELF_MASK_BYTES;
   let present = 0;
   for (let i = 0; i < SELF_FLOATS; i++) if (mask & (1 << i)) present++;
   if (bytes.length < snapshotSize(0, 0, 0, present)) return null;
@@ -217,10 +231,11 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
   const you: SelfState = {
     x: f(), y: f(), z: f(), vx: f(), vz: f(), vy: f(), bodyYaw: f(), dashTime: f(), dashCooldown: f(), dashX: f(), dashZ: f(),
     abilityTime: f(), abilityCooldown: f(), abilityX: f(), abilityZ: f(),
-    fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(), speedScale: f(), dropPhase: f(), dropTime: f(), mech: 0,
+    fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(), speedScale: f(), dropPhase: f(), dropTime: f(),
+    heat: f(), overheat: f(), windup: f(), charge: f(), pinTime: f(), pinSpeed: f(), mech: 0,
     grounded: false, running: false, jetting: false, crawling: false, fuelLocked: false, staminaLocked: false,
   };
-  const selfOrder = [you.x, you.y, you.z, you.vx, you.vz, you.vy, you.bodyYaw, you.dashTime, you.dashCooldown, you.dashX, you.dashZ, you.abilityTime, you.abilityCooldown, you.abilityX, you.abilityZ, you.fuel, you.fuelTimer, you.stamina, you.staminaTimer, you.fuelScale, you.speedScale, you.dropPhase, you.dropTime];
+  const selfOrder = [you.x, you.y, you.z, you.vx, you.vz, you.vy, you.bodyYaw, you.dashTime, you.dashCooldown, you.dashX, you.dashZ, you.abilityTime, you.abilityCooldown, you.abilityX, you.abilityZ, you.fuel, you.fuelTimer, you.stamina, you.staminaTimer, you.fuelScale, you.speedScale, you.dropPhase, you.dropTime, you.heat, you.overheat, you.windup, you.charge, you.pinTime, you.pinSpeed];
   const flags = v.getUint8(o); o += 1;
   you.grounded = (flags & 1) !== 0; you.running = (flags & 2) !== 0; you.jetting = (flags & 4) !== 0;
   you.fuelLocked = (flags & 8) !== 0; you.staminaLocked = (flags & 16) !== 0; you.crawling = (flags & 32) !== 0;
@@ -240,18 +255,22 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
     const delta = (kind & DELTA_BIT) !== 0, hasDetails = (kind & DETAILS_BIT) !== 0;
     const was = memory.others.get(id);
     if (!was && (delta || !hasDetails)) return null; // a change from something this connection was never sent
-    if (bytes.length < o + (delta ? POSITION_DELTA_BYTES : POSITION_BYTES) + YAW_BYTES + (hasDetails ? DETAIL_BYTES : 0)) return null;
+    const hasAlt = (kind & ALT_BIT) !== 0;
+    if (bytes.length < o + (delta ? POSITION_DELTA_BYTES : POSITION_BYTES) + YAW_BYTES + (hasDetails ? DETAIL_BYTES : 0) + (hasAlt ? ALT_BYTES : 0)) return null;
     let qx: number, qy: number, qz: number;
     if (delta) { qx = was!.x + v.getInt8(o); qy = was!.y + v.getInt8(o + 1); qz = was!.z + v.getInt8(o + 2); o += POSITION_DELTA_BYTES; }
     else { qx = v.getInt16(o, true); qy = v.getInt16(o + 2, true); qz = v.getInt16(o + 4, true); o += POSITION_BYTES; }
     const yaw = (v.getUint16(o, true) / 65535) * TWO_PI; o += YAW_BYTES;
     let d = was?.details;
     if (hasDetails) { d = Array.from(bytes.subarray(o, o + DETAIL_BYTES)); o += DETAIL_BYTES; }
+    const alt = hasAlt ? v.getUint8(o) : 0;
+    if (hasAlt) o += ALT_BYTES;
     seen.set(id, { x: qx, y: qy, z: qz, details: d! });
     others.push({
       id, x: qx * POSITION_STEP, y: qy * HEIGHT_STEP, z: qz * POSITION_STEP, yaw,
       running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, repairing: (bits & 32) !== 0, bot: (bits & 8) !== 0,
       hp: [d![0]!, d![1]!, d![2]!], weapon: d![3]!, armor: [d![4]!, d![5]!, d![6]!], upgrades: [slot(d![7]!), slot(d![8]!)], mech: (bits >> 6) | (kind & MECH_HIGH_BIT ? 4 : 0), ability: (kind & ABILITY_BIT) !== 0, dropPhase: (kind >> DROP_SHIFT) & DROP_MASK,
+      pinned: (kind & PINNED_BIT) !== 0, overheated: alt === ALT_VENTING, spin: alt === ALT_VENTING ? 0 : alt / ALT_SPIN_MAX,
     });
   }
   if (bytes.length < o + 1) return null;
@@ -310,7 +329,9 @@ export function encodeShot(m: ShotMessage): Uint8Array {
   for (const n of [m.ox, m.oy, m.oz]) { v.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(n / SHOT_ORIGIN_STEP))), true); o += 2; }
   for (const n of [m.dx, m.dy, m.dz]) { v.setInt16(o, Math.round(Math.max(-1, Math.min(1, n)) * 32767), true); o += 2; }
   v.setUint16(o, Math.max(0, Math.min(65535, Math.round(m.length * 100))), true); o += 2;
-  v.setUint8(o, m.hitMech ? 1 : 0);
+  v.setUint8(o, (m.hitMech ? SHOT_HIT_BIT : 0) | (m.pierce ? SHOT_PIERCE_BIT : 0)); o += 1;
+  // 0 for a primary shot; a secondary's share is never quite 0, so it is kept at least 1.
+  v.setUint8(o, m.alt === undefined ? 0 : Math.max(1, u8(Math.max(0, Math.min(1, m.alt)) * 255)));
   return new Uint8Array(buffer);
 }
 
@@ -324,8 +345,11 @@ export function decodeShot(bytes: Uint8Array): ShotMessage | null {
   const n = Math.hypot(dx, dy, dz) || 1; // put back to exactly unit length after the rounding
   dx /= n; dy /= n; dz /= n;
   const length = v.getUint16(o, true) / 100; o += 2;
-  const hitMech = v.getUint8(o) === 1;
-  return { t: "shot", id, ox, oy, oz, dx, dy, dz, length, hitMech };
+  const bits = v.getUint8(o), alt = v.getUint8(o + 1);
+  const shot: ShotMessage = { t: "shot", id, ox, oy, oz, dx, dy, dz, length, hitMech: (bits & SHOT_HIT_BIT) !== 0 };
+  if (alt > 0) shot.alt = alt / 255;
+  if (bits & SHOT_PIERCE_BIT) shot.pierce = true;
+  return shot;
 }
 
 // ---- input
@@ -333,7 +357,7 @@ export function decodeShot(bytes: Uint8Array): ShotMessage | null {
 // The target goes along when the caller says it is needed: firing, throwing, and every step of the drop, which steers
 // toward it. A pounce lands on the aim point, so it also goes whenever the ability key is down, whatever the caller says.
 export function encodeInput(m: InputMessage, withTarget: boolean): Uint8Array {
-  const hasTarget = withTarget || m.ability;
+  const hasTarget = withTarget || m.ability || m.altFire;
   const hasLag = m.lagMs !== undefined;
   const hasWatch = m.watchId !== undefined;
   const buffer = new ArrayBuffer(INPUT_BASE_BYTES + (hasTarget ? 12 : 0) + (hasLag ? 2 : 0) + (hasWatch ? 2 : 0));
@@ -344,7 +368,7 @@ export function encodeInput(m: InputMessage, withTarget: boolean): Uint8Array {
   v.setInt8(o, Math.round(m.moveX * 127)); o += 1;
   v.setInt8(o, Math.round(m.moveY * 127)); o += 1;
   v.setUint8(o, (m.run ? 1 : 0) | (m.jet ? 2 : 0) | (m.dash ? 4 : 0) | (m.fire ? 8 : 0) | (m.grenade ? 16 : 0) | (hasTarget ? 32 : 0) | (hasLag ? 64 : 0) | (hasWatch ? 128 : 0)); o += 1;
-  v.setUint8(o, (m.interact ? 1 : 0) | (m.slot === 1 ? 2 : 0) | (m.repair ? 4 : 0) | (m.ability ? 8 : 0)); o += 1;
+  v.setUint8(o, (m.interact ? 1 : 0) | (m.slot === 1 ? 2 : 0) | (m.repair ? 4 : 0) | (m.ability ? 8 : 0) | (m.altFire ? 16 : 0)); o += 1;
   v.setFloat32(o, m.aimYaw, true); o += 4;
   v.setFloat32(o, m.aimPitch, true); o += 4;
   if (hasTarget) for (const n of [m.targetX, m.targetY, m.targetZ]) { v.setFloat32(o, n, true); o += 4; }
@@ -367,7 +391,7 @@ export function decodeInput(bytes: Uint8Array): InputMessage | null {
   const record: Record<string, unknown> = {
     seq: v.getUint32(1, true), moveX: v.getInt8(5) / 127, moveY: v.getInt8(6) / 127,
     run: (flags & 1) !== 0, jet: (flags & 2) !== 0, dash: (flags & 4) !== 0, fire: (flags & 8) !== 0, grenade: (flags & 16) !== 0,
-    interact: (flags2 & 1) !== 0, slot: (flags2 & 2) !== 0 ? 1 : 0, repair: (flags2 & 4) !== 0, ability: (flags2 & 8) !== 0,
+    interact: (flags2 & 1) !== 0, slot: (flags2 & 2) !== 0 ? 1 : 0, repair: (flags2 & 4) !== 0, ability: (flags2 & 8) !== 0, altFire: (flags2 & 16) !== 0,
     aimYaw: v.getFloat32(9, true), aimPitch: v.getFloat32(13, true),
     targetX: 0, targetY: 0, targetZ: 0,
   };

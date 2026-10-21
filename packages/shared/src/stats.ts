@@ -52,6 +52,57 @@ export interface WeaponStats {
   maxAimDistance: number;
   shakeForce: number;
   damage: number;
+  secondary: SecondaryStats; // right-click (altFire.ts)
+}
+
+// Right-click fire, built from a few kinds so no gun needs code of its own (gate 18a).
+// Hold to spin up: the rate climbs to maxRateMultiplier times the gun's own over windupSeconds. Every alt shot adds
+// heat; full heat locks both triggers for overheatSeconds. Heat cools whenever the right button is up.
+export interface WindupStats {
+  kind: "windup";
+  windupSeconds: number; maxRateMultiplier: number; heatPerShot: number; coolPerSecond: number; overheatSeconds: number; spreadDegrees: number;
+}
+// One heavy shot in place of the gun's own: its own rate, damage, spread, range and kick.
+export interface SlugStats {
+  kind: "slug";
+  shotsPerSecond: number; damage: number; spreadDegrees: number; maxAimDistance: number; shakeForce: number;
+}
+// Hold to charge, release to fire. Damage runs from minDamageShare to the gun's full damage; a full charge passes
+// through pierceMechs mechs and pins each one it hits, slowed to pinSpeedShare of its speed for pinSeconds.
+export interface ChargeStats {
+  kind: "charge";
+  chargeSeconds: number; minDamageShare: number; pierceMechs: number; pinSeconds: number; pinSpeedShare: number; shakeForce: number;
+}
+export type SecondaryStats = WindupStats | SlugStats | ChargeStats;
+
+const SECONDARY_KEYS: Record<SecondaryStats["kind"], readonly string[]> = {
+  windup: ["windupSeconds", "maxRateMultiplier", "heatPerShot", "coolPerSecond", "overheatSeconds", "spreadDegrees"],
+  slug: ["shotsPerSecond", "damage", "spreadDegrees", "maxAimDistance", "shakeForce"],
+  charge: ["chargeSeconds", "minDamageShare", "pierceMechs", "pinSeconds", "pinSpeedShare", "shakeForce"],
+};
+
+// Divided by, or a share that must stay a share: anything else is a typo that would hang or break a gun.
+function checkSecondary(s: SecondaryStats, name: string): void {
+  const above = (key: string, v: number) => { if (!(v > 0)) throw new Error(`${name}: "${key}" must be above 0`); };
+  const share = (key: string, v: number) => { if (!(v >= 0 && v <= 1)) throw new Error(`${name}: "${key}" must be from 0 to 1`); };
+  if (s.kind === "windup") {
+    above("windupSeconds", s.windupSeconds); above("overheatSeconds", s.overheatSeconds); above("heatPerShot", s.heatPerShot);
+    if (!(s.maxRateMultiplier >= 1)) throw new Error(`${name}: "maxRateMultiplier" must be at least 1`);
+  } else if (s.kind === "slug") {
+    above("shotsPerSecond", s.shotsPerSecond); above("maxAimDistance", s.maxAimDistance);
+  } else {
+    above("chargeSeconds", s.chargeSeconds); share("minDamageShare", s.minDamageShare); share("pinSpeedShare", s.pinSpeedShare);
+    if (!Number.isInteger(s.pierceMechs) || s.pierceMechs < 0) throw new Error(`${name}: "pierceMechs" must be a whole number of at least 0`);
+  }
+}
+
+export function parseSecondary(raw: unknown, name: string): SecondaryStats {
+  const kind = (raw as { kind?: unknown } | null)?.kind;
+  if (kind !== "windup" && kind !== "slug" && kind !== "charge") throw new Error(`${name}: "kind" must be windup, slug or charge`);
+  const numbers = parseNumbers<Record<string, number>>(raw, name, SECONDARY_KEYS[kind] as string[]);
+  const s = { ...numbers, kind } as SecondaryStats;
+  checkSecondary(s, name);
+  return s;
 }
 
 export interface GrenadeStats {
@@ -276,9 +327,11 @@ export function parseWeapons(raw: unknown): WeaponSet {
   if (!Array.isArray(d?.weapons) || d.weapons.length === 0) throw new Error("weapons.json: needs weapons");
   const weapons = (d.weapons as Record<string, unknown>[]).map((w) => {
     if (typeof w.id !== "string" || typeof w.name !== "string" || typeof w.color !== "string") throw new Error("weapons.json: every weapon needs id, name and color");
-    const numbers = parseNumbers<Omit<WeaponStats, "id" | "name" | "color">>(w, `weapons.json ${w.id}`, WEAPON_KEYS as never);
+    const numbers = parseNumbers<Omit<WeaponStats, "id" | "name" | "color" | "secondary">>(w, `weapons.json ${w.id}`, WEAPON_KEYS as never);
     if (!Number.isInteger(numbers.pellets) || numbers.pellets < 1) throw new Error(`weapons.json: ${w.id} pellets must be a whole number of at least 1`);
-    return { ...numbers, id: w.id, name: w.name, color: w.color } as WeaponStats;
+    if (!(numbers.shotsPerSecond > 0)) throw new Error(`weapons.json: ${w.id} shotsPerSecond must be above 0`);
+    const secondary = parseSecondary(w.secondary, `weapons.json ${w.id} secondary`);
+    return { ...numbers, id: w.id, name: w.name, color: w.color, secondary } as WeaponStats;
   });
   const start = weapons.findIndex((w) => w.id === d.start);
   if (start < 0) throw new Error(`weapons.json: start weapon "${String(d.start)}" is not in the list`);

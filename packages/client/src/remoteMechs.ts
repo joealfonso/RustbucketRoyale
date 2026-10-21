@@ -25,6 +25,9 @@ interface Remote {
   mech: number; // the roster mech it is drawn as. A new one swaps the model.
   weapon: number; // the weapon in hand, by index in weapons.json, so its shots are drawn in that weapon's look
   dead: boolean;
+  pinned: boolean; // held by a full charge spike (gate 18a)
+  overheated: boolean; // its windup gun is venting
+  spin: number; // 0 to 1: its windup gun spinning up, or its spike charging, for the glow and the sound
   hp: number[]; // the newest hit points the server sent, so a replay can hand the mech back as it is now
   looted: boolean;
   bot: boolean;
@@ -34,6 +37,7 @@ interface Remote {
 }
 
 const MAX_SAMPLES = 12;
+const SPIN_STEPS = 4; // a remote's spin up or charge is heard in this many steps
 const OFFSET_WINDOW = 40; // snapshots to look back over when working out the fastest the network has been
 
 // Other players, drawn a little in the past. Blending between two real snapshots looks smooth
@@ -64,6 +68,7 @@ export class RemoteMechs {
   onKnockedOut: ((id: number, model: MechModel, alreadyDown: boolean) => void) | null = null;
   // A mech's drop-in moved on a phase (drop.ts), as the server saw it, at the spot it was then: the retro burn
   // lighting, or touching down (to 0). Not called for a mech first seen mid drop.
+  onSpinStep: ((model: MechModel, weapon: number, spin: number) => void) | null = null;
   onDropPhase: ((model: MechModel, from: number, to: number, x: number, y: number, z: number) => void) | null = null;
 
   constructor(
@@ -146,6 +151,13 @@ export class RemoteMechs {
       if (Math.hypot(p.x - x, p.z - z) <= range) return true;
     }
     return false;
+  }
+
+  // Calls `fn` for every mech that is pinned, venting or winding up right now, for their effects (altFireFx.ts).
+  // Allocates nothing.
+  forEachAlt(fn: (model: MechModel, mech: number, weapon: number, pinned: boolean, overheated: boolean, spin: number) => void): void {
+    if (this.replaying) return;
+    for (const r of this.remotes.values()) if (r.pinned || r.overheated || r.spin > 0) fn(r.model, r.mech, r.weapon, r.pinned, r.overheated, r.spin);
   }
 
   // Which roster mech someone is, or -1 if we have not seen them.
@@ -234,7 +246,7 @@ export class RemoteMechs {
         remote.mech = o.mech;
       }
       if (!remote) {
-        remote = { id: o.id, model: this.makeModel(o), mech: o.mech, weapon: o.weapon, vx: 0, vy: 0, vz: 0, jetting: false, running: false, ability: false, dropPhase: o.dropPhase, dead: false, hp: [...o.hp], looted: false, bot: o.bot, ghost: null, samples: [], seen: true };
+        remote = { id: o.id, model: this.makeModel(o), mech: o.mech, weapon: o.weapon, vx: 0, vy: 0, vz: 0, jetting: false, running: false, ability: false, dropPhase: o.dropPhase, dead: false, pinned: false, overheated: false, spin: 0, hp: [...o.hp], looted: false, bot: o.bot, ghost: null, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;
@@ -245,6 +257,12 @@ export class RemoteMechs {
       remote.jetting = o.jetting;
       remote.running = o.running;
       remote.ability = o.ability;
+      remote.pinned = o.pinned;
+      remote.overheated = o.overheated;
+      // Each quarter of a spin up or charge is heard, so a gun winding up nearby is heard getting there.
+      const quarter = Math.floor(o.spin * SPIN_STEPS), was = Math.floor(remote.spin * SPIN_STEPS);
+      if (quarter > was && !this.replaying) this.onSpinStep?.(remote.model, o.weapon, quarter / SPIN_STEPS);
+      remote.spin = o.spin;
       if (o.dropPhase !== remote.dropPhase) {
         const from = remote.dropPhase;
         remote.dropPhase = o.dropPhase;

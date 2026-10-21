@@ -1,6 +1,6 @@
 import {
   Predictor, STEP, SnapshotMemory, abilityFor, propsInReach, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
-  dropping, mechStatsFor, ringAt, type Roster, type BotConfig, type TitanConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type AbilitySet, type AbilityStats, type RingSchedule, type ServerMessage, type TierSet, type World,
+  createAltFireState, readAltFire, dropping, mechStatsFor, ringAt, type WeaponSet, type Roster, type BotConfig, type TitanConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type AbilitySet, type AbilityStats, type RingSchedule, type ServerMessage, type TierSet, type World,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "../Bot";
 import { TITAN_ID } from "../Titan";
@@ -46,6 +46,8 @@ export class HeadlessPlayer {
   private smashScratch: number[] = [];
   private smashed: number[] = [];
   private dropPlan: DropPlan | null = null;
+  private alt = createAltFireState(); // its heat and charge as the server last said, for the brain's right-click
+  secondaryShots = 0; // its own secondary shots seen coming back, so the soak shows right-click is being used
 
   constructor(
     private room: Room,
@@ -61,6 +63,7 @@ export class HeadlessPlayer {
     private botAbilities: BotAbilityStats | null = null,
     private titan: TitanConfig | null = null,
     private dropBots: DropBotStats | null = null, // how its brain picks a landing spot, as the room's bots do
+    private weapons: WeaponSet | null = null, // for the brain's right-click; null never right-clicks
   ) {
     this.abilityOf = abilities ? abilityFor(abilities, roster) : () => null;
     this.statsOf = mechStatsFor(mech, roster);
@@ -82,6 +85,7 @@ export class HeadlessPlayer {
     if (message.t === "props") for (const id of message.destroyed) this.breakProp(id);
     if (message.t === "eliminated") this.places.push(message.place);
     if (message.t === "result") this.winnerSeen = true;
+    if (message.t === "shot" && message.id === this.id && message.alt !== undefined) this.secondaryShots++;
     // Being rammed is a shove only the server knows about, so the snapshots right after it are not judged.
     if (message.t === "ability" && message.event === "hit" && this.predictor && Math.hypot(message.x - this.predictor.state.x, message.z - this.predictor.state.z) < RAMMED_NEAR) this.settleSnapshots = 3;
     // So is the Junk Titan's stomp.
@@ -137,6 +141,9 @@ export class HeadlessPlayer {
     // Legs breaking is only known from the snapshot that reports it, so the inputs already predicted at walk speed
     // get one unavoidable correction then, like a respawn.
     if (snap.health.dead !== this.wasDead || snap.you.crawling !== this.wasCrawling) this.settleSnapshots = 3;
+    // So is being pinned by a spike: the slow starts on the server's step of the hit.
+    if (snap.you.pinTime > (this.last?.you.pinTime ?? 0)) this.settleSnapshots = 3;
+    readAltFire(this.alt, snap.you);
     // Only the server knows the Titan's body, so being pushed out of it is corrected, as in the browser.
     const titan = snap.titan;
     if (titan && this.titan && titan.action !== "down" && Math.hypot(titan.x - snap.you.x, titan.z - snap.you.z) < this.titan.radius + 2) this.settleSnapshots = 3;
@@ -164,6 +171,9 @@ export class HeadlessPlayer {
     const ring = this.ring && snap.match.state === "active" ? ringAt(this.ring, snap.match.seconds, this.ringNow) : null;
     this.brain.abilityKind = this.abilityOf(this.predictor.state.mech)?.kind ?? null;
     this.brain.body = this.statsOf(this.predictor.state.mech);
+    const held = snap.loadout.slots[snap.loadout.active] ?? -1;
+    this.brain.secondary = (held >= 0 ? this.weapons?.weapons[held]?.secondary : null) ?? null;
+    this.brain.alt = this.alt;
     if (dropping(this.predictor.state) && this.dropPlan) {
       // It cannot know where the room's bots mean to land, only where the mechs it is sent are now.
       const taken = this.dropPlan.taken;
@@ -175,7 +185,7 @@ export class HeadlessPlayer {
     }
     // The same rules the browser applies before sending.
     if (snap.health.dead || snap.match.state === "countdown") {
-      input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.grenade = false; input.ability = false;
+      input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.altFire = false; input.grenade = false; input.ability = false;
     }
     input.aimYaw = Math.fround(input.aimYaw);
     input.aimPitch = Math.fround(input.aimPitch);
@@ -189,6 +199,6 @@ export class HeadlessPlayer {
     const watchId = snap.health.dead ? (snap.others.find((o) => !o.dead)?.id ?? 0) : undefined;
     Object.assign(this.message, input, { t: "input", seq, lagMs: 20, watchId });
     // The target goes every step of the drop, as the browser sends it: the ball steers toward it.
-    this.room.receive(this.id, encodeInput(this.message, input.fire || input.grenade || dropping(this.predictor.state)));
+    this.room.receive(this.id, encodeInput(this.message, input.fire || input.altFire || input.grenade || dropping(this.predictor.state)));
   }
 }

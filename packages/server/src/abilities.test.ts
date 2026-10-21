@@ -396,7 +396,8 @@ describe("Decoy Drones", () => {
     expect(popAt).toBeGreaterThan(0);
     expect(a.messages[popAt]).toMatchObject({ id, kind: "decoy" });
     const before = a.messages.slice(0, popAt);
-    expect(before.some((m) => m.t === "shot" && m.id === botId)).toBe(true);
+    // The shot that pops it is sent just after the pop, so it counts too (a spun up autocannon often pops it first go).
+    expect(a.messages.slice(0, popAt + 2).some((m) => m.t === "shot" && m.id === botId)).toBe(true);
     expect(before.some((m) => m.t === "explode")).toBe(false); // it was shot, not blown up
   });
 });

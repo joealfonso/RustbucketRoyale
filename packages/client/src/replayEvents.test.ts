@@ -60,3 +60,15 @@ describe("ReplayEvents, the Junk Titan", () => {
     expect(out).toMatchObject({ event: "stomp", x: 7, z: 8, radius: 11 });
   });
 });
+
+describe("ReplayEvents right-click shots (gate 18a)", () => {
+  it("keeps a shot's right-click share alongside whether it hit a mech", () => {
+    const events = new ReplayEvents(4);
+    events.shot(0, 1, shotAt(0), 2, true, 1);
+    events.shot(1, 1, shotAt(0), 2, false, 0.35);
+    events.shot(2, 1, shotAt(0), 0, true);
+    expect([events.hitMechAt(0), events.altAt(0)]).toEqual([true, 1]);
+    expect([events.hitMechAt(1), events.altAt(1)]).toEqual([false, 0.35]);
+    expect([events.hitMechAt(2), events.altAt(2)]).toEqual([true, -1]);
+  });
+});
