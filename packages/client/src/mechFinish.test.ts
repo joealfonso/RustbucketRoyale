@@ -61,7 +61,7 @@ describe("mech surfaces", () => {
     expect(() => parseKits(bad)).toThrow(/chrome/);
   });
 
-  it("gives kit materials the chips, the glint and the flat rubber, and leaves other materials alone", () => {
+  it("gives kit materials the chips, the glint and the flat rubber, each finish its own bands, and leaves other materials alone", () => {
     const toonLib = THREE.ShaderLib.toon!;
     const patched = (m: THREE.Material): ShaderParts => {
       const shader = { vertexShader: toonLib.vertexShader, fragmentShader: toonLib.fragmentShader, uniforms: {} };
@@ -71,12 +71,13 @@ describe("mech surfaces", () => {
     const kitPaint = toon.ownMaterial("#ffffff", true, "mech", true);
     const shader = patched(kitPaint);
     expect(shader.vertexShader).toContain("attribute vec2 finish;");
-    for (const line of ["wearColor", "toonGlint * glintColor", "toonFlatten = toonRubber", "(1.0 - toonRubber)", "vFinish.x * "]) expect(shader.fragmentShader).toContain(line);
+    for (const line of ["wearColor", "toonGlint * glintColor", "toonLevels = mix(mix(toonLevels", "toonEdges = mix(mix(toonEdges", "(1.0 - toonRubber)", "vFinish.x * "]) expect(shader.fragmentShader).toContain(line);
     // Chips first, then rust over them.
     expect(shader.fragmentShader.indexOf("wearColor;")).toBeLessThan(shader.fragmentShader.indexOf("rustDark : rustColor"));
     expect(kitPaint.customProgramCacheKey()).toContain("finish");
     const plain = patched(toon.ownMaterial("#ffffff", true, "mech"));
     expect(plain.vertexShader).not.toContain("finish");
+    expect(plain.fragmentShader).not.toContain("toonLevels = ");
     expect(THREE.ShaderChunk.lights_toon_pars_fragment).toContain("toonGlint");
   });
 });

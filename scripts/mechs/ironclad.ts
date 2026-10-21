@@ -371,8 +371,8 @@ function build(lv: Level): Record<string, MeshData> {
   // Head: small and dark, sunk a full 0.28 m behind the brow. Near, the eye is a lens with a bevelled face standing just out of a
   // collared housing, and the walls of the slot the head sits in are lined in the same dark, so the recess reads deep
   // rather than as a grey gap. The housing is solid round the lens rather than a tube the lens sits down inside: the
-  // game's outline pushes every face 6 cm out (data/look.json), and the walls of a bore that narrow would draw their
-  // outline over the eye.
+  // game's outline pushes every face a few cm out (data/look.json outline.mech), and the walls of a bore that narrow
+  // would draw their outline over the eye.
   const head = merge(
     slab([-0.26, 2.8, -0.44], [0.26, 3.14, 0.12], bev(0.05)),
     only(() => lathe([0, 3.02, -0.42], [0, 3.02, -0.52], [[0, 0.1], [0.07, 0.1], [0.07, 0.115], [0.1, 0.115]], 16)),

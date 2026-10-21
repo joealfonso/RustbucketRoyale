@@ -69,7 +69,8 @@ export class Debris {
   constructor(scene: THREE.Scene, toon: Toon, capacity: number, private limit: () => number, private physics: ChunkPhysics) {
     // White paint, so each chunk's own instance colour is its colour.
     this.mesh = new THREE.InstancedMesh(PIECE, toon.ownMaterial("#ffffff"), capacity);
-    this.outline = new THREE.InstancedMesh(PIECE, toon.instanced(toon.shellOutline("soot")), capacity);
+    // A white shell sharing the chunks' colours, so each is inked from its own paint like every other outline.
+    this.outline = new THREE.InstancedMesh(PIECE, toon.instanced(toon.shellOutline("#ffffff")), capacity);
     this.outline.instanceMatrix = this.mesh.instanceMatrix; // one set of matrices drives both
     for (const m of [this.mesh, this.outline]) {
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -83,6 +84,7 @@ export class Debris {
       this.colors.push(new THREE.Color());
       this.mesh.setColorAt(i, this.colors[i]!);
     }
+    this.outline.instanceColor = this.mesh.instanceColor;
   }
 
   // The hills of the map being played, so chunks thrown on a hillside land on it. Null for level ground.

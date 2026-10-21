@@ -55,10 +55,12 @@ export class PickupView {
         else {
           const color = p.item === ITEM_GRENADE ? this.colors.grenade
             : upgrade >= 0 ? (this.upgradeColors[upgrade] ?? "#ffffff") : (this.weaponColors[weapon] ?? "#ffffff");
-          mesh = new THREE.Mesh(this.geometry, this.material(color));
-          if (p.item === ITEM_GRENADE) mesh.scale.set(0.5, 0.5, 0.5);
-          else if (weapon >= 0) mesh.scale.set(0.4, 0.35, 1.6);
-          else { mesh.scale.set(0.7, 0.7, 0.7); mesh.rotation.x = Math.PI / 4; } // an upgrade: a tumbling cube, bigger than a grenade
+          const box = new THREE.Mesh(this.geometry, this.material(color));
+          if (p.item === ITEM_GRENADE) box.scale.set(0.5, 0.5, 0.5);
+          else if (weapon >= 0) box.scale.set(0.4, 0.35, 1.6);
+          else { box.scale.set(0.7, 0.7, 0.7); box.rotation.x = Math.PI / 4; } // an upgrade: a tumbling cube, bigger than a grenade
+          this.outline(box, color);
+          mesh = box;
         }
         mesh.position.set(p.x, p.y, p.z);
         this.scene.add(mesh);
@@ -85,8 +87,16 @@ export class PickupView {
     across.scale.set(crossArm[0], crossArm[1], depth);
     const up = new THREE.Mesh(this.geometry, cross);
     up.scale.set(crossArm[1], crossArm[0], depth);
+    this.outline(slab, this.look.plate);
+    this.outline(across, this.look.cross);
+    this.outline(up, this.look.cross);
     group.add(slab, across, up);
     return group;
+  }
+
+  // Outlined like every other box in the world. The grey-box look has no outlines.
+  private outline(mesh: THREE.Mesh, color: string): void {
+    this.toon?.outlineChild(mesh, color);
   }
 
   // `dt` in seconds, for the slide of a pickup that moved.

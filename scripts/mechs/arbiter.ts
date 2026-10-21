@@ -294,8 +294,9 @@ function bent(rings: V3[][]): MeshData {
 const solidProfile = (r: number, length: number, r2 = r): P2[] => [[0, -length / 2], [r, -length / 2], [r2, length / 2], [0, length / 2]];
 const ringProfile = (outer: number, inner: number, length: number): P2[] => [[outer, -length / 2], [outer, length / 2], [inner, length / 2], [inner, -length / 2]];
 // A hollow ring about an axis: a duct, a lens housing, a muzzle. Its depth shows as a shaded inside wall. The game's
-// outline shell swells every face out by 6 cm (data/look.json), so an inside wall closer than that to the axis would
-// swell right through it and show as a dark stick in the hole: keep `inner` at 6.1 cm or more.
+// outline shell swells every face out by an even width on screen, about 1.5 to 4 cm between 10 and 25 m (data/look.json
+// outline.mech), so an inside wall closer than that to the axis would swell right through it and show as a dark stick
+// in the hole: keep `inner` at 6.1 cm or more, which also covers the old fixed 6 cm.
 const hollow = (centre: V3, outer: number, inner: number, length: number, axis: Axis, sides: number, stretch = 1) =>
   lathe(ringProfile(outer, inner, length), centre, axis, sides, { closed: true, stretch });
 

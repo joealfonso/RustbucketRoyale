@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { addOutlineNormals } from "../outlineNormals";
 import type { Toon } from "../toonMaterial";
+import { withoutCreases } from "../creasePass";
 import { COVER_KINDS, type CoverConfig } from "./coverConfig";
 import { CoverSites, ITEM_FLOATS, planCell, type CoverMap } from "./coverPlan";
 import { coverModel, OUTLINED } from "./coverShapes";
@@ -29,7 +30,14 @@ export class GroundCover {
     this.material = toon.ownMaterial("#ffffff");
     this.material.vertexColors = true;
     this.material.side = THREE.DoubleSide; // plants are cards
-    const outline = toon.instanced(toon.shellOutline("scrapSteel"));
+    withoutCreases(this.material); // every blade would be a crease line (creasePass.ts)
+    // A white shell taking each corner's paint and each item's tint, so every part is inked from its own colour.
+    // A copy of its own: the shared white shell is also the trees', whose corner colours must not reach their ink.
+    const shared = toon.instanced(toon.shellOutline("#ffffff"));
+    const outline = shared.clone();
+    outline.onBeforeCompile = shared.onBeforeCompile;
+    outline.customProgramCacheKey = shared.customProgramCacheKey;
+    outline.vertexColors = true;
     const cap = config.maxPerKind;
     for (const kind of COVER_KINDS) {
       const geometry = this.geometryOf(kind);
@@ -48,6 +56,7 @@ export class GroundCover {
       if (OUTLINED.has(kind)) {
         const shell = new THREE.InstancedMesh(geometry, outline, cap);
         shell.instanceMatrix = mesh.instanceMatrix; // the same instances, drawn again from the inside
+        shell.instanceColor = color;
         shell.count = 0;
         shell.boundingSphere = mesh.boundingSphere;
         this.outlines.push(shell);

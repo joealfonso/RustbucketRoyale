@@ -1,9 +1,13 @@
 import * as THREE from "three";
 import { createGrenade, stepGrenade, type GrenadeState, type GrenadeStats, type World } from "@rustbucket/shared";
+import { addOutlineNormals } from "./outlineNormals";
+import type { Toon } from "./toonMaterial";
+
+const PAINT = "#3a3f2a";
 
 interface Live {
   state: GrenadeState;
-  mesh: THREE.Mesh;
+  mesh: THREE.Object3D;
   active: boolean;
   settled: boolean;
 }
@@ -13,11 +17,13 @@ interface Live {
 export class ClientGrenades {
   private pool: Live[] = [];
 
-  constructor(scene: THREE.Scene, count: number, private stats: GrenadeStats) {
-    const geometry = new THREE.SphereGeometry(stats.radius, 10, 8);
-    const material = new THREE.MeshStandardMaterial({ color: "#3a3f2a", roughness: 0.8 });
+  // With `toon`, a grenade is drawn in the master material with an outline, like everything else in a match.
+  constructor(scene: THREE.Scene, count: number, private stats: GrenadeStats, toon: Toon | null = null) {
+    const geometry = addOutlineNormals(new THREE.SphereGeometry(stats.radius, 10, 8));
+    const material = toon ? toon.material(PAINT) : new THREE.MeshStandardMaterial({ color: PAINT, roughness: 0.8 });
+    const outline = toon?.shellOutline(PAINT) ?? null;
     for (let i = 0; i < count; i++) {
-      const mesh = new THREE.Mesh(geometry, material);
+      const mesh = outline ? new THREE.Group().add(new THREE.Mesh(geometry, material), new THREE.Mesh(geometry, outline)) : new THREE.Mesh(geometry, material);
       mesh.visible = false;
       scene.add(mesh);
       this.pool.push({ state: createGrenade(), mesh, active: false, settled: false });

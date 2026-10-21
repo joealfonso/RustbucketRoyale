@@ -117,7 +117,7 @@ import dropsJson from "../../../data/drops.json";
 import { ShotFx } from "./shotFx";
 import { parseWeaponFx, usesAltLook, weaponFxFor } from "./weaponFxData";
 import weaponFxJson from "../../../data/weaponFx.json";
-import { addVfxQualityControl, mostOf, onVfxQuality, vfxConfig, vfxLevel, vfxQuality } from "./fx/quality";
+import { addVfxQualityControl, attachVfxQualityButton, mostOf, onVfxQuality, vfxConfig, vfxLevel, vfxQuality } from "./fx/quality";
 import { ThirdPersonCamera } from "./thirdPersonCamera";
 import { KillReplay, parseReplay } from "./killReplay";
 import replayJson from "../../../data/replay.json";
@@ -246,6 +246,7 @@ const overview = params.has("overview");
 hint.classList.remove("busy");
 hint.innerHTML = hintHtml;
 crt.attachSwitch(document.getElementById("crtSwitch") as HTMLButtonElement);
+attachVfxQualityButton(document.getElementById("vfxSwitch") as HTMLButtonElement);
 // The mech is picked on the title screen only (gate 14a); the Menu button in the room bar goes back there.
 document.getElementById("menuButton")!.addEventListener("click", () => { location.href = location.pathname; });
 // Play from the title screen: the match starts the first time you click into the game, so it never counts down while
@@ -501,7 +502,7 @@ const walkRemote = (model: MechModel, m: number, vx: number, vy: number, vz: num
   }
 };
 
-const grenades = new ClientGrenades(scene, 8, grenadeStats);
+const grenades = new ClientGrenades(scene, 8, grenadeStats, toon);
 const grenadeGate = new FireGate();
 const thrown = createGrenade();
 const damageFx = new DamageFx(fxSprites, damageFxConfig, zoneSet);
@@ -756,12 +757,13 @@ const workMs = new FrameTimes(240); // time spent on the frame before the GPU ta
 const gpuTimer = new GpuTimer(renderer.getContext() as WebGL2RenderingContext);
 // The V7 look features that cost the most, switchable from F1 to see what each costs on this machine (gate 12c).
 let coverShown = true;
-const crease = new CreasePass(lookConfig.crease);
+const crease = new CreasePass(lookConfig.crease, vfxQuality());
+onVfxQuality(() => crease.setQuality(vfxQuality()));
 const lookFeatures = [
   { name: "sun shadows", set: (on: boolean) => sunShadows.setEnabled(on) },
   { name: "painted marks", set: (on: boolean) => toon.paint.setShown(on) },
   { name: "ground cover", set: (on: boolean) => { coverShown = on; } },
-  { name: "crease lines", on: crease.enabled, set: (on: boolean) => { crease.enabled = on; } },
+  { name: "crease lines", get on() { return crease.enabled; }, set: (on: boolean) => { crease.enabled = on; } },
 ];
 const featureCost = new FeatureCost(lookFeatures, 2, 3);
 const gpuSummary = { median: 0, worst: 0 };

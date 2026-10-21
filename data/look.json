@@ -8,16 +8,20 @@
     0.5,
     0.68
   ],
+  "bandEdgePixels": 1.0,
   "rim": {
     "strength": 0.45,
     "width": 0.25,
-    "color": "warmLight"
+    "color": "warmLight",
+    "skyTint": 0.35,
+    "shadeSide": 0.35,
+    "fade": { "startMeters": 45, "endMeters": 110 }
   },
   "outline": {
-    "widthMeters": 0.06,
     "darken": 0.3,
     "mechDarken": 0.22,
-    "mechWidthMeters": 0.04
+    "world": { "pixels": 2.2, "minMeters": 0.004, "maxMeters": 0.3, "thinFromMeters": 60, "thinToMeters": 220, "thinShare": 0.5 },
+    "mech": { "pixels": 2.6, "minMeters": 0.004, "maxMeters": 0.2, "thinFromMeters": 60, "thinToMeters": 220, "thinShare": 0.5 }
   },
   "light": {
     "presets": [
@@ -36,6 +40,7 @@
         "fillSky": "fillBlue",
         "fillGround": "bounceWarm",
         "fillIntensity": 0.55,
+        "shade": { "shadow": 0.9, "mid": 0.3 },
         "sky": {
           "zenith": "skyPale",
           "sun": "sunDisc"
@@ -65,6 +70,7 @@
         "fillSky": "duskFill",
         "fillGround": "duskBounce",
         "fillIntensity": 0.52,
+        "shade": { "shadow": 0.9, "mid": 0.2 },
         "sky": {
           "zenith": "duskZenith",
           "sun": "duskSun"
@@ -94,6 +100,7 @@
         "fillSky": "overcastFill",
         "fillGround": "overcastBounce",
         "fillIntensity": 0.72,
+        "shade": { "shadow": 0.6, "mid": 0.2 },
         "sky": {
           "zenith": "overcastZenith",
           "sun": "overcastSun"
@@ -119,6 +126,10 @@
       "normal": {
         "mapSize": 2048,
         "meters": 100
+      },
+      "high": {
+        "mapSize": 2048,
+        "meters": 100
       }
     },
     "ahead": 0.4,
@@ -127,7 +138,6 @@
     "bias": -0.0005,
     "normalBias": 0.05,
     "edge": 0.12,
-    "skyTint": 0.85,
     "contactNear": 0.3
   },
   "ao": {
@@ -204,8 +214,8 @@
   "mech": {
     "normals": { "smoothAngleDegrees": 50, "bigShare": 0.4, "wearWidthMeters": 0.09 },
     "edgeWear": { "color": "#8E979A", "cover": 0.4, "scale": 14, "rustFirst": 0.3, "fade": { "startMeters": 14, "endMeters": 35 } },
-    "metal": { "glint": 0.55, "size": 0.05, "color": "warmLight" },
-    "rubber": { "flatten": 0.55, "darken": 0.8 }
+    "metal": { "glint": 0.55, "size": 0.05, "color": "warmLight", "bands": [0.24, 0.8, 1.12], "bandEdges": [0.5, 0.78] },
+    "rubber": { "darken": 0.8, "bands": [0.3, 0.5, 0.62], "bandEdges": [0.5, 0.68] }
   },
-  "crease": { "enabled": false, "darken": 0.45, "threshold": 0.6, "fade": { "startMeters": 25, "endMeters": 60 } }
+  "crease": { "onAtQuality": ["high"], "darken": 0.55, "threshold": 0.6, "stepShare": 0.02, "fade": { "startMeters": 25, "endMeters": 60 } }
 }

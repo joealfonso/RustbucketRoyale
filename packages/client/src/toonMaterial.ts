@@ -9,8 +9,9 @@ import { installHaze } from "./haze";
 import { parseLight, presetColors, presetForSeed, presetNamed, type LightConfig, type LightPreset } from "./lightPresets";
 import { Sky, parseSky, type SkyConfig } from "./sky";
 import { parseSunShadowLook, type SunShadowLook } from "./sunShadows";
-import { installToonLight } from "./toonLight";
+import { installToonLight, setToonShade } from "./toonLight";
 import { parseCrease, type CreaseLook } from "./creasePass";
+import { OUTLINE_UNIT_GLSL, outlineWidthGlsl, parseOutlineWidth, pushOutGlsl, type OutlineWidth } from "./outlineWidth";
 
 // The look of the game, from data/look.json and data/palette.json: one master toon material for everything (three
 // flat bands of light plus a hard rim), a dark outline round every box, and one warm key light (the sun, casting
@@ -27,12 +28,17 @@ export interface Palette {
 }
 
 export interface LookConfig {
-  bands: number[]; // brightness of each band, darkest first
+  bands: number[]; // brightness of the three bands, darkest first
   bandEdges: number[]; // where one band turns into the next, 0 (facing away from the light) to 1 (facing it)
-  rim: { strength: number; width: number; color: string };
+  bandEdgePixels: number; // how many pixels a band edge takes to turn on screen (toonLight.ts)
+  // A hard rim of `color` where a surface turns from the camera (`width`, 1 minus the cosine), turned `skyTint` of the
+  // way toward the sky's hue. Full on the sun's side, `shadeSide` of it on the shadow side, gone between the fade
+  // distances so far mechs do not glow.
+  rim: { strength: number; width: number; color: string; skyTint: number; shadeSide: number; fade: { startMeters: number; endMeters: number } };
   // Both darkens are a share of the brightness you see, so outlines read as ink, not a pale halo (scaling in linear
   // light made 0.35 show as about 62%). Mechs are inked a little darker than the world so they stand out from it.
-  outline: { widthMeters: number; darken: number; mechDarken: number; mechWidthMeters: number };
+  // Widths are about even on screen (outlineWidth.ts), the world's and the mechs' each their own.
+  outline: { darken: number; mechDarken: number; world: OutlineWidth; mech: OutlineWidth };
   // Damage eats paint to rust: `cover` share of a part at zero hit points, in patches `scale` per metre, with a dark
   // rim `rim` wide (in noise units) round each patch.
   // `spread` below 1 makes the first hits show: the share of damage is raised to this power before it becomes cover.
@@ -67,11 +73,17 @@ export interface MechSurfaceLook {
   // patches `scale` per metre; rust starts on edges, `rustFirst` ahead of the rest. Gone between the fade distances,
   // where a chamfer is a pixel wide and chips would only flicker.
   edgeWear: { color: string; cover: number; scale: number; rustFirst: number; fade: { startMeters: number; endMeters: number } };
-  // Bare metal parts: one hard highlight from the sun, `glint` strong, where the surface is within `size` (1 minus
-  // the cosine) of mirroring it toward the eye.
-  metal: { glint: number; size: number; color: string };
-  // Rubber parts: no rim, the lit bands pulled `flatten` of the way toward the shadow band, the colour times `darken`.
-  rubber: { flatten: number; darken: number };
+  // Bare metal parts: bands of their own, and one hard highlight from the sun, `glint` strong, where the surface is
+  // within `size` (1 minus the cosine) of mirroring it toward the eye.
+  metal: { glint: number; size: number; color: string } & FinishBands;
+  // Rubber parts: no rim, flat bands of their own, the colour times `darken`.
+  rubber: { darken: number } & FinishBands;
+}
+
+// Three bands and their two edges, as the look's own `bands` and `bandEdges`.
+export interface FinishBands {
+  bands: number[];
+  bandEdges: number[];
 }
 
 export function parsePalette(raw: unknown): Palette {
@@ -86,9 +98,16 @@ const ink = (hex: string, share: number) => new THREE.Color(hex).convertLinearTo
 
 export function parseLook(raw: unknown): LookConfig {
   const l = raw as LookConfig;
-  if (!Array.isArray(l?.bands) || l.bands.length < 2 || l.bandEdges?.length !== l.bands.length - 1) throw new Error("look.json: needs bands and one fewer bandEdges");
-  if (typeof l.outline?.widthMeters !== "number" || typeof l.rim?.strength !== "number") throw new Error("look.json: needs outline and rim");
-  if (typeof l.outline.mechDarken !== "number" || typeof l.outline.mechWidthMeters !== "number") throw new Error("look.json: outline needs mechDarken and mechWidthMeters");
+  checkBands(l as FinishBands, "look.json");
+  if (!(typeof l.bandEdgePixels === "number" && l.bandEdgePixels > 0 && l.bandEdgePixels <= 4)) throw new Error("look.json: bandEdgePixels must be above 0, at most 4");
+  if (typeof l.outline?.darken !== "number") throw new Error("look.json: needs outline");
+  const r = l.rim;
+  if (!(r && r.strength >= 0 && share(r.width) && typeof r.color === "string" && share(r.skyTint) && share(r.shadeSide) && r.fade?.startMeters >= 0 && r.fade.endMeters > r.fade.startMeters)) {
+    throw new Error("look.json: rim needs strength 0 or more, a color, width, skyTint and shadeSide 0 to 1, and a fade that ends after it starts");
+  }
+  if (typeof l.outline.mechDarken !== "number") throw new Error("look.json: outline needs mechDarken");
+  parseOutlineWidth(l.outline.world, "outline.world");
+  parseOutlineWidth(l.outline.mech, "outline.mech");
   if (typeof l.haze?.heightFalloff !== "number" || l.haze.heightFalloff < 0) throw new Error("look.json: needs haze.heightFalloff");
   parseLight(l.light);
   parseSky(l.sky);
@@ -96,11 +115,20 @@ export function parseLook(raw: unknown): LookConfig {
   const ao = l.ao;
   if (!(ao?.heightMeters > 0 && ao.strength >= 0 && ao.strength <= 1 && Number.isInteger(ao.steps) && ao.steps >= 1 && ao.ragged >= 0 && ao.directShare >= 0 && ao.directShare <= 1)) throw new Error("look.json: ao needs heightMeters above 0, strength and directShare 0 to 1, whole steps of 1 or more, ragged 0 or more");
   parseMechSurface(l.mech);
-  parseCrease(l.crease);
+  parseCrease(l.crease, Object.keys(vfxConfig.levels));
   return l;
 }
 
 const share = (n: unknown) => typeof n === "number" && n >= 0 && n <= 1;
+
+// Exactly three bands, each brighter than the last, with two edges in order between 0 and 1.
+function checkBands(b: FinishBands, where: string): void {
+  const [dark, mid, top] = b?.bands ?? [];
+  const [low, high] = b?.bandEdges ?? [];
+  const ok = b?.bands?.length === 3 && b.bandEdges?.length === 2 && [dark, mid, top, low, high].every((n) => typeof n === "number")
+    && dark! >= 0 && dark! < mid! && mid! < top! && top! <= 2 && low! > 0 && low! < high! && high! < 1;
+  if (!ok) throw new Error(`${where}: needs three bands, each brighter than the last (at most 2), and two bandEdges in order between 0 and 1`);
+}
 
 function parseMechSurface(m: MechSurfaceLook): void {
   if (!m?.normals || !m.edgeWear || !m.metal || !m.rubber) throw new Error("look.json: mech needs normals, edgeWear, metal and rubber");
@@ -113,8 +141,13 @@ function parseMechSurface(m: MechSurfaceLook): void {
     throw new Error("look.json: mech.edgeWear needs a color, cover and rustFirst 0 to 1, scale above 0, and a fade that ends after it starts");
   }
   if (!(share(m.metal.glint) && m.metal.size > 0 && m.metal.size < 1 && typeof m.metal.color === "string")) throw new Error("look.json: mech.metal needs glint 0 to 1, size between 0 and 1 and a color");
-  if (!(share(m.rubber.flatten) && share(m.rubber.darken))) throw new Error("look.json: mech.rubber needs flatten and darken 0 to 1");
+  checkBands(m.metal, "look.json mech.metal");
+  if (!share(m.rubber.darken)) throw new Error("look.json: mech.rubber needs darken 0 to 1");
+  checkBands(m.rubber, "look.json mech.rubber");
 }
+
+// A GLSL vector of two or three numbers.
+const vec = (n: number[]) => `vec${n.length}(${n.map((v) => v.toFixed(4)).join(", ")})`;
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const RAMP_SIZE = 64;
@@ -151,7 +184,8 @@ export class Toon {
   private paintKit: PaintKit | null = null;
 
   constructor(private look: LookConfig, private palette: Palette) {
-    // The bands as a tiny texture read with no blending, so light falls in flat steps.
+    // The bands as a tiny texture read with no blending, for lights other than the sun (toonLight.ts works the
+    // sun's bands out in the shader).
     const data = new Uint8Array(RAMP_SIZE * 4);
     for (let i = 0; i < RAMP_SIZE; i++) {
       const t = i / (RAMP_SIZE - 1);
@@ -169,7 +203,7 @@ export class Toon {
       for (const c of presetColors(preset)) if (!/^#[0-9a-fA-F]{6}$/.test(this.color(c))) throw new Error(`look.json: light preset ${preset.name} names ${c}, which is not in palette.json`);
     }
     this.sky = new Sky(look.sky, (c) => this.color(c));
-    installToonLight(look.shadows);
+    installToonLight({ ...look.shadows, bands: look.bands, bandEdges: look.bandEdges, edgePixels: look.bandEdgePixels }, look.light.presets[0]!.shade);
   }
 
   // The key light, which casts the shadows (sunShadows.ts), and the unit direction toward it for this preset.
@@ -276,7 +310,8 @@ export class Toon {
   // `paint`: the painted marks for this kind of surface (paint/paintChunk.ts), laid on after rust and weathering.
   private make(hex: string, rusts = false, weathered = false, paint: PaintSurface | null = null, finishes = false): THREE.MeshToonMaterial {
     const m = new THREE.MeshToonMaterial({ color: hex, gradientMap: this.ramp });
-    const { strength, width } = this.look.rim;
+    const { strength, width, skyTint, shadeSide, fade } = this.look.rim;
+    const pixels = (this.look.bandEdgePixels / 2).toFixed(4);
     const rim = this.rimColor;
     const rust = this.look.rust;
     const mech = this.look.mech;
@@ -285,7 +320,9 @@ export class Toon {
     // Everything in the master material casts sun shadows (sunShadows.ts); the ground and outlines do not.
     m.userData.castsShadow = true;
     const ao = this.look.ao;
-    // A hard rim of warm light where a surface turns away from the camera, so shapes separate from what is behind.
+    // A hard rim of light where a surface turns away from the camera, so shapes separate from what is behind: from
+    // the sun's side (toonSunSide, toonLight.ts) more than the shadow side, part sky-coloured, gone far away. Its edge
+    // turns over the same pixel or so as the band edges.
     // Rust: a value-noise pattern fixed to the part (in its own frame, scaled to metres, so it moves with the mech)
     // decides which bits of paint go first; everything under `rustCover` is rust, with a dark band at the edge.
     // Weathering: the same noise in world space, so it lines up across neighbouring boxes and never moves.
@@ -318,8 +355,16 @@ export class Toon {
           }
           #include <aomap_fragment>`)
         .replace("#include <opaque_fragment>", `
-          float facing = max(dot(normalize(normal), normalize(vViewPosition)), 0.0);
-          outgoingLight += rimColor * ${strength.toFixed(3)} * step(1.0 - ${width.toFixed(3)}, 1.0 - facing) * diffuseColor.rgb${finishes ? " * (1.0 - toonRubber)" : ""};
+          float rimTurn = 1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0);
+          float rimAa = max(fwidth(rimTurn), 1e-5) * ${pixels};
+          vec3 rimLight = rimColor;
+          #if NUM_HEMI_LIGHTS > 0
+            vec3 rimSky = hemisphereLights[0].skyColor;
+            rimLight = mix(rimColor, rimSky / max(max(rimSky.r, max(rimSky.g, rimSky.b)), 1e-4) * max(rimColor.r, max(rimColor.g, rimColor.b)), ${skyTint.toFixed(3)});
+          #endif
+          float rimAmount = smoothstep(${(1 - width).toFixed(3)} - rimAa, ${(1 - width).toFixed(3)} + rimAa, rimTurn) * mix(${shadeSide.toFixed(3)}, 1.0, toonSunSide)
+            * (1.0 - smoothstep(${fade.startMeters.toFixed(2)}, ${fade.endMeters.toFixed(2)}, length(vViewPosition)));
+          outgoingLight += rimLight * ${strength.toFixed(3)} * rimAmount * diffuseColor.rgb${finishes ? " * (1.0 - toonRubber)" : ""};
           #include <opaque_fragment>`);
       if (rusts) {
         shader.uniforms.rustCover = rustCover;
@@ -385,7 +430,8 @@ export class Toon {
             float toonChip = vFinish.x * step(vFinish.y, 0.5) * (1.0 - smoothstep(${edgeWear.fade.startMeters.toFixed(2)}, ${edgeWear.fade.endMeters.toFixed(2)}, length(vViewPosition)));
             if (toonChip > 0.0 && rustNoise(vFinishPos * ${edgeWear.scale.toFixed(3)} + 41.0) < ${edgeWear.cover.toFixed(3)} * toonChip) diffuseColor.rgb = wearColor;
             diffuseColor.rgb *= mix(1.0, ${rubber.darken.toFixed(3)}, toonRubber);`)
-          .replace("#include <lights_fragment_begin>", `toonFlatten = toonRubber * ${rubber.flatten.toFixed(3)};
+          .replace("#include <lights_fragment_begin>", `toonEdges = mix(mix(toonEdges, ${vec(metal.bandEdges)}, toonMetal), ${vec(rubber.bandEdges)}, toonRubber);
+            toonLevels = mix(mix(toonLevels, ${vec(metal.bands)}, toonMetal), ${vec(rubber.bands)}, toonRubber);
             toonGlintSize = toonMetal * ${metal.size.toFixed(4)};
             #include <lights_fragment_begin>`)
           .replace("#include <opaque_fragment>", `outgoingLight += toonGlint * glintColor * ${metal.glint.toFixed(3)};
@@ -398,20 +444,41 @@ export class Toon {
     return m;
   }
 
-  // The outline colour: the base colour darkened, never black, so it reads as part of the thing it surrounds.
-  outlineMaterial(name: string): THREE.MeshBasicMaterial {
+  // The outline round a box: the box drawn again from the inside, each face pushed out by the outline width there
+  // (outlineWidth.ts), so only its rim shows round the edges. Its colour is the base colour darkened, never black,
+  // so it reads as part of the thing it surrounds. Only for unit boxes (scaled to size), as box() and ToonInstances
+  // make: each corner moves along the box's own axes, so the faces stay flat and the corners closed. `mech` uses
+  // the mech outline settings.
+  outlineMaterial(name: string, mech = false): THREE.MeshBasicMaterial {
     const hex = this.color(name);
-    let m = this.outlines.get(hex);
+    const key = mech ? `mech-${hex}` : hex;
+    let m = this.outlines.get(key);
     if (!m) {
-      m = new THREE.MeshBasicMaterial({ color: ink(hex, this.look.outline.darken), side: THREE.BackSide });
-      this.outlines.set(hex, m);
+      const { outline } = this.look;
+      m = new THREE.MeshBasicMaterial({ color: ink(hex, mech ? outline.mechDarken : outline.darken), side: THREE.BackSide });
+      const width = mech ? outline.mech : outline.world;
+      m.onBeforeCompile = (shader) => {
+        shader.vertexShader = shader.vertexShader
+          .replace("#include <common>", `#include <common>${outlineWidthGlsl(width)}${OUTLINE_UNIT_GLSL}`)
+          .replace("#include <project_vertex>", `#include <project_vertex>
+  mat3 outlineAxes = mat3(modelViewMatrix);
+  #ifdef USE_INSTANCING
+    outlineAxes = outlineAxes * mat3(instanceMatrix);
+  #endif
+  vec3 outlineCorner = sign(position);
+  ${pushOutGlsl("outlineUnit(outlineAxes[0]) * outlineCorner.x + outlineUnit(outlineAxes[1]) * outlineCorner.y + outlineUnit(outlineAxes[2]) * outlineCorner.z")}`);
+      };
+      m.customProgramCacheKey = () => `box-outline-${mech ? "mech" : "world"}`;
+      this.outlines.set(key, m);
     }
     return m;
   }
 
-  // The outline for a real model: the same mesh drawn from the inside with every vertex pushed out along its normal.
-  // Works for any shape; on hard-edged boxes the faces part slightly at the corners, which smooth-shaded art does not.
-  // `mech` uses the mech outline settings.
+  // The outline for a real model: the same mesh drawn from the inside with every vertex pushed out along its
+  // outlineNormal (outlineNormals.ts: one direction per corner position, so flat-shaded shells stay closed at the
+  // edges; every geometry drawn with this material gets it where it is built), by the outline width there
+  // (outlineWidth.ts). The push is in view space, so a scaled model keeps the same width. `mech` uses the mech
+  // outline settings.
   shellOutline(name: string, mech = false): THREE.MeshBasicMaterial {
     const hex = this.color(name);
     const key = mech ? `mech-${hex}` : hex;
@@ -419,15 +486,19 @@ export class Toon {
     if (!m) {
       const { outline } = this.look;
       m = new THREE.MeshBasicMaterial({ color: ink(hex, mech ? outline.mechDarken : outline.darken), side: THREE.BackSide });
-      const width = mech ? outline.mechWidthMeters : outline.widthMeters;
+      const width = mech ? outline.mech : outline.world;
       m.onBeforeCompile = (shader) => {
-        // outlineNormal (outlineNormals.ts) keeps flat-shaded shells closed at the edges; every geometry drawn with
-        // this material gets it where it is built.
+        // A geometry without outline normals falls back to its normals rather than collapsing to NaN.
         shader.vertexShader = shader.vertexShader
-          .replace("#include <common>", "#include <common>\nattribute vec3 outlineNormal;")
-          .replace("#include <begin_vertex>", `#include <begin_vertex>\n  transformed += normalize(outlineNormal) * ${width.toFixed(4)};`);
+          .replace("#include <common>", `#include <common>\nattribute vec3 outlineNormal;${outlineWidthGlsl(width)}${OUTLINE_UNIT_GLSL}`)
+          .replace("#include <project_vertex>", `#include <project_vertex>
+  vec3 outlineAlong = dot(outlineNormal, outlineNormal) > 1e-12 ? outlineNormal : normal;
+  #ifdef USE_INSTANCING
+    outlineAlong = mat3(instanceMatrix) * outlineAlong;
+  #endif
+  ${pushOutGlsl("outlineUnit(mat3(modelViewMatrix) * outlineAlong)")}`);
       };
-      m.customProgramCacheKey = () => `shell-${width}`;
+      m.customProgramCacheKey = () => `shell-${mech ? "mech" : "world"}`;
       this.shellOutlines.set(key, m);
     }
     return m;
@@ -448,8 +519,7 @@ export class Toon {
     return copy;
   }
 
-  // A box with its outline: a slightly bigger copy drawn from the inside, so only its rim shows round the edges.
-  // The outline is a fixed width in metres, so it thins on screen with distance, as far LODs should.
+  // A box with its outline: the same box drawn from the inside and pushed out (outlineMaterial).
   box(parent: THREE.Object3D, center: readonly number[], size: readonly number[], name: string, material?: THREE.Material): ToonBox {
     const group = new THREE.Group();
     const mesh = new THREE.Mesh(unitBox, material ?? this.material(name));
@@ -463,29 +533,18 @@ export class Toon {
   }
 
   resize(box: ToonBox, size: readonly number[]): void {
-    const w = this.look.outline.widthMeters * 2;
     box.mesh.scale.set(size[0]!, size[1]!, size[2]!);
-    box.hull.scale.set(size[0]! + w, size[1]! + w, size[2]! + w);
+    box.hull.scale.copy(box.mesh.scale);
   }
 
-  // An outline for a box mesh that is already scaled: a hull child, sized so the edge is the same width in metres
-  // whatever the box's size. Call `refit` again after changing the box's scale.
-  outlineChild(mesh: THREE.Mesh, name: string, outlineColor?: string): void {
-    const hull = new THREE.Mesh(unitBox, this.outlineMaterial(outlineColor ?? name));
-    mesh.add(hull);
-    mesh.userData.hull = hull;
-    this.refit(mesh);
-  }
-
-  refit(mesh: THREE.Mesh): void {
-    const hull = mesh.userData.hull as THREE.Mesh | undefined;
-    if (!hull) return;
-    const w = this.look.outline.widthMeters * 2;
-    hull.scale.set(1 + w / mesh.scale.x, 1 + w / mesh.scale.y, 1 + w / mesh.scale.z);
+  // An outline for a box mesh that is already scaled: a hull child, which follows the box's scale by itself.
+  // `mech` uses the mech outline settings.
+  outlineChild(mesh: THREE.Mesh, name: string, mech = false): void {
+    mesh.add(new THREE.Mesh(unitBox, this.outlineMaterial(name, mech)));
   }
 
   instances(name: string, count: number, ground = false): ToonInstances {
-    return new ToonInstances(this, name, count, this.look.outline.widthMeters, ground);
+    return new ToonInstances(this, name, count, ground);
   }
 
   // The light preset for a map seed, or the one named by `forced` (?look=<name>) when there is one by that name.
@@ -517,6 +576,7 @@ export class Toon {
     this.towardSun.set(...preset.key.direction).normalize();
     this.key.position.copy(this.key.target.position).addScaledVector(this.towardSun, 100);
     this.key.shadow.intensity = preset.key.shadow;
+    setToonShade(preset.shade);
     this.haze.color.set(this.color(preset.haze.color));
     this.haze.near = preset.haze.near;
     this.haze.far = preset.haze.far;
@@ -564,15 +624,14 @@ export class ToonInstances {
   readonly hull: THREE.InstancedMesh | null;
 
   // `ground` draws the bands with no rim and no outline, for the floor.
-  constructor(toon: Toon, name: string, count: number, private outlineWidth: number, ground = false) {
+  constructor(toon: Toon, name: string, count: number, ground = false) {
     this.mesh = new THREE.InstancedMesh(unitBox, toon.instanced(ground ? toon.ground(name) : toon.world(name, "metal", true)), count);
     this.hull = ground ? null : new THREE.InstancedMesh(unitBox, toon.instanced(toon.outlineMaterial(name)), count);
   }
 
   set(i: number, x: number, y: number, z: number, sx: number, sy: number, sz: number): void {
     this.mesh.setMatrixAt(i, placed.compose(at.set(x, y, z), noTurn, sized.set(sx, sy, sz)));
-    const w = this.outlineWidth * 2;
-    this.hull?.setMatrixAt(i, placed.compose(at, noTurn, sized.set(sx + w, sy + w, sz + w)));
+    this.hull?.setMatrixAt(i, placed); // the outline pushes itself out (outlineMaterial)
   }
 
   hide(i: number): void {

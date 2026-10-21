@@ -17,6 +17,7 @@ import { createMechModel, kickMech, moveGunsAndSensors, recoilConfig, setCrawlLo
 import { kickFor } from "./recoil";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import { SunShadows, castShadows } from "./sunShadows";
+import { CreasePass } from "./creasePass";
 import mechKitsJson from "../../../data/mechKits.json";
 import { loadKit, parseKits, type LoadedKit } from "./mechKit";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -69,6 +70,9 @@ toon.light(scene, toon.presets[preset]!);
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 3000);
 const sunShadows = new SunShadows(renderer, toon.sun, toon.toSun, lookConfig.shadows, vfxQuality());
 onVfxQuality(() => sunShadows.setQuality(vfxQuality()));
+// Crease lines at the effects levels that draw them, as in the game.
+const crease = new CreasePass(lookConfig.crease, vfxQuality());
+onVfxQuality(() => crease.setQuality(vfxQuality()));
 
 // Ground, then the chunk with its middle on the origin.
 const ground = new THREE.Mesh(new THREE.BoxGeometry(600, 1, 600), toon.ground(palette.world.ground));
@@ -419,7 +423,7 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "KeyJ") { jetsOn = !jetsOn; if (!jetsOn) dropFrames = 1; }
   if (e.code === "KeyK") dashFrames = 1;
   if ((e.code === "KeyX" || e.code === "KeyZ") && (lookingAtFx || closeUp >= 0)) blowApart(e.code === "KeyZ");
-  if (e.code === "KeyV") setVfxQuality(vfxQuality() === "low" ? "normal" : "low");
+  if (e.code === "KeyV") { const levels = Object.keys(vfxConfig.levels); setVfxQuality(levels[(levels.indexOf(vfxQuality()) + 1) % levels.length]!); }
   if (e.code === "Digit7") lookingAtRange = true;
   if (e.code === "KeyF") fireAtRange();
   if (e.code === "KeyC" && lookingAtRange) fireAtRange(true);
@@ -458,7 +462,7 @@ renderer.setAnimationLoop(() => {
   shotFx.draw(camera, fxDt);
   updateRange(fxDt);
   sunShadows.follow(camera);
-  renderer.render(scene, camera);
+  crease.render(renderer, scene, camera);
 });
 
 // ---- Gate 13c (client): the Junk Titan's moves. Key I stands a live Titan beside the roster, past the scale Titan

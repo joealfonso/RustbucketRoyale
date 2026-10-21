@@ -5,21 +5,35 @@ import * as THREE from "three";
 // anything compiles, the way haze.ts swaps the fog.
 // - Anything in the darkest band is in shadow, whether it is turned away from the sun or something stands between
 //   it and the sun. Cast shadows therefore fall in the same flat band as the shadow side of a box, never darker.
-// - The shadow band is lit by the sun's colour turned toward the sky's hue (the hemisphere light's sky colour, so
-//   each light preset gets its own cool shadows with nothing per preset): cool soot shadows (DESIGN.md, Lighting).
+// - The three bands are worked out in the shader, not read from a texture (V14): each edge is a step over about
+//   `edgePixels` pixels of the light term's change on screen, so a terminator is sharp at any distance but never
+//   stair-stepped, and on a far curved part, where the light term changes fast, the bands blend instead of shimmering.
+// - Shadow colour, not darkness: the shadow band is lit by the sun's colour turned toward the sky's hue (the
+//   hemisphere light's sky colour) and the middle band a little, by how much the light preset says (`setToonShade`):
+//   warm light, cool shadow (DESIGN.md, Lighting).
 // - The shadow test is one hardware-filtered sample, cut at one half: a hard edge that follows the shadow's shape
 //   between texels instead of stepping, softened over a pixel or so by `edge`.
 // - The shadow map follows the camera (sunShadows.ts), so toward its rim the shadows fade out (`fadeFrom`, a share
 //   of its radius) and its edge never shows as a line on the ground.
-// Other lights (an explosion's flash) light the bands as before. Materials other than toon keep Three's own code.
-// - Finishes (gate V9, toonMaterial.ts): a material may set `toonFlatten` before the lights to pull the lit bands
-//   toward the shadow band (rubber), and `toonGlintSize` to have the sun leave one hard highlight in `toonGlint`
-//   where the surface mirrors it toward the eye (bare metal). Both are 0 everywhere else and cost nothing there.
+// Other lights (an explosion's flash) light the bands from the bands texture as before. Materials other than toon
+// keep Three's own code.
+// - Finishes (gate V9, toonMaterial.ts): a material may set `toonEdges` and `toonLevels` before the lights for bands
+//   of its own (bare metal, rubber), and `toonGlintSize` to have the sun leave one hard highlight in `toonGlint`
+//   where the surface mirrors it toward the eye (bare metal). `toonSunSide` says afterwards how far the sun lights
+//   the pixel, for the rim.
 
 export interface ToonLightLook {
-  edge: number; // half the width of the band edge, in shadow-test units: 0 is a hard step, 0.5 the whole filter
+  edge: number; // half the width of the shadow's edge, in shadow-test units: 0 is a hard step, 0.5 the whole filter
   fadeFrom: number; // share of the shadow map's radius where shadows start to fade out, 0 to 1
-  skyTint: number; // how far the shadow band's light turns toward the sky's hue, 0 to 1
+  bands: number[]; // the three bands' brightness, darkest first
+  bandEdges: number[]; // where each band turns into the next, 0 (facing away from the sun) to 1 (facing it)
+  edgePixels: number; // how many pixels a band edge takes to turn
+}
+
+// How far the shadow and middle bands turn toward the sky's hue, 0 to 1 (a light preset's `shade`).
+export interface ToonShade {
+  shadow: number;
+  mid: number;
 }
 
 const f = (n: number) => n.toFixed(4);
@@ -32,21 +46,22 @@ const TOON_DIRECT = "vec3 irradiance = getGradientIrradiance( geometryNormal, di
 
 // The toon lighting functions, with the sun's shadow band. `toonSun` is raised by lights_fragment_begin just before
 // the directional light is applied and lowered again here, so only that light gets the shadow treatment.
+// The derivatives are taken outside any branch that differs between neighbouring pixels: `toonSun` is the same for
+// the whole draw, and the glint's is taken whether the pixel is metal or not.
 export function toonParsChunk(look: ToonLightLook, original: string = THREE.ShaderChunk.lights_toon_pars_fragment): string {
   if (!original.includes(TOON_DIRECT)) throw new Error("toonLight: three's toon lighting chunk changed, update toonLight.ts");
+  const [dark, mid, top] = look.bands;
+  const [low, high] = look.bandEdges;
+  const halfWidth = f(look.edgePixels / 2);
   const helpers = `
+uniform vec4 toonShade;
 float toonSun = 0.0;
 float toonSunLit = 1.0;
-float toonFlatten = 0.0;
+float toonSunSide = 0.0;
+vec2 toonEdges = vec2( ${f(low!)}, ${f(high!)} );
+vec3 toonLevels = vec3( ${f(dark!)}, ${f(mid!)}, ${f(top!)} );
 float toonGlintSize = 0.0;
 vec3 toonGlint = vec3( 0.0 );
-float toonBand( float coord ) {
-	#ifdef USE_GRADIENTMAP
-		return texture2D( gradientMap, vec2( coord, 0.0 ) ).r;
-	#else
-		return coord < 0.7 ? 0.7 : 1.0;
-	#endif
-}
 #if defined( USE_SHADOWMAP ) && defined( SHADOWMAP_TYPE_PCF )
 float toonShadow( sampler2DShadow map, float intensity, float bias, vec4 coord ) {
 	coord.xyz /= coord.w;
@@ -59,18 +74,23 @@ float toonShadow( sampler2DShadow map, float intensity, float bias, vec4 coord )
 `;
   const sun = `vec3 irradiance;
 	if ( toonSun > 0.5 ) {
-		float band = toonBand( dot( geometryNormal, directLight.direction ) * 0.5 + 0.5 );
-		float darkest = toonBand( 0.0 );
-		float lit = toonSunLit * step( darkest + 0.001, band );
-		band = mix( band, darkest, toonFlatten );
-		if ( toonGlintSize > 0.0 ) toonGlint += directLight.color * lit * step( 1.0 - toonGlintSize, dot( geometryNormal, normalize( directLight.direction + geometryViewDir ) ) );
-		vec3 shade = directLight.color;
+		float toward = dot( geometryNormal, directLight.direction ) * 0.5 + 0.5;
+		float aa = max( fwidth( toward ), 1e-5 ) * ${halfWidth};
+		float lit = toonSunLit * smoothstep( toonEdges.x - aa, toonEdges.x + aa, toward );
+		float topBand = smoothstep( toonEdges.y - aa, toonEdges.y + aa, toward );
+		float mirror = dot( geometryNormal, normalize( directLight.direction + geometryViewDir ) );
+		float mirrorAa = max( fwidth( mirror ), 1e-5 ) * ${halfWidth};
+		toonGlint += directLight.color * lit * step( 1e-5, toonGlintSize ) * smoothstep( 1.0 - toonGlintSize - mirrorAa, 1.0 - toonGlintSize + mirrorAa, mirror );
+		toonSunSide = lit;
+		vec3 key = directLight.color;
+		vec3 cool = key;
 		#if NUM_HEMI_LIGHTS > 0
 			vec3 sky = hemisphereLights[ 0 ].skyColor;
-			float keyBright = max( shade.r, max( shade.g, shade.b ) );
-			shade = mix( shade, sky / max( max( sky.r, max( sky.g, sky.b ) ), 1e-4 ) * keyBright, ${f(look.skyTint)} );
+			cool = sky / max( max( sky.r, max( sky.g, sky.b ) ), 1e-4 ) * max( key.r, max( key.g, key.b ) );
 		#endif
-		irradiance = mix( darkest * shade, band * directLight.color, lit );
+		vec3 shadowLight = toonLevels.x * mix( key, cool, toonShade.x );
+		vec3 midLight = toonLevels.y * mix( key, cool, toonShade.y );
+		irradiance = mix( shadowLight, mix( midLight, toonLevels.z * key, topBand ), lit );
 		toonSun = 0.0;
 	} else {
 		irradiance = getGradientIrradiance( geometryNormal, directLight.direction ) * directLight.color;
@@ -93,15 +113,28 @@ export function lightsBeginChunk(original: string = THREE.ShaderChunk.lights_fra
 		#endif`);
 }
 
+// The shade of the current light preset, one value shared by every toon material: Three copies a material's
+// uniforms from its ShaderLib entry when it compiles, but a typed array is copied by reference, so writing these
+// four numbers reaches every toon material, the ground, the water and the far ranges with nothing per material.
+const shade = new Float32Array(4);
+
+export function setToonShade(s: ToonShade): void {
+  shade[0] = s.shadow;
+  shade[1] = s.mid;
+}
+
 let installed: string | null = null;
 
 // Swaps the chunks. Every page builds its Toon before anything compiles, and every Toon reads the same look.json,
-// so a second install with the same numbers does nothing and one with different numbers is a mistake.
-export function installToonLight(look: ToonLightLook): void {
-  const key = JSON.stringify([look.edge, look.fadeFrom, look.skyTint]);
+// so a second install with the same numbers does nothing and one with different numbers is a mistake. `first` is
+// the shade until a light preset is used (the hangar never uses one).
+export function installToonLight(look: ToonLightLook, first: ToonShade): void {
+  const key = JSON.stringify([look.edge, look.fadeFrom, look.bands, look.bandEdges, look.edgePixels]);
   if (installed === key) return;
   if (installed !== null) throw new Error("toonLight: the sun's shadow look is baked into shaders, set it once");
   THREE.ShaderChunk.lights_toon_pars_fragment = toonParsChunk(look);
   THREE.ShaderChunk.lights_fragment_begin = lightsBeginChunk();
+  THREE.ShaderLib.toon!.uniforms.toonShade = { value: shade };
+  setToonShade(first);
   installed = key;
 }

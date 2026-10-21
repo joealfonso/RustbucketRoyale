@@ -11,6 +11,9 @@ export interface LightPreset {
   fillSky: string;
   fillGround: string;
   fillIntensity: number;
+  // Shadow colour, not darkness: how far the shadow band's and the middle band's light turn from the sun's colour
+  // toward the sky's hue (fillSky), 0 to 1 (toonLight.ts).
+  shade: { shadow: number; mid: number };
   // The sky fades from the haze colour at the horizon up to `zenith`, so far ground melts into the sky with no seam.
   sky: { zenith: string; sun: string };
   clouds: { lit: string; shade: string };
@@ -41,6 +44,7 @@ export function parseLight(raw: unknown): LightConfig {
     if (Math.hypot(d[0]!, d[2]!) < 0.05 * Math.hypot(d[0]!, d[1]!, d[2]!)) throw new Error(`${where}: the key light must not come from straight above`);
     if (!isNumber(p.key.shadow) || p.key.shadow < 0 || p.key.shadow > 1) throw new Error(`${where} needs key shadow, 0 to 1`);
     if (!isText(p.fillSky) || !isText(p.fillGround) || !isNumber(p.fillIntensity)) throw new Error(`${where} needs fillSky, fillGround and fillIntensity`);
+    if (!(isNumber(p.shade?.shadow) && p.shade.shadow >= 0 && p.shade.shadow <= 1 && isNumber(p.shade.mid) && p.shade.mid >= 0 && p.shade.mid <= 1)) throw new Error(`${where} needs shade shadow and mid, 0 to 1`);
     if (!isText(p.sky?.zenith) || !isText(p.sky.sun) || !isText(p.clouds?.lit) || !isText(p.clouds.shade)) throw new Error(`${where} needs sky and cloud colours`);
     if (!isText(p.haze?.color) || !isNumber(p.haze.near) || !isNumber(p.haze.far) || p.haze.near < 0 || p.haze.far <= p.haze.near) throw new Error(`${where} needs haze colour and near < far`);
   }

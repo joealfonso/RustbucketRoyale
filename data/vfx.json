@@ -32,6 +32,22 @@
       "deathPieces": 4,
       "deathSmoke": 10,
       "splashes": 160
+    },
+    "high": {
+      "fire": 120,
+      "smoke": 300,
+      "dust": 200,
+      "sparks": 200,
+      "scorches": 16,
+      "debris": 120,
+      "flames": 48,
+      "blastBlobs": 3,
+      "blastSmoke": 8,
+      "blastDebris": 10,
+      "blastScorch": 1,
+      "deathPieces": 4,
+      "deathSmoke": 10,
+      "splashes": 160
     }
   },
   "sprites": {

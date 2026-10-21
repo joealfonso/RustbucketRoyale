@@ -21,7 +21,6 @@ export interface SunShadowLook {
   bias: number; // depth bias of the shadow test, in shadow-map depth units (negative pulls toward the light)
   normalBias: number; // metres each surface is pushed along its normal before the test, against shadow acne
   edge: number; // half the width of the shadow's band edge, in shadow-test units (toonLight.ts)
-  skyTint: number; // how far the shadow band's light turns toward the sky's hue
   // Share of the soft contact patches under map boxes (contactShadows.ts) kept where real shadows are drawn.
   contactNear: number;
 }
@@ -37,7 +36,7 @@ export function parseSunShadowLook(raw: unknown, qualityLevels: readonly string[
     if (!(Number.isInteger(l.mapSize) && l.mapSize >= 256 && l.mapSize <= 8192 && (l.mapSize & (l.mapSize - 1)) === 0)) throw new Error(`look.json: shadows.levels.${name}.mapSize must be a power of two from 256 to 8192`);
     if (!(isNumber(l.meters) && l.meters > 0)) throw new Error(`look.json: shadows.levels.${name}.meters must be above 0`);
   }
-  for (const k of ["ahead", "fadeFrom", "skyTint", "contactNear"] as const) if (!(isNumber(s[k]) && s[k] >= 0 && s[k] <= 1)) throw new Error(`look.json: shadows.${k} must be 0 to 1`);
+  for (const k of ["ahead", "fadeFrom", "contactNear"] as const) if (!(isNumber(s[k]) && s[k] >= 0 && s[k] <= 1)) throw new Error(`look.json: shadows.${k} must be 0 to 1`);
   if (!(isNumber(s.edge) && s.edge >= 0 && s.edge <= 0.5)) throw new Error("look.json: shadows.edge must be 0 to 0.5");
   if (!(isNumber(s.reach) && s.reach >= 0) || !isNumber(s.bias) || !(isNumber(s.normalBias) && s.normalBias >= 0)) throw new Error("look.json: shadows needs reach and normalBias 0 or more, and a bias");
   return s;

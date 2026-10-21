@@ -25,6 +25,11 @@ describe("light presets", () => {
     const overhead = preset();
     overhead.key.direction = [0, 1, 0];
     expect(() => parseLight({ presets: [overhead] })).toThrow(/straight above/);
+    for (const shade of [undefined, { shadow: 1.2, mid: 0.2 }, { shadow: 0.5, mid: -0.1 }]) {
+      const p = preset() as unknown as Record<string, unknown>;
+      p.shade = shade;
+      expect(() => parseLight({ presets: [p] })).toThrow(/shade/);
+    }
     for (const shadow of [-0.1, 1.5, Number.NaN]) {
       const p = preset();
       p.key.shadow = shadow;

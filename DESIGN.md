@@ -37,7 +37,7 @@ Every hero asset starts as hand drawn thumbnail silhouettes.
 Review test: show a screenshot to someone who hasn't seen the game and ask what looks off. If they say AI, find the tell.
 
 ## Shading
-Toon ramp with 3 bands plus a rim light. One master toon material for everything, with shared ramp and outline settings. Outline: consistent width, thinner on far LODs, color tinted from the base color, never pure black. No imported PBR materials ship.
+Toon ramp with 3 bands plus a rim light. One master toon material for everything, with shared ramp and outline settings. Outline: an even width on screen near and far (thinning past a set distance), color tinted from the base color, never pure black. At the high effects quality, thin crease lines mark panel seams and folds inside the silhouette, in the surface's own darkened color, fading out with distance. No imported PBR materials ship.
 
 ## Textures
 One shared 2048 atlas for props and chunks, 1024 per mech set. Painted brush marks, rust streaks, and tape or patch details live in the atlas. Vertex color adds variation. No unique per asset textures except hero mech sets.
@@ -62,7 +62,7 @@ One warm key light, cool soot shadows, soft fog for depth. Shadows near range on
 Chunky retro CRT terminal. Amber on soot, bold squared type with monospace numbers, rectangular panels with one clipped corner. CRT post effect has an intensity slider and an off switch. Never rely on color alone for warnings. Mech damage diagram is always on screen.
 
 ## VFX
-Hand painted flipbooks and simple meshes. Pooled, capped by data file values, with a low setting. Sparks and smoke are the main language of damage.
+Hand painted flipbooks and simple meshes. Pooled, capped by data file values, with a low setting and a high setting that adds crease lines. Sparks and smoke are the main language of damage.
 
 ## Asset intake checklist
 1. Source and license logged in docs/ASSETS.md, including how AI was used, if at all.

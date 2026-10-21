@@ -86,6 +86,21 @@ export function onVfxQuality(fn: () => void): void {
   listeners.push(fn);
 }
 
+// The button on the pause screen: each click steps to the next level, round to the first.
+export function attachVfxQualityButton(button: HTMLButtonElement): void {
+  const state = button.querySelector(".state")!;
+  const show = () => { state.textContent = active; };
+  button.addEventListener("click", (e) => {
+    e.stopPropagation(); // the pause screen behind it locks the mouse on click, and the button should not
+    const names = Object.keys(vfxConfig.levels);
+    setVfxQuality(names[(names.indexOf(active) + 1) % names.length]!);
+  });
+  // Enter on the focused button is for the button, not the game's "start match" key on the window.
+  button.addEventListener("keydown", (e) => { if (e.code === "Enter") e.stopPropagation(); });
+  onVfxQuality(show);
+  show();
+}
+
 // The switch in the F1 panel. Takes the panel's lil-gui folder maker so this file needs no lil-gui import.
 export function addVfxQualityControl(gui: { addFolder(name: string): { add(o: object, k: string, options: string[]): { name(n: string): unknown; onChange(fn: (v: string) => void): unknown } } }): void {
   const shown = { quality: active };

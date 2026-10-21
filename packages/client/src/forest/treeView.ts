@@ -261,9 +261,9 @@ export class TreeView {
         { geometry: partsGeometry(m.crown, color), fill: fillFading, outline: outlineFading, colored: true },
       ], true, "pine"));
     });
-    // No outline far away: past 140 m the outline is a fifth of a pixel wide, and drawing it doubled the far trees'
-    // cost for nothing that shows.
-    this.far = new TreeLayer(this.count, [{ geometry: partsGeometry(farPine(look), color), fill, outline: null, colored: true }], false, "far pine");
+    // Far trees are inked too (V14): outlines are an even width on screen now, so a far pine without one stood out
+    // as un-inked next to the outlined far prop boxes. The shell is the near crowns' white one, tinted per tree.
+    this.far = new TreeLayer(this.count, [{ geometry: partsGeometry(farPine(look), color), fill, outline, colored: true }], false, "far pine");
     this.stumps = new TreeLayer(this.count, [{ geometry: partsGeometry(stump(look), color), fill: woodFill, outline: woodOutline, colored: false }], false, "pine stump");
     const pool = Math.min(forest.fall.maxFalling, this.count);
     models.forEach((m) => {

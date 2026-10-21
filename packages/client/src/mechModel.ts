@@ -126,8 +126,8 @@ export function createMechModel(
   // In the toon look each zone's paint rusts away with damage; the plain look darkens instead.
   const zoneMaterials = baseColors.map((c) => (toon ? toon.ownMaterial(`#${c.getHexString()}`, true, "mech") : new THREE.MeshStandardMaterial({ color: c, roughness: 1 })));
   const armMeshes: THREE.Mesh[] = [];
-  // Every box gets an outline in the toon look, tinted from the colour it starts with.
-  const outline = (mesh: THREE.Mesh, color: string) => { if (toon) toon.outlineChild(mesh, color); };
+  // Every box gets an outline in the toon look, tinted from the colour it starts with, inked as a mech.
+  const outline = (mesh: THREE.Mesh, color: string) => { if (toon) toon.outlineChild(mesh, color, true); };
 
   const part = (zone: number, center: number[], size: number[]): THREE.Mesh => {
     const mesh = new THREE.Mesh(unitBox, zoneMaterials[zone]!);
@@ -466,7 +466,6 @@ export function setMechDamage(model: MechModel, hp: readonly number[], dead: boo
     const length = crawling ? 1.6 * crawlLook.legStubScale : 1.6;
     leg.scale.y = length;
     leg.position.y = 1.6 - length / 2;
-    model.toon?.refit(leg);
   }
   model.group.scale.y = dead && !model.blownApart ? 0.35 : 1;
 }
@@ -503,7 +502,7 @@ export function setMechUpgrades(model: MechModel, upgrades: readonly number[], d
       part.position.set(mount.center[0]!, mount.center[1]!, mount.center[2]!);
       part.scale.set(mount.size[0]!, mount.size[1]!, mount.size[2]!);
       model.body.add(part);
-      model.toon?.outlineChild(part, def.color);
+      model.toon?.outlineChild(part, def.color, true);
       castShadows(part);
       model.upgradeParts[u] = part;
     }
