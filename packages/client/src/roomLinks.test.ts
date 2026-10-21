@@ -7,9 +7,9 @@ describe("room links", () => {
     expect(createRoomSearch({ tier: "small", bots: "", difficulty: "mixed" })).toBe("?create&tier=small&difficulty=mixed");
   });
 
-  it("Play makes a small room of normal bots filled to size, which starts itself only on that first page", () => {
-    const play = new URLSearchParams(playSearch().slice(1));
-    expect(serverQuery(play).toString()).toBe("tier=small&difficulty=normal"); // no bots count: fill to the tier size
+  it("Play makes a small room filled to size with the picked bots, which starts itself only on that first page", () => {
+    const play = new URLSearchParams(playSearch("hard").slice(1));
+    expect(serverQuery(play).toString()).toBe("tier=small&difficulty=hard"); // no bots count: fill to the tier size
     expect(play.has("play")).toBe(true);
     expect(rejoinQuery(play, "PLAY", "small").has("play")).toBe(false); // a reload or invite never starts it again
   });

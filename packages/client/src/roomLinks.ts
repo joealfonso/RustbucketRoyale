@@ -17,9 +17,9 @@ export function createRoomSearch(choice: RoomChoice): string {
   return `?create&${query}`;
 }
 
-// The title screen's Play: a small yard filled with bots of normal skill, started by the first click into the game.
-export function playSearch(): string {
-  return `?create&tier=small&difficulty=normal&play`;
+// The title screen's Play: a small yard filled with bots, started by the first click into the game.
+export function playSearch(difficulty: BotDifficulty): string {
+  return `?create&tier=small&difficulty=${difficulty}&play`;
 }
 
 // What the game server is told when connecting. It reads only these, and ignores them for a room that already exists.

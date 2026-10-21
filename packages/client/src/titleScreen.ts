@@ -1,6 +1,7 @@
 import { parseBotDifficulty, type Roster } from "@rustbucket/shared";
 import audioJson from "../../../data/audio.json";
 import { Sound, type AudioConfig } from "./audio";
+import { rememberDifficulty, savedDifficulty } from "./difficultyChoice";
 import { Hangar } from "./hangar/hangar";
 import { mechCards } from "./mechPicker";
 import { createRoomSearch, playSearch } from "./roomLinks";
@@ -8,9 +9,10 @@ import { uiSounds } from "./uiSounds";
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-// The title screen: pick a mech, then Play (a small yard of bots, no choices), join a friend's room by code, make a
-// custom room (map, bots and how hard they are), or practise offline. The mech is chosen here and nowhere else. Every button reloads the page with the choice in the address (see main.ts). Behind it the hangar runs,
-// with the picked mech standing in the loading bay.
+// The title screen: pick a mech and how hard the bots are, then Play (a small yard of bots), join a friend's room by
+// code, make a custom room (map and how many bots), or practise offline (alone, so the bot difficulty does not apply).
+// The mech is chosen here and nowhere else. Every button reloads the page with the choice in the address (see
+// main.ts). Behind it the hangar runs, with the picked mech standing in the loading bay.
 export function showTitleScreen(roster: Roster, picked: number): void {
   const menu = byId("menu");
   menu.style.display = "grid";
@@ -19,8 +21,12 @@ export function showTitleScreen(roster: Roster, picked: number): void {
   const bots = byId<HTMLSelectElement>("botSelect");
   const code = byId<HTMLInputElement>("roomCode");
   const difficulty = () => parseBotDifficulty(document.querySelector<HTMLInputElement>('input[name="difficulty"]:checked')?.value);
+  // One difficulty for Play and Create room, remembered in this browser. A room you join by code keeps its maker's.
+  const saved = document.querySelector<HTMLInputElement>(`input[name="difficulty"][value="${savedDifficulty()}"]`);
+  if (saved) saved.checked = true;
+  byId("difficulty").addEventListener("change", () => rememberDifficulty(difficulty()));
 
-  byId("play").addEventListener("click", () => { location.search = playSearch(); });
+  byId("play").addEventListener("click", () => { location.search = playSearch(difficulty()); });
   byId("createRoom").addEventListener("click", () => {
     location.search = createRoomSearch({ tier: tier.value, bots: bots.value, difficulty: difficulty() });
   });

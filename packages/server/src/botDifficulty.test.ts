@@ -50,10 +50,11 @@ describe("bot difficulty in the room link", () => {
   afterEach(async () => { await server?.close(); server = undefined; });
 
   // Connects with `query` and returns the first room message, which carries the difficulty to everyone in the room.
-  async function roomMessage(query: string): Promise<{ message: Extract<ServerMessage, { t: "room" }>; room: Room }> {
+  // `defaultBots` null fills a room with no bot count to the tier size, as the public server does.
+  async function roomMessage(query: string, defaultBots: number | null = 0): Promise<{ message: Extract<ServerMessage, { t: "room" }>; room: Room }> {
     let made: Room | null = null;
     const manager = new RoomManager((code, tier, bots, difficulty) => (made = new Room(code, tier, config, bots, difficulty)), ["small"], "small", 5);
-    server = await startServer(manager, 0);
+    server = await startServer(manager, 0, defaultBots);
     const socket = new WebSocket(`ws://localhost:${server.port}/${query}`);
     const message = await new Promise<Extract<ServerMessage, { t: "room" }>>((resolve) => {
       socket.on("message", (data, isBinary) => {
@@ -70,6 +71,13 @@ describe("bot difficulty in the room link", () => {
     const { message, room } = await roomMessage("?tier=small&bots=6&difficulty=hard");
     expect(message.difficulty).toBe("hard");
     expect(ratings(room).every((r) => r === RATINGS.hard)).toBe(true);
+  });
+
+  it("fills a Play room (no bot count) to the tier size with bots of the picked difficulty", async () => {
+    const { message, room } = await roomMessage("?tier=small&difficulty=easy", null);
+    expect(message.difficulty).toBe("easy");
+    expect(ratings(room)).toHaveLength(config.bots.fill.small! - 1); // the player who made it takes one place
+    expect(ratings(room).every((r) => r === RATINGS.easy)).toBe(true);
   });
 
   it("makes a mixed room from a value it does not know", async () => {
