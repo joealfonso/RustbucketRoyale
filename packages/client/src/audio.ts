@@ -6,6 +6,8 @@
 // a shared echo (a junkyard ringed with metal walls), and the further away a sound is the darker it gets and the more
 // of it is echo, so a far fight booms instead of ticking.
 
+import { REF_DISTANCE, ROLLOFF, heardLevel, makeRoom, travelSeconds, type MixConfig } from "./soundMix";
+
 export type SoundName =
   | "shot" | "shotScattergun" | "shotSpikeDriver" | "impact" | "explosion" | "smash" | "hitMarker" | "hurt"
   | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap" | "loot" | "repair"
@@ -22,6 +24,7 @@ export interface AudioConfig {
   // Distance darkens: highs above `nearHz` fall away by half every `halfMeters`, never below `farHz`; and the share
   // of echo grows up to `farEcho` times its near amount.
   air: { nearHz: number; halfMeters: number; farHz: number; farEcho: number };
+  mix: MixConfig;
   variation: { pitch: number; level: number }; // each play is this much higher or lower, louder or quieter, at random
   weaponShots: Record<string, SoundName>; // weapon id to its shot sound
   // `echo` is how much of the sound goes into the shared space, 0 to 1.
@@ -35,7 +38,9 @@ export class Sound {
   private noise: AudioBuffer | null = null;
   private grit: Float32Array<ArrayBuffer> | null = null; // the distortion curve that roughens shots, roars and crunches
   private files = new Map<SoundName, AudioBuffer[]>();
-  private voices = 0;
+  // World sounds and their echo go through this, so a big blast near you can push them down for a moment.
+  private world: GainNode | null = null;
+  private voices: { name: string; level: number; gain: GainNode; timer: number }[] = [];
   private jets: { source: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
   private wind: { source: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
   private ears = { x: 0, y: 0, z: 0 };
@@ -48,13 +53,17 @@ export class Sound {
     if (this.ctx) { void this.ctx.resume(); return; }
     const ctx = new AudioContext();
     const compressor = new DynamicsCompressorNode(ctx, { threshold: -14, knee: 12, ratio: 4, attack: 0.004, release: 0.25 });
-    compressor.connect(ctx.destination);
+    // A hard limiter after the compressor, so recorded blasts played above full volume never clip.
+    const limiter = new DynamicsCompressorNode(ctx, { threshold: -3, knee: 0, ratio: 20, attack: 0.001, release: 0.1 });
+    compressor.connect(limiter).connect(ctx.destination);
     this.out = ctx.createGain();
     this.out.gain.value = this.config.master;
     this.out.connect(compressor);
+    this.world = new GainNode(ctx, { gain: 1 });
+    this.world.connect(this.out);
     // The shared space: a made-up impulse of a yard ringed with sheet metal, a few hard early slaps and a dark tail.
     this.echo = new ConvolverNode(ctx, { buffer: yardImpulse(ctx, this.config.echo.seconds) });
-    this.echo.connect(new GainNode(ctx, { gain: this.config.echo.level })).connect(this.out);
+    this.echo.connect(new GainNode(ctx, { gain: this.config.echo.level })).connect(this.world);
     // One second of white noise, reused by every noisy sound.
     this.noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const data = this.noise.getChannelData(0);
@@ -98,33 +107,67 @@ export class Sound {
   // `pitch` scales a made-up sound's tones, so one footstep can be a heavy mech's stomp or a light one's step.
   play(name: SoundName, at?: { x: number; y: number; z: number }, loudness = 1, pitch = 1): void {
     const ctx = this.ctx, out = this.out;
-    if (!ctx || !out || this.muted || this.voices >= this.config.maxVoices) return;
+    const world = this.world;
+    if (!ctx || !out || !world || this.muted) return;
     const settings = this.config.sounds[name];
     const { variation, air } = this.config;
     const volume = settings.volume * loudness * (1 + (Math.random() * 2 - 1) * variation.level);
     if (volume <= 0) return;
     const p = pitch * (1 + (Math.random() * 2 - 1) * variation.pitch);
 
+    const { mix } = this.config;
+    const distance = at ? Math.hypot(at.x - this.ears.x, at.y - this.ears.y, at.z - this.ears.z) : 0;
+    const level = heardLevel(volume, distance);
+    const room = makeRoom(this.voices, name, level, this.config.maxVoices, mix.maxSame);
+    if (room === null) return;
+    if (room >= 0) this.stopVoice(this.voices[room]!);
+
     const gain = new GainNode(ctx, { gain: volume });
+    // A big sound near you ducks everything else; it plays past the duck itself.
+    const ducks = mix.duck.sounds.includes(name) && distance <= mix.duck.withinMeters;
+    const bus = ducks ? out : world;
+    let delay = 0;
     if (at) {
-      const distance = Math.hypot(at.x - this.ears.x, at.y - this.ears.y, at.z - this.ears.z);
+      // Far sounds arrive late, at the speed of sound: the flash first, then the boom.
+      delay = travelSeconds(distance, mix);
       const panner = new PannerNode(ctx, {
-        panningModel: "equalpower", distanceModel: "inverse", refDistance: 8, rolloffFactor: 1.2,
+        panningModel: "equalpower", distanceModel: "inverse", refDistance: REF_DISTANCE, rolloffFactor: ROLLOFF,
         maxDistance: this.config.hearingMeters, positionX: at.x, positionY: at.y, positionZ: at.z,
       });
       const darker = new BiquadFilterNode(ctx, { type: "lowpass", Q: 0.5, frequency: Math.max(air.farHz, air.nearHz * 0.5 ** (distance / air.halfMeters)) });
-      gain.connect(darker).connect(panner).connect(out);
+      const late = new DelayNode(ctx, { maxDelayTime: Math.max(1, delay), delayTime: delay });
+      gain.connect(late).connect(darker).connect(panner).connect(bus);
       // The echo is not panned or faded with distance as much as the sound itself: far away, it is most of what you hear.
       const send = (settings.echo ?? 0) * (1 + (air.farEcho - 1) * Math.min(1, distance / this.config.hearingMeters));
       if (send > 0 && this.echo) darker.connect(new GainNode(ctx, { gain: send * Math.min(1, 24 / Math.max(8, distance)) ** 0.5 })).connect(this.echo);
     } else {
-      gain.connect(out);
+      gain.connect(bus);
       if ((settings.echo ?? 0) > 0 && this.echo) gain.connect(new GainNode(ctx, { gain: settings.echo })).connect(this.echo);
     }
+    if (ducks) {
+      const t = ctx.currentTime + delay;
+      world.gain.cancelScheduledValues(t);
+      world.gain.setTargetAtTime(10 ** (mix.duck.db / 20), t, 0.01);
+      world.gain.setTargetAtTime(1, t + mix.duck.seconds * 0.3, mix.duck.seconds * 0.3);
+    }
 
-    this.voices++;
-    const length = this.files.has(name) ? this.playFile(name, gain, p) : this.synth(name, gain, p);
-    window.setTimeout(() => { this.voices--; gain.disconnect(); }, length * 1000 + 100);
+    const length = (this.files.has(name) ? this.playFile(name, gain, p) : this.synth(name, gain, p)) + delay;
+    const voice = { name, level, gain, timer: 0 };
+    voice.timer = window.setTimeout(() => this.dropVoice(voice), length * 1000 + 100);
+    this.voices.push(voice);
+  }
+
+  // A playing sound cut short to make room: faded over a few milliseconds so it does not click.
+  private stopVoice(voice: { gain: GainNode; timer: number }): void {
+    window.clearTimeout(voice.timer);
+    voice.gain.gain.setTargetAtTime(0, this.ctx!.currentTime, 0.01);
+    window.setTimeout(() => voice.gain.disconnect(), 80);
+    this.voices = this.voices.filter((v) => v !== voice);
+  }
+
+  private dropVoice(voice: { gain: GainNode }): void {
+    voice.gain.disconnect();
+    this.voices = this.voices.filter((v) => v !== voice);
   }
 
   // The jet thrusters roar for as long as they are on, so they are one held sound rather than repeated ones.

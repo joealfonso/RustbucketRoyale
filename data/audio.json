@@ -12,6 +12,17 @@
     "farHz": 900,
     "farEcho": 1.4
   },
+  "mix": {
+    "maxSame": 6,
+    "speedOfSound": 343,
+    "travelFromMeters": 40,
+    "duck": {
+      "sounds": ["explosion", "titanFall", "titanStomp", "railShot"],
+      "db": -8,
+      "seconds": 0.5,
+      "withinMeters": 50
+    }
+  },
   "variation": {
     "pitch": 0.06,
     "level": 0.12

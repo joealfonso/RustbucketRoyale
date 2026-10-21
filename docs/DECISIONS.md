@@ -409,3 +409,6 @@ The ship's line comes from the match seed (shipPath.ts, shared, so offline flies
 
 ## 2026-10-20: Map size beside the bot difficulty (gate P1b)
 Joseph asked to pick the map size. The Map select left Custom room for a Small / Medium / Large / Arena strip under Play, drawn like the difficulty strip, so Play, Create room and offline practice all use one remembered size (Small when nothing is saved; Arena last, as it is a quick test). Play fills the room to that size's bot count (data/bots.json fill). Nothing changed on the server, which already builds the tier the link names. Both strips are remembered by one small helper (playChoices.ts) that ticks the saved radio button only if the screen still offers it.
+
+## 2026-10-20: Sound mix: voices by loudness, sound travels, big blasts duck
+Joseph: the mix and space needed work. A full mix used to skip new sounds, so autocannon fire could silence an explosion; now the quietest voice at the ears gives way to a louder one, and one sound has at most six copies. Sounds beyond 40 m arrive at the speed of sound, so a far blast is seen before it is heard. An explosion, Titan stomp or fall, or Rail Shot within 50 m ducks every other world sound by 8 dB for half a second. A limiter after the compressor keeps recorded blasts above full volume from clipping. All in data/audio.json mix.
