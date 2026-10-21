@@ -1,6 +1,6 @@
 # Milestones
 
-Current code milestone: none in progress (13c done); 12c waiting for Joseph's laptop numbers (M10's friend test still open)
+Current code milestone: none in progress (13c, 12c and M10 done)
 Current visual milestone: none in progress (V10 and S1 done)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
@@ -177,3 +177,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-20: Mech fringing fixed with V10, waiting for the same playtest (Joseph: "make the mechs look cleaner. they still have odd fringing"). Mech outlines were the paint at about 62% brightness on screen, a pale 6 cm halo round white and teal parts; now 22% of the paint's brightness and 4 cm wide, so they read as ink lines. Mechs and the Titan only; world outlines unchanged. Values in data/look.json outline.mechDarken and mechWidthMeters.
 - 2026-10-20: Sound gate S1 built (Joseph: "the sounds need to be improved", guns and explosions first, from free packs), waiting for his ears. Autocannon (3 takes), scattergun (3), spike driver (2), Rail Shot, explosions (3) and the Titan's fall are recordings from two CC0 packs, layered and pitched for mech-sized guns; 13 files, about 250 kB. Loudness matched to the old sounds by measurement only: nobody has listened yet. Volumes in data/audio.json.
 - 2026-10-20: V10, the mech outline fix and sound gate S1 passed by Joseph's playtest ("both look good").
+- 2026-10-20: Gate 12c and M10 (the friend test over the internet) passed by Joseph's call ("pass both"), without numbers recorded here.
