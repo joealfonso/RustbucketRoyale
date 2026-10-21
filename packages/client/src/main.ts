@@ -20,6 +20,7 @@ import weaponsJson from "../../../data/weapons.json";
 import lootJson from "../../../data/loot.json";
 import propsJsonForLoot from "../../../data/props.json";
 import cameraJson from "../../../data/camera.json";
+import stepEaseJson from "../../../data/stepEase.json";
 import netJson from "../../../data/net.json";
 import hudJson from "../../../data/hud.json";
 import grenadeJson from "../../../data/grenade.json";
@@ -135,6 +136,7 @@ import matchJson from "../../../data/match.json";
 import { parseDive, share, startAltitude } from "./dive";
 import { DiveCamera, simPitch } from "./diveCamera";
 import { DiveHud } from "./diveHud";
+import { StepEase, parseStepEase } from "./stepEase";
 import { DivePose } from "./divePose";
 import { DiveTrails } from "./diveTrails";
 import { LandingImpact } from "./landingImpact";
@@ -958,6 +960,8 @@ let lastCorrection = 0;
 let offX = 0, offY = 0, offZ = 0;
 // The latest step's positions, kept so rendering can blend between fixed steps.
 let prevX = mech.x, prevY = mech.y, prevZ = mech.z;
+// Eases the drawn mech up stairs, which the sim climbs in one tick (stepEase.ts).
+const stepEase = new StepEase(parseStepEase(stepEaseJson));
 
 if (net) {
   net.onSnapshot = (snap) => {
@@ -966,10 +970,12 @@ if (net) {
     if (!ready) {
       ready = true;
       prevX = mech.x; prevY = mech.y; prevZ = mech.z;
+      stepEase.reset();
       offX = offY = offZ = 0;
     } else if (error > netStats.snapDistance) {
       offX = offY = offZ = 0;
       prevX = mech.x; prevY = mech.y; prevZ = mech.z;
+      stepEase.reset();
     } else {
       offX += predictor.correctionX; offY += predictor.correctionY; offZ += predictor.correctionZ;
       prevX -= predictor.correctionX; prevY -= predictor.correctionY; prevZ -= predictor.correctionZ;
@@ -1344,6 +1350,7 @@ function startDropOffline(): void {
   const spot = planDropSpots(map.seed, 1, map.world, map.meters, dropSpotStats)[0]!;
   hangAtSpot(mech, spot.x, spot.z, map.world, altitude);
   prevX = mech.x; prevY = mech.y; prevZ = mech.z;
+  stepEase.reset();
   faceDrop();
   offlineDropIn = matchJson.countdownSeconds;
 }
@@ -1448,7 +1455,9 @@ function frame(now: number): void {
 
     const dashBefore = mech.dashTime;
     const abilityBefore = mech.abilityTime;
+    const groundedBefore = mech.grounded;
     const seq = predictor.step(mechInput, STEP);
+    stepEase.stepped(mech.y - prevY, groundedBefore && mech.grounded);
     if (dashBefore <= 0 && mech.dashTime > 0) sound.play("dash", { x: mech.x, y: mech.y + 1, z: mech.z });
     // Your own ram or leap shows from prediction, the instant Q goes down; the dust is where it pushed off from.
     const ownAbility = abilityOf(mech.mech);
@@ -1513,7 +1522,7 @@ function frame(now: number): void {
   const fade = Math.exp(-netStats.correctionSmoothing * frameTime);
   offX *= fade; offY *= fade; offZ *= fade;
   const x = prevX + (mech.x - prevX) * alpha + offX;
-  const y = prevY + (mech.y - prevY) * alpha + offY;
+  const y = prevY + (mech.y - prevY) * alpha + offY + stepEase.update(frameTime);
   const z = prevZ + (mech.z - prevZ) * alpha + offZ;
   mechGroup.position.set(x, y, z);
   // With an instant body turn, face exactly where the camera looks, even between sim steps.
