@@ -19,9 +19,13 @@ import { walkMech } from "../mechWalk";
 import { moveMechParts } from "../mechMotion";
 import { Toon, parseLook, parsePalette } from "../toonMaterial";
 import { aegisMark, decalFontReady, textDecal } from "./decals";
+import { HangarFraming } from "./framing";
 import { GantryArms, buildGantries } from "./gantry";
 import { buildHall, lampSpots, mergedPieces } from "./hall";
+import { HangarLife } from "./life";
+import { HangarLighting, parseStageLight } from "./lighting";
 import { bayCentres, bayOfMech, loadingBayClear, parseHangar, stepToward, type HangarConfig, type Step } from "./layout";
+import { HangarProps } from "./props";
 import { Screen, schematicOf } from "./screens";
 import { WelderSparks } from "./sparks";
 
@@ -56,6 +60,12 @@ export class Hangar {
   private gait = parseGait(gaitJson);
   private seconds = 0;
   private last = 0;
+  private stage: HangarLighting;
+  private framing: HangarFraming;
+  private props: HangarProps;
+  private life: HangarLife;
+  // Reduced motion holds the camera and the hangar's own movement still; mechs still walk to the loading bay.
+  private still = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   constructor(canvas: HTMLCanvasElement, private roster: Roster, private selected: number) {
     const c = this.config;
@@ -64,6 +74,12 @@ export class Hangar {
     this.camera = new THREE.PerspectiveCamera(c.camera.fov, 1, c.camera.near, c.camera.far);
     this.light();
     this.buildShell();
+    this.stage = new HangarLighting(c, this.toon, parseStageLight(hangarJson.light));
+    this.scene.add(this.stage.group);
+    this.framing = new HangarFraming(c, this.toon);
+    this.props = new HangarProps(c, this.toon);
+    this.life = new HangarLife(c, this.toon);
+    this.scene.add(this.framing.group, this.props.group, this.life.group);
     this.sparks = new WelderSparks(c.welder, (name) => this.toon.color(name));
     this.scene.add(this.sparks.mesh, this.sparks.tip);
     const look = parseShadowLook(groundJson.shadows);
@@ -83,6 +99,12 @@ export class Hangar {
     void this.paintDecals();
     void this.loadMechs();
     requestAnimationFrame(this.frame);
+  }
+
+  // The mech whose card the pointer is on lights up in its bay; -1 for none. The picked one is out in the loading bay,
+  // so its empty bay stays as it is.
+  hover(mech: number): void {
+    this.stage.hoverBay(mech >= 0 && mech !== this.selected ? this.mechs[mech]?.bay ?? -1 : -1);
   }
 
   // The picked mech walks out; whoever is in the loading bay walks home first.
@@ -117,7 +139,7 @@ export class Hangar {
     const [hx, hy, hz] = c.lamps.housing;
     pieces.set("lamp", lampSpots(c).map(([x, y, z]) => box([x, y - 0.02, z], [hx * 0.85, hy, hz * 0.8])));
     for (const [key, mesh] of mergedPieces(pieces)) {
-      const paint = key === "light" ? c.hexGrid.color : key === "engineer" ? c.engineers.paint : c.paints[key]!;
+      const paint = key === "light" ? c.hexGrid.color : c.paints[key]!;
       const geometry = toGeometry([mesh]);
       if (key === "lamp" || key === "light") {
         this.scene.add(freeze(new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: this.toon.color(paint), fog: false }))));
@@ -215,13 +237,18 @@ export class Hangar {
     this.moveMechs(dt);
     this.sparks.update(dt);
     for (const screen of this.screens) screen.update(this.seconds);
+    const still = this.still.matches;
+    this.stage.update(dt, still);
+    this.framing.update(this.seconds, dt, still);
+    this.props.update(this.seconds, dt, still);
+    this.life.update(this.seconds, dt, still);
     this.renderer.render(this.scene, this.camera);
   };
 
   // A slow drift round the resting spot, each axis on its own period so it never visibly repeats.
   private moveCamera(): void {
     const { position, target, driftMeters, driftSeconds } = this.config.camera;
-    const wave = (i: number) => Math.sin((this.seconds / driftSeconds[i]!) * Math.PI * 2) * driftMeters[i]!;
+    const wave = (i: number) => this.still.matches ? 0 : Math.sin((this.seconds / driftSeconds[i]!) * Math.PI * 2) * driftMeters[i]!;
     this.camera.position.set(position[0] + wave(0), position[1] + wave(1), position[2] + wave(2));
     this.camera.lookAt(target[0], target[1], target[2]);
   }

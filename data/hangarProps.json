@@ -1,0 +1,72 @@
+{
+  "clearance": {"walkMeters": 2.4, "loadingBayMeters": 1.0},
+  "paints": {
+    "steel": "scrapSteel",
+    "dark": "#262B2F",
+    "rubber": "#1B1E1E",
+    "hazard": "sparkYellow",
+    "crate": "#56603F",
+    "cart": "#B04A2E",
+    "rack": "frameNavy",
+    "screen": "#7FD8FF"
+  },
+  "bays": {
+    "stiletto": {
+      "accents": {"main": "blue", "trim": "white", "dark": "frame", "glow": "conduitGlow"},
+      "items": [
+        {"kind": "finStand", "at": [0.25, -3.4], "turnDegrees": 30},
+        {"kind": "fuelCells", "at": [2.0, -3.0], "turnDegrees": -15}
+      ]
+    },
+    "ironclad": {
+      "accents": {"main": "hull", "trim": "hazard", "dark": "hazardBlack", "glow": "sensorGlow"},
+      "items": [
+        {"kind": "shieldPlates", "at": [-1.8, -3.5], "turnDegrees": 12},
+        {"kind": "ammoDrums", "at": [0.1, -3.3], "turnDegrees": 0}
+      ]
+    },
+    "cataclysm": {
+      "accents": {"main": "tan", "trim": "rustBrown", "dark": "scorch", "glow": "lensGlow"},
+      "items": [
+        {"kind": "mortarShells", "at": [-1.8, -3.4], "turnDegrees": 0},
+        {"kind": "mortarShells", "at": [1.8, -3.4], "turnDegrees": 180}
+      ]
+    },
+    "arbiter": {
+      "accents": {"main": "white", "trim": "teal", "dark": "frame", "glow": "tealGlow"},
+      "items": [
+        {"kind": "droneCradles", "at": [-1.7, -3.2], "turnDegrees": 10},
+        {"kind": "droneCradles", "at": [1.7, -3.2], "turnDegrees": -10}
+      ]
+    },
+    "longshot": {
+      "accents": {"main": "slate", "trim": "bone", "dark": "black", "glow": "lensGlow"},
+      "items": [
+        {"kind": "rifleRack", "at": [-1.1, -3.2], "turnDegrees": 15}
+      ]
+    }
+  },
+  "workshop": [
+    {"kind": "weaponRack", "at": [-9.3, -14.9], "turnDegrees": 0},
+    {"kind": "weaponRack", "at": [-15.5, -15.0], "turnDegrees": 0},
+    {"kind": "weaponRack", "at": [19.1, -9.0], "turnDegrees": -90},
+    {"kind": "ammoCrates", "at": [3.1, -14.4], "turnDegrees": 8},
+    {"kind": "ammoCrates", "at": [-3.1, -14.6], "turnDegrees": -6},
+    {"kind": "ammoCrates", "at": [17.2, -5.6], "turnDegrees": -20},
+    {"kind": "armourStand", "at": [17.6, -12.8], "turnDegrees": -50},
+    {"kind": "armourStand", "at": [-16.4, -13.6], "turnDegrees": 40},
+    {"kind": "toolCart", "at": [9.0, 2.6], "turnDegrees": -35}
+  ],
+  "engineers": {
+    "height": 1.8,
+    "paints": {"boots": "#1E2224", "gloves": "#2E2A26", "belt": "#262B2F", "stripe": "warmLight", "goggles": "#1B1E1E"},
+    "people": [
+      {"at": [-5.6, 3.5], "turnDegrees": -145, "pose": "tablet", "overalls": "#4A7398", "helmet": "sparkYellow", "skin": "#E0AC84"},
+      {"at": [7.9, 3.6], "turnDegrees": -72, "pose": "point", "overalls": "#D9772E", "helmet": "paintWhite", "skin": "#8A5A3C"},
+      {"at": [-7.7, -11.9], "turnDegrees": 25, "pose": "tablet", "overalls": "#D9772E", "helmet": "sparkYellow", "skin": "#B97A55"},
+      {"at": [4.6, -11.9], "turnDegrees": -150, "pose": "tablet", "overalls": "#4A7398", "helmet": "sparkYellow", "skin": "#8A5A3C"},
+      {"at": [11.0, -2.6], "turnDegrees": -95, "pose": "carry", "overalls": "#4A7398", "helmet": "paintWhite", "skin": "#E0AC84"}
+    ]
+  },
+  "pulse": {"seconds": 1.8, "low": 0.35}
+}

@@ -13,7 +13,13 @@ export interface ScreenSpot {
 }
 
 export interface HangarConfig {
-  hall: { halfWidth: number; backZ: number; frontZ: number; height: number; wallPanel: number; trussSpacing: number };
+  hall: {
+    halfWidth: number; backZ: number; frontZ: number; height: number; wallPanel: number; trussSpacing: number;
+    // The big door in the back wall: its opening from x `from` to `to` (on the wall panel grid), its leaves parted over `gap`.
+    door: { from: number; to: number; height: number; gap: [number, number]; frame: number; rib: number };
+    // Catwalks along the back and side walls: deck height, reach from the wall, railing height, post spacing, where the side runs end (z).
+    catwalk: { deck: number; depth: number; rail: number; post: number; sideTo: number };
+  };
   floor: { panel: number; seam: number; plate: number };
   loadingBay: { x: number; z: number; halfWidth: number; halfDepth: number; slat: number; slatGap: number; pitDepth: number };
   bays: { order: string[]; spacing: number; z: number; halfWidth: number; halfDepth: number };
@@ -35,8 +41,6 @@ export interface HangarConfig {
   screen: { line: string; dim: string; glass: string; glassOpacity: number; frame: number; gridLines: number; spinSeconds: number; fill: number };
   // The development grid: hexagons of light strips over the deck, `radius` metres centre to corner, inside a rectangle.
   hexGrid: { radius: number; strip: number; lift: number; color: string; from: [number, number]; to: [number, number] };
-  // People at work for scale: dark figures at x, z, facing `degrees`.
-  engineers: { paint: string; height: number; spots: [number, number, number][] };
   welder: {
     bench: V3; torch: V3; pool: number; burstEverySeconds: [number, number]; sparksPerBurst: [number, number];
     speed: [number, number]; lifeSeconds: [number, number]; gravity: number; length: number; width: number; color: string; tip: string; seed: number;
@@ -79,6 +83,12 @@ export function parseHangar(raw: unknown): HangarConfig {
     if (s.show === "bay" && !(Number.isInteger(s.bay) && s.bay! >= 0 && s.bay! < c.bays.order.length)) throw new Error(`hangar.json: a screen shows bay ${s.bay}, which does not exist`);
   }
   for (const p of PAINTS) if (typeof c.paints[p] !== "string") throw new Error(`hangar.json: paints.${p} is missing`);
+  const door = c.hall.door;
+  const onPanel = (x: number) => Math.abs((x + c.hall.halfWidth) / c.hall.wallPanel - Math.round((x + c.hall.halfWidth) / c.hall.wallPanel)) < 1e-6;
+  if (!door || !onPanel(door.from) || !onPanel(door.to) || !(door.from < door.gap[0] && door.gap[0] < door.gap[1] && door.gap[1] < door.to)) {
+    throw new Error("hangar.json: hall.door needs its edges on the wall panel grid and its gap inside it");
+  }
+  for (const k of ["deck", "depth", "rail", "post"] as const) positive(c.hall.catwalk?.[k], `hall.catwalk.${k}`);
   return c;
 }
 

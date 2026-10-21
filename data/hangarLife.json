@@ -1,0 +1,62 @@
+{
+  "crane": {
+    "truss": 1,
+    "rail": "frameNavy",
+    "belowRoof": 1.375,
+    "railDepth": 0.4,
+    "stops": [-0.9, 3.4, 7.9],
+    "metersPerSecond": 0.8,
+    "pauseSeconds": [7, 13],
+    "cableMeters": 2.2,
+    "swayDamping": 0.6,
+    "trolley": "#4A5056",
+    "block": "sparkYellow",
+    "hook": "#1B1E1E",
+    "seed": 11
+  },
+  "beacons": {
+    "spots": [
+      [-14.6, 7.1, -9.5],
+      [8.7, 7.1, -9.5]
+    ],
+    "turnsPerSecond": 0.35,
+    "lamp": "#FFA51F",
+    "lampSize": [0.16, 0.32],
+    "base": "frameNavy",
+    "beamMeters": 2.0,
+    "beamWidth": [0.16, 0.7],
+    "beamOpacity": 0.35
+  },
+  "steam": {
+    "vents": [
+      [11.2, -2.5]
+    ],
+    "pool": 22,
+    "everySeconds": [0.18, 0.3],
+    "burstSeconds": [2.5, 4.5],
+    "restSeconds": [3, 7],
+    "lifeSeconds": [2.0, 2.8],
+    "riseMetersPerSecond": [1.0, 1.4],
+    "drift": [0.04, -0.06],
+    "spread": 0.35,
+    "size": [0.08, 0.32],
+    "color": "#D3D8D4",
+    "grate": "frameNavy",
+    "hole": "#141817",
+    "grateSize": 1.2,
+    "seed": 23
+  },
+  "drone": {
+    "from": [-24, 9.4, -4.5],
+    "to": [26, 8.8, -2.5],
+    "metersPerSecond": 3.2,
+    "everySeconds": [18, 34],
+    "firstAfterSeconds": 6,
+    "bobMeters": 0.12,
+    "bobSeconds": 2.2,
+    "leanDegrees": 8,
+    "body": "paintWhite",
+    "lamp": "#7FD8FF",
+    "seed": 31
+  }
+}

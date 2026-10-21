@@ -513,3 +513,6 @@ Soak seeds 11 to 13, small and medium, knockouts of a bot by a bot by how far th
 ### V11 cleaner world (2026-10-20)
 Production builds of the commit before and after, served side by side, headless Chrome 1600 x 900 on the M4, offline medium spawn: seed 11 triangles 1.32M -> 1.20M, seed 23 1.41M -> 1.28M, draw calls unchanged (249 and 243). GPU median before / after, three rounds on seed 11: 5.95 / 6.83, 7.98 / 7.16, 7.28 / 7.20 ms; seed 23 7.60 / 7.53 ms: no change beyond the run-to-run swing. Scatter over a whole medium map 704k -> 328k triangles. The water shader does one more noise lookup and three hashes per water pixel.
 
+### V12 hangar (2026-10-20)
+Title screen, production builds side by side (before V11 and V12 / after), headless Chrome 1600 x 900 on the M4, three rounds: GPU median 1.49 / 1.60, 1.55 / 1.71, 1.83 / 2.00 ms; draw calls 367 -> 393; triangles 88k -> 121k. The title screen's script went from 24 to 61 kB raw; no new model or texture files.
+

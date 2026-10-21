@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none in progress (13c, 12c and M10 done)
-Current visual milestone: V11 built, waiting for Joseph's playtest
+Current visual milestone: V11 and V12 built, waiting for Joseph's playtest
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -179,3 +179,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-20: V10, the mech outline fix and sound gate S1 passed by Joseph's playtest ("both look good").
 - 2026-10-20: Gate 12c and M10 (the friend test over the internet) passed by Joseph's call ("pass both"), without numbers recorded here.
 - 2026-10-20: V11 built on Joseph's go ("plan and build the cleaner, brighter world gate"), waiting for his playtest. The world is inked like the mechs (no pale halos round props, rocks, buildings, pickups); golden afternoon's sun higher and stronger so flat ground is lit, overcast with real shadows, stronger rim and contact darkening, ground colours about 10% lighter; water reads as water (slate surface apart from the grass, foam along the bank, ripples rolling in, sky tint at a distance, broken streaks and glints, muddy shallows); grass grows in patches with bare paths, junk only in piles by walls and buildings, the confetti litter gone. GPU unchanged, 10% fewer triangles. Check: a pond up close and from afar, open ground at each map size, dusk water (not seen here). Values in data/look.json, ground.json, water.json, dressing.json.
+- 2026-10-20: V12 built (relayed from the repo session: Joseph asked to "improve the title menu screen quality. better lighting, more interesting hangar"), waiting for his playtest with V11. The picked mech stands in a warm pool with a cool rim light, the other bays darker; pointing at a card lights that mech's bay; the hex strips are calmer. A big back door opens onto junkyard daylight, catwalks run along the walls, and a gantry leg frames the right side. Each bay is dressed to its mech, engineers in overalls and hard hats work at the bench, console and cradles. A roof crane moves between stops, two beacons turn, a vent puffs steam, a drone crosses now and then; reduced motion holds all of it and the camera still. God rays were not built (DESIGN.md bans them). GPU +0.1 to 0.2 ms on the title screen, +37 kB of script. Shots in docs/style/v12/. Check: hover each card, a window at 1280 x 720, the beacons and steam for being too busy.

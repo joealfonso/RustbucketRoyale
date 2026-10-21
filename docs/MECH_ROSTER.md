@@ -87,6 +87,7 @@ Where the mechs are shown off, such as a menu or loadout screen backdrop. Built 
 - **Place:** the AEGIS DYNAMICS PROTOCOLS advanced development hangar.
 - **Floor:** grated metal plating with glowing yellow-orange safety light strips outlining a hexagonal development grid.
 - **Background:** workshop stations, blue holographic schematic displays showing wireframes of the mechs, and blurred engineers at consoles for scale.
+- **Since gate V12:** a big back door slid part open onto junkyard daylight, catwalks along the walls, each bay dressed to its mech (Ironclad shield plates and ammo drums, Stiletto fin and fuel cells, Cataclysm mortar shells, Arbiter drone cradles, Longshot rifle rack), engineers in overalls and hard hats, a roof crane, turning beacons, a steam vent and a passing drone; the picked mech stands in a lit pool with a cool rim light.
 - **Branding:** the AEGIS DYNAMICS logo (a triangle with a stylised "A") on the back wall screens and floor decals.
 
 ---
