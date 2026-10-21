@@ -1,6 +1,11 @@
 import { raised, type BotPathStats, type NavGrid, type Terrain } from "@rustbucket/shared";
 
 const DIAGONAL = Math.SQRT2;
+// Where round a mech the way out of a blocked cell may begin: under its middle, then a metre out each way, still
+// under its body, so never past a wall it stands against. The fine cells there it could stand in start the search.
+const ESCAPE_SEEDS = [0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 1, 1, 1, -1, -1, 1, -1, -1];
+const ESCAPE_PROBE = 0.8; // a little less than a mech's half width, in metres
+const NOT_REACHED = -2;
 
 // Finds a walkable route across the map for bots, on a coarse grid of 8 m cells made from the navigation grid.
 // A coarse cell is blocked if anything a mech cannot step over stands up off the ground anywhere in it, so routes
@@ -17,6 +22,17 @@ export class Pathfinder {
   private blocked: Uint8Array;
   private wet: Uint8Array; // 1 where most of a cell's ground is under wading water
   private region: Int32Array; // open cells that can reach each other share a number, blocked cells are -1
+  private nav: NavGrid;
+  private factor: number; // nav cells across one route cell
+  // The way out of a blocked route cell, searched on the fine nav grid in a square of cells round the start: for each,
+  // the one it was reached from (-1 for a first one, NOT_REACHED for none), and the search's queue.
+  private escapeSide: number;
+  private escapeFrom: Int32Array;
+  private escapeQueue: Int32Array;
+  private escapeCells: number[] = [];
+  private escapeTargets: number[] = [];
+  private escapePoints: number[] = [];
+  private arrivalPoints: number[] = [];
 
   // Scratch space, reused by every search. A stamp stands in for clearing the arrays each time.
   private g: Float32Array;
@@ -42,6 +58,11 @@ export class Pathfinder {
   constructor(nav: NavGrid, private stats: BotPathStats, private terrain: Terrain | null = null) {
     this.searchesLeft = stats.searchesPerTick;
     const factor = Math.max(1, Math.round(stats.cellMeters / nav.cell));
+    this.nav = nav;
+    this.factor = factor;
+    this.escapeSide = 2 * Math.ceil(stats.escapeMeters / nav.cell) + 1;
+    this.escapeFrom = new Int32Array(this.escapeSide * this.escapeSide);
+    this.escapeQueue = new Int32Array(this.escapeSide * this.escapeSide);
     this.cell = nav.cell * factor;
     this.cols = Math.ceil(nav.cols / factor);
     this.rows = Math.ceil(nav.rows / factor);
@@ -182,36 +203,63 @@ export class Pathfinder {
   }
 
   // Fills `out` with x, z, x, z... for the waypoints from here to the goal, not counting the start.
-  // Returns false only when no route towards the goal could be found at all.
-  findPath(startX: number, startZ: number, goalX: number, goalZ: number, out: number[]): boolean {
+  // Returns false only when no route towards the goal could be found at all. `startY` is where the walker's feet are,
+  // when it may be standing beside something tall rather than on it; left out, its feet are on the ground.
+  findPath(startX: number, startZ: number, goalX: number, goalZ: number, out: number[], startY?: number): boolean {
     out.length = 0;
     this.reachedGoal = false;
     this.cellsSearched = 0;
     this.searchesLeft--;
-    const start = this.nearestOpen(this.cellOf(startX, startZ));
-    if (start < 0) return false;
-    // A goal out at sea, past an island's limit, can lie further from open ground than nearestOpen looks: it is
-    // swapped for the nearest reachable spot below, like any goal that cannot be reached.
     const goalCell = this.cellOf(goalX, goalZ);
     let goal = this.nearestOpen(goalCell);
+    // A mech beside a wall is often in a cell the wall blocks, and the nearest open cell can be the one over the wall.
+    // Heading straight for that left bots pushing into the wall for minutes. A mech in a room is in open cells the
+    // coarse grid sees as sealed in, though it walks out of the door. Either way the way out is found on the fine grid
+    // from where it stands, toward open ground the goal can be reached from, and the route begins with it.
+    const escape = this.escapePoints;
+    escape.length = 0;
+    const startCell = this.cellOf(startX, startZ);
+    const want = goal >= 0 ? this.region[goal]! : -1;
+    let start = startCell;
+    if (this.blocked[startCell] || (want >= 0 && this.region[startCell] !== want)) {
+      const out = this.escape(startX, startZ, startY, want, false, escape);
+      if (out >= 0) start = out;
+    }
+    if (this.blocked[start]) start = this.nearestOpen(startCell);
+    if (start < 0) return false;
+    for (let i = 0; i < escape.length; i++) out.push(escape[i]!);
+    const fromX = escape.length > 0 ? escape[escape.length - 2]! : startX;
+    const fromZ = escape.length > 0 ? escape[escape.length - 1]! : startZ;
+    // A goal out at sea, past an island's limit, can lie further from open ground than nearestOpen looks: it is
+    // swapped for the nearest reachable spot below, like any goal that cannot be reached.
     if (goal < 0 && this.terrain?.island) goal = this.nearestInRegion(goalCell, this.region[start]!);
     if (goal < 0) return false;
+    // The same at the other end: a goal in a room, or beside a wall, is walked to from open ground on its own side,
+    // found on the fine grid from the goal back toward the start. Without it a bot chasing a noise in a building stood
+    // at the nearest open spot outside, bumping the wall.
+    const arrival = this.arrivalPoints;
+    arrival.length = 0;
+    let sameRegion = this.region[goal] === this.region[start];
+    if (!sameRegion || this.blocked[goalCell]) {
+      const into = this.escape(goalX, goalZ, undefined, this.region[start]!, true, arrival);
+      if (into >= 0) { goal = into; sameRegion = true; }
+    }
     // A goal that cannot be reached from here: go to the nearest spot that can.
-    const sameRegion = this.region[goal] === this.region[start];
     if (!sameRegion) goal = this.nearestInRegion(goal, this.region[start]!);
     // Nor is a goal out at sea: the route ends on the shore, so the bot gives it up there instead of wading at the limit.
     const exact = sameRegion && (this.terrain?.mayStand(goalX, goalZ) ?? true);
     // A route to the nearest reachable spot does not reach the goal, however well the search went. Saying it did kept
     // bots standing for minutes in clearings the grid sees as sealed in, sure they had arrived.
     if (start === goal) {
-      out.push(exact ? goalX : this.centreX(goal), exact ? goalZ : this.centreZ(goal));
+      if (arrival.length > 0) for (let i = 0; i < arrival.length; i++) out.push(arrival[i]!);
+      else out.push(exact ? goalX : this.centreX(goal), exact ? goalZ : this.centreZ(goal));
       this.reachedGoal = exact;
       return true;
     }
 
     const reached = this.search(start, goal);
     const end = reached ? goal : this.best;
-    if (end === start) return false;
+    if (end === start) return escape.length > 0;
     this.reachedGoal = reached && exact;
     const cells = this.cells;
     cells.length = 0;
@@ -221,15 +269,132 @@ export class Pathfinder {
     const points = this.points, wetBefore = this.wetBefore;
     points.length = 0;
     wetBefore.length = 0;
-    points.push(startX, startZ);
+    points.push(fromX, fromZ);
     wetBefore.push(0);
     for (let i = 1; i < cells.length; i++) {
       points.push(this.centreX(cells[i]!), this.centreZ(cells[i]!));
       wetBefore.push(wetBefore[i - 1]! + this.wet[cells[i]!]!);
     }
-    if (reached && exact) points[points.length - 2] = goalX, points[points.length - 1] = goalZ;
+    const arrive = reached && arrival.length > 0;
+    if (arrive) points[points.length - 2] = arrival[0]!, points[points.length - 1] = arrival[1]!;
+    else if (reached && exact) points[points.length - 2] = goalX, points[points.length - 1] = goalZ;
     this.pull(points, out);
+    if (arrive) for (let i = 2; i < arrival.length; i++) out.push(arrival[i]!);
     return true;
+  }
+
+  // Searches the fine nav grid outwards from a mech standing at (x, z) with its feet at y, in steps a mech can walk,
+  // for the nearest nav cell in an open route cell of region `want`, or failing that (and only going out of a blocked
+  // cell) the nearest in any open route cell but its own. Writes the way there into `out` as a few straight legs and
+  // returns that route cell, or -1 if there is none within escapeMeters. `backward` searches from a goal for the way in
+  // to it instead: steps are taken the other way round, and `out` runs from that route cell to the goal.
+  private escape(x: number, z: number, y: number | undefined, want: number, backward: boolean, out: number[]): number {
+    const nav = this.nav, side = this.escapeSide, half = (side - 1) / 2;
+    const from = this.escapeFrom.fill(NOT_REACHED), queue = this.escapeQueue;
+    const fx = Math.floor((x - nav.originX) / nav.cell), fz = Math.floor((z - nav.originZ) / nav.cell);
+    const middle = this.navIndex(fx, fz);
+    // Left out, the feet are on the ground; failing that, on whatever stands there: a floor, a roof.
+    let head = 0, tail = 0;
+    for (let tries = 0; tries < 2 && tail === 0; tries++) {
+      if (tries === 1 && (y !== undefined || middle < 0)) break;
+      const feet = y ?? (middle < 0 ? 0 : tries === 0 ? nav.ground[middle]! : nav.top[middle]!);
+      for (let i = 0; i < ESCAPE_SEEDS.length; i += 2) {
+        const gx = Math.floor((x + ESCAPE_SEEDS[i]! * ESCAPE_PROBE - nav.originX) / nav.cell);
+        const gz = Math.floor((z + ESCAPE_SEEDS[i + 1]! * ESCAPE_PROBE - nav.originZ) / nav.cell);
+        const c = this.navIndex(gx, gz);
+        const local = (gz - fz + half) * side + (gx - fx + half);
+        if (c < 0 || from[local] !== NOT_REACHED) continue;
+        // Something standing up in this cell taller than a step from its feet is beside it, not under it.
+        if (raised(nav, c) > 0 && nav.top[c]! > feet + nav.stepHeight) continue;
+        from[local] = -1;
+        queue[tail++] = local;
+      }
+    }
+    const own = this.cellOf(x, z);
+    let found = -1, nearest = -1;
+    while (head < tail) {
+      const local = queue[head++]!;
+      const lx = local % side, lz = (local - lx) / side;
+      const gx = fx + lx - half, gz = fz + lz - half;
+      const coarse = Math.floor(gz / this.factor) * this.cols + Math.floor(gx / this.factor);
+      if (!this.blocked[coarse] && coarse !== own) {
+        if (this.region[coarse] === want) { found = local; break; }
+        if (nearest < 0) nearest = local;
+      }
+      const c = gz * nav.cols + gx;
+      for (let k = 0; k < 4; k++) {
+        const nx = lx + (k === 0 ? 1 : k === 1 ? -1 : 0), nz = lz + (k === 2 ? 1 : k === 3 ? -1 : 0);
+        if (nx < 0 || nz < 0 || nx >= side || nz >= side) continue;
+        const next = nz * side + nx;
+        const n = this.navIndex(fx + nx - half, fz + nz - half);
+        if (n < 0 || from[next] !== NOT_REACHED) continue;
+        // The steps the map's own checks count as walkable (floodFill in navGrid.ts). Going out it may drop too: a mech
+        // reeled up onto a roof walks off its edge. Coming in it may not, or the top of every wall round the goal would
+        // count as a way in, and the legs would be straightened across them.
+        const hillside = raised(nav, n) <= 0 && raised(nav, c) <= 0;
+        const climb = backward ? Math.abs(nav.top[c]! - nav.top[n]!) : nav.top[n]! - nav.top[c]!;
+        if (!hillside && climb > nav.stepHeight) continue;
+        from[next] = local;
+        queue[tail++] = next;
+      }
+    }
+    // From a blocked cell, any open ground beats none. From open ground, only the way out to the goal's side is worth it.
+    if (found < 0 && !backward && this.blocked[own]) found = nearest;
+    if (found < 0) return -1;
+
+    const cells = this.escapeCells;
+    cells.length = 0;
+    for (let local = found; local >= 0; local = from[local]!) cells.push(local);
+    if (!backward) cells.reverse();
+    // The middle of each cell of the way in walking order; the way in ends on the goal itself, and begins at its route
+    // cell, the end of the coarse route.
+    const targets = this.escapeTargets;
+    targets.length = 0;
+    for (let i = 0; i < cells.length; i++) targets.push(this.escapeX(cells[i]!, fx), this.escapeZ(cells[i]!, fz));
+    let px = x, pz = z, first = 0;
+    if (backward) {
+      targets.push(x, z);
+      px = targets[0]!; pz = targets[1]!;
+      out.push(px, pz);
+      first = 1;
+    }
+    // Straight legs: from each point, on to the furthest point of the way that a straight line over reached cells gets to.
+    const count = targets.length / 2;
+    for (let i = first; i < count;) {
+      let j = count - 1;
+      while (j > i && !this.overReached(px, pz, targets[j * 2]!, targets[j * 2 + 1]!, fx, fz)) j--;
+      px = targets[j * 2]!; pz = targets[j * 2 + 1]!;
+      out.push(px, pz);
+      i = j + 1;
+    }
+    const gx = fx + (found % side) - half, gz = fz + Math.floor(found / side) - half;
+    return Math.floor(gz / this.factor) * this.cols + Math.floor(gx / this.factor);
+  }
+
+  // Whether a straight line stays on nav cells the last escape search reached, sampled every quarter cell.
+  private overReached(ax: number, az: number, bx: number, bz: number, fx: number, fz: number): boolean {
+    const nav = this.nav, side = this.escapeSide, half = (side - 1) / 2;
+    const steps = Math.ceil(Math.hypot(bx - ax, bz - az) / (nav.cell * 0.25));
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps;
+      const lx = Math.floor((ax + (bx - ax) * t - nav.originX) / nav.cell) - fx + half;
+      const lz = Math.floor((az + (bz - az) * t - nav.originZ) / nav.cell) - fz + half;
+      if (lx < 0 || lz < 0 || lx >= side || lz >= side || this.escapeFrom[lz * side + lx] === NOT_REACHED) return false;
+    }
+    return true;
+  }
+
+  // The middle of a cell of the escape search's square, which is centred on nav cell (fx, fz).
+  private escapeX(local: number, fx: number): number {
+    return this.nav.originX + (fx + (local % this.escapeSide) - (this.escapeSide - 1) / 2 + 0.5) * this.nav.cell;
+  }
+
+  private escapeZ(local: number, fz: number): number {
+    return this.nav.originZ + (fz + Math.floor(local / this.escapeSide) - (this.escapeSide - 1) / 2 + 0.5) * this.nav.cell;
+  }
+
+  private navIndex(x: number, z: number): number {
+    return x < 0 || z < 0 || x >= this.nav.cols || z >= this.nav.rows ? -1 : z * this.nav.cols + x;
   }
 
   // A* from start to goal over the open cells, at most maxNodes cells looked at. Returns whether it got there;
@@ -311,34 +476,51 @@ export class Pathfinder {
     }
   }
 
-  // Whether a mech can walk in a straight line between two spots without meeting anything the routes go round.
-  // The cell the walk starts in is not checked: a coarse cell is blocked by anything in it, so a mech walking along
-  // the edge of a building often stands in one.
+  // Whether a mech can walk in a straight line between two spots without meeting anything the routes go round, with
+  // routeClearanceMeters to spare either side. The cell the walk starts in is not checked: a coarse cell is blocked by
+  // anything in it, so a mech walking along the edge of a building often stands in one. Nor, for the lines either
+  // side, is the cell it ends in.
   canWalkStraight(ax: number, az: number, bx: number, bz: number): boolean {
-    const from = this.cellOf(ax, az);
+    const from = this.cellOf(ax, az), to = this.cellOf(bx, bz);
     const length = Math.hypot(bx - ax, bz - az);
+    if (length < 1e-6) return true;
     const steps = Math.ceil(length / (this.cell * 0.5));
-    for (let s = 1; s < steps; s++) {
-      const t = s / steps;
-      const c = this.cellOf(ax + (bx - ax) * t, az + (bz - az) * t);
-      if (c !== from && this.blocked[c]) return false;
+    const clearance = this.stats.routeClearanceMeters;
+    const sideX = (-(bz - az) / length) * clearance, sideZ = ((bx - ax) / length) * clearance;
+    for (let side = -1; side <= 1; side++) {
+      for (let s = 1; s < steps; s++) {
+        const t = s / steps;
+        const c = this.cellOf(ax + (bx - ax) * t + sideX * side, az + (bz - az) * t + sideZ * side);
+        if (c !== from && (side === 0 || c !== to) && this.blocked[c]) return false;
+      }
     }
     return true;
   }
 
-  // Samples the line every half cell. Straightening tries many lines per route, so this works out the cells inline,
-  // the same way cellOf does.
+  // Samples the line every half cell, and two more beside it routeClearanceMeters out, so a leg never runs so close
+  // past the end of a wall that a mech's shoulder catches it. Water is judged on the middle line only, and the lines
+  // beside it skip the cells the leg starts and ends in, which are where the route goes anyway. Straightening tries
+  // many lines per route, so this works out the cells inline, the same way cellOf does.
   private lineClear(ax: number, az: number, bx: number, bz: number, waterAllowed: boolean): boolean {
     const { blocked, wet, cols, rows, originX, originZ, cell } = this;
-    const steps = Math.ceil(Math.hypot(bx - ax, bz - az) / (cell * 0.5));
+    const length = Math.hypot(bx - ax, bz - az);
+    if (length < 1e-6) return true;
+    const from = this.cellOf(ax, az), to = this.cellOf(bx, bz);
+    const steps = Math.ceil(length / (cell * 0.5));
     const lastCol = cols - 1, lastRow = rows - 1;
-    for (let s = 1; s < steps; s++) {
-      const t = s / steps;
-      let cx = Math.floor((ax + (bx - ax) * t - originX) / cell);
-      let cz = Math.floor((az + (bz - az) * t - originZ) / cell);
-      cx = cx < 0 ? 0 : cx > lastCol ? lastCol : cx;
-      cz = cz < 0 ? 0 : cz > lastRow ? lastRow : cz;
-      if (blocked[cz * cols + cx] || (!waterAllowed && wet[cz * cols + cx])) return false;
+    const clearance = this.stats.routeClearanceMeters;
+    const sideX = (-(bz - az) / length) * clearance, sideZ = ((bx - ax) / length) * clearance;
+    for (let side = -1; side <= 1; side++) {
+      for (let s = 1; s < steps; s++) {
+        const t = s / steps;
+        let cx = Math.floor((ax + (bx - ax) * t + sideX * side - originX) / cell);
+        let cz = Math.floor((az + (bz - az) * t + sideZ * side - originZ) / cell);
+        cx = cx < 0 ? 0 : cx > lastCol ? lastCol : cx;
+        cz = cz < 0 ? 0 : cz > lastRow ? lastRow : cz;
+        const c = cz * cols + cx;
+        if (side !== 0 && (c === from || c === to)) continue;
+        if (blocked[c] || (side === 0 && !waterAllowed && wet[c])) return false;
+      }
     }
     return true;
   }

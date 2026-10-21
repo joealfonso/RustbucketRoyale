@@ -230,13 +230,26 @@ export interface BotPathStats {
   steerClearanceMeters: number; // the gap left between its side and the thing it passes
   steerMaxSizeMeters: number; // anything wider or deeper than this is a wall, left to the route
   steerKeepSideMeters: number; // keeps the side it picked unless the other way is shorter by more than this
+  steerGrazeMeters: number; // a wall it would only catch by this much of its side is stepped off too, not left to the route
   // How long a bot keeps at a goal it is getting nowhere with before it gives up on it: standing at the end of a route
   // that stops short of the goal, or holding E on loot that never comes.
   giveUpSeconds: number;
+  // A route from a cell the coarse grid calls blocked (a mech beside a wall, or among crates) first finds its way out
+  // on the fine nav grid from where the mech stands, looking this far. Past it, the old nearest open cell is used.
+  escapeMeters: number;
+  // Route legs pass anything the routes go round with this much to spare either side of a bot's middle, so its
+  // shoulder does not catch the end of a wall. A guess: a mech's half width and a little.
+  routeClearanceMeters: number;
+  // A bot only moves on to its next waypoint from up to waypointReach away when it can walk straight there from where
+  // it is; otherwise it first comes this near, so it does not cut a corner into the wall.
+  cornerReachMeters: number;
 }
 
 export interface BotLootStats {
   searchMeters: number; // with nobody in sight, a bot goes for useful loot and full wrecks this close
+  // ...and keeps looking this far while it is already after something, so loot near the edge of searchMeters is not
+  // lost and found again with every step, turning the bot round each time.
+  keepMeters: number;
   refreshTicks: number; // how often it looks again for the nearest thing worth having
 }
 
@@ -344,7 +357,7 @@ export const parseCombatStats = (raw: unknown) => parseNumbers<CombatStats>(raw,
 export const parseBotStats = (raw: unknown, name = "bots.json") => parseNumbers<BotStats>(raw, name, BOT_KEYS);
 
 const LOD_KEYS: (keyof BotLodStats & string)[] = ["fullRangeMeters", "cheapEveryTicks", "abstractFightRange", "abstractFightSeconds", "abstractLoserDamage", "abstractWinnerDamage"];
-const PATH_KEYS: (keyof BotPathStats & string)[] = ["cellMeters", "maxNodes", "replanSeconds", "waypointReach", "minPathDistance", "goalMoveReplan", "searchesPerTick", "heuristicWeight", "waterCost", "steerLookMeters", "steerClearanceMeters", "steerMaxSizeMeters", "steerKeepSideMeters", "giveUpSeconds"];
+const PATH_KEYS: (keyof BotPathStats & string)[] = ["cellMeters", "maxNodes", "replanSeconds", "waypointReach", "minPathDistance", "goalMoveReplan", "searchesPerTick", "heuristicWeight", "waterCost", "steerLookMeters", "steerClearanceMeters", "steerMaxSizeMeters", "steerKeepSideMeters", "steerGrazeMeters", "giveUpSeconds", "escapeMeters", "routeClearanceMeters", "cornerReachMeters"];
 
 export function parseBotConfig(raw: unknown): BotConfig {
   const d = raw as Record<string, Record<string, unknown>>;
@@ -362,7 +375,7 @@ export function parseBotConfig(raw: unknown): BotConfig {
     mix, fill: numbersIn(d?.fill, "fill"), difficulties,
     lod: parseNumbers<BotLodStats>(d?.lod, "bots.json lod", LOD_KEYS),
     path: parseNumbers<BotPathStats>(d?.path, "bots.json path", PATH_KEYS),
-    loot: parseNumbers<BotLootStats>(d?.loot, "bots.json loot", ["searchMeters", "refreshTicks"]),
+    loot: parseNumbers<BotLootStats>(d?.loot, "bots.json loot", ["searchMeters", "keepMeters", "refreshTicks"]),
     hunt: parseNumbers<BotHuntStats>(d?.hunt, "bots.json hunt", ["searchMeters", "personDistanceScale"]),
   };
 }

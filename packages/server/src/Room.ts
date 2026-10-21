@@ -643,7 +643,8 @@ export class Room {
   private aimBotAtLoot(player: Player): void {
     const bot = player.bot!;
     const { x, z } = player.state;
-    let range = this.config.bots.loot.searchMeters;
+    const { loot } = this.config.bots;
+    let range = bot.hasLootGoal ? loot.keepMeters : loot.searchMeters;
     const pickup = this.pickups.nearest(x, z, range, (p) => wantsItem(player.loadout, p.item, this.config.loot));
     let goalX = 0, goalZ = 0, found = false;
     if (pickup) { goalX = pickup.x; goalZ = pickup.z; range = Math.hypot(pickup.x - x, pickup.z - z); found = true; }

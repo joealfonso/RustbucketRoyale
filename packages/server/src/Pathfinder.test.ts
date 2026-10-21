@@ -209,15 +209,94 @@ describe("Pathfinder", () => {
   });
 
   it("does not say a route goes all the way when the goal is cut off and it only goes as near as it can", () => {
+    // A room with no door: nothing walks in or out.
+    const walls = [box(-10, -10, 10, -9), box(-10, 9, 10, 10), box(-10, -10, -9, 10), box(9, -10, 10, 10)];
+    const path: number[] = [];
+    const f = finder(walls);
+    f.findPath(0, 70, 0, 0, path, 0); // from outside in
+    expect(f.reachedGoal).toBe(false);
+    f.findPath(0, 0, 0, 70, path, 0); // from inside out
+    expect(f.reachedGoal).toBe(false);
+  });
+
+  it("goes in and out of a clearing the coarse grid sees as sealed in, between the posts round it", () => {
     // A thin post in each of the eight coarse cells round the one centred on (8, 8): on the route grid that cell is
-    // sealed in, though a mech walks out between the posts.
+    // sealed in, though a mech walks between the posts. Routes used to stop outside, and bots stood there for minutes.
     const posts = clearingPosts(8, 8);
     const path: number[] = [];
     const f = finder(posts);
-    f.findPath(8, 8, 8, 90, path); // from inside the clearing out
-    expect(f.reachedGoal).toBe(false);
-    f.findPath(8, 90, 8, 8, path); // from outside in
-    expect(f.reachedGoal).toBe(false);
+    for (const [from, to] of [[[8, 8], [8, 90]], [[8, 90], [8, 8]]] as const) {
+      f.findPath(from[0], from[1], to[0], to[1], path);
+      expect(f.reachedGoal).toBe(true);
+      expect(path.slice(-2)).toEqual([to[0], to[1]]);
+      for (const p of posts) expect(crosses([from[0], from[1]], path, p.minX, p.minZ, p.maxX, p.maxZ)).toBe(false);
+    }
+  });
+
+  it("starts a route on the mech's own side of a wall it stands against, not over it", () => {
+    // Small seed 1000: a bot against a 7 m wall stood in a route cell the wall blocks, the route began at the open cell
+    // over the wall, and it pushed into the wall for 176 s. Here the bot's nav cell is the wall's too.
+    const wall = box(2.2, -40, 2.6, 40, 7);
+    const path: number[] = [];
+    const f = finder([wall]);
+    for (const goalX of [60, -60]) {
+      expect(f.findPath(3.5, 0, goalX, 0, path, 0)).toBe(true);
+      expect(crosses([3.5, 0], path, wall.minX, wall.minZ, wall.maxX, wall.maxZ)).toBe(false);
+      expect(f.reachedGoal).toBe(true);
+    }
+  });
+
+  it("walks out of a room by its door, though the coarse grid sees the room as sealed in", () => {
+    // A 20 m room with a 4 m door in its east wall. Every route cell round its middle has a wall in it.
+    const walls = [box(-10, -10, 10, -9), box(-10, 9, 10, 10), box(-10, -10, -9, 10), box(9, -10, 10, -2), box(9, 2, 10, 10)];
+    const path: number[] = [];
+    const f = finder(walls);
+    for (const [x, z] of [[0, 0], [-6, 5], [5, -6]] as const) {
+      expect(f.findPath(x, z, -60, 0, path, 0)).toBe(true);
+      expect(f.reachedGoal).toBe(true);
+      for (const w of walls) expect(crosses([x, z], path, w.minX, w.minZ, w.maxX, w.maxZ)).toBe(false);
+    }
+  });
+
+  it("walks into a room by its door to reach a goal inside it", () => {
+    // Medium seed 2000: a bot chasing a noise from inside a building stopped at the nearest open spot outside and
+    // bumped the wall again and again, every new noise starting its patience over.
+    const walls = [box(-10, -10, 10, -9), box(-10, 9, 10, 10), box(-10, -10, -9, 10), box(9, -10, 10, -2), box(9, 2, 10, 10)];
+    const path: number[] = [];
+    const f = finder(walls);
+    for (const [x, z] of [[0, 0], [-6, 5], [5, -6]] as const) {
+      expect(f.findPath(-60, 0, x, z, path, 0)).toBe(true);
+      expect(f.reachedGoal).toBe(true);
+      expect(path.slice(-2)).toEqual([x, z]);
+      for (const w of walls) expect(crosses([-60, 0], path, w.minX, w.minZ, w.maxX, w.maxZ)).toBe(false);
+    }
+  });
+
+  it("passes the end of a wall with room for a mech's shoulder", () => {
+    // Legs used to be straightened until they ran about half a metre past a wall's end, so a mech caught the corner.
+    // The wall ends on a route cell's edge (cells run from -100 in steps of 8), so the open cell starts right at it.
+    const wall = box(2.2, -44, 2.6, 44, 7);
+    const path: number[] = [];
+    expect(finder([wall]).findPath(30, 0, -30, 20, path)).toBe(true);
+    let nearest = Infinity, x = 30, z = 0;
+    for (let i = 0; i < path.length; i += 2) {
+      for (let t = 0; t <= 1; t += 0.01) {
+        const px = x + (path[i]! - x) * t, pz = z + (path[i + 1]! - z) * t;
+        nearest = Math.min(nearest, Math.hypot(Math.max(wall.minX - px, 0, px - wall.maxX), Math.max(wall.minZ - pz, 0, pz - wall.maxZ)));
+      }
+      x = path[i]!; z = path[i + 1]!;
+    }
+    expect(nearest).toBeGreaterThan(mech.halfWidth + 0.2);
+  });
+
+  it("walks off the edge of a roof it was reeled up onto", () => {
+    const roof = box(-20, -20, 20, 20, 8);
+    const path: number[] = [];
+    const f = finder([roof]);
+    expect(f.findPath(0, 0, 70, 0, path, 8)).toBe(true);
+    expect(f.reachedGoal).toBe(true);
+    // Off the roof by its nearest edge, not over it toward one the search could not get to.
+    expect(Math.hypot(path[0]! - 0, path[1]! - 0)).toBeLessThan(30);
   });
 
   it("tells whether a straight walk is clear, ignoring the cell the walk starts in", () => {

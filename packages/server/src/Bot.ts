@@ -68,6 +68,8 @@ export class Bot {
   private heardX = 0;
   private heardZ = 0;
   private heardFor = 0;
+  private atX = 0; // where it was at its last think, for judging which sound is nearer
+  private atZ = 0;
   needsRepair = false; // set by the room: a part is bad enough that the bot stops to fix it when nobody is in sight
   abilityKind: AbilityStats["kind"] | null = null; // set by the room: the Q ability of the mech this bot drives
   // Set by the room: the size of the mech this bot drives, for stepping round trunks and crates in its way. Null
@@ -132,8 +134,11 @@ export class Bot {
     this.replanIn = random() * pathStats.replanSeconds; // so a room full of bots does not all search on the same tick
   }
 
-  // Something was heard here. With nobody in sight, the bot goes to have a look for a while.
+  // Something was heard here. With nobody in sight, the bot goes to have a look for a while: at the nearest thing it
+  // has heard lately. Taking every newest sound instead, a bot near a big fight turned round with each shot, the sounds
+  // a little off the real spots, and stood still.
   hear(x: number, z: number, seconds: number): void {
+    if (this.heardFor > 0 && Math.hypot(x - this.atX, z - this.atZ) > Math.hypot(this.heardX - this.atX, this.heardZ - this.atZ)) return;
     this.heardX = x;
     this.heardZ = z;
     this.heardFor = seconds;
@@ -159,6 +164,10 @@ export class Bot {
 
   clearLootGoal(): void {
     this.hasLoot = false;
+  }
+
+  get hasLootGoal(): boolean {
+    return this.hasLoot;
   }
 
   // The nearest other mech, set by the room whether or not it can be seen. With nothing better to do the bot goes
@@ -216,6 +225,7 @@ export class Bot {
 
   think(self: MechState, targets: readonly BotTarget[], ring: RingNow | null, world: World, dt: number, out: MechInput): void {
     this.drop.forget(); // down: the next drop picks afresh
+    this.atX = self.x; this.atZ = self.z;
     out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.altFire = false; out.grenade = false; out.interact = false; out.repair = false; out.ability = false;
     const s = this.stats;
     this.retargetIn -= dt;
@@ -528,16 +538,23 @@ export class Bot {
     }
   }
 
-  // The direction to walk to reach a spot. Far spots are walked to along a planned route round obstacles,
-  // near ones straight. If no route can be found it just heads straight there, and so it does once past the end of a
-  // route that stops short of the spot.
+  // The direction to walk to reach a spot. Far spots are walked to along a planned route round obstacles, and so are
+  // near ones with something in the way: walked straight at, a noise behind a building's wall pinned bots to the wall.
+  // Near ones in the clear are walked to straight. If no route can be found it just heads straight there, and so it
+  // does once past the end of a route that stops short of the spot.
   private travel(self: MechState, goalX: number, goalZ: number, dt: number): { x: number; z: number } {
     const out = this.heading;
     let tx = goalX, tz = goalZ;
+    let onTheWay = false; // heading for a waypoint, not the end of its route
     const straight = Math.hypot(goalX - self.x, goalZ - self.z);
 
-    if (this.finder && straight > this.pathStats.minPathDistance) {
-      const goalMoved = Math.hypot(goalX - this.pathGoalX, goalZ - this.pathGoalZ) > this.pathStats.goalMoveReplan;
+    if (this.finder && (straight > this.pathStats.minPathDistance || !this.finder.canWalkStraight(self.x, self.z, goalX, goalZ))) {
+      // A whole route ends where the goal was when it was planned. Arrived there with the goal moved on a little since,
+      // less than goalMoveReplan, it plans again rather than standing at the old spot.
+      const n = this.path.length;
+      const arrivedElsewhere = this.pathWhole && n > 0 && Math.hypot(this.path[n - 2]! - self.x, this.path[n - 1]! - self.z) < 3 &&
+        Math.hypot(this.path[n - 2]! - goalX, this.path[n - 1]! - goalZ) > this.pathStats.waypointReach;
+      const goalMoved = arrivedElsewhere || Math.hypot(goalX - this.pathGoalX, goalZ - this.pathGoalZ) > this.pathStats.goalMoveReplan;
       // Replanning on the clock used to be most of a large room's tick, and on a map that never changes it mostly
       // found the same route again. So the clock only replans when the bot has been pushed off its route (it can no
       // longer walk straight to its next waypoint), or is on the last leg of one that stopped short of the goal.
@@ -550,16 +567,17 @@ export class Bot {
         this.pathIndex = 0;
         this.pathGoalX = goalX; this.pathGoalZ = goalZ;
         this.replanIn = this.pathStats.replanSeconds * (0.8 + this.random() * 0.4);
-        if (!this.finder.findPath(self.x, self.z, goalX, goalZ, this.path)) this.path.length = 0;
+        if (!this.finder.findPath(self.x, self.z, goalX, goalZ, this.path, self.y)) this.path.length = 0;
         this.pathWhole = this.path.length > 0 && this.finder.reachedGoal;
         this.noteRouteEnd(goalMoved);
       }
       // The last point of a whole route is the goal itself. The last of one that stops short is passed like any other.
       const last = this.pathWhole ? this.path.length - 2 : this.path.length;
-      while (this.pathIndex * 2 < last && Math.hypot(this.path[this.pathIndex * 2]! - self.x, this.path[this.pathIndex * 2 + 1]! - self.z) < this.pathStats.waypointReach) this.pathIndex++;
+      while (this.pathIndex * 2 < last && this.passed(self)) this.pathIndex++;
       if (this.path.length > 0 && this.pathIndex * 2 < this.path.length) {
         tx = this.path[this.pathIndex * 2]!;
         tz = this.path[this.pathIndex * 2 + 1]!;
+        onTheWay = this.pathIndex * 2 < last;
       } else if (this.path.length > 0) {
         this.shortFor += dt;
       }
@@ -571,8 +589,20 @@ export class Bot {
 
     const dx = tx - self.x, dz = tz - self.z;
     const distance = Math.hypot(dx, dz);
-    if (distance > 3) { out.x = dx / distance; out.z = dz / distance; } else { out.x = 0; out.z = 0; }
+    // Only the end is stopped short of: a waypoint on the way is walked right up to until it counts as passed.
+    if (distance > 3 || (onTheWay && distance > 1e-3)) { out.x = dx / distance; out.z = dz / distance; } else { out.x = 0; out.z = 0; }
     return out;
+  }
+
+  // Whether the waypoint it is heading for counts as reached: within waypointReach of it, as long as it can walk
+  // straight on to the one after from here. Cutting the corner from further off took bots into the end of the wall
+  // the route goes round. Close enough, it moves on anyway.
+  private passed(self: MechState): boolean {
+    const i = this.pathIndex * 2, path = this.path;
+    const distance = Math.hypot(path[i]! - self.x, path[i + 1]! - self.z);
+    if (distance >= this.pathStats.waypointReach) return false;
+    if (distance < this.pathStats.cornerReachMeters || i + 2 >= path.length) return true;
+    return this.finder!.canWalkStraight(self.x, self.z, path[i + 2]!, path[i + 3]!);
   }
 
   // Time past the end of short routes adds up for as long as the new routes keep ending in the same place, so a bot
@@ -640,10 +670,13 @@ export class Bot {
       const inside = !ring || Math.hypot(this.lootX - ring.cx, this.lootZ - ring.cz) < ring.radius;
       if (inside) return { x: this.lootX, z: this.lootZ, urgent: false, kind: "loot" };
     }
-    // A sound worth checking, as long as going there does not mean leaving the safe area.
+    // A sound worth checking, as long as going there does not mean leaving the safe area. Once there it has had its
+    // look, and the next sound it hears, near or far, is the one to go to.
     if (this.heardFor > 0) {
       const inside = !ring || Math.hypot(this.heardX - ring.cx, this.heardZ - ring.cz) < ring.radius - this.stats.ringMargin;
-      if (inside && Math.hypot(this.heardX - self.x, this.heardZ - self.z) > 6) return { x: this.heardX, z: this.heardZ, urgent: false, kind: "heard" };
+      const there = Math.hypot(this.heardX - self.x, this.heardZ - self.z) <= 6;
+      if (there) this.heardFor = 0;
+      else if (inside) return { x: this.heardX, z: this.heardZ, urgent: false, kind: "heard" };
     }
     if (this.hasHunt) {
       const inside = !ring || Math.hypot(this.huntX - ring.cx, this.huntZ - ring.cz) < ring.radius - this.stats.ringMargin;
