@@ -15,7 +15,9 @@
   },
   "outline": {
     "widthMeters": 0.06,
-    "darken": 0.35
+    "darken": 0.35,
+    "mechDarken": 0.22,
+    "mechWidthMeters": 0.04
   },
   "light": {
     "presets": [

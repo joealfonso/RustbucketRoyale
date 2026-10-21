@@ -30,7 +30,9 @@ export interface LookConfig {
   bands: number[]; // brightness of each band, darkest first
   bandEdges: number[]; // where one band turns into the next, 0 (facing away from the light) to 1 (facing it)
   rim: { strength: number; width: number; color: string };
-  outline: { widthMeters: number; darken: number };
+  // `darken` scales the colour in linear light, which reads lighter on screen than the number says (0.35 shows as
+  // about 62%). Mechs use `mechDarken`, a share of the brightness you see, so their outlines read as ink, not a halo.
+  outline: { widthMeters: number; darken: number; mechDarken: number; mechWidthMeters: number };
   // Damage eats paint to rust: `cover` share of a part at zero hit points, in patches `scale` per metre, with a dark
   // rim `rim` wide (in noise units) round each patch.
   // `spread` below 1 makes the first hits show: the share of damage is raised to this power before it becomes cover.
@@ -83,6 +85,7 @@ export function parseLook(raw: unknown): LookConfig {
   const l = raw as LookConfig;
   if (!Array.isArray(l?.bands) || l.bands.length < 2 || l.bandEdges?.length !== l.bands.length - 1) throw new Error("look.json: needs bands and one fewer bandEdges");
   if (typeof l.outline?.widthMeters !== "number" || typeof l.rim?.strength !== "number") throw new Error("look.json: needs outline and rim");
+  if (typeof l.outline.mechDarken !== "number" || typeof l.outline.mechWidthMeters !== "number") throw new Error("look.json: outline needs mechDarken and mechWidthMeters");
   if (typeof l.haze?.heightFalloff !== "number" || l.haze.heightFalloff < 0) throw new Error("look.json: needs haze.heightFalloff");
   parseLight(l.light);
   parseSky(l.sky);
@@ -405,12 +408,16 @@ export class Toon {
 
   // The outline for a real model: the same mesh drawn from the inside with every vertex pushed out along its normal.
   // Works for any shape; on hard-edged boxes the faces part slightly at the corners, which smooth-shaded art does not.
-  shellOutline(name: string): THREE.MeshBasicMaterial {
+  // `mech` uses the mech outline settings.
+  shellOutline(name: string, mech = false): THREE.MeshBasicMaterial {
     const hex = this.color(name);
-    let m = this.shellOutlines.get(hex);
+    const key = mech ? `mech-${hex}` : hex;
+    let m = this.shellOutlines.get(key);
     if (!m) {
-      m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(this.look.outline.darken), side: THREE.BackSide });
-      const width = this.look.outline.widthMeters;
+      const { outline } = this.look;
+      const color = mech ? new THREE.Color(hex).convertLinearToSRGB().multiplyScalar(outline.mechDarken).convertSRGBToLinear() : new THREE.Color(hex).multiplyScalar(outline.darken);
+      m = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
+      const width = mech ? outline.mechWidthMeters : outline.widthMeters;
       m.onBeforeCompile = (shader) => {
         // outlineNormal (outlineNormals.ts) keeps flat-shaded shells closed at the edges; every geometry drawn with
         // this material gets it where it is built.
@@ -419,7 +426,7 @@ export class Toon {
           .replace("#include <begin_vertex>", `#include <begin_vertex>\n  transformed += normalize(outlineNormal) * ${width.toFixed(4)};`);
       };
       m.customProgramCacheKey = () => `shell-${width}`;
-      this.shellOutlines.set(hex, m);
+      this.shellOutlines.set(key, m);
     }
     return m;
   }

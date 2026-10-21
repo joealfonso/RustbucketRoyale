@@ -229,7 +229,7 @@ export function createMechModel(
         }
         for (const o of piece.outlines) {
           const g = o.lods[level] ? cut(o.lods[level]!) : null;
-          if (g) holder.add(new THREE.Mesh(g, o.accent ? toon.shellOutline(accentColor) : shared.shell));
+          if (g) holder.add(new THREE.Mesh(g, o.accent ? toon.shellOutline(accentColor, true) : shared.shell));
         }
         lod.addLevel(holder, level === 0 ? 0 : kit.lodDistances[level - 1]!);
       });
@@ -398,7 +398,7 @@ function cornerColored(toon: Toon): { plain: THREE.MeshToonMaterial; shell: THRE
   if (!found) {
     const plain = toon.ownMaterial("#ffffff", false, "mech", true);
     plain.vertexColors = true;
-    const source = toon.shellOutline("#ffffff");
+    const source = toon.shellOutline("#ffffff", true);
     const shell = source.clone();
     shell.onBeforeCompile = source.onBeforeCompile; // clone() leaves behind the shader change that pushes the shell out
     shell.customProgramCacheKey = source.customProgramCacheKey;

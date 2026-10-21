@@ -383,3 +383,9 @@ The extra near triangles went to round forms (12 to 36 sides), real thickness an
 ## 2026-10-20: Bots hunt the nearest mech and see people as further off
 Joseph: "bots also need to fight each other". They already shot any mech in sight, but on medium few met where a person could see. Now a bot with nothing in sight, no loot near and nothing heard heads for the nearest mech within 250 m, and when choosing whom to shoot it judges people 1.6 times further off, so bots near a person turn on each other instead of all on the person. Both numbers are in bots.json hunt. A bigger lever, not taken yet: far bots walking toward people instead of fighting on paper out of sight.
 
+## 2026-10-20: Recorded sounds from CC0 packs only (S1)
+Guns, the Rail Shot, explosions and the Titan's fall are now recordings layered by scripts/audio/make-sounds.ts from two CC0 packs; everything else stays synthesised. The Sonniss GDC bundle was rejected: its licence forbids supplying its sounds as files, edited or not, and this repo is public. The sources stay outside the repo; the script names every file it uses. A sound may list several takes (data/audio.json `file` as a list), one picked per play. Recorded cracks are sparse, so volumes above 1 match the synth's loudness (first guesses, by measurement, not by ear).
+
+## 2026-10-20: Mech outlines darkened by screen brightness, 4 cm (fringing fix)
+Joseph saw "odd fringing" on the mechs. The outline is each part's paint scaled by 0.35, but in linear light, which shows on screen at about 62%: white armour got a light grey band and teal parts a pale teal one, 6 cm wide, reading as a halo rather than ink. Mechs (and the Titan, which shares their model code) now use look.json outline.mechDarken 0.22 as a share of the brightness you see and mechWidthMeters 0.04. The world's outlines are unchanged.
+

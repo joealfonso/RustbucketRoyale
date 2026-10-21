@@ -65,7 +65,7 @@ function merge(kit: LoadedKit, toon: Toon, bodyColor: string, trimColor: string)
     const paint = part.color ? toon.color(part.color) : part.paint === "trim" ? toon.color(trimColor) : toon.color(bodyColor);
     // The same colours the parts had as separate meshes: the paint itself, and the shared outline's darkened colour.
     const fill = accent || look === "weapon" ? null : new THREE.Color(paint);
-    const outline = accent ? null : toon.shellOutline(look === "weapon" ? trimColor : paint).color.clone();
+    const outline = accent ? null : toon.shellOutline(look === "weapon" ? trimColor : paint, true).color.clone();
     part.states.forEach((state, i) => {
       if (!state) return;
       const shown = shownIn(part, i);
