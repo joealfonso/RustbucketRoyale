@@ -1,9 +1,9 @@
 {
   "altitudeMeters": {
-    "arena": 150,
-    "small": 250,
-    "medium": 450,
-    "large": 750
+    "arena": 110,
+    "small": 190,
+    "medium": 340,
+    "large": 560
   },
   "bots": {
     "ringMarginMeters": 15,
