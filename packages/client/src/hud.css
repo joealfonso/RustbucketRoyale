@@ -296,6 +296,9 @@ body.titleScreen > :not(#menu, #game) { display: none !important; }
 .keys { display: grid; grid-template-columns: repeat(2, auto 1fr); gap: 0.3rem 0.7rem; margin: 0; text-align: left; font: 400 1rem var(--hud-body); text-transform: none; letter-spacing: 0; color: var(--hud-text); }
 .keys dt { justify-self: end; font: 400 0.85rem var(--hud-num); color: var(--hud-amber); border: 1px solid var(--hud-amber-dim); padding: 0 0.35rem; }
 .keys dd { margin: 0 1rem 0 0; }
+/* The one line on pickups under the keys: a red cross is health, said in the cross's own red. */
+.pickupLine { margin: 0; max-width: 22rem; font: 400 0.95rem var(--hud-body); text-transform: none; letter-spacing: 0; color: var(--hud-text); }
+.pickupLine b { color: #FF6B5C; font-weight: 600; }
 
 /* The four mechs to pick from, on the start menu and on the pause screen. Stat bars are against the best in the roster. */
 .mechCards { display: flex; gap: 0.6rem; justify-content: center; }

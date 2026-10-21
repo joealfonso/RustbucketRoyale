@@ -23,7 +23,7 @@ export interface LootConfig {
   spillRadius: number; // how far round a looted wreck its things land
   switchSeconds: number; // a short pause after changing weapon before it can fire
   maxPickups: number;
-  colors: { grenade: string; armor: string };
+  colors: { grenade: string }; // health plates look as data/pickupLook.json says
   drops: Record<string, LootDrop>;
   // Per map tier, weights that replace a table's own for the items named, in every table that has them (gate 18b: the
   // rivet gun suits small maps' close fights, the harpoon large maps' distances). A tier left out uses the tables as they are.

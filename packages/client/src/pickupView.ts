@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Toon } from "./toonMaterial";
+import type { PickupLook } from "./pickupLook";
 import { ITEM_GRENADE, itemArmorZone, itemUpgrade, itemWeapon, type PickupState } from "@rustbucket/shared";
 
 const SPIN = 1.6; // radians a second
@@ -9,34 +10,35 @@ const BOB = 0.15; // metres up and down
 const SLIDE_RATE = 9;
 
 interface Shown {
-  mesh: THREE.Mesh;
+  mesh: THREE.Object3D;
   seen: boolean;
   baseY: number;
   x: number; z: number; // where it is drawn, sliding toward where the server says (tx, ty, tz)
   tx: number; ty: number; tz: number;
 }
 
-// Things to pick up: small floating boxes that turn slowly, coloured by what they are. They come and go with the
-// snapshots. Art hook: a model per item kind at V2.
+// Things to pick up: small floating shapes that turn slowly, coloured by what they are. They come and go with the
+// snapshots. Health (an armour plate) is an upright white slab with a red cross through it, so it reads as health
+// from any side and never looks like a gun bar or an upgrade cube. Art hook: a model per item kind at V2.
 export class PickupView {
   private shown = new Map<number, Shown>();
   private geometry = new THREE.BoxGeometry(1, 1, 1);
   private materials = new Map<string, THREE.MeshStandardMaterial | THREE.MeshToonMaterial>();
 
-  constructor(private scene: THREE.Scene, private colors: { grenade: string; armor: string }, private weaponColors: string[], private upgradeColors: string[], private toon: Toon | null = null) {}
+  constructor(private scene: THREE.Scene, private colors: { grenade: string }, private weaponColors: string[], private upgradeColors: string[], private look: PickupLook["health"], private toon: Toon | null = null) {}
 
   // In the toon look a pickup still glows a little, so loot stands out from the scrap round it.
-  private material(color: string): THREE.MeshStandardMaterial | THREE.MeshToonMaterial {
-    let m = this.materials.get(color);
+  private material(name: string, glow = 0.35): THREE.MeshStandardMaterial | THREE.MeshToonMaterial {
+    let m = this.materials.get(name);
     if (!m) {
       if (this.toon) {
-        m = this.toon.ownMaterial(color);
-        m.emissive.set(color);
-        m.emissiveIntensity = 0.35;
+        m = this.toon.ownMaterial(name);
+        m.emissive.set(name);
+        m.emissiveIntensity = glow;
       } else {
-        m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.35, roughness: 0.5 });
+        m = new THREE.MeshStandardMaterial({ color: name, emissive: name, emissiveIntensity: glow, roughness: 0.5 });
       }
-      this.materials.set(color, m);
+      this.materials.set(name, m);
     }
     return m;
   }
@@ -48,13 +50,16 @@ export class PickupView {
       if (!s) {
         const weapon = itemWeapon(p.item);
         const upgrade = itemUpgrade(p.item);
-        const color = p.item === ITEM_GRENADE ? this.colors.grenade : itemArmorZone(p.item) >= 0 ? this.colors.armor
-          : upgrade >= 0 ? (this.upgradeColors[upgrade] ?? "#ffffff") : (this.weaponColors[weapon] ?? "#ffffff");
-        const mesh = new THREE.Mesh(this.geometry, this.material(color));
-        if (p.item === ITEM_GRENADE) mesh.scale.set(0.5, 0.5, 0.5);
-        else if (weapon >= 0) mesh.scale.set(0.4, 0.35, 1.6);
-        else if (upgrade >= 0) { mesh.scale.set(0.7, 0.7, 0.7); mesh.rotation.x = Math.PI / 4; } // a tumbling cube, bigger than a grenade
-        else mesh.scale.set(0.9, 0.15, 0.9);
+        let mesh: THREE.Object3D;
+        if (itemArmorZone(p.item) >= 0) mesh = this.healthShape();
+        else {
+          const color = p.item === ITEM_GRENADE ? this.colors.grenade
+            : upgrade >= 0 ? (this.upgradeColors[upgrade] ?? "#ffffff") : (this.weaponColors[weapon] ?? "#ffffff");
+          mesh = new THREE.Mesh(this.geometry, this.material(color));
+          if (p.item === ITEM_GRENADE) mesh.scale.set(0.5, 0.5, 0.5);
+          else if (weapon >= 0) mesh.scale.set(0.4, 0.35, 1.6);
+          else { mesh.scale.set(0.7, 0.7, 0.7); mesh.rotation.x = Math.PI / 4; } // an upgrade: a tumbling cube, bigger than a grenade
+        }
         mesh.position.set(p.x, p.y, p.z);
         this.scene.add(mesh);
         s = { mesh, seen: true, baseY: p.y + 0.4, x: p.x, z: p.z, tx: p.x, ty: p.y, tz: p.z };
@@ -66,6 +71,22 @@ export class PickupView {
     for (const [id, s] of this.shown) {
       if (!s.seen) { this.scene.remove(s.mesh); this.shown.delete(id); }
     }
+  }
+
+  // The slab, and the two bars of the cross running through it so the cross stands out of both faces.
+  private healthShape(): THREE.Group {
+    const { size, crossArm, crossDepth, glow } = this.look;
+    const group = new THREE.Group();
+    const slab = new THREE.Mesh(this.geometry, this.material(this.look.plate, glow));
+    slab.scale.set(size[0], size[1], size[2]);
+    const cross = this.material(this.look.cross, glow);
+    const depth = size[2] + crossDepth * 2;
+    const across = new THREE.Mesh(this.geometry, cross);
+    across.scale.set(crossArm[0], crossArm[1], depth);
+    const up = new THREE.Mesh(this.geometry, cross);
+    up.scale.set(crossArm[1], crossArm[0], depth);
+    group.add(slab, across, up);
+    return group;
   }
 
   // `dt` in seconds, for the slide of a pickup that moved.

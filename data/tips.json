@@ -1,6 +1,7 @@
 {
   "showSeconds": 6,
   "walkSecondsBeforeSprint": 12,
+  "healthTipMeters": 15,
   "tips": {
     "sprint": "Double-tap W and hold: sprint",
     "ability": "Q: {ability} ready",
@@ -9,6 +10,7 @@
     "drop": "Look where you want to land",
     "secondary": "Right-click: {secondary}",
     "detonate": "Right-click: pop every rivet you have stuck",
-    "reel": "Right-click: harpoon a wall and reel yourself to it"
+    "reel": "Right-click: harpoon a wall and reel yourself to it",
+    "health": "Red cross: walk over it for + health on that part"
   }
 }

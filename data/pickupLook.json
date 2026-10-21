@@ -1,0 +1,21 @@
+{
+  "health": {
+    "plate": "paintWhite",
+    "cross": "warningRed",
+    "size": [0.95, 0.95, 0.3],
+    "crossArm": [0.62, 0.2],
+    "crossDepth": 0.08,
+    "glow": 0.3
+  },
+  "text": {
+    "seconds": 1.6,
+    "risePx": 70,
+    "health": "+{n} HEALTH · {zone}",
+    "grenade": "+{n} GRENADE",
+    "grenades": "+{n} GRENADES",
+    "weapon": "{name}",
+    "upgrade": "{name}",
+    "healthColor": "#FF6B5C",
+    "otherColor": "#FFC93C"
+  }
+}

@@ -3,18 +3,20 @@
 // player, remembered in this browser, and a real prompt (take, loot, repair) always wins over a tip.
 
 // "detonate" and "reel" (gate 18b) teach the rivet gun's and the harpoon's right-click, in place of "secondary".
-export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "drop", "secondary", "detonate", "reel"] as const;
+// "health" is said the first time a health plate lies close by.
+export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "drop", "secondary", "detonate", "reel", "health"] as const;
 export type TipId = (typeof TIP_IDS)[number];
 
 export interface TipsConfig {
   showSeconds: number;
   walkSecondsBeforeSprint: number; // the sprint tip waits for this much plain walking
+  healthTipMeters: number; // the health tip waits for a plate this close
   tips: Record<TipId, string>; // "{ability}" is replaced by the mech's ability name, "{secondary}" by the gun's right-click
 }
 
 export function parseTips(raw: unknown): TipsConfig {
   const d = raw as TipsConfig;
-  if (!(d?.showSeconds > 0 && d.walkSecondsBeforeSprint >= 0)) throw new Error("tips.json: needs showSeconds above 0 and walkSecondsBeforeSprint");
+  if (!(d?.showSeconds > 0 && d.walkSecondsBeforeSprint >= 0 && d.healthTipMeters > 0)) throw new Error("tips.json: needs showSeconds above 0, walkSecondsBeforeSprint and healthTipMeters above 0");
   for (const id of TIP_IDS) if (typeof d.tips?.[id] !== "string" || d.tips[id].length === 0) throw new Error(`tips.json: needs a ${id} tip`);
   return d;
 }

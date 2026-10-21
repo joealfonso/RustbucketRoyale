@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, itemArmorZone, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
   FIRE_NONE, FIRE_SECONDARY, chargeShare, createAltFireState, createAltShot, stepAltFire, flightSteps, reelPoint, SURFACE_NUDGE, type HarpoonMessage, type RivetMessage,
   createRayHit, parseDropsConfig, parseTitanConfig, DROP_BALL, DROP_BURNING, DROP_HANGING, DROP_NONE, dropping, hangAtSpot, parseDropSpotStats, planDropSpots, releaseDrop, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot, type WeaponStats,
 } from "@rustbucket/shared";
@@ -60,6 +60,10 @@ import { FallHints } from "./forest/fallHints";
 import { parseForest } from "./forest/config";
 import forestJson from "../../../data/forest.json";
 import { PickupView } from "./pickupView";
+import { parsePickupLook } from "./pickupLook";
+import { pickupLines, type PickupLine } from "./pickupText";
+import { PickupPop } from "./pickupPop";
+import pickupLookJson from "../../../data/pickupLook.json";
 import { setMechGear } from "./mechModel";
 import { Hud } from "./hud";
 import { DamageDiagram, parseDiagram } from "./damageDiagram";
@@ -250,7 +254,8 @@ let autoStart = params.has("play");
 // Players never see the tuning panel: a production build opens it only with &tuning in the address (for measuring
 // on a laptop through the tunnel). Development always has it.
 const tuningAllowed = import.meta.env.DEV || params.has("tuning");
-const tips = new Tips(parseTips(tipsJson), browserTipStore(() => localStorage));
+const tipsConfig = parseTips(tipsJson);
+const tips = new Tips(tipsConfig, browserTipStore(() => localStorage));
 let clickedIn = false;
 hint.addEventListener("click", () => { clickedIn = true; });
 
@@ -707,7 +712,12 @@ const aimAtMechs = (ox: number, oy: number, oz: number, dx: number, dy: number, 
   const titan = titanView.raycast(ox, oy, oz, dx, dy, dz, mech >= 0 ? mech : max, aimHit);
   return titan >= 0 ? titan : mech;
 };
-const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgradeSet.upgrades.map((u) => u.color), toon);
+const pickupLook = parsePickupLook(pickupLookJson);
+const pickupView = new PickupView(scene, lootConfig.colors, weaponColors, upgradeSet.upgrades.map((u) => u.color),
+  { ...pickupLook.health, plate: toon.color(pickupLook.health.plate), cross: toon.color(pickupLook.health.cross) }, toon);
+const pickupPop = new PickupPop(pickupLook.text);
+const pickupNames = { weapons: weaponSet.weapons.map((w) => w.name), upgrades: upgradeSet.upgrades.map((u) => u.name), zones: zoneSet.zones.map((z) => z.name) };
+const poppedLines: PickupLine[] = [];
 if (net) net.viewDelayMs = () => remotes.viewDelayMs;
 
 const rig = new ThirdPersonCamera(cameraStats, window.innerWidth / window.innerHeight);
@@ -862,6 +872,7 @@ remotes.onSpinStep = (model, weapon, spin) => {
 let health: HealthState = { hp: [...zoneMaxHp], dead: false, respawnIn: 0 };
 // What you carry. Online the server's word is final and arrives with every snapshot. Offline it never changes.
 let loadout: Loadout = { slots: [weaponSet.start, -1], active: 0, grenades: lootConfig.grenadesStart, armor: [0, 0, 0], upgrades: [-1, -1] };
+let lastSnapLoadout = loadout;
 let serverActive = 0;
 let firingSlot = 0; // the slot this client is firing from, so the switch pause is predicted too
 let pickupsNow: PickupState[] = [];
@@ -915,6 +926,7 @@ function swapMap(newSeed: number, newTier: string): void {
   treeView = makeTrees();
   castMapShadows();
   pickupView.clear();
+  pickupPop.clear();
   rivetView?.clear();
   harpoonView?.clear();
   predictor.setWorld(map.world);
@@ -951,6 +963,7 @@ if (net) {
     // Hurt when hit points or armor went down. Picked something up when grenades or armor went up.
     const before = sum(health.hp) + sum(loadout.armor);
     const old = loadout;
+    const oldState = progress.state;
     progress = snap.match;
     progressAt = performance.now();
     const wasDead = health.dead;
@@ -961,6 +974,10 @@ if (net) {
       if (loadout.grenades > 0) tips.offer("grenade"); // under fire with a grenade in hand: the moment to say G
     }
     if (loadout.grenades > old.grenades || loadout.armor.some((a, zone) => a > old.armor[zone]!)) sound.play("pickup");
+    // Say what was just taken. Not across a respawn or a new match, where the loadout is simply handed out fresh.
+    // Against the last snapshot's loadout, not `old`: a thrown grenade is taken off `old` ahead of the server.
+    if (!wasDead && !health.dead && snap.match.state === oldState) pickupPop.show(pickupLines(lastSnapLoadout, loadout, pickupNames, pickupLook.text, poppedLines));
+    lastSnapLoadout = loadout;
     if (loadout.slots[0] !== old.slots[0] || loadout.slots[1] !== old.slots[1]) sound.play("swap");
     // When the server changes the weapon in hand itself (taking a weapon into an empty slot), follow it.
     if (loadout.active !== serverActive) { serverActive = loadout.active; input.setSlot(loadout.active); }
@@ -1665,6 +1682,9 @@ function frame(now: number): void {
     // The rivet gun and the harpoon each say what their right-click does, the first time each is in hand.
     if (altKind === "detonate" || altKind === "reel") tips.offer(altKind);
     else if (inHand >= 0 && altLooks[inHand]) tips.offer("secondary", altLooks[inHand]!.name);
+    for (const p of pickupsNow) {
+      if (itemArmorZone(p.item) >= 0 && Math.hypot(p.x - mech.x, p.z - mech.z) <= tipsConfig.healthTipMeters) { tips.offer("health"); break; }
+    }
   }
   const tipNow = tips.current(frameTime);
   // Standing by a weapon, say what E would do.

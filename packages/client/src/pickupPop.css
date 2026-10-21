@@ -1,0 +1,33 @@
+/* What a pickup did, floating up from just under the mech in the middle of the screen. A hard soot shadow, not a
+   glow, keeps it readable over bright sky and dark scrap alike. */
+#pickupPop {
+  position: fixed;
+  left: 50%;
+  top: 62%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  pointer-events: none;
+  z-index: 5;
+}
+#pickupPop .pop {
+  font: 700 1.35rem var(--hud-word);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: 2px 2px 0 var(--hud-soot), -1px -1px 0 var(--hud-soot), 1px -1px 0 var(--hud-soot), -1px 1px 0 var(--hud-soot);
+  animation: pickupRise var(--pop-seconds) ease-out forwards;
+}
+@keyframes pickupRise {
+  0% { opacity: 0; transform: translateY(8px) scale(0.85); }
+  12% { opacity: 1; transform: translateY(0) scale(1.08); }
+  22% { transform: translateY(0) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(var(--pop-rise)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #pickupPop .pop { animation-name: pickupFade; }
+  @keyframes pickupFade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+}

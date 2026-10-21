@@ -14,8 +14,7 @@
   "switchSeconds": 0.25,
   "maxPickups": 200,
   "colors": {
-    "grenade": "#5fbf3f",
-    "armor": "#7fb3ff"
+    "grenade": "#5fbf3f"
   },
   "drops": {
     "crate": {
