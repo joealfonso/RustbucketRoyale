@@ -333,6 +333,11 @@ body.titleScreen > :not(#menu, #game) { display: none !important; }
 :is(#menu, #hint) .mechCards button.on::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--hud-amber); transform-origin: left; }
 .mechCards strong { display: block; font: 700 1rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.04em; }
 .mechCards em { display: block; font: 400 0.8rem var(--hud-body); font-style: normal; opacity: 0.8; margin-bottom: 0.45rem; }
+.mechCards .power { margin: 0 0 0.5rem; font: 700 0.8rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; }
+.mechCards .power .key { margin-right: 0.35em; }
+/* #menu small sets its own size and colour, so these name the menu too. On the picked card the text turns soot. */
+:is(#menu, #hint) .mechCards .power small { display: block; margin-top: 0.2rem; font: 400 0.75rem/1.3 var(--hud-body); text-transform: none; letter-spacing: 0; color: var(--hud-text); opacity: 0.85; }
+:is(#menu, #hint) .mechCards button.on .power small { color: inherit; opacity: 1; }
 .mechCards .stats { display: grid; grid-template-columns: 3.2rem 1fr; gap: 0.2rem 0.4rem; align-items: center; font: 500 0.7rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.08em; }
 .mechCards .stats i { height: 0.35rem; background: rgba(0, 0, 0, 0.35); }
 .mechCards .stats b { display: block; height: 100%; background: currentColor; }
