@@ -1,7 +1,7 @@
 # Milestones
 
 Current code milestone: none in progress (13c done); 12c waiting for Joseph's laptop numbers (M10's friend test still open)
-Current visual milestone: V10 in progress (mechs filled toward the 15k budget)
+Current visual milestone: none in progress (V10 and S1 done)
 
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
@@ -176,3 +176,4 @@ Record each gate here: date, what was played, who played, what felt bad.
 - 2026-10-20: V10 built on Joseph's go, waiting for his playtest. Near levels: Ironclad 13,478, Stiletto 13,952, Cataclysm 13,752, Arbiter 13,656, Longshot 13,528 (were 8.0k to 9.3k). Round barrels, collars, drums, nozzle bells and joints; the Arbiter's dome smooth; the Ironclad's shield lipped with a steel ramming blade and its pods with real tubes; Cataclysm claw toes and a toothed traverse ring; Stiletto coil springs and hollow nozzle bells; Longshot round coil collars, a ported muzzle brake and sunk lenses. GPU +0.14 ms with five up close (M4); draw calls unchanged. Hit boxes: Longshot rifle box 48% wider (round collars), the only real balance change; Arbiter gun box +11% tall. The Arbiter's drone sway now carries the eye with the pod (it was left behind). Honest note: from 7 m the change is subtle; it shows most in the hangar and at 5 m. Shots in docs/style/v10/.
 - 2026-10-20: Mech fringing fixed with V10, waiting for the same playtest (Joseph: "make the mechs look cleaner. they still have odd fringing"). Mech outlines were the paint at about 62% brightness on screen, a pale 6 cm halo round white and teal parts; now 22% of the paint's brightness and 4 cm wide, so they read as ink lines. Mechs and the Titan only; world outlines unchanged. Values in data/look.json outline.mechDarken and mechWidthMeters.
 - 2026-10-20: Sound gate S1 built (Joseph: "the sounds need to be improved", guns and explosions first, from free packs), waiting for his ears. Autocannon (3 takes), scattergun (3), spike driver (2), Rail Shot, explosions (3) and the Titan's fall are recordings from two CC0 packs, layered and pitched for mech-sized guns; 13 files, about 250 kB. Loudness matched to the old sounds by measurement only: nobody has listened yet. Volumes in data/audio.json.
+- 2026-10-20: V10, the mech outline fix and sound gate S1 passed by Joseph's playtest ("both look good").

@@ -355,6 +355,13 @@ Motion sells the metal. Every gun now kicks on its own spring, a rattle for the 
 
 Medium and large maps now have a boss. Forty-five seconds in, a giant built from containers, cars and an excavator arm wakes up and goes for the nearest mech. Get close and it stomps you flat; stay far and it throws a car at you. It holds a grudge against whoever shot it last, so the best move is to lure it into someone else. It walks straight through anything in its way, and when it finally falls it spills a pile of the best loot.
 
+## 49. Cleaner mechs that sound like guns
+*Passed 2026-10-20. Commits `72ce1bc`, `a77e125`, `5becb1d`.*
+
+![The Stiletto-B up close with dark ink outlines and rounder nozzles, fins and springs](49-v10-cleaner-mechs.jpg)
+
+The mech budget went from 10,000 to 15,000 triangles after measuring that it costs almost nothing, and every mech spent it on rounder barrels, nozzles, domes and springs. A colour-maths slip had been giving every part a pale halo instead of an ink line; mechs now have crisp dark outlines. And the guns and explosions are real recordings now, free public-domain gunshots slowed and layered into mech-sized booms.
+
 ---
 
 *Next: whatever the playtests ask for. Ranked performance ideas are in docs/PERF.md.*
