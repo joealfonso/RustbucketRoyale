@@ -95,7 +95,7 @@ import { Backdrop } from "./backdrop/backdrop";
 import { parseBackdrop } from "./backdrop/layout";
 import { Ranges, parseRanges } from "./backdrop/ranges";
 import chunksJsonForDressing from "../../../data/chunks.json";
-import { createMechModel, kickMech, legsLimping, moveGunsAndSensors, recoilConfig, setCrawlLook, setMechDamage, setMechUpgrades, type MechModel } from "./mechModel";
+import { createMechModel, kickMech, legsLimping, moveGunsAndSensors, recoilConfig, setCrawlLook, setMechDamage, type MechModel } from "./mechModel";
 import { kickFor, kickIdFor } from "./recoil";
 import { AltFireFx, pinLookOf } from "./altFireFx";
 import { RivetView } from "./rivetView";
@@ -638,7 +638,6 @@ const accentFor = (id: number) => (pilotAccents.length > 0 ? pilotAccents[id % p
 const remoteLook = { toon, accentFor, body: palette.mech.body, kitFor, trim: palette.mech.trim };
 const remotes = new RemoteMechs(scene, netStats.interpolationBufferMs, netStats.maxViewDelayMs, netStats.snapshotEvery * STEP * 1000, zoneMaxHp);
 remotes.weaponColors = weaponColors;
-remotes.upgrades = upgradeSet.upgrades;
 remotes.look = remoteLook;
 remotes.ghostLook = abilityFxConfig.ghost;
 // A mech knocked out blows apart (deathFx.ts), pushed the way the killing blow went: from where its killer stood,
@@ -1644,7 +1643,6 @@ function frame(now: number): void {
   dropSprites.update(fxTime, rig.camera.position);
   hud.setLoadout(loadout, weaponSet.weapons, lootConfig.armorPlates, upgradeSet.upgrades);
   hud.setReplay(killReplay.playing, killReplay.progress);
-  setMechUpgrades(ownModel, loadout.upgrades, upgradeSet.upgrades);
   radar?.setRangeScale(upgradeScale(loadout, upgradeSet, "radarRange"));
   setMechGear(ownModel, weaponColors[loadout.slots[loadout.active]!] ?? weaponStats.color, loadout.armor);
   pickupView.update(performance.now(), frameTime);

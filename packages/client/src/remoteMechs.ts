@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { STEP, raycastMech, type OtherState, type ZoneHit, type ZoneSet } from "@rustbucket/shared";
-import { createMechModel, setMechDamage, setMechGear, setMechUpgrades, type MechModel } from "./mechModel";
-import type { UpgradeDef } from "@rustbucket/shared";
+import { createMechModel, setMechDamage, setMechGear, type MechModel } from "./mechModel";
 import type { Toon } from "./toonMaterial";
 import type { LoadedKit } from "./mechKit";
 import type { AbilityFxConfig } from "./abilityFx";
@@ -58,7 +57,6 @@ export class RemoteMechs {
 
   // The colour of each weapon by index, for drawing the gun in hand.
   weaponColors: string[] = [];
-  upgrades: UpgradeDef[] = [];
   // The toon look and colours for other mechs. Without it they are drawn as plain grey boxes.
   look: { toon: Toon; accentFor: (id: number) => string; body: string; kitFor: (mech: number) => LoadedKit | null; trim: string } | null = null;
   // How your own decoys look to you. Without it they are drawn like anyone else.
@@ -276,8 +274,7 @@ export class RemoteMechs {
         if (o.dead && !wasDead) this.onKnockedOut?.(o.id, remote.model, firstSeen);
       }
       setMechGear(remote.model, this.weaponColors[o.weapon] ?? "#d9731a", o.armor);
-      setMechUpgrades(remote.model, o.upgrades, this.upgrades);
-      this.ghostIfOwn(o.id, remote); // after the upgrades, so their parts go see-through too
+      this.ghostIfOwn(o.id, remote);
       remote.samples.push({ time: serverMs, x: o.x, y: o.y, z: o.z, yaw: o.yaw });
       if (remote.samples.length > MAX_SAMPLES) remote.samples.shift();
     }

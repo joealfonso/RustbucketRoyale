@@ -1,5 +1,6 @@
 import { ZONE_BROKEN, ZONE_DAMAGED, zoneState, type Loadout, type MatchProgress, type RingNow, type RosterMech, type UpgradeDef, type WeaponStats, type ZoneSet } from "@rustbucket/shared";
 import { percentLeft } from "./damageDiagram";
+import { upgradeEffectText } from "./upgradeText";
 import { countUp, cssSeconds, replay } from "./uiMotion";
 
 export interface RoomView {
@@ -221,8 +222,14 @@ export class Hud {
         const name = l.slots[i]! >= 0 ? weapons[l.slots[i]!]?.name ?? "?" : "empty";
         return `<div class="${i === l.active ? "on" : ""}"><span class="key">${i + 1}</span>${name}</div>`;
       };
-      const fitted = l.upgrades.filter((u) => u >= 0).map((u) => `<span class="swatch" style="background:${upgrades[u]?.color ?? "#fff"}"></span>${upgrades[u]?.name ?? "?"}`);
-      const html = `${slot(0)}${slot(1)}<div class="on"><span class="key">G</span>Grenades <span class="num">x${l.grenades}</span></div>${fitted.length ? `<div class="upgrades">${fitted.join("")}</div>` : ""}`;
+      // Each upgrade slot, filled or not, with what the upgrade does, so a pickup's worth is clear without the mech
+      // wearing it.
+      const upgradeSlot = (u: number) => {
+        const def = u >= 0 ? upgrades[u] : undefined;
+        if (!def) return `<div class="upgrade empty"><span class="swatch"></span>Empty slot</div>`;
+        return `<div class="upgrade"><span class="swatch" style="background:${def.color}"></span>${def.name}<small>${upgradeEffectText(def)}</small></div>`;
+      };
+      const html = `${slot(0)}${slot(1)}<div class="on"><span class="key">G</span>Grenades <span class="num">x${l.grenades}</span></div><div class="upgrades"><span class="label">Upgrades</span>${l.upgrades.map(upgradeSlot).join("")}</div>`;
       this.loadoutBox.innerHTML = html;
       this.loadoutBox.children[l.active]?.after(this.altBox);
     }

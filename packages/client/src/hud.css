@@ -129,7 +129,13 @@ canvas { display: block; width: 100%; height: 100%; }
 #loadout > div.on { color: var(--hud-amber); }
 #loadout > div.on .key { background: var(--hud-amber); color: var(--hud-soot); border-color: var(--hud-amber); }
 #loadout .swatch { display: inline-block; width: 0.55em; height: 0.55em; margin: 0 0.3em 0 0.5em; vertical-align: 0.05em; }
-#loadout .upgrades { color: var(--hud-amber); }
+/* Upgrades: every slot shows, filled with a name and what it does, or empty, so it is clear there is room for more. */
+#loadout .upgrades { margin-top: 0.3rem; padding-top: 0.3rem; border-top: 1px solid var(--hud-amber-dim); color: var(--hud-amber); }
+#loadout .upgrades > .label { display: block; font-size: 0.7rem; color: var(--hud-amber-dim); }
+#loadout .upgrade { line-height: 1.35; }
+#loadout .upgrade .swatch { margin-left: 0; border: 1px solid var(--hud-amber-dim); }
+#loadout .upgrade small { display: block; padding-left: 0.85em; font: 400 0.75rem var(--hud-body); text-transform: none; letter-spacing: 0; color: var(--hud-text); opacity: 0.85; }
+#loadout .upgrade.empty { color: var(--hud-amber-dim); }
 /* The right-click under the gun in hand: a heat bar, a charge ring or a ready dot. Overheat is red, striped and says
    so; a full charge kicks and says PIERCE, so neither rests on colour alone. */
 #altFire { display: none; align-items: center; gap: 0.45rem; padding-left: 1.6rem; font: 500 0.78rem/1.5 var(--hud-word); color: var(--hud-amber); }
