@@ -345,20 +345,22 @@ function build(lod: Lod): Part[] {
   // the better they judge it, which is why the bar is as wide as the shoulders.
   const headRing = (z: number, y: number, w: number, h: number) => ring([0, y, z], X, Y, w, h, 0.06);
   const head = loft([headRing(0.16, 3.62, 0.28, 0.24), headRing(-0.04, 3.64, 0.34, 0.3), headRing(-0.24, 3.61, 0.28, 0.22)]);
-  // The T it makes is what tells the Longshot at 150 m, so the bar runs out over the pauldrons, a hammerhead wider
-  // than any other mech's head, and its lens housings are big blunt blocks rather than tips.
-  const barY = 3.72, barZ = -0.02, barEnd = 0.8;
-  const lensX = barEnd - 0.1, lensFront = barZ - 0.04 - 0.16;
+  // The T it makes is what tells the Longshot at 150 m, so the bar runs out to the pauldrons, a hammerhead wider
+  // than any other mech's head. The bar is deepest at the clamp and thins toward the ends, and the lens housings are
+  // only a little taller than it and run forward rather than up: with a thin bar between two tall knobs the head read
+  // as a dog's bone from behind, which is how a player sees it most (gate V13).
+  const barY = 3.72, barZ = -0.02, barEnd = 0.74;
+  const lensX = barEnd - 0.1, lensR = 0.09, lensFront = barZ - 0.06 - 0.19;
   const rangeBar = merge(
-    bar([-barEnd + 0.1, barY, barZ], [barEnd - 0.1, barY, barZ], Z, [0.2, 0.15], [0.2, 0.15], 0.025, lod === 2 ? undefined : 0.03),
-    // The end housings, where the lenses sit, deeper and taller than the bar.
-    ...[1, -1].map((s) => block([s * lensX, barY, barZ - 0.04], [0.2, 0.27, 0.32], 0.03)),
+    run([[[-lensX, barY, barZ], [0.2, 0.13]], [[0, barY, barZ], [0.24, 0.2]], [[lensX, barY, barZ], [0.2, 0.13]]], Z, 0.025, lod === 2 ? undefined : 0.03),
+    // The end housings, where the lenses sit, deeper than the bar and reaching forward.
+    ...[1, -1].map((s) => block([s * lensX, barY, barZ - 0.06], [0.2, 0.21, 0.38], 0.03)),
   );
   // Each lens sits deep in a barrel standing out of its housing, so the red eye shows only from in front and the
   // barrel's lip throws a ring of shade round it. Past 25 m the barrel is solid, with the lens on its face.
   const lensBarrel = (s: number) => lod === 0
-    ? lathe([s * lensX, barY, lensFront], [s * lensX, barY, lensFront - 1], [[0, 0.104], [0.08, 0.104], [0.1, 0.09], [0.1, 0.072], [0.045, 0.072]], 18)
-    : mid(cyl([s * lensX, barY, lensFront], [s * lensX, barY, lensFront - 0.1], 0.104, 0.104, [18, 6, 5]));
+    ? lathe([s * lensX, barY, lensFront], [s * lensX, barY, lensFront - 1], [[0, lensR], [0.08, lensR], [0.1, lensR - 0.014], [0.1, lensR - 0.03], [0.045, lensR - 0.03]], 18)
+    : mid(cyl([s * lensX, barY, lensFront], [s * lensX, barY, lensFront - 0.1], lensR, lensR, [18, 6, 5]));
   const lensAt = lod === 0 ? lensFront - 0.046 : lod === 1 ? lensFront - 0.101 : lensFront - 0.05;
   // The clamp that holds the bar on the crown, a hood over the main optic and its long lens barrel.
   const headFrame = merge(
@@ -372,14 +374,16 @@ function build(lod: Lod): Part[] {
   const rangeCable = mid(cable([[0.1, barY - 0.02, barZ + 0.11], [0.13, 3.5, 0.15], [0.22, 3.36, 0.13]], 0.03));
   const headGlow = merge(
     cyl([0, 3.6, -0.44], [0, 3.6, -0.455], 0.075, 0.075, [16, 6, 5]),
-    ...[1, -1].map((s) => cyl([s * lensX, barY, lensAt], [s * lensX, barY, lensAt - 0.006], 0.066, 0.066, [16, 6, 5])),
+    ...[1, -1].map((s) => cyl([s * lensX, barY, lensAt], [s * lensX, barY, lensAt - 0.006], lensR - 0.034, lensR - 0.034, [16, 6, 5])),
   );
 
   // ---- Pack: the capacitor bank that charges the rail, a narrow box between the shoulder blades with a drum of cells
   // on each side, a ballast block under it that balances the long barrel out front, and two jet nozzles.
+  // The box is as wide as the drums' middles, so they sink into it to half their width and the back reads as one
+  // violet mass with two rounded grey edges, not two grey columns with a dark gap between (gate V13).
   const pack = merge(
-    block([0, 2.8, 0.42], [0.46, 0.66, 0.32], 0.05),
-    mid(block([0, 3.15, 0.4], [0.36, 0.06, 0.26], 0.02)), // the lid over the cells' terminals
+    block([0, 2.8, 0.44], [0.6, 0.66, 0.36], 0.05), // its back face just behind the drums', so they show only as edges
+    mid(block([0, 3.15, 0.4], [0.5, 0.06, 0.26], 0.02)), // the lid over the cells' terminals
   );
   const ballast = block(BALLAST_AT, [0.38, 0.24, 0.26], 0.04);
   // Two webbing straps hang it from the pack, so it reads as hung weight, not part of the body.
@@ -397,15 +401,16 @@ function build(lod: Lod): Part[] {
     : cyl([x, 2.48, 0.44], [x, 3.18, 0.44], 0.145, 0.145, [16, 8, 7]);
   // A jet nozzle: the gimbal collar, a narrow throat and a bell that flares to the exit, hollow up close, so you look
   // up into it from behind and below. Its exit stays at 1.88 m, just over where the flame starts (data/thrusterFx.json
-  // nozzles, the default pair). Past 25 m a solid cone.
+  // nozzles, the default pair). Past 25 m a solid cone. Slim, so from behind they hang beside the hips rather than
+  // over them like a skirt.
   const nozzle = (x: number) => lod === 0
     ? lathe([x, 2.4, 0.56], [x, 1.88, 0.56], [
-      [0, 0.1], [0.012, 0.117], [0.068, 0.117], [0.08, 0.094], [0.14, 0.094], [0.3, 0.112], [0.43, 0.138], [0.52, 0.153],
-      [0.52, 0.128], [0.4, 0.114], [0.27, 0.088],
+      [0, 0.09], [0.012, 0.105], [0.068, 0.105], [0.08, 0.082], [0.14, 0.082], [0.3, 0.096], [0.43, 0.115], [0.52, 0.127],
+      [0.52, 0.104], [0.4, 0.094], [0.27, 0.074],
     ], 16)
     : merge(
-      cyl([x, 2.34, 0.56], [x, 1.88, 0.56], 0.09, 0.15, 14, 0.02),
-      mid(cyl([x, 2.4, 0.56], [x, 2.32, 0.56], 0.115, 0.115, 10)), // the gimbal collar
+      cyl([x, 2.34, 0.56], [x, 1.88, 0.56], 0.078, 0.125, 14, 0.02),
+      mid(cyl([x, 2.4, 0.56], [x, 2.32, 0.56], 0.103, 0.103, 10)), // the gimbal collar
     );
   const jets = merge(
     nozzle(0.4), nozzle(-0.4),

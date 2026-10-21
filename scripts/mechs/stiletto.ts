@@ -266,16 +266,13 @@ const shinBack = scale(perp(norm(sub(HOCK, KNEE)), [0, 0, -1]), -1);
 const strutOut = (t: number) => add([0.15 - t * 0.03, 0, 0], scale(shinBack, 0.04));
 const KNEE_TOP = add(lerp(THIGH_TOP, KNEE, 0.12), scale(thighFront, 0.285)), KNEE_ROD = add(lerp(THIGH_TOP, KNEE, 0.86), scale(thighFront, 0.215));
 const HOCK_TOP = add(lerp(KNEE, HOCK, 0.14), strutOut(0.14)), HOCK_ROD = add(lerp(KNEE, HOCK, 0.88), strutOut(0.88));
-// The fuel line hangs between the tank and the nozzle bar: it swings about the line between its two fittings.
-const FUEL_LINE: V3[] = [[-0.37, 3.02, 0.68], [-0.39, 2.62, 0.72], [-0.27, 2.47, 0.74]];
+// The fuel line hangs between the tank and the nozzle cowl: it swings about the line between its two fittings.
+const FUEL_LINE: V3[] = [[-0.37, 3.02, 0.68], [-0.41, 2.8, 0.73], [-0.34, 2.58, 0.74]];
 
 type Zone = "legs" | "arms" | "torso";
 // `noHit`: spans both arms, so one hit box round it would stretch across the chest, or sits inside other parts'
 // boxes. `finish`: left out for painted armour; "metal" for bare barrels, pistons and joints, "rubber" for hoses.
 interface Part { name: string; zone: Zone; paint: string; finish?: "metal" | "rubber"; glow?: true; rusts?: false; noHit?: true; mesh: MeshData }
-
-// Where a point on a part ends up after the part is turned, for fixing things to a turned part.
-const turnPoint = (p: V3, angles: V3, pivot: V3): V3 => turn({ positions: [...p], normals: [0, 1, 0], indices: [] }, angles, pivot).positions as V3;
 
 function build(lod: Lod): Part[] {
   const { near, mid, run, bar, cyl, slab, block, hose, ram, tendons, lathe, coil } = makers(lod);
@@ -317,6 +314,9 @@ function build(lod: Lod): Part[] {
   // of the thigh pushes the knee cap. Hock: the sprung joint, a damper with a coil spring on the outside of the shin
   // that soaks up landings. Ball: a plain pin. Each drum's outer face carries an orange power core (Leg_Conduits).
   const hipDrum = cyl([0.28, HIP[1], HIP[2]], [0.68, HIP[1], HIP[2]], 0.19, 0.19, 10, 0.03);
+  // A light fairing over the top and back of the drum, riding the thigh: from behind the tops of the legs were two dark
+  // drums under a dark pelvis. The drum's outer face and its power core stay bare.
+  const hipFairing = block([0.45, 1.63, 0.1], [0.3, 0.24, 0.3], 0.03);
   // The pistons: bare metal, so they get the hard highlight that says "machine" from across the field.
   // Each rod runs deep into its cylinder, out of sight, so it never pulls out as the joint bends (gate V9b: the knee
   // piston's rod is pinned to the knee cap on the shin, the damper's to the foot, and the game slides them).
@@ -412,6 +412,10 @@ function build(lod: Lod): Part[] {
   const flankPlate = turn(block(flankAt, [0.07, 0.26, 0.42], 0.022), [0, 0, -0.16], flankAt);
   // Armour over the pelvis actuator, hung from the belt.
   const hipGuard = bar([0, 1.87, -0.25], [0, 1.6, -0.28], X, [0.3, 0.08], [0.22, 0.07], 0.025);
+  // And one behind, swept back and down like a raptor's tail stub: from behind, where a player sees their own mech, it
+  // covers the dark pelvis block with a light plate, and from the side it balances the beak. Short, so it stays clear
+  // of the jet nozzles' blast and inside the torso's hit box.
+  const tailGuard = bar([0, 1.9, 0.2], [0, 1.6, 0.38], X, [0.44, 0.09], [0.26, 0.07], 0.025, 0.03);
   // Two struts behind the spine hold the chest upright against recoil and hard landings.
   const waistStrut = (x: number) => near(
     cyl([x, 1.84, 0.27], [x, 2.06, 0.27], 0.042, 0.042, 8, 0.01),
@@ -473,6 +477,9 @@ function build(lod: Lod): Part[] {
   const pack = merge(
     block([0, 2.8, 0.56], [0.7, 0.8, 0.42], 0.07),
     mid(block([0, 3.24, 0.5], [0.44, 0.1, 0.3], 0.03)), // intake hump
+    // A white cowl round the nozzles' tops that carries them, where a bare bar used to: from behind the bells now hang
+    // out of a light housing instead of reading as one dark mass under the pack.
+    block([0, 2.47, 0.62], [0.86, 0.2, 0.5], 0.04),
   );
   // The stabilizer fins, the Stiletto's mark at 150 m. Canted out over the shoulders and toed out at the back, so
   // from in front they open into a broad V instead of two edge-on slivers, and thick enough to stay solid there.
@@ -481,9 +488,7 @@ function build(lod: Lod): Part[] {
   const packFinR = turn(sweepFin([[[0.28, 3.0, 0.3], [0.28, 3.0, 0.86], 0.16], [[0.28, 4.22, 1.22], [0.28, 4.14, 1.38], 0.09]], lod === 0 ? FOIL_NEAR : FOIL_FAR), finTurn, finPivot);
   // The fin's root block, where it is clamped to the pack.
   const finRootR = turn(block([0.28, 3.08, 0.6], [0.2, 0.14, 0.48], 0.02), finTurn, finPivot);
-  // A ram from the pack's top to each fin's inner face cants the fin to steer a jump.
-  const finRamR = mid(ram([0.12, 3.2, 0.8], turnPoint([0.215, 3.42, 0.8], finTurn, finPivot), 0.04, 0.5));
-  // The fuel line down the pack's bare left side, from the tank to the nozzle bar: rubber, so it flexes with the
+  // The fuel line down the pack's bare left side, from the tank to the nozzle cowl: rubber, so it flexes with the
   // gimbals.
   const fuelLine = mid(hose(FUEL_LINE, 0.04));
   // A hatch over the fuel cell on the pack's back, opposite the blue plate.
@@ -540,13 +545,11 @@ function build(lod: Lod): Part[] {
     : cyl([0.22, 2.045, 0.66], [0.22, 2.025, 0.66], 0.17, 0.17, 12), nozzleTilt, nozzleTop);
   const jets = merge(
     nozzleR, mirrorX(nozzleR),
-    block([0, 2.48, 0.66], [0.52, 0.14, 0.26], 0.03), // the bar that carries both nozzles
     // Gimbal rams that steer each nozzle: the vector in vector thrust.
     near(cyl([0.36, 2.5, 0.6], [0.36, 2.3, 0.74], 0.028, 0.028, 6), cyl([-0.36, 2.5, 0.6], [-0.36, 2.3, 0.74], 0.028, 0.028, 6)),
     // A vent on the pack's back, where the fuel pump sheds its heat.
-    mid(block([0.14, 2.62, 0.77], [0.28, 0.14, 0.04], 0.01)),
+    mid(block([0.14, 2.67, 0.77], [0.28, 0.14, 0.04], 0.01)),
     near(block([0, 3.29, 0.5], [0.34, 0.02, 0.2], 0)), // the dark intake mouth
-    finRamR, mirrorX(finRamR),
   );
 
   // ---- Arms. Right: a slim arm with the blade emitter on the wrist. Left: the same shoulder with a burst carbine
@@ -643,7 +646,7 @@ function build(lod: Lod): Part[] {
   );
 
   return [
-    { name: "Torso", zone: "torso", paint: "white", mesh: merge(chestLower, chestUpper, collarR, hipGuard) },
+    { name: "Torso", zone: "torso", paint: "white", mesh: merge(chestLower, chestUpper, collarR, hipGuard, tailGuard) },
     { name: "Torso_Camo", zone: "torso", paint: "blue", mesh: merge(keel, chestPlate, flankPlate, mirrorX(collarR)) },
     { name: "Frame", zone: "torso", paint: "frame", finish: "metal", rusts: false, mesh: merge(torsoFrame, podR, mirrorX(podR), finClamp) },
     { name: "Sensor", zone: "torso", paint: "white", mesh: head },
@@ -654,8 +657,8 @@ function build(lod: Lod): Part[] {
     { name: "Jets", zone: "torso", paint: "frame", finish: "metal", rusts: false, mesh: jets },
     { name: "Pack_Hose", zone: "torso", paint: "frame", finish: "rubber", rusts: false, noHit: true, mesh: fuelLine },
     { name: "Jet_Glow", zone: "torso", paint: "conduitGlow", glow: true, mesh: merge(throatR, mirrorX(throatR)) },
-    { name: "Leg_L", zone: "legs", paint: "white", mesh: mirrorX(merge(legShellR, thighPlate)) },
-    { name: "Leg_R", zone: "legs", paint: "white", mesh: merge(legShellR, kneeCap, hockGuard) },
+    { name: "Leg_L", zone: "legs", paint: "white", mesh: mirrorX(merge(legShellR, thighPlate, hipFairing)) },
+    { name: "Leg_R", zone: "legs", paint: "white", mesh: merge(legShellR, kneeCap, hockGuard, hipFairing) },
     { name: "Leg_Camo", zone: "legs", paint: "blue", mesh: merge(thighPlate, shinPlate, mirrorX(kneeCap), mirrorX(footGuard), mirrorX(hockGuard)) },
     { name: "Leg_Frame", zone: "legs", paint: "frame", finish: "metal", rusts: false, mesh: merge(legFrameR, mirrorX(legFrameR)) },
     { name: "Leg_Pistons", zone: "legs", paint: "frame", finish: "metal", rusts: false, noHit: true, mesh: merge(legPistonsR, mirrorX(legPistonsR)) },

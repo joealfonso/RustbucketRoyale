@@ -43,12 +43,12 @@ A hulking four legged platform that trades mobility for overwhelming firepower.
 ## 4. Electronic warfare / command class: "Arbiter" (tactical support)
 Slender and asymmetrical, built for battlefield control and electronic warfare.
 
-- **Head:** an oversized, bulbous central radome "head" taken up by a smooth, reflective blue sensor dome. It holds the electronic warfare and communication gear.
+- **Head:** a compact round radome, about 0.85 m across (half its old size since gate V13, on Joseph's call), sitting low in a collar on a white gorget, with a short comms mast beside it on the left. A smooth, reflective blue sensor dome that holds the electronic warfare and communication gear.
 - **Torso and armor:** an asymmetrical, refined chassis with polished white plating and teal energy accents. Sleek and clean, made for stealth and a low radar signature. Serial number **04** on the main body.
 - **Drones:** the defining feature. Four tethered utility drones orbit the chassis on jointed pylons: small, glowing teal and white sensor pods that project holographic decoys and give out repair beams.
 - **Weapons:** minimal: light personal-defense submachine guns in the wrists, for emergencies only.
 - **Legs:** slender digitigrade legs with magnetic locking feet, for grip on rooftops or ship decks.
-- **Silhouette at 150 m:** the big round head and the ring of drones.
+- **Silhouette at 150 m:** the ring of four drones round a small round head and a tall aerial.
 - **Values (gate V9):** white armour is the light value, the teal trim a light mid a step above the ground, and the dark slate frame, the rubber hoses and a deep cobalt glossy dome the dark, a step below it. So the dome reads as a dark round head on a light body against moss, dirt or rust. The serial **04** is in the dark frame colour on the white chest plate.
 
 ## 5. Marksman class: "Longshot" (sniper)

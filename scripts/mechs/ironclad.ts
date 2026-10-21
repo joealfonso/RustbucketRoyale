@@ -322,6 +322,9 @@ function build(lv: Level): Record<string, MeshData> {
   // the cheapest that is still there.
   const line = (points: V3[], r: number) => (far ? rod(points[0]!, points[points.length - 1]!, r, 3) : hose(points, r, near ? 10 : 4));
 
+  // The bottom edge of each slat in the jet housings' back vents. Three, not more: the slots between them must stay
+  // wider than the mech outline (4 cm) or it draws over them.
+  const ventSlats = [2.12, 2.27, 2.42];
   // ---- Torso: a core hull wrapped in plates, each its own block so the seams between them show. Two big upper
   // armour blocks at the corners hold the missile pods; the head sits between them, behind a chin guard and under a
   // brow hood, so only a slit shows.
@@ -340,12 +343,27 @@ function build(lv: Level): Record<string, MeshData> {
     block(cut(3.1, 3.26, -0.72, 0.04, [0.06, 0.04, 0, 0]), "x", -0.38, 0.38, bev(0.02)),
     pair(block(cut(2.08, 2.6, -0.46, 0.42, far ? 0 : 0.04), "x", 0.79, 0.93, bev(0.02))), // flank plates
     pair(slab([0.33, 2.55, -0.63], [0.95, 3.1, 0.52], bev(0.08))), // upper armour blocks
-    pair(slab([0.36, 3.0, 0.08], [0.94, 3.3, 0.5], bev(0.06))), // rear cowl behind each pod
+    // Rear cowl behind each pod. Gate V13 sloped its top back edge, so from over the shoulder the top of the back
+    // steps down in layers toward the jets instead of ending in two crates.
+    pair(block(cut(3.0, 3.3, 0.08, 0.5, [0, 0, 0.14, 0]), "x", 0.36, 0.94, bev(0.05))),
+    // A cowl over the back of the head, sloped the same way, between the two upper armour blocks. Gate V13: without
+    // it the head's dark back showed between them as a hole in the middle of the view players see most.
+    block(cut(2.84, 3.12, 0.1, 0.5, [0, 0, 0.14, 0]), "x", -0.32, 0.32, bev(0.03)),
     // Jump jet housings on the back, deep and sloped off at the top: the hump behind the shoulders in the side view.
     pair(block(cut(1.9, 2.86, 0.48, 0.96, [0, 0, 0.2, 0.06]), "x", 0.18, 0.64, bev(0.05))),
     notFar(() => block(cut(-0.17, 0.17, 2.0, 2.6, 0.04), "z", 0.46, 0.56, bev(0.02))), // reactor access hatch between the jets
-    // A second plate over the back of each jet housing, the face a shot from behind meets first.
-    notFar(() => pair(block(cut(0.24, 0.58, 2.0, 2.58, [0, 0, 0.05, 0.05]), "z", 0.95, 1.0, bev(0.015)))),
+    // A second plate over the back of each jet housing, the face a shot from behind meets first. Gate V13: near, it is
+    // a frame round a louvred vent (dark slots, Frame below, between sloped slats), so the back reads as jets rather
+    // than two plain slabs; past 25 m it stays one plate of the same outline.
+    near
+      ? pair(merge(
+        slab([0.24, 2.0, 0.95], [0.58, 2.06, 1.0], 0.012), // bottom rail
+        slab([0.24, 2.52, 0.95], [0.58, 2.58, 1.0], 0.012), // top rail
+        ...[[0.24, 0.29], [0.53, 0.58]].map(([x0, x1]) => slab([x0!, 2.06, 0.95], [x1!, 2.52, 1.0], 0.01)), // side rails
+        // Slats sloping down and back, the way a vent sheds rain and hides its slot from behind and above.
+        ...ventSlats.map((y) => block([[y, 0.955], [y + 0.06, 0.955], [y + 0.03, 1.0], [y - 0.03, 1.0]], "x", 0.29, 0.53, 0.008)),
+      ))
+      : notFar(() => pair(block(cut(0.24, 0.58, 2.0, 2.58, [0, 0, 0.05, 0.05]), "z", 0.95, 1.0))),
     // A skirt hung from the belly over the waist, between the legs, where the hip bar would otherwise show.
     notFar(() => block(cut(-0.26, 0.26, 1.5, 1.76, [0.08, 0.08, 0, 0]), "z", -0.5, -0.42, bev(0.02))),
   );
@@ -406,6 +424,7 @@ function build(lv: Level): Record<string, MeshData> {
       ? pair(lathe([nozzle[0], 1.92, nozzle[2]], [nozzle[0], 1.71, nozzle[2]], [[0, 0.15], [0.18, 0.195], [0.18, 0.215], [0.21, 0.215], [0.21, 0.17], [0.07, 0.125]], 16))
       : pair(cylinder(nozzle, 0.2, 0.2, "y", sides(10), 0.15)),
     only(() => pair(cylinder([nozzle[0], 1.91, nozzle[2]], 0.18, 0.04, "y", 20))), // nozzle collars, under the housings
+    only(() => pair(slab([0.29, 2.06, 0.955], [0.53, 2.52, 0.968]))), // the jet vents' dark slots, behind their slats
   );
 
   // ---- Arms. Each has a big square pauldron with its top edges sloped off, a shoulder wall on its outer face that
@@ -419,11 +438,14 @@ function build(lv: Level): Record<string, MeshData> {
   const wallR = block(cut(1.74, 1.9, 2.4, 3.66, [0, 0.04, 0.04, 0.1]), "z", -0.52, 0.46, bev(0.03));
   const upperArmR = slab([1.02, 2.26, -0.22], [1.42, 2.62, 0.22], bev(0.05));
 
-  // Hazard stripes on each shoulder wall's outer face and the pauldron's top, the faces seen from the side and behind.
+  // Hazard stripes on each shoulder wall's outer face and the pauldron's top, the faces seen from the side and above.
   // Wide stripes: past 50 m a narrow one is a smear of khaki rather than yellow and black.
   const stripeWidth = [0.13, 0.17, 0.26][lv]!;
   const outerStripes = hazardPanel("x", 1.9, 1, [2.52, 3.56], [-0.42, 0.36], stripeWidth);
   const topStripes = hazardPanel("y", 3.26, 1, [-0.34, 0.3], [0.96, 1.68], stripeWidth);
+  // Gate V13: and on the pauldron's back face. Players see their own mech from behind and above, where the back was
+  // all dark hull; the stripes now frame the jet pack from that side too, and say Ironclad from behind at 50 m.
+  const backStripes = hazardPanel("z", 0.46, 1, [1.0, 1.66], [2.66, 3.1], stripeWidth);
 
   // Right arm: the forearm is one long housing that the autocannon comes out of, a top plate over the gun's motor
   // and the ammo drum on the outside.
@@ -698,8 +720,8 @@ function build(lv: Level): Record<string, MeshData> {
     Pile_Driver: pileDriver,
     Arm_Frame: armFrame,
     Arm_Hoses: armHoses,
-    Shoulder_Stripes: pair(merge(outerStripes.yellow, topStripes.yellow)),
-    Shoulder_Stripes_Black: pair(merge(outerStripes.black, topStripes.black)),
+    Shoulder_Stripes: pair(merge(outerStripes.yellow, topStripes.yellow, backStripes.yellow)),
+    Shoulder_Stripes_Black: pair(merge(outerStripes.black, topStripes.black, backStripes.black)),
     Leg_R: legR,
     Leg_L: mirrorX(legR),
     Feet: pair(footR),
@@ -729,7 +751,7 @@ for (const name of Object.keys(levels[0]!)) {
 }
 parts.push(
   { name: "Mount_Gun", translation: GUN },
-  { name: "Torso_Fx", translation: [0, 3.0, 0.25] },
+  { name: "Torso_Fx", translation: [0, 3.1, 0.42] },
   { name: "Arm_R_Fx", translation: [1.2, 2.66, -0.45] },
   { name: "Leg_L_Fx", translation: [-0.82, 1.1, 0.05] },
   ...bothLegs(HIP, KNEE, ANKLE),

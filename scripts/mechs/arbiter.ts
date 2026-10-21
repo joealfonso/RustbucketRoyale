@@ -315,9 +315,10 @@ const legPoint = (a: V3, b: V3, front: V3) => (t: number, out = 0) => add(lerp(a
 const thighRam: [V3, V3] = [add(legPoint(hip, knee, thighFront)(0.36), [0.19, 0, 0]), add(legPoint(hip, knee, thighFront)(0.92), [0.18, 0, 0])];
 const calfRam: [V3, V3] = [legPoint(knee, hock, shinFront)(0.14, -0.17), legPoint(knee, hock, shinFront)(0.9, -0.14)];
 
-// The radome: far bigger than a head needs to be, sitting low in a collar. It is the silhouette.
-const domeCentre: V3 = [0, 3.72, 0];
-const domeRadii: V3 = [0.76, 0.68, 0.76];
+// The radome: a small round sensor head sat low and tight in its collar on the yoke (gate V13, Joseph: "change the head
+// for the arbiter to something smaller"; it was 1.52 m across). The ring of drones round it is the silhouette now.
+const domeCentre: V3 = [0, 3.52, 0];
+const domeRadii: V3 = [0.42, 0.38, 0.42];
 // A point on the radome's skin, `out` metres proud of it, `round` degrees from straight ahead toward +x, at a latitude.
 const onDome = (round: number, lat: number, out = 0): V3 => [
   Math.sin(round * deg) * Math.cos(lat * deg) * (domeRadii[0] + out),
@@ -326,12 +327,14 @@ const onDome = (round: number, lat: number, out = 0): V3 => [
 ];
 // The sensor window looks out of the front of the dome above the ring, tilted up to its surface there.
 const windowLat = 24;
-const lensXs = [-0.14, 0, 0.14];
+const lensXs = [-0.085, 0, 0.085];
 const windowTilt = Math.atan2(Math.sin(windowLat * deg) / domeRadii[1], Math.cos(windowLat * deg) / domeRadii[2]);
 // Comms mast on the left shoulder, behind the dome, on a bracket off the yoke. The asymmetry has a job: the mast
 // relays the drones, and it sits on the side away from the gun so it stays out of the line of fire. It stands clear
-// of the dome's rim and well above its top, so the two shapes never merge into one at range.
-const mastX = -0.8, mastZ = 0.5;
+// of the dome's rim and well above its top, so the two shapes never merge into one at range. With the smaller head
+// (gate V13) it stands closer in and shorter, so it reads as the head's aerial rather than a pole beside the mech.
+const mastX = -0.68, mastZ = 0.46;
+const mastTop = 4.42;
 // The chest plate carrying the serial number (data/mechKits.json serials: "04" at x 0.12, y 2.5 from the front). Its
 // face stays flat and clear of bolts over the whole number.
 const chestPivot: V3 = [0.12, 2.54, -0.33];
@@ -443,6 +446,9 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
     onChest(chestBox),
     slab([[-0.56, 2.9], [0.56, 2.9], [0.56, 3.05], [0.38, 3.16], [-0.38, 3.16], [-0.56, 3.05]], "z", -0.22, 0.3, c(0.05)), // shoulder yoke
     box([0, 1.55, -0.2], [0.3, 0.2, 0.06], c(0.02)), // guard over the front of the hip drive
+    // A gorget rising off the back of the yoke behind the collar (gate V13): it seats the smaller head on the body, so
+    // seen from behind, where players mostly see their own mech, the head sits on white armour rather than a neck.
+    slab([[2.95, 0.3], [3.36, 0.4], [3.36, 0.47], [2.95, 0.54]], "x", -0.3, 0.3, c(0.035)),
     // The lip round the intake under the chest, standing proud of its dark grille so the grille reads as sunk in.
     nearOnly(() => merge(
       ...[1.952, 2.088].map((y) => box([0, y, -0.29], [0.3, 0.025, 0.04])),
@@ -464,13 +470,14 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
   // The radome's data feed, two hoses from the top of the electronics pack up behind the yoke into the collar, and
   // the mast's, across the back of the pack to the mast foot. Thick enough to show from behind at mid range.
   const torsoHoses = notFar(() => merge(
-    ...[0.03, 0.15].map((x) => hoseRun([[x, 2.84, 0.5], [x, 3.06, 0.42], [x - 0.02, 3.22, 0.35]], 0.038, [8, 5, 4])),
+    ...[0.03, 0.15].map((x) => hoseRun([[x, 2.8, 0.5], [x, 2.9, 0.52], [x, 3.0, 0.48]], 0.038, [8, 5, 4])), // up into the gorget
     hoseRun([[-0.22, 2.84, 0.53], [-0.48, 3.0, 0.55], [mastX + 0.06, 3.16, mastZ + 0.07]], 0.034, [8, 5, 4]),
   ));
   const torsoTrim = merge(
     box([0.425, 2.62, 0], [0.07, 0.42, 0.36], c(0.025)), // flank panels
     box([-0.395, 2.62, 0], [0.07, 0.42, 0.36], c(0.025)),
-    box([0, 2.66, 0.565], [0.48, 0.34, 0.06], c(0.02)), // pack cover
+    // Most of the back of the pack is covered, so from behind the body reads as two clean light plates, not dark clutter.
+    box([0, 2.52, 0.565], [0.5, 0.56, 0.06], c(0.02)), // pack cover
     notFar(() => box([0, 3.03, -0.235], [0.76, 0.08, 0.04], c(0.015))), // livery stripe on the yoke
   );
   const torsoGlow = merge(
@@ -498,40 +505,40 @@ function build(lod: 0 | 1 | 2): Record<string, MeshData> {
   const windowAt = onDome(0, windowLat, -0.02);
   const onWindow = (m: MeshData) => turn(m, [windowTilt, 0, 0], windowAt);
   const sensorRing = merge(
-    drum(domeCentre, pick(0.8, 0.8, 0.79), pick(0.065, 0.065, 0.09), "y", [36, 14, 8]), // the far level has no frame ring round it
+    drum(domeCentre, pick(0.455, 0.455, 0.45), pick(0.05, 0.05, 0.07), "y", [36, 14, 8]), // the far level has no frame ring round it
     // Each lens is the face of a barrel standing out of the bezel (Sensor_Frame). Not sunk into it: the outline
     // shell would swell out of a hole that small.
-    nearOnly(() => merge(...lensXs.map((x) => onWindow(drum(add(windowAt, [x, 0, -0.105]), 0.05, 0.012, "z", [14, 8, 8]))))),
-    pick(empty(), onWindow(box(add(windowAt, [0, 0, -0.05]), [0.38, 0.06, 0.02])), empty()),
+    nearOnly(() => merge(...lensXs.map((x) => onWindow(drum(add(windowAt, [x, 0, -0.07]), 0.029, 0.01, "z", [14, 8, 8]))))),
+    pick(empty(), onWindow(box(add(windowAt, [0, 0, -0.035]), [0.23, 0.04, 0.02])), empty()),
   );
   // The ribs follow the dome's curve in short stretches, so they lie on the smooth skin all the way up.
-  const ribLats = [6, 15, 24, 33, 42, 51, 60, 70, 80];
+  const ribLats = [6, 18, 30, 42, 54, 66, 80];
   const sensorFrame = merge(
-    drum([0, 3.2, 0.02], 0.38, 0.18, "y", [32, 12, 8], 0.5), // collar, flaring up to cup the dome
+    drum([0, 3.2, 0.02], 0.22, 0.15, "y", [32, 12, 8], 0.31), // collar, flaring up to cup the dome
     // The dome turns on a bearing ring at the foot of the collar, so it can sweep without the chest turning.
-    notFar(() => drum([0, 3.13, 0.02], 0.43, 0.05, "y", [32, 12, 8])),
+    notFar(() => drum([0, 3.14, 0.02], 0.3, 0.04, "y", [32, 12, 8])),
     // The frame ring the two halves of the dome are clamped into; the glowing band runs in a channel round it.
-    notFar(() => drum(domeCentre, 0.785, 0.16, "y", [36, 14, 8])),
+    notFar(() => drum(domeCentre, 0.442, 0.11, "y", [36, 14, 8])),
     // Four ribs over the seams between the dome's panels, meeting at a hub on top. They miss the front, where the
     // window looks out.
     nearOnly(() => merge(...[45, 135, 225, 315].map((round) => bent(ribLats.map((lat) => {
-      // Square to the skin: its foot sunk a centimetre in, its top 3.5 cm proud, 5.5 cm wide.
-      const side = scale(unit([Math.cos(round * deg), 0, Math.sin(round * deg)]), 0.0275);
-      const foot = onDome(round, lat, -0.01), top = onDome(round, lat, 0.035);
+      // Square to the skin: its foot sunk a centimetre in, its top 2.5 cm proud, 4 cm wide.
+      const side = scale(unit([Math.cos(round * deg), 0, Math.sin(round * deg)]), 0.02);
+      const foot = onDome(round, lat, -0.01), top = onDome(round, lat, 0.025);
       return [add(foot, side), add(top, side), sub(top, side), sub(foot, side)];
     }))))),
-    notFar(() => drum([0, domeCentre[1] + domeRadii[1] - 0.01, 0], 0.15, 0.07, "y", [20, 8, 6])), // hub
-    notFar(() => onWindow(box(windowAt, [0.5, 0.15, 0.1], c(0.02)))), // the window's bezel
-    // The lens barrels, standing five centimetres out of the bezel, so the sensor array has depth seen from the side.
-    nearOnly(() => merge(...lensXs.map((x) => onWindow(drum(add(windowAt, [x, 0, -0.075]), 0.066, 0.05, "z", [14, 8, 8]))))),
+    notFar(() => drum([0, domeCentre[1] + domeRadii[1] - 0.008, 0], 0.09, 0.05, "y", [20, 8, 6])), // hub
+    notFar(() => onWindow(box(windowAt, [0.3, 0.1, 0.07], c(0.015)))), // the window's bezel
+    // The lens barrels, standing three centimetres out of the bezel, so the sensor array has depth seen from the side.
+    nearOnly(() => merge(...lensXs.map((x) => onWindow(drum(add(windowAt, [x, 0, -0.05]), 0.039, 0.035, "z", [14, 8, 8]))))),
   );
   const mast = merge(
     bar([-0.42, 3.06, 0.24], [mastX, 3.16, mastZ], [0.13, 0.11], c(0.03)), // bracket off the yoke
     notFar(() => box([mastX, 3.2, mastZ], [0.26, 0.13, 0.26], c(0.03))),
-    drum([mastX, 3.95, mastZ], 0.07, 1.5, "y", [12, 6, 4], 0.05),
-    box([mastX, 4.12, mastZ], [0.42, 0.09, 0.09], c(0.02)), // antenna elements
-    box([mastX, 4.36, mastZ], [0.3, 0.08, 0.08], c(0.02)),
-    drum([mastX, 4.72, mastZ], 0.09, 0.09, "y", [12, 6, 4], 0.055), // beacon
+    drum([mastX, (3.2 + mastTop) / 2, mastZ], 0.07, mastTop - 3.2, "y", [12, 6, 4], 0.05),
+    box([mastX, mastTop - 0.5, mastZ], [0.42, 0.09, 0.09], c(0.02)), // antenna elements
+    box([mastX, mastTop - 0.28, mastZ], [0.3, 0.08, 0.08], c(0.02)),
+    drum([mastX, mastTop + 0.045, mastZ], 0.09, 0.09, "y", [12, 6, 4], 0.055), // beacon
     // A dish on a short arm, turned out to the left: the long link back to the team, while the elements above talk
     // to the drones.
     notFar(() => merge(
@@ -797,7 +804,7 @@ const motionR = [
 ];
 const motion = [
   ...motionR, ...motionR.map(leftOf),
-  sway("Mast", ["Mast"], "body", [[mastX, 3.27, mastZ], [mastX, 4.8, mastZ]], 0.3, "mast"),
+  sway("Mast", ["Mast"], "body", [[mastX, 3.27, mastZ], [mastX, mastTop + 0.08, mastZ]], 0.3, "mast"),
   ...dronePlaces.map((p, i) => sway(`Drone_${i + 1}`, ["Drones", "Drone_Eyes", "Drone_Pylons"], "body", [p.mount, p.elbow, p.at, eyeOf(p)], 0.62, "drone")),
 ];
 writeFileSync(join(root, "scripts/mechs/arbiter.kit.json"), `${JSON.stringify({ scheme, parts: looks, motion }, null, 2)}\n`);

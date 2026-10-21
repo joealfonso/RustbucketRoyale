@@ -260,19 +260,6 @@ function build(lod: Lod): Record<string, MeshData> {
     box([s * 1.12, 2.66, 0.7], [0.03, 0.04, 0.63]),
     box([s * 0.95, 2.69, 0.7], [0.3, 0.012, 0.05]), // the strap over both crates
   );
-  // The power plant breathes out of the housings on the hull back into a stack beside each, bent back at the top so
-  // the hot air blows away from the gun. A clamp ties each stack to the hull.
-  const tilt = 30 * deg;
-  const stackTip = (s: number, m: MeshData) => turn(m, [tilt, 0, 0], [s * 0.84, 2.7, 1.44]);
-  // Up close the bent tip is an open pipe, so the soot inside it shows.
-  const stack = (s: number) => merge(
-    tube([s * 0.84, 2.31, 1.44], 0.12, 0.78, "y", 10),
-    stackTip(s, near ? hollowRing([s * 0.84, 2.77, 1.44], 0.09, 0.12, 0.14, "y", 10) : drum([s * 0.84, 2.77, 1.44], 0.12, 0.14, "y", 8)),
-    nearOnly(
-      tube([s * 0.76, 2.0, 1.38], 0.07, 0.2, "x", 8, 6), // the pipe from the housing
-      tube([s * 0.84, 2.25, 1.44], 0.145, 0.06, "y", 12), box([s * 0.84, 2.25, 1.32], [0.08, 0.06, 0.1]), // clamp and its bracket
-    ),
-  );
   const torso = merge(
     slab(hullOutline, "x", -hullHalf, hullHalf, 0.08),
     // The flat plate on the hull front that carries the serial number (data/mechKits.json serials): nothing on it.
@@ -285,7 +272,9 @@ function build(lod: Lod): Record<string, MeshData> {
     notFar(block([0.95, 2.44, 0.7], [0.38, 0.08, 0.56], 0.03)), // deck plate, rear right
     block([-1.2, 2.18, 0], [0.08, 0.36, 1.0], 0.03), // upper skirt, left
     block([1.23, 1.78, 0], [0.08, 0.38, 0.92], 0.03), // lower skirt, right
-    // Exhaust housings on the hull back, for the power plant under the deck.
+    // Exhaust housings on the hull back, for the power plant under the deck; the hot air leaves through their louvres.
+    // (Gate V13: the two upright stacks beside them went; from over the shoulder they were two black posts beside the
+    // black hip drums, the busiest spot in the view players see most.)
     notFar(...[-0.45, 0.45].map((x) => block([x, 2.06, 1.37], [0.4, 0.34, 0.14], 0.03))),
     notFar(...crates(-1)),
   );
@@ -309,7 +298,6 @@ function build(lod: Lod): Record<string, MeshData> {
     scorchFront,
     notFar(bothSides(deckPatch(2.4, [[0.68, -0.4], [1.1, -0.42], [1.12, -0.68], [0.88, -0.7], [0.66, -0.56]]))), // round the laser pedestals
     notFar(bothSides(turn(prism([[-0.12, -0.2], [0.13, -0.18], [0.16, 0.12], [0.02, 0.22], [-0.14, 0.1]], "y", 0, 0.03), [glacisAngle, 0, 0], [0, 0, 0], onGlacis(0.97, -1.06, glacisLift + 0.07)))),
-    nearOnly(...[-1, 1].map((s) => stackTip(s, tube([s * 0.84, 2.715, 1.44], 0.095, 0.02, "y", 12, 6)))), // soot down inside the stacks' mouths
   );
 
   // The hull's own joints, under the paint (frame): the belly the mech crawls on, the jump-jet nozzles under the
@@ -328,7 +316,6 @@ function build(lod: Lod): Record<string, MeshData> {
     notFar(...[-0.7, 0.7].map((x) => tube([x, 1.64, 1.2], 0.15, 0.2, "y", 12, 8, 0, 0.1))), // jump-jet nozzles
     // Exhaust louvres: the hot air leaves through slats across each housing.
     nearOnly(...[-0.45, 0.45].flatMap((x) => [1.96, 2.06, 2.16].map((y) => box([x, y, 1.455], [0.32, 0.045, 0.04])))),
-    notFar(stack(-1), stack(1)),
     nearOnly(rack(-1), rack(1)),
     // The upper skirts hang on a backing plate that shows a dark step round them: the armour is in layers.
     nearOnly(...[-1, 1].map((s) => chamferBox([s * 1.17, 2.18, 0], [0.04, 0.46, 1.14], 0.015))),
@@ -371,7 +358,12 @@ function build(lod: Lod): Record<string, MeshData> {
       cylinder(motorAt, 0.09, 0.2, "y", 12), // the traverse motor
     )
     : drum([0, 2.51, ringZ], 0.72, 0.22, "y", 16);
-  const turretBand = tube([0, 2.47, ringZ], 0.76, 0.1, "y", 24, 16); // the pilot's marking, a band round the ring under the gear
+  // The pilot's marking: a band round the ring under the gear, and (gate V13) a stripe across the bustle's back, so the
+  // marking also shows from behind, where the pilot sees their own mech and a chaser sees the target.
+  const turretBand = merge(
+    tube([0, 2.47, ringZ], 0.76, 0.1, "y", 24, 16),
+    notFar(block([0, 2.86, 1.57], [0.98, 0.1, 0.03], 0.01)),
+  );
   // The turret breathes the gun's heat out through louvres low on each side, under the cheeks: tan slats over a
   // soot-black opening, so the scorch round the mount has a source.
   const ventSlats = nearOnly(...[-1, 1].flatMap((s) => [0.31, 0.43, 0.55, 0.67, 0.79].map((z) => box([s * 0.66, 2.76, z], [0.05, 0.15, 0.035]))));
@@ -382,7 +374,10 @@ function build(lod: Lod): Record<string, MeshData> {
   const cheek: [number, number][] = [[2.85, 0.12], [2.85, 0.98], [3.14, 0.86], [3.2, 0.5], [3.12, 0.22]];
   const turretCamo = merge(
     bothSides(slab(cheek, "x", 0.48, 0.66, 0.03)),
-    block([0, 2.77, 1.16], [0.96, 0.27, 0.3], 0.05), // the magazine bustle
+    // The magazine bustle, the shells' store behind the breech, which also balances the long barrels. Gate V13 made it
+    // the turret's big back: wider than the barrels, taller than the turret and sloped on top, so from over the shoulder
+    // the mortar reads as one heavy gun house rather than two thin pipes on a plate. The breech runs into its front.
+    slab([[2.64, 1.0], [2.64, 1.48], [2.72, 1.56], [3.0, 1.56], [3.1, 1.34], [3.06, 1.0]], "x", -0.58, 0.58, 0.04),
   );
   const turretFrontAngle = -Math.atan2(0.15, 0.35);
   // Soot on the turret front under the barrels, on the lip below it and in the vents.
