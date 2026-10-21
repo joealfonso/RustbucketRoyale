@@ -1,4 +1,5 @@
-import type { Loadout, MatchProgress, RingNow, RosterMech, UpgradeDef, WeaponStats } from "@rustbucket/shared";
+import { ZONE_BROKEN, ZONE_DAMAGED, zoneState, type Loadout, type MatchProgress, type RingNow, type RosterMech, type UpgradeDef, type WeaponStats, type ZoneSet } from "@rustbucket/shared";
+import { percentLeft } from "./damageDiagram";
 import { countUp, cssSeconds, replay } from "./uiMotion";
 
 export interface RoomView {
@@ -132,6 +133,7 @@ export class Hud {
   private shownProgress = [-1, -1, -1, -1, -1];
   private shownLoadout = [-2, -2, -2, -2, -2, -2];
   private shownPlates = [-1, -1, -1];
+  private shownParts = [-1, -1, -1]; // percent left and state packed, so an unchanged part touches nothing
 
   constructor(onStart: () => void, onCopy: () => void) {
     this.altBox.id = "altFire";
@@ -229,10 +231,26 @@ export class Hud {
       if (this.shownPlates[zone] === points) continue;
       this.shownPlates[zone] = points;
       const cell = this.plateCells[zone]!;
-      const value = cell.lastElementChild as HTMLElement;
+      const value = cell.querySelector<HTMLElement>(".plate .num")!;
       value.textContent = plateText(points);
       value.classList.toggle("empty", points <= 0);
       cell.style.setProperty("--fill", String(Math.min(1, points / (plates[zone] || 1))));
+    }
+  }
+
+  // How much of each part is left before it breaks off, as a percent and a bar, red once the part is damaged.
+  setParts(hp: readonly number[], set: ZoneSet): void {
+    for (let zone = 0; zone < this.plateCells.length; zone++) {
+      const percent = percentLeft(hp[zone] ?? 0, set.zones[zone]?.hp ?? 1);
+      const state = zoneState(hp, set, zone);
+      const packed = percent * 4 + state;
+      if (this.shownParts[zone] === packed) continue;
+      this.shownParts[zone] = packed;
+      const cell = this.plateCells[zone]!;
+      cell.querySelector(".part")!.textContent = String(percent);
+      cell.style.setProperty("--part", String(percent / 100));
+      cell.classList.toggle("damaged", state === ZONE_DAMAGED);
+      cell.classList.toggle("broken", state === ZONE_BROKEN);
     }
   }
 

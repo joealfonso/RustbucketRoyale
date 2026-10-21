@@ -102,11 +102,21 @@ canvas { display: block; width: 100%; height: 100%; }
 /* The damage diagram draws itself into this box at this size. */
 #damageDiagram { flex: none; width: 90px; height: 120px; }
 #mechGauges { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
-#plates { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.2rem; }
-#plates div { display: flex; flex-direction: column; border: 1px solid var(--hud-amber-dim); padding: 0.1rem 0.3rem; }
-#plates .num { font-size: 1rem; }
+#plates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.2rem; }
+/* Each part: how much is left before it breaks off (the big number and its bar, red once damaged), then its armour
+   plate points and a thin line for how full the plate is. */
+#plates > div { display: flex; flex-direction: column; border: 1px solid var(--hud-amber-dim); padding: 0.1rem 0.3rem; }
+#plates .part { font-size: 1.1rem; }
+#plates .part::after { content: "%"; font-size: 0.65em; color: var(--hud-amber-dim); }
+#plates .partBar { display: block; height: 0.35rem; background: rgba(0, 0, 0, 0.45); border: 1px solid var(--hud-amber-dim); }
+#plates .partBar b { display: block; height: 100%; width: calc(var(--part, 1) * 100%); background: var(--hud-amber); }
+#plates > div.damaged .part, #plates > div.broken .part { color: var(--hud-warn); }
+#plates > div.damaged .partBar b { background: var(--hud-warn); }
+#plates > div.broken .partBar { border-color: var(--hud-warn); }
+#plates .plate { margin-top: 0.15rem; font-size: 0.7rem; white-space: nowrap; }
+#plates .plate .num { font-size: 0.8rem; }
 #plates .empty { color: var(--hud-amber-dim); }
-#plates div::after { content: ""; height: 2px; margin-top: 0.1rem; width: calc(var(--fill, 0) * 100%); background: var(--hud-amber); }
+#plates > div::after { content: ""; height: 2px; margin-top: 0.1rem; width: calc(var(--fill, 0) * 100%); background: var(--hud-amber); }
 .meter { display: flex; flex-direction: column; gap: 0.15rem; }
 .bar { position: relative; height: 0.6rem; background: rgba(0, 0, 0, 0.45); border: 1px solid var(--hud-amber-dim); }
 .bar > div { height: 100%; width: 100%; background: var(--hud-amber); }

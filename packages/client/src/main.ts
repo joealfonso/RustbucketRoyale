@@ -1639,6 +1639,7 @@ function frame(now: number): void {
   fuelFill.style.width = `${mech.fuel.fraction * 100}%`;
   staminaFill.style.width = `${mech.stamina.fraction * 100}%`;
   damageDiagram.update(mech.mech, zonesFor(mech.mech), health.hp, loadout.armor, lootConfig.armorPlates);
+  hud.setParts(health.hp, zonesFor(mech.mech));
   warningInput.dead = health.dead;
   warningInput.outside = outside;
   warningInput.hp = health.hp;
