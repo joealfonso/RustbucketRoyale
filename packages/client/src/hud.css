@@ -145,8 +145,9 @@ canvas { display: block; width: 100%; height: 100%; }
 
 /* Bottom right: the radar. The canvas sits inside its frame and is sized in rem, so the two can never drift apart and
    both grow with the HUD; radar.ts matches the canvas pixels to this size. */
-#radarFrame { display: none; right: var(--hud-margin); bottom: var(--hud-margin); padding: 0.3rem 0.5rem 0.5rem; }
-#radarFrame canvas { display: block; width: 12.5rem; height: 12.5rem; margin-top: 0.3rem; }
+/* The radar stands on its own over the game, the round scope only: no panel behind it and no label. */
+#radarFrame { display: none; position: fixed; right: var(--hud-margin); bottom: var(--hud-margin); }
+#radarFrame canvas { display: block; width: 12.5rem; height: 12.5rem; }
 
 /* Centre: the aim. A solid soot edge keeps the amber readable on sky and sand alike. */
 #crosshair { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
