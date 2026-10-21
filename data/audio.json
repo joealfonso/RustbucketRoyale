@@ -23,19 +23,19 @@
   },
   "sounds": {
     "shot": {
-      "volume": 0.5,
+      "volume": 1.56,
       "echo": 0.45,
-      "file": null
+      "file": ["audio/shot-autocannon-1.mp3", "audio/shot-autocannon-2.mp3", "audio/shot-autocannon-3.mp3"]
     },
     "shotScattergun": {
-      "volume": 0.55,
+      "volume": 2.5,
       "echo": 0.5,
-      "file": null
+      "file": ["audio/shot-scattergun-1.mp3", "audio/shot-scattergun-2.mp3", "audio/shot-scattergun-3.mp3"]
     },
     "shotSpikeDriver": {
-      "volume": 0.5,
+      "volume": 1.5,
       "echo": 0.45,
-      "file": null
+      "file": ["audio/shot-spike-driver-1.mp3", "audio/shot-spike-driver-2.mp3"]
     },
     "impact": {
       "volume": 0.6,
@@ -43,9 +43,9 @@
       "file": null
     },
     "explosion": {
-      "volume": 1.0,
+      "volume": 2.5,
       "echo": 0.6,
-      "file": null
+      "file": ["audio/explosion-1.mp3", "audio/explosion-2.mp3", "audio/explosion-3.mp3"]
     },
     "smash": {
       "volume": 0.7,
@@ -130,9 +130,9 @@
       "file": null
     },
     "railShot": {
-      "volume": 1.0,
+      "volume": 2.5,
       "echo": 0.5,
-      "file": null
+      "file": ["audio/rail-shot.mp3"]
     },
     "shellIncoming": {
       "volume": 0.6,
@@ -206,9 +206,9 @@
       "file": null
     },
     "titanFall": {
-      "volume": 1,
+      "volume": 2.5,
       "echo": 0.7,
-      "file": null
+      "file": ["audio/titan-fall.mp3"]
     }
   }
 }

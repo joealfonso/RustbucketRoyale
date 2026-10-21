@@ -1,6 +1,7 @@
 // Every sound in the game, played through Web Audio. There are no sound files yet, so each sound is built from
 // noise and tones on the spot, as a grey-box placeholder with the right weight and timing. Art hook: give a sound a
-// `file` in data/audio.json and that recording plays instead, at the same volume, in the same places.
+// `file` in data/audio.json and that recording plays instead, at the same volume, in the same places. A list of
+// files is takes of one sound: each play picks one, so a held trigger does not repeat the same shot.
 // Sounds from the world come from where they happen, so you can hear which way a fight is. They also sit in a space:
 // a shared echo (a junkyard ringed with metal walls), and the further away a sound is the darker it gets and the more
 // of it is echo, so a far fight booms instead of ticking.
@@ -23,7 +24,7 @@ export interface AudioConfig {
   variation: { pitch: number; level: number }; // each play is this much higher or lower, louder or quieter, at random
   weaponShots: Record<string, SoundName>; // weapon id to its shot sound
   // `echo` is how much of the sound goes into the shared space, 0 to 1.
-  sounds: Record<SoundName, { volume: number; echo?: number; file: string | null }>;
+  sounds: Record<SoundName, { volume: number; echo?: number; file: string | string[] | null }>;
 }
 
 export class Sound {
@@ -32,7 +33,7 @@ export class Sound {
   private echo: ConvolverNode | null = null;
   private noise: AudioBuffer | null = null;
   private grit: Float32Array<ArrayBuffer> | null = null; // the distortion curve that roughens shots, roars and crunches
-  private files = new Map<SoundName, AudioBuffer>();
+  private files = new Map<SoundName, AudioBuffer[]>();
   private voices = 0;
   private jets: { source: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
   private ears = { x: 0, y: 0, z: 0 };
@@ -60,8 +61,13 @@ export class Sound {
     this.grit = new Float32Array(1024);
     for (let i = 0; i < this.grit.length; i++) { const x = (i / (this.grit.length - 1)) * 2 - 1; this.grit[i] = Math.tanh(x * 4); }
     this.ctx = ctx;
-    for (const [name, s] of Object.entries(this.config.sounds) as [SoundName, { file: string | null }][]) {
-      if (s.file) void fetch(s.file).then((r) => r.arrayBuffer()).then((b) => ctx.decodeAudioData(b)).then((buffer) => this.files.set(name, buffer)).catch(() => {});
+    // A sound plays its synthesised stand-in until every one of its takes has loaded.
+    for (const [name, s] of Object.entries(this.config.sounds) as [SoundName, { file: string | string[] | null }][]) {
+      const takes = s.file === null ? [] : typeof s.file === "string" ? [s.file] : s.file;
+      if (takes.length === 0) continue;
+      void Promise.all(takes.map((file) => fetch(file).then((r) => r.arrayBuffer()).then((b) => ctx.decodeAudioData(b))))
+        .then((buffers) => this.files.set(name, buffers))
+        .catch((error) => console.warn(`Sound "${name}" could not be loaded, using its stand-in:`, error));
     }
   }
 
@@ -141,7 +147,8 @@ export class Sound {
 
   private playFile(name: SoundName, into: AudioNode, pitch: number): number {
     const source = this.ctx!.createBufferSource();
-    source.buffer = this.files.get(name)!;
+    const takes = this.files.get(name)!;
+    source.buffer = takes[Math.floor(Math.random() * takes.length)]!;
     source.playbackRate.value = pitch;
     source.connect(into);
     source.start();
