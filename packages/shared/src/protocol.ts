@@ -191,6 +191,17 @@ export interface HitMessage {
   x: number; y: number; z: number;
 }
 
+// Sent to the victim only: where it was hit, for the dots on its damage diagram. x and y are the hit point in the
+// victim's own frame (metres right of and up from its feet, as toMechFrame gives them), to the centimetre. zone is -1
+// for splash (blasts, rams, stomps), which hit several zones at once: x, y is then where it came from. kind is
+// HURT_PLATE, HURT_HULL or HURT_BROKEN (zones.ts); for splash, the worst of the zones it hurt.
+export interface HurtMessage {
+  t: "hurt";
+  zone: number;
+  x: number; y: number;
+  kind: number;
+}
+
 export interface GrenadeMessage {
   t: "grenade";
   id: number;
@@ -275,6 +286,7 @@ export type ServerMessage =
   | { t: "snapshot"; tick: number; ack: number; ackAgeMs: number; you: SelfState; health: HealthState; match: MatchProgress; others: OtherState[]; noises: NoiseEvent[]; loadout: Loadout; looting: number; repairing: number; pickups: PickupState[] | null; titan?: TitanState | null } // pickups null: unchanged since the last snapshot; titan null: none near you
   | ShotMessage
   | HitMessage
+  | HurtMessage
   | GrenadeMessage
   | ExplodeMessage
   | RivetMessage

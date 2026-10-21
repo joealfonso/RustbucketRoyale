@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ZONE_ARMS, ZONE_LEGS, ZONE_TORSO, World, boxFromData, type MechInput, type ServerMessage } from "@rustbucket/shared";
+import { HURT_HULL, HURT_PLATE, ZONE_ARMS, ZONE_LEGS, ZONE_TORSO, World, boxFromData, type MechInput, type ServerMessage } from "@rustbucket/shared";
 import type { Room, RoomConfig } from "./Room";
 import { loadRoomConfig } from "./config";
 import { Client, idle, makeRoom, startMatch } from "./testClient";
@@ -38,6 +38,7 @@ function settle(room: Room, shooter: Client, target: Client): void {
 }
 
 const hits = (c: Client) => c.messages.filter((m): m is Extract<ServerMessage, { t: "hit" }> => m.t === "hit");
+const hurts = (c: Client) => c.messages.filter((m): m is Extract<ServerMessage, { t: "hurt" }> => m.t === "hurt");
 
 describe("shots", () => {
   it("hit the zone they were aimed at, tell the shooter, and hurt the target", () => {
@@ -48,6 +49,19 @@ describe("shots", () => {
     expect(hits(shooter)[0]).toMatchObject({ t: "hit", targetId: target.id, zone: ZONE_TORSO, damage: config.weapons.weapons[config.weapons.start]!.damage, killed: false });
     expect(target.last().health.hp[ZONE_TORSO]).toBe(100 - config.weapons.weapons[config.weapons.start]!.damage);
     expect(shooter.messages.find((m) => m.t === "shot")).toMatchObject({ hitMech: true });
+  });
+
+  it("tell the victim, and only the victim, where on its own mech it was hit", () => {
+    const { room, shooter, target } = setup();
+    settle(room, shooter, target);
+    tick(room, [shooter, target], (c, i) => (c === shooter ? idle({ ...AT_TARGET, fire: i === 0 }) : turnedAway()), 6);
+    const [hurt] = hurts(target);
+    expect(hurt).toMatchObject({ t: "hurt", zone: ZONE_TORSO, kind: HURT_HULL });
+    // Aimed at the chest, 2.4 m up, from straight behind: about the middle of the back, in the target's own frame.
+    expect(hurt!.y).toBeCloseTo(2.4, 0);
+    expect(Math.abs(hurt!.x)).toBeLessThan(0.3);
+    expect(hurt!.x).toBe(Math.round(hurt!.x * 100) / 100); // to the centimetre, to keep the message small
+    expect(hurts(shooter)).toHaveLength(0);
   });
 
   it("hit an arm when aimed at the arm itself", () => {
@@ -171,6 +185,16 @@ describe("grenades", () => {
     expect(thrower.every((hp, zone) => hp < full[zone]!)).toBe(true);
     expect(bystander.some((hp, zone) => hp < full[zone]!)).toBe(true);
     expect(thrower[ZONE_TORSO]!).toBeLessThan(bystander[ZONE_TORSO]!); // closer means more damage
+  });
+
+  it("tell each mech caught in the blast it was splashed, from the side the blast was on", () => {
+    const { room, shooter, target } = setup(dropBomb);
+    tick(room, [shooter, target], (c, i) => (c === shooter && i === 0 ? idle(THROW) : idle()), 60);
+    const [hurt] = hurts(target);
+    expect(hurt).toMatchObject({ zone: -1 });
+    expect([HURT_PLATE, HURT_HULL]).toContain(hurt!.kind);
+    // The bomb drops by the thrower, 6 m to the target's side, so the splash comes from well off its centre line.
+    expect(Math.abs(hurt!.x)).toBeGreaterThan(3);
   });
 
   it("are blocked by walls", () => {

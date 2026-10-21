@@ -12,7 +12,7 @@ import {
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
   titanHitBoxes, type TitanConfig, type TitanState,
   dropping, hangAtSpot, planDropSpots, releaseDrop,
-  SURFACE_NUDGE, flightSteps, fromMechFrame, reelPoint, startPull, toMechFrame, type HarpoonMessage, type HarpoonStats, type RivetMessage, type RivetStats,
+  HURT_PLATE, hurtKind, SURFACE_NUDGE, flightSteps, fromMechFrame, reelPoint, startPull, toMechFrame, type HarpoonMessage, type HarpoonStats, type RivetMessage, type RivetStats,
 } from "@rustbucket/shared";
 import { Flights, type Landing, type Rivet } from "./flights";
 import { Bot, type BotTarget } from "./Bot";
@@ -124,6 +124,7 @@ export class Room {
   private pickupsMovedTick = -Infinity;
   private targetPose = { x: 0, y: 0, z: 0, yaw: 0 }; // where findTarget's mech stood, rewound
   private frame = { x: 0, y: 0, z: 0 }; // scratch for mech frame turns and reel goals
+  private hpBefore = [0, 0, 0]; // a victim's hit points before splash, to tell it how bad the hit was
   private pierced: Player[] = []; // mechs one piercing shot has already gone through
   private newGrenade = createGrenade();
   private worldHit = createRayHit();
@@ -749,8 +750,10 @@ export class Room {
     if (target.dead || !target.participant) return;
     const zones = this.zonesFor(target.state.mech);
     let total = 0;
+    this.noteHp(target);
     for (let zone = 0; zone < ZONE_COUNT; zone++) total += applyDamage(target.hp, zones, zone, zoneDamage[zone] ?? 0, target.loadout.armor);
     this.hurt(target, cause, null, total);
+    this.sendHurt(target, -1, 0, 0, this.splashKind(target)); // a stomp comes up through the feet
     if (isDestroyed(target.hp)) this.eliminate(target, null);
   }
 
@@ -1208,8 +1211,11 @@ export class Room {
   private shotHits(player: Player, target: Player, weapon: WeaponStats, weaponIndex: number, reach: number, alt: AltShot | null): void {
     const s = this.shot;
     const damage = weapon.damage * this.shieldFactor(target, s.dx, s.dz);
-    const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, damage, target.loadout.armor);
+    const zone = this.zoneHit.zone;
+    const before = target.hp[zone]!;
+    const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), zone, damage, target.loadout.armor);
     this.hurt(target, weaponCause(weaponIndex), player, taken);
+    this.tellHurt(target, zone, s.ox + s.dx * reach, s.oy + s.dy * reach, s.oz + s.dz * reach, hurtKind(before, target.hp[zone]!));
     if (alt && alt.mode !== FIRE_NONE && alt.pinSeconds > 0) {
       target.state.pinTime = Math.max(target.state.pinTime, alt.pinSeconds);
       target.state.pinSpeed = alt.pinSpeedShare;
@@ -1319,8 +1325,11 @@ export class Room {
 
       const amount = damage * (1 - distance / radius);
       let total = 0;
+      this.noteHp(target);
       for (let zone = 0; zone < ZONE_COUNT; zone++) total += applyDamage(target.hp, this.zonesFor(target.state.mech), zone, amount, target.loadout.armor);
       this.hurt(target, cause, owner, total);
+      const t = target.state;
+      this.splashFrom(target, bx, by, bz, t.x, t.y, t.z, t.bodyYaw);
       const killed = isDestroyed(target.hp);
       owner?.send({ t: "hit", targetId: target.id, zone: -1, damage: total, killed, x: target.state.x, y: target.state.y + CHEST_HEIGHT, z: target.state.z });
       if (killed) this.eliminate(target, owner);
@@ -1418,8 +1427,10 @@ export class Room {
   // A rivet or harpoon's own hit on a mech, at the zone settled when it was fired.
   private landDamage(owner: Player | null, target: Player, l: Landing, x: number, y: number, z: number): void {
     if (target.dead || !target.participant || dropping(target.state) || l.damage <= 0) return;
+    const before = target.hp[l.zone]!;
     const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), l.zone, l.damage, target.loadout.armor);
     this.hurt(target, weaponCause(l.weapon), owner, taken);
+    this.sendHurt(target, l.zone, l.lx, l.ly, hurtKind(before, target.hp[l.zone]!));
     const killed = isDestroyed(target.hp);
     owner?.send({ t: "hit", targetId: target.id, zone: l.zone, damage: taken, killed, x, y, z });
     if (killed) this.eliminate(target, owner);
@@ -1617,8 +1628,11 @@ export class Room {
       const zone = this.titanHit.zone;
       this.hurtTitan(player, rail.damage * this.titan!.zoneMultiplier(zone), zone, s.ox + s.dx * reach, s.oy + s.dy * reach, s.oz + s.dz * reach);
     } else if (target) {
-      const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), this.zoneHit.zone, rail.damage * this.shieldFactor(target, s.dx, s.dz), target.loadout.armor);
+      const zone = this.zoneHit.zone;
+      const before = target.hp[zone]!;
+      const taken = applyDamage(target.hp, this.zonesFor(target.state.mech), zone, rail.damage * this.shieldFactor(target, s.dx, s.dz), target.loadout.armor);
       this.hurt(target, abilityCause(rail.kind), player, taken);
+      this.tellHurt(target, zone, s.ox + s.dx * reach, s.oy + s.dy * reach, s.oz + s.dz * reach, hurtKind(before, target.hp[zone]!));
       noteLongest(player.tally, "longestRailShot", reach);
       const killed = !target.dead && isDestroyed(target.hp);
       player.send({ t: "hit", targetId: target.id, zone: this.zoneHit.zone, damage: taken, killed, x: s.ox + s.dx * reach, y: s.oy + s.dy * reach, z: s.oz + s.dz * reach });
@@ -1781,8 +1795,11 @@ export class Room {
   private abilityDamage(attacker: Player, target: Player, damage: number, cause: number): void {
     const zones = this.zonesFor(target.state.mech);
     const t = target.state;
+    this.noteHp(target);
     const total = applyDamage(target.hp, zones, ZONE_ARMS, damage / 2, target.loadout.armor) + applyDamage(target.hp, zones, ZONE_TORSO, damage / 2, target.loadout.armor);
     this.hurt(target, cause, attacker, total);
+    const a = attacker.state;
+    this.splashFrom(target, a.x, a.y + CHEST_HEIGHT, a.z, t.x, t.y, t.z, t.bodyYaw);
     const killed = isDestroyed(target.hp);
     attacker.send({ t: "hit", targetId: target.id, zone: -1, damage: total, killed, x: t.x, y: t.y + CHEST_HEIGHT, z: t.z });
     if (killed) this.eliminate(target, attacker);
@@ -1793,6 +1810,41 @@ export class Room {
   private hurt(target: Player, cause: number, by: Player | null, taken: number): void {
     noteCause(target, cause);
     if (by && by !== target) by.tally.mostDamage += taken;
+  }
+
+  // Tells the victim where it was hit, for the dots on its damage diagram. A shot's point is turned into the frame of
+  // the pose findTarget hit (rewound by the shooter's lag), so it lands where the boxes were struck.
+  private tellHurt(target: Player, zone: number, wx: number, wy: number, wz: number, kind: number): void {
+    const pose = this.targetPose;
+    toMechFrame(wx, wy, wz, pose.x, pose.y, pose.z, pose.yaw, this.frame);
+    this.sendHurt(target, zone, this.frame.x, this.frame.y, kind);
+  }
+
+  // Splash, from a point in the world (a blast's centre, a rammer's chest), turned into the victim's frame as it
+  // stands. The diagram puts the spread on the side the hit came from.
+  private splashFrom(target: Player, wx: number, wy: number, wz: number, mx: number, my: number, mz: number, yaw: number): void {
+    toMechFrame(wx, wy, wz, mx, my, mz, yaw, this.frame);
+    this.sendHurt(target, -1, this.frame.x, this.frame.y, this.splashKind(target));
+  }
+
+  private sendHurt(target: Player, zone: number, lx: number, ly: number, kind: number): void {
+    if (target.bot) return; // nobody is looking at a bot's diagram
+    target.send({ t: "hurt", zone, x: Math.round(lx * 100) / 100, y: Math.round(ly * 100) / 100, kind });
+  }
+
+  private noteHp(target: Player): void {
+    for (let zone = 0; zone < ZONE_COUNT; zone++) this.hpBefore[zone] = target.hp[zone]!;
+  }
+
+  // The worst splash did to any zone since noteHp. Only zones it actually hurt count, so a part broken earlier does not
+  // make every later blast read as breaking something.
+  private splashKind(target: Player): number {
+    let worst = HURT_PLATE;
+    for (let zone = 0; zone < ZONE_COUNT; zone++) {
+      const before = this.hpBefore[zone]!;
+      if (before > 0) worst = Math.max(worst, hurtKind(before, target.hp[zone]!));
+    }
+    return worst;
   }
 
   // ---- pickups

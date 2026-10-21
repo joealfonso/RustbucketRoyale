@@ -1,4 +1,5 @@
 import { ZONE_ARMS, ZONE_BROKEN, ZONE_COUNT, ZONE_DAMAGED, ZONE_LEGS, ZONE_TORSO, zoneState, type Box, type ZoneSet } from "@rustbucket/shared";
+import { HitDots, parseHitDots, type FrontFrame, type HitDotsConfig } from "./hitDots";
 import "./damageDiagram.css";
 
 export interface DiagramConfig {
@@ -9,6 +10,7 @@ export interface DiagramConfig {
   minBoxArea: number; // square metres seen from the front; smaller boxes (bolts, barrels) only clutter a doll this size
   hatchSpacingPx: number;
   plateGapPx: number; // how far the armour frame stands off the boxes it covers
+  hits: HitDotsConfig; // the dots where you were hit
 }
 
 const KEYS = ["widthPx", "heightPx", "labelRowPx", "paddingPx", "minBoxArea", "hatchSpacingPx", "plateGapPx"] as const;
@@ -19,7 +21,7 @@ export function parseDiagram(raw: unknown): DiagramConfig {
   for (const key of KEYS) {
     if (typeof d?.[key] !== "number" || !(d[key] as number >= 0)) throw new Error(`damageDiagram.json: ${key} must be a number, 0 or more`);
   }
-  const c = d as unknown as DiagramConfig;
+  const c = { ...(d as unknown as DiagramConfig), hits: parseHitDots(d.hits) };
   if (c.heightPx - c.labelRowPx - 2 * c.paddingPx <= 0 || c.widthPx - 2 * c.paddingPx <= 0) throw new Error("damageDiagram.json: no room left to draw the mech");
   return c;
 }
@@ -39,13 +41,18 @@ const area = (b: Box) => (b.maxX - b.minX) * (b.maxY - b.minY);
 // above the label row and centred. Boxes below minBoxArea are left out, but every zone keeps its biggest box so
 // none can vanish. Biggest first within each zone, so small parts draw on top of the big ones they sit on.
 export function frontRects(boxes: readonly Box[], boxZone: readonly number[], c: DiagramConfig): DiagramRect[] {
+  return frontView(boxes, boxZone, c).rects;
+}
+
+// The same, with the scale and offset used, so a point on the mech can be put on the diagram too (hitDots.ts).
+export function frontView(boxes: readonly Box[], boxZone: readonly number[], c: DiagramConfig): { rects: DiagramRect[]; frame: FrontFrame } {
   const biggest: (Box | null)[] = [null, null, null];
   boxes.forEach((b, i) => {
     const best = biggest[boxZone[i]!];
     if (!best || area(b) > area(best)) biggest[boxZone[i]!] = b;
   });
   const kept = boxes.map((b, i) => ({ b, zone: boxZone[i]! })).filter(({ b, zone }) => area(b) >= c.minBoxArea || biggest[zone] === b);
-  if (kept.length === 0) return [];
+  if (kept.length === 0) return { rects: [], frame: { scale: 0, left: 0, top: 0, minX: 0, maxY: 0 } };
 
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const { b } of kept) {
@@ -59,13 +66,14 @@ export function frontRects(boxes: readonly Box[], boxZone: readonly number[], c:
   const top = c.paddingPx + (roomH - (maxY - minY) * scale) / 2;
 
   kept.sort((a, b) => a.zone - b.zone || area(b.b) - area(a.b));
-  return kept.map(({ b, zone }) => ({
+  const rects = kept.map(({ b, zone }) => ({
     zone,
     x: round(left + (b.minX - minX) * scale),
     y: round(top + (maxY - b.maxY) * scale),
     w: round((b.maxX - b.minX) * scale),
     h: round((b.maxY - b.minY) * scale),
   }));
+  return { rects, frame: { scale, left, top, minX, maxY } };
 }
 
 export type ZoneLook = "intact" | "damaged" | "broken";
@@ -115,8 +123,10 @@ export class DamageDiagram {
   private shownState = [-1, -1, -1];
   private shownPercent = [-1, -1, -1];
   private shownPlate: (PlateLook | "")[] = ["", "", ""];
+  private dots: HitDots;
 
   constructor(root: HTMLElement, private config: DiagramConfig) {
+    this.dots = new HitDots(config.hits);
     this.svg = svgEl("svg", { viewBox: `0 0 ${config.widthPx} ${config.heightPx}`, width: config.widthPx, height: config.heightPx, class: "damageDiagram", role: "img", "aria-label": "Mech damage" });
     root.appendChild(this.svg);
   }
@@ -139,6 +149,11 @@ export class DamageDiagram {
         this.labels[zone]!.textContent = `${LABELS[zone]}${percent}`;
       }
     }
+  }
+
+  // A dot where your mech was hit (a hurt message): x, y in its own frame, zone -1 for splash.
+  hit(zone: number, x: number, y: number, kind: number): void {
+    this.dots.show(zone, x, y, kind);
   }
 
   private build(mech: number, set: ZoneSet): void {
@@ -167,7 +182,8 @@ export class DamageDiagram {
     for (const zone of DRAW_ORDER) this.svg.appendChild(this.zones[zone]!);
 
     const gap = c.plateGapPx;
-    for (const r of frontRects(set.boxes, set.boxZone, c)) {
+    const view = frontView(set.boxes, set.boxZone, c);
+    for (const r of view.rects) {
       const zone = layers[r.zone]!;
       const framed = { x: r.x - gap, y: r.y - gap, width: r.w + 2 * gap, height: r.h + 2 * gap };
       zone.plateLine!.appendChild(svgEl("rect", framed));
@@ -177,6 +193,7 @@ export class DamageDiagram {
       // The cross only shows once the zone is broken (by the stylesheet), so the shape changes, not just the colour.
       zone.cross!.appendChild(svgEl("path", { d: `M${r.x} ${r.y}L${round(r.x + r.w)} ${round(r.y + r.h)}M${round(r.x + r.w)} ${r.y}L${r.x} ${round(r.y + r.h)}` }));
     }
+    this.dots.attach(this.svg, view.rects, view.frame);
 
     this.labels = [];
     const labelY = c.heightPx - 3;

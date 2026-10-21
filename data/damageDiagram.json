@@ -5,5 +5,15 @@
   "paddingPx": 6,
   "minBoxArea": 0.03,
   "hatchSpacingPx": 4,
-  "plateGapPx": 2
+  "plateGapPx": 2,
+  "hits": {
+    "maxDots": 24,
+    "holdSeconds": 1.2,
+    "fadeSeconds": 2.3,
+    "plateRadiusPx": 2,
+    "hullRadiusPx": 2.4,
+    "brokenRadiusPx": 3.2,
+    "splashDots": 5,
+    "splashRadiusPx": 5
+  }
 }

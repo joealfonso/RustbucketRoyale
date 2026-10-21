@@ -1,4 +1,4 @@
-import { SnapshotMemory, decodeServerBinary, encodeInput, type RejoinMessage, type AbilityMessage, type ExplodeMessage, type TitanMessage, type RivetMessage, type HarpoonMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
+import { SnapshotMemory, decodeServerBinary, encodeInput, type RejoinMessage, type AbilityMessage, type ExplodeMessage, type TitanMessage, type RivetMessage, type HarpoonMessage, type HurtMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
 
 type SnapshotMessage = Extract<ServerMessage, { t: "snapshot" }>;
 type ShotMessage = Extract<ServerMessage, { t: "shot" }>;
@@ -30,6 +30,7 @@ export class NetClient {
   onSnapshot?: (snapshot: SnapshotMessage) => void;
   onShot?: (shot: ShotMessage) => void;
   onHit?: (hit: HitMessage) => void;
+  onHurt?: (hurt: HurtMessage) => void; // where your own mech was hit
   onGrenade?: (grenade: GrenadeMessage) => void;
   onExplode?: (explosion: ExplodeMessage) => void;
   onAbility?: (moment: AbilityMessage) => void;
@@ -152,6 +153,7 @@ export class NetClient {
       else if (message.t === "prop") this.onPropDestroyed?.(message.id, false);
       else if (message.t === "props") for (const id of message.destroyed) this.onPropDestroyed?.(id, true);
       else if (message.t === "hit") this.onHit?.(message);
+      else if (message.t === "hurt") this.onHurt?.(message);
       else if (message.t === "grenade") this.onGrenade?.(message);
       else if (message.t === "explode") this.onExplode?.(message);
       else if (message.t === "ability") this.onAbility?.(message);

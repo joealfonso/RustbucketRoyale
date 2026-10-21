@@ -77,6 +77,17 @@ export function applyDamage(hp: number[], set: ZoneSet, zone: number, amount: nu
   return soaked + taken;
 }
 
+// How a hit on you landed, for the dot on your damage diagram: soaked by a plate, into the zone's hit points, or into
+// a part it broke or that was already broken. Judged from the zone's hit points before and after.
+export const HURT_PLATE = 0;
+export const HURT_HULL = 1;
+export const HURT_BROKEN = 2;
+
+export function hurtKind(hpBefore: number, hpAfter: number): number {
+  if (hpAfter <= 0) return HURT_BROKEN;
+  return hpAfter < hpBefore ? HURT_HULL : HURT_PLATE;
+}
+
 export const ZONE_INTACT = 0;
 export const ZONE_DAMAGED = 1;
 export const ZONE_BROKEN = 2;

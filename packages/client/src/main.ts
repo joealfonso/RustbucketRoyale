@@ -1018,6 +1018,7 @@ if (net) {
     if (s.id === net.id || killReplay.playing) return;
     showShot(s.id, s, weapon, s.hitMech, alt);
   };
+  net.onHurt = (h) => damageDiagram.hit(h.zone, h.x, h.y, h.kind);
   net.onHit = (h) => {
     flashHitMarker(h.killed);
     showHit(h.zone, h.damage, h.killed, h.targetId === TITAN_ID);
