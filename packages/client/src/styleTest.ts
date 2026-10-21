@@ -25,7 +25,9 @@ import { toGeometry } from "./dressing/dressing";
 import weaponsJson from "../../../data/weapons.json";
 import weaponFxJson from "../../../data/weaponFx.json";
 import { ShotFx } from "./shotFx";
-import { parseWeaponFx } from "./weaponFxData";
+import { parseWeaponFx, weaponFxFor } from "./weaponFxData";
+import { RivetView } from "./rivetView";
+import { ANCHOR_MECH, ANCHOR_WORLD, HarpoonView } from "./harpoonView";
 import { mostOf, onVfxQuality, setVfxQuality, vfxConfig, vfxLevel, vfxQuality } from "./fx/quality";
 import explosionFxJson from "../../../data/explosionFx.json";
 import thrusterFxJson from "../../../data/thrusterFx.json";
@@ -225,20 +227,26 @@ const rangeWorld = new World([rangeWall, rangeGround]);
 const target = createMechModel(palette.mech.othersAccent, zoneMaxHp, toon, palette.mech.body, kit, palette.mech.trim);
 target.group.position.set(3.5, 0, RANGE_Z + 2.5);
 scene.add(target.group);
-const shotFx = new ShotFx(scene, parseWeaponFx(weaponFxJson), weapons, (c) => toon.color(c), vfxConfig.sprites.growSteps, vfxQuality);
+const weaponFxConfig = parseWeaponFx(weaponFxJson);
+const shotFx = new ShotFx(scene, weaponFxConfig, weapons, (c) => toon.color(c), vfxConfig.sprites.growSteps, vfxQuality);
 shotFx.impacts.setSurfaces([toon.color("rustOrange"), toon.color(palette.world.ground)], [0, 1]);
 const rangeShot = createShot();
 let rangeWeapon = 0;
 let rangeShots = 0;
 let lookingAtRange = false;
 let rangeSlow = false; // quarter speed, to see each flipbook frame
-// `alt` fires the weapon's right-click look instead (C): a slug, a windup round or a full charge (gate 18a).
+// `alt` fires the weapon's right-click look instead (C): a slug, a windup round or a full charge (gate 18a); the rivet
+// gun's detonator, or a harpoon reel that drags the range's stand-in shooter up to the wall (gate 18b).
 function fireAtRange(alt = false): void {
   const w = weapons[rangeWeapon]!;
-  const pellets = alt && w.secondary.kind === "slug" ? 1 : w.pellets;
-  const spreadDegrees = alt && w.secondary.kind !== "charge" ? w.secondary.spreadDegrees : w.spreadDegrees;
-  const atMech = rangeShots++ % 2 === 1;
-  const ox = -4.5, oy = 2.4, oz = RANGE_Z + 9;
+  const sec = w.secondary;
+  if (alt && sec.kind === "detonate") { rangeRivets?.detonate(0); return; }
+  const pellets = alt && sec.kind === "slug" ? 1 : w.pellets;
+  const spreadDegrees = alt && (sec.kind === "slug" || sec.kind === "windup") ? sec.spreadDegrees : alt && sec.kind === "reel" ? 0 : w.spreadDegrees;
+  // A reel always goes for the wall.
+  const atMech = alt && sec.kind === "reel" ? (rangeShots++, false) : rangeShots++ % 2 === 1;
+  rangeShooter.x = -4.5; rangeShooter.y = 2.4; rangeShooter.z = RANGE_Z + 9; rangeReel = 0;
+  const ox = rangeShooter.x, oy = rangeShooter.y, oz = rangeShooter.z;
   const tx = atMech ? 3.5 : -1.5, ty = atMech ? 2.4 : 2, tz = atMech ? RANGE_Z + 3 : RANGE_Z + 0.5;
   for (let p = 0; p < pellets; p++) {
     const spread = (spreadDegrees * Math.PI) / 180;
@@ -246,7 +254,14 @@ function fireAtRange(alt = false): void {
     const length = Math.hypot(dx, dy, dz);
     dx /= length; dy /= length; dz /= length;
     Object.assign(rangeShot, { ox, oy, oz, dx, dy, dz, length: atMech ? length - 1 : length + 5 }); // a mech hit ends on its armour
-    shotFx.show(rangeShot, rangeWeapon, atMech, alt ? 1 : -1);
+    if (w.projectile.kind !== "harpoon" || !rangeHarpoon) { shotFx.show(rangeShot, rangeWeapon, atMech, alt ? 1 : -1); continue; }
+    // The harpoon: its head and cable, latching on the mech (a yank) or the wall (a reel, or a plain bite).
+    shotFx.flash(rangeShot, rangeWeapon, alt ? 1 : -1);
+    const hit = atMech ? length - 1 : length - 0.5;
+    rangeHarpoon.fire(0, ox, oy, oz, dx, dy, dz, hit, alt);
+    const hold = alt && sec.kind === "reel" ? sec.maxSeconds : w.projectile.yankSeconds;
+    rangeHarpoon.latch(0, atMech ? ANCHOR_MECH : ANCHOR_WORLD, 1, ox + dx * hit, oy + dy * hit, oz + dz * hit, alt, hold);
+    if (alt && sec.kind === "reel") rangeReel = hit / w.projectileSpeed + hold;
   }
 }
 // Key 8: effects (V5a), the roster seen from in front. B sets off a blast behind it, in turn as big as a grenade's,
@@ -258,6 +273,48 @@ const fxChunks = new Debris(scene, toon, mostOf(vfxConfig, "debris"), () => vfxL
 const explosions = new Explosions(scene, fxSprites, fxChunks, explosionFx, (c) => toon.color(c));
 const thrusters = new Thrusters(fxSprites, parseThrusterFx(thrusterFxJson));
 const damageFx = new DamageFx(fxSprites, parseDamageFx(damageFxJson), zones);
+// The rivets and the harpoon on the range: the stand-in shooter is a point where the shots leave, dragged up to the
+// wall by a reel; mech 1 is the target mech.
+const rangeShooter = { x: 0, y: 0, z: 0 };
+let rangeReel = 0; // seconds of reel left, counting the flight
+const rangeLooks = weaponFxFor(weaponFxConfig, weapons);
+const rangeRivetGun = weapons.findIndex((w) => w.projectile.kind === "rivet");
+const rangeRivetStats = weapons[rangeRivetGun]?.projectile;
+const rangeRivetLook = rangeLooks[rangeRivetGun]?.rivet;
+const rangeRivets = rangeRivetLook && rangeRivetStats?.kind === "rivet"
+  ? new RivetView(scene, rangeRivetLook, toon.ownMaterial(rangeRivetLook.head), (c) => toon.color(c), (m) => (m === 1 ? target : null), () => rangeRivetStats.blastRadius)
+  : null;
+let rangeRivetId = 1;
+if (rangeRivets && rangeRivetStats?.kind === "rivet") {
+  rangeRivets.popOwnFuses = true;
+  rangeRivets.onPop = (x, y, z, radius) => explosions.blast(x, y, z, radius, 0);
+  const fuse = rangeRivetStats.fuseSeconds;
+  shotFx.onImpact = (x, y, z, weapon, nx, ny, nz) => {
+    if (weapon === rangeRivetGun) rangeRivets.stick({ owner: 0, id: rangeRivetId++, x, y, z, outX: nx, outY: ny, outZ: nz, mech: -1, fuseSeconds: fuse });
+  };
+  // On the mech the rivet faces back along the shot, out of its armour.
+  shotFx.onMechImpact = (x, y, z, weapon) => {
+    if (weapon === rangeRivetGun) rangeRivets.stick({ owner: 0, id: rangeRivetId++, x, y, z, outX: -rangeShot.dx, outY: 0, outZ: -rangeShot.dz, mech: 1, fuseSeconds: fuse });
+  };
+}
+const rangeHarpoonGun = weapons.findIndex((w) => w.projectile.kind === "harpoon");
+const rangeHarpoonLook = rangeLooks[rangeHarpoonGun]?.harpoon;
+const rangeHarpoon = rangeHarpoonLook
+  ? new HarpoonView(scene, rangeHarpoonLook, (c) => toon.color(c), toon.color(weapons[rangeHarpoonGun]!.color), fxSprites.sparks,
+    (_id, out) => { out.x = rangeShooter.x; out.y = rangeShooter.y; out.z = rangeShooter.z; return true; }, (m) => (m === 1 ? target : null), () => false)
+  : null;
+// Each frame: a reel drags the shooter point along its cable, as the server drags a reeling mech.
+function updateRange(dt: number): void {
+  if (rangeReel > 0 && weapons[rangeHarpoonGun]?.secondary.kind === "reel") {
+    rangeReel -= dt;
+    const speed = weapons[rangeHarpoonGun]!.secondary.speed;
+    const tx = -1.5, tz = RANGE_Z + 2, dx = tx - rangeShooter.x, dz = tz - rangeShooter.z, d = Math.hypot(dx, dz);
+    if (d > 0.5) { rangeShooter.x += (dx / d) * speed * dt; rangeShooter.z += (dz / d) * speed * dt; }
+  }
+  rangeHarpoon?.update(dt);
+  rangeRivets?.update(dt, camera.position);
+  rangeHarpoon?.draw(camera);
+}
 const BLASTS = [["grenade", grenadeJson.blastRadius], ["mortar shell", abilitiesJson.mechs.cataclysm.blastRadius], ["barrel", props.barrelBlast.radius]] as const;
 let nextBlast = 0;
 let jetsOn = false;
@@ -399,6 +456,7 @@ renderer.setAnimationLoop(() => {
   fireRoster(closeUp >= 0 || lookingAtRoster || lookingAtFx ? fxDt : dt);
   shotFx.update(fxDt, rangeWorld);
   shotFx.draw(camera, fxDt);
+  updateRange(fxDt);
   sunShadows.follow(camera);
   renderer.render(scene, camera);
 });

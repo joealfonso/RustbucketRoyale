@@ -105,7 +105,15 @@
     "windupResumeHeat": 0.3,
     "chargeMinRange": 60,
     "chargeStillSpeed": 2,
-    "chargeChancePerSecond": 0.8
+    "chargeChancePerSecond": 0.8,
+    "detonateMinRivets": 3,
+    "detonateMaxRange": 25,
+    "harpoonMinRange": 25,
+    "harpoonFleeSpeed": 3,
+    "reelHurtChancePerSecond": 0.5,
+    "reelHighChancePerSecond": 0.1,
+    "reelMinClimb": 3,
+    "reelMinMeters": 8
   },
   "abilities": {
     "ramChancePerSecond": 0.6,

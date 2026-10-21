@@ -1,4 +1,4 @@
-import { createRayHit, type AbilityStats, type AltFireState, type SecondaryStats, type BotPathStats, type BotStats, type MechInput, type MechState, type MechStats, type RingNow, type World } from "@rustbucket/shared";
+import { createRayHit, type AbilityStats, type AltFireState, type SecondaryStats, type WeaponStats, type BotPathStats, type BotStats, type MechInput, type MechState, type MechStats, type RingNow, type World } from "@rustbucket/shared";
 import type { BotAbilityStats } from "./botAbilities";
 import { DropBrain, type DropAim, type DropPlan } from "./botDrop";
 import type { Pathfinder } from "./Pathfinder";
@@ -11,7 +11,14 @@ const CHEST_HEIGHT = 2.0;
 // enough that a bot standing here really is on top of the thing.
 const LOOT_REACH = 1.2;
 const LOOT_DIRECT = 6; // nearer than this a bot walks straight at loot, not along a route that stops short
-const SAME_LOOT = 0.5; // loot offered this near the last is the same thing; things spilled from a wreck lie further apart
+const SAME_LOOT = 0.5;
+// Reeling (gate 18b). Guesses: how far round it looks for a roof to reel onto, the headings tried when reeling away
+// from a target (straight away, then off to either side), how far above level it aims those, and how long it keeps
+// turning toward one before giving up.
+const REEL_HIGH_SEARCH = 40;
+const REEL_AWAY_TURNS = [0, 0.7, -0.7];
+const REEL_AWAY_PITCH = 0.15;
+const REEL_PLAN_SECONDS = 1; // loot offered this near the last is the same thing; things spilled from a wreck lie further apart
 
 type GoalKind = "ring" | "loot" | "heard" | "hunt" | "wander";
 
@@ -70,6 +77,16 @@ export class Bot {
   // can back off before overheating and release a charge when it is full. Null: never right-clicks.
   secondary: SecondaryStats | null = null;
   alt: AltFireState | null = null;
+  weapon: WeaponStats | null = null; // the gun in hand, for its projectile kind and range (gate 18b)
+  rivetsReady = 0; // its own rivets riding other mechs near enough to pop now, worked out by the room
+  private detonateDown = false; // right-click was pressed last think: let go so the next press is a fresh one
+  private lastDistance = 0; // to the current target last think, for whether it is running away
+  private awaySpeed = 0; // how fast the current target is moving away, m/s
+  private reelFor = 0; // seconds left of trying to reel to (reelX, reelY, reelZ)
+  private reelX = 0;
+  private reelY = 0;
+  private reelZ = 0;
+  private boxScratch: number[] = [];
   private venting = false; // let go of a spun up autocannon to cool, until the heat is down again
   private charging = false; // holding a spike driver charge
   private trackId = 0; // the target whose speed is being watched, for charging on one that stands still
@@ -247,7 +264,10 @@ export class Bot {
         out.targetX = target.x; out.targetY = target.y; out.targetZ = target.z;
       }
       this.watchSpeed(target, dt);
+      this.awaySpeed = target.id === this.lastTargetId && dt > 0 && this.spottedFor > dt ? (distance - this.lastDistance) / dt : 0;
+      this.lastDistance = distance;
       this.useSecondary(distance, dt, out);
+      this.useProjectile(self, target, distance, world, dt, out);
       if (this.abilityKind && this.abilities) this.useAbility(self, target, distance, dt, out);
     } else {
       this.lastTargetId = 0;
@@ -368,13 +388,79 @@ export class Bot {
     } else if (this.charging) {
       out.fire = false;
       // The release step is the one that fires, toward the aim point this think set for the left button.
-      if (alt.charge >= sec.chargeSeconds && lined) this.charging = false;
+      if (sec.kind === "charge" && alt.charge >= sec.chargeSeconds && lined) this.charging = false;
       else out.altFire = true;
-    } else if (lined && (distance >= b.chargeMinRange || this.targetSpeed <= b.chargeStillSpeed) && this.random() < b.chargeChancePerSecond * dt) {
+    } else if (sec.kind === "charge" && lined && (distance >= b.chargeMinRange || this.targetSpeed <= b.chargeStillSpeed) && this.random() < b.chargeChancePerSecond * dt) {
       this.charging = true;
       out.fire = false;
       out.altFire = true;
     }
+  }
+
+  // The rivet gun and the harpoon in a fight (gate 18b). Rivets go on whatever it shoots, and right-click pops them
+  // once enough ride mechs that are close but not on top of it. The harpoon is kept for a target far off or running
+  // away, to yank it in. Hurt, a bot sometimes reels away from its target; now and then it reels up onto high ground.
+  private useProjectile(self: MechState, target: BotTarget, distance: number, world: World, dt: number, out: MechInput): void {
+    const weapon = this.weapon, b = this.abilities?.secondary;
+    const kind = weapon?.projectile.kind;
+    if (!weapon || !b || (kind !== "rivet" && kind !== "harpoon")) { this.reelFor = 0; this.detonateDown = false; return; }
+    if (kind === "rivet") {
+      const press = !this.detonateDown && this.rivetsReady >= b.detonateMinRivets;
+      this.detonateDown = press;
+      if (press) { out.altFire = true; out.fire = false; }
+      return;
+    }
+    if (out.fire && distance < b.harpoonMinRange && this.awaySpeed < b.harpoonFleeSpeed) out.fire = false;
+    this.reelFor -= dt;
+    if (this.reelFor <= 0 && this.hurtFor > 0 && this.random() < b.reelHurtChancePerSecond * dt) this.planReel(self, target, weapon, world, false);
+    else if (this.reelFor <= 0 && this.random() < b.reelHighChancePerSecond * dt) this.planReel(self, target, weapon, world, true);
+    if (this.reelFor <= 0) return;
+    this.turnToward(self, this.reelX, this.reelY, this.reelZ, dt);
+    out.fire = false;
+    if (this.angleTo(self, this.reelX, this.reelY, this.reelZ) < this.stats.fireToleranceDegrees * 2 * DEG) {
+      out.altFire = true;
+      out.targetX = this.reelX; out.targetY = this.reelY; out.targetZ = this.reelZ;
+    }
+  }
+
+  // Somewhere to reel to: a box top at least reelMinClimb above it and in reach, or with `high` false, a wall or
+  // slope behind it, away from the target. Leaves it in reelX/Y/Z for a second of turning and firing.
+  private planReel(self: MechState, target: BotTarget, weapon: WeaponStats, world: World, high: boolean): void {
+    const b = this.abilities!.secondary;
+    const range = weapon.maxAimDistance;
+    const eyeY = self.y + EYE_HEIGHT;
+    let found = false;
+    if (high) {
+      const r = Math.min(range, REEL_HIGH_SEARCH);
+      const count = world.query(self.x - r, self.z - r, self.x + r, self.z + r, this.boxScratch);
+      let best = Infinity;
+      for (let i = 0; i < count; i++) {
+        const index = this.boxScratch[i]!;
+        const box = world.boxes[index]!;
+        if (box.maxY - self.y < b.reelMinClimb) continue;
+        // Just under the top edge of its nearest side, where a reel lifts you over.
+        const x = Math.max(box.minX, Math.min(self.x, box.maxX)), z = Math.max(box.minZ, Math.min(self.z, box.maxZ)), y = box.maxY - 0.5;
+        const d = Math.hypot(x - self.x, y - eyeY, z - self.z);
+        if (d < b.reelMinMeters || d > range || d >= best) continue;
+        // Only a top it can see the edge of: the first thing on the way is that box, near the spot.
+        if (world.raycast(self.x, eyeY, self.z, (x - self.x) / d, (y - eyeY) / d, (z - self.z) / d, d + 1, this.hit) && this.hit.distance < d - 1) continue;
+        best = d; this.reelX = x; this.reelY = y; this.reelZ = z; found = true;
+      }
+    } else {
+      const ax = self.x - target.x, az = self.z - target.z;
+      const length = Math.hypot(ax, az) || 1;
+      for (const turn of REEL_AWAY_TURNS) {
+        const cos = Math.cos(turn), sin = Math.sin(turn);
+        const dx = (ax * cos - az * sin) / length, dz = (ax * sin + az * cos) / length;
+        const lift = Math.sin(REEL_AWAY_PITCH), flat = Math.cos(REEL_AWAY_PITCH);
+        if (!world.raycast(self.x, eyeY, self.z, dx * flat, lift, dz * flat, range, this.hit) || this.hit.distance < b.reelMinMeters) continue;
+        const d = this.hit.distance;
+        this.reelX = self.x + dx * flat * d; this.reelY = eyeY + lift * d; this.reelZ = self.z + dz * flat * d;
+        found = true;
+        break;
+      }
+    }
+    if (found) this.reelFor = REEL_PLAN_SECONDS;
   }
 
   // Q in a fight: a ram once the target is close and lined up dead ahead, since it charges the way the bot looks, a

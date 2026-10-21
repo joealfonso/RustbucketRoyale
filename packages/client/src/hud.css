@@ -136,6 +136,12 @@ canvas { display: block; width: 100%; height: 100%; }
 #altFire i.slug { width: 0.6rem; height: 0.6rem; border-radius: 50%; border: 1px solid var(--hud-amber); }
 #altFire[data-state="ready"] i.slug { background: var(--hud-amber); }
 #altFire .altLabel { font: 400 0.75rem var(--hud-num); letter-spacing: 0.1em; }
+/* Gate 18b. The rivets stuck: a bar cut into rivet-sized cells, one lit per rivet. The harpoon: a cooldown ring like
+   the charge's, solid when the next harpoon is ready. */
+#altFire i.detonate { width: 4.5rem; height: 0.45rem; background: rgba(0, 0, 0, 0.45); border: 1px solid var(--hud-amber-dim); }
+#altFire i.detonate b { display: block; height: 100%; width: calc(var(--fill, 0) * 100%); background: repeating-linear-gradient(90deg, var(--hud-amber) 0 0.32rem, transparent 0.32rem 0.45rem); }
+#altFire i.reel { width: 0.95rem; height: 0.95rem; border-radius: 50%; background: conic-gradient(var(--hud-amber-dim) calc(var(--fill, 0) * 1turn), rgba(0, 0, 0, 0.45) 0); -webkit-mask: radial-gradient(circle, transparent 0 38%, #000 40%); mask: radial-gradient(circle, transparent 0 38%, #000 40%); }
+#altFire[data-state="ready"] i.reel { background: var(--hud-amber); }
 
 /* Bottom right: the radar. The canvas sits inside its frame and is sized in rem, so the two can never drift apart and
    both grow with the HUD; radar.ts matches the canvas pixels to this size. */

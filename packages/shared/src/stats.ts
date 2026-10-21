@@ -52,7 +52,52 @@ export interface WeaponStats {
   maxAimDistance: number;
   shakeForce: number;
   damage: number;
+  projectile: ProjectileStats; // what a shot does where it lands (gate 18b). Left out in weapons.json it is a plain hitscan hit
   secondary: SecondaryStats; // right-click (altFire.ts)
+}
+
+// What a shot does where it lands (gate 18b). Every kind is resolved on the server at the trigger pull, against where
+// targets were a moment ago, and takes effect projectileSpeed later, when the drawn projectile gets there (flightSteps).
+export interface HitscanStats { kind: "hitscan" }
+// A rivet sticks where it lands (a wall, the ground, a prop, or riding on a mech) and pops after fuseSeconds with a
+// small blast. A player has at most maxStuck stuck at once: one more pops the oldest early.
+export interface RivetStats {
+  kind: "rivet";
+  fuseSeconds: number; blastDamage: number; blastRadius: number; maxStuck: number;
+}
+// A harpoon on a mech yanks it toward the shooter (yankSpeed for up to yankSeconds, stopping yankStopMeters short, with
+// yankLift m/s upward); on a pickup (passing within itemHitRadius) it slides the pickup over itemPullSeconds to
+// itemStopMeters in front of the shooter; on a prop of a type in smashProps it smashes it and slides its loot the same way.
+export interface HarpoonStats {
+  kind: "harpoon";
+  yankSpeed: number; yankSeconds: number; yankLift: number; yankStopMeters: number;
+  itemPullSeconds: number; itemStopMeters: number; itemHitRadius: number;
+  smashProps: string[];
+}
+export type ProjectileStats = HitscanStats | RivetStats | HarpoonStats;
+
+const RIVET_KEYS = ["fuseSeconds", "blastDamage", "blastRadius", "maxStuck"] as const;
+const HARPOON_KEYS = ["yankSpeed", "yankSeconds", "yankLift", "yankStopMeters", "itemPullSeconds", "itemStopMeters", "itemHitRadius"] as const;
+
+export function parseProjectile(raw: unknown, name: string): ProjectileStats {
+  if (raw === undefined) return { kind: "hitscan" };
+  const kind = (raw as { kind?: unknown } | null)?.kind;
+  const above = (s: Record<string, number>, key: string) => { if (!(s[key]! > 0)) throw new Error(`${name}: "${key}" must be above 0`); };
+  if (kind === "hitscan") return { kind };
+  if (kind === "rivet") {
+    const s = parseNumbers<Record<string, number>>(raw, name, [...RIVET_KEYS]);
+    above(s, "fuseSeconds"); above(s, "blastRadius");
+    if (!Number.isInteger(s.maxStuck) || s.maxStuck! < 1) throw new Error(`${name}: "maxStuck" must be a whole number of at least 1`);
+    return { ...s, kind } as RivetStats;
+  }
+  if (kind === "harpoon") {
+    const s = parseNumbers<Record<string, number>>(raw, name, [...HARPOON_KEYS]);
+    above(s, "yankSpeed"); above(s, "itemPullSeconds"); above(s, "itemHitRadius");
+    const smash = (raw as { smashProps?: unknown }).smashProps;
+    if (!Array.isArray(smash) || !smash.every((p) => typeof p === "string")) throw new Error(`${name}: "smashProps" must be a list of prop type ids`);
+    return { ...s, kind, smashProps: [...smash] } as HarpoonStats;
+  }
+  throw new Error(`${name}: "kind" must be hitscan, rivet or harpoon`);
 }
 
 // Right-click fire, built from a few kinds so no gun needs code of its own (gate 18a).
@@ -73,12 +118,23 @@ export interface ChargeStats {
   kind: "charge";
   chargeSeconds: number; minDamageShare: number; pierceMechs: number; pinSeconds: number; pinSpeedShare: number; shakeForce: number;
 }
-export type SecondaryStats = WindupStats | SlugStats | ChargeStats;
+// Right-click pops every rivet of yours that has stuck, at once. Fires on the press only.
+export interface DetonateStats { kind: "detonate" }
+// A grapple: fires the harpoon (sharing the gun's fire gate, at its own rate) and pulls you at `speed` for up to
+// maxSeconds toward where it lands, aimed standOffMeters out from the surface and climbMeters above it so a reel at a
+// ledge ends on top, stopping stopMeters short.
+export interface ReelStats {
+  kind: "reel";
+  shotsPerSecond: number; speed: number; maxSeconds: number; standOffMeters: number; climbMeters: number; stopMeters: number;
+}
+export type SecondaryStats = WindupStats | SlugStats | ChargeStats | DetonateStats | ReelStats;
 
 const SECONDARY_KEYS: Record<SecondaryStats["kind"], readonly string[]> = {
   windup: ["windupSeconds", "maxRateMultiplier", "heatPerShot", "coolPerSecond", "overheatSeconds", "spreadDegrees"],
   slug: ["shotsPerSecond", "damage", "spreadDegrees", "maxAimDistance", "shakeForce"],
   charge: ["chargeSeconds", "minDamageShare", "pierceMechs", "pinSeconds", "pinSpeedShare", "shakeForce"],
+  detonate: [],
+  reel: ["shotsPerSecond", "speed", "maxSeconds", "standOffMeters", "climbMeters", "stopMeters"],
 };
 
 // Divided by, or a share that must stay a share: anything else is a typo that would hang or break a gun.
@@ -90,7 +146,9 @@ function checkSecondary(s: SecondaryStats, name: string): void {
     if (!(s.maxRateMultiplier >= 1)) throw new Error(`${name}: "maxRateMultiplier" must be at least 1`);
   } else if (s.kind === "slug") {
     above("shotsPerSecond", s.shotsPerSecond); above("maxAimDistance", s.maxAimDistance);
-  } else {
+  } else if (s.kind === "reel") {
+    above("shotsPerSecond", s.shotsPerSecond); above("speed", s.speed); above("maxSeconds", s.maxSeconds);
+  } else if (s.kind === "charge") {
     above("chargeSeconds", s.chargeSeconds); share("minDamageShare", s.minDamageShare); share("pinSpeedShare", s.pinSpeedShare);
     if (!Number.isInteger(s.pierceMechs) || s.pierceMechs < 0) throw new Error(`${name}: "pierceMechs" must be a whole number of at least 0`);
   }
@@ -98,7 +156,7 @@ function checkSecondary(s: SecondaryStats, name: string): void {
 
 export function parseSecondary(raw: unknown, name: string): SecondaryStats {
   const kind = (raw as { kind?: unknown } | null)?.kind;
-  if (kind !== "windup" && kind !== "slug" && kind !== "charge") throw new Error(`${name}: "kind" must be windup, slug or charge`);
+  if (kind !== "windup" && kind !== "slug" && kind !== "charge" && kind !== "detonate" && kind !== "reel") throw new Error(`${name}: "kind" must be windup, slug, charge, detonate or reel`);
   const numbers = parseNumbers<Record<string, number>>(raw, name, SECONDARY_KEYS[kind] as string[]);
   const s = { ...numbers, kind } as SecondaryStats;
   checkSecondary(s, name);
@@ -331,7 +389,11 @@ export function parseWeapons(raw: unknown): WeaponSet {
     if (!Number.isInteger(numbers.pellets) || numbers.pellets < 1) throw new Error(`weapons.json: ${w.id} pellets must be a whole number of at least 1`);
     if (!(numbers.shotsPerSecond > 0)) throw new Error(`weapons.json: ${w.id} shotsPerSecond must be above 0`);
     const secondary = parseSecondary(w.secondary, `weapons.json ${w.id} secondary`);
-    return { ...numbers, id: w.id, name: w.name, color: w.color, secondary } as WeaponStats;
+    const projectile = parseProjectile(w.projectile, `weapons.json ${w.id} projectile`);
+    if (projectile.kind !== "hitscan" && !(numbers.projectileSpeed > 0)) throw new Error(`weapons.json: ${w.id} projectileSpeed must be above 0`);
+    // Detonate only has rivets to pop.
+    if (secondary.kind === "detonate" && projectile.kind !== "rivet") throw new Error(`weapons.json: ${w.id} detonate needs a rivet projectile`);
+    return { ...numbers, id: w.id, name: w.name, color: w.color, projectile, secondary } as WeaponStats;
   });
   const start = weapons.findIndex((w) => w.id === d.start);
   if (start < 0) throw new Error(`weapons.json: start weapon "${String(d.start)}" is not in the list`);

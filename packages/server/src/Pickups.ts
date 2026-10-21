@@ -19,6 +19,10 @@ export class Pickups {
     return pickup;
   }
 
+  get(id: number): PickupState | undefined {
+    return this.items.get(id);
+  }
+
   remove(id: number): void {
     this.items.delete(id);
   }

@@ -2,7 +2,8 @@
 // is said once, at the moment it is useful, in the same prompt box as "Hold F: repair". Each tip is shown once per
 // player, remembered in this browser, and a real prompt (take, loot, repair) always wins over a tip.
 
-export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "drop", "secondary"] as const;
+// "detonate" and "reel" (gate 18b) teach the rivet gun's and the harpoon's right-click, in place of "secondary".
+export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "drop", "secondary", "detonate", "reel"] as const;
 export type TipId = (typeof TIP_IDS)[number];
 
 export interface TipsConfig {

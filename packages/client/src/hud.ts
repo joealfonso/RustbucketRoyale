@@ -48,10 +48,23 @@ export function bossBarShown(shown: boolean, fallen: boolean, dx: number, dz: nu
 
 // The right-click meter beside the gun in hand (gate 18a), in whole steps so the page changes only when it moves.
 // windup: `value` is heat, `flag` overheated; charge: `value` is the charge share, `flag` full; slug: `flag` ready.
+// Gate 18b: detonate: `value` is the share of the most rivets you can have stuck, `count` how many are; reel: `value`
+// is how far the harpoon has cooled down, `flag` ready.
 export const ALT_STEPS = 20;
+export type AltKind = "windup" | "slug" | "charge" | "detonate" | "reel";
 export interface AltMeter { step: number; label: string; state: "" | "hot" | "overheat" | "full" | "ready" }
-export function altMeter(kind: "windup" | "slug" | "charge", value: number, flag: boolean, out: AltMeter): AltMeter {
+export function altMeter(kind: AltKind, value: number, flag: boolean, out: AltMeter, count = 0): AltMeter {
   out.step = kind === "slug" ? (flag ? ALT_STEPS : 0) : Math.max(0, Math.min(ALT_STEPS, Math.round(value * ALT_STEPS)));
+  if (kind === "detonate") {
+    out.state = count > 0 ? "ready" : "";
+    out.label = count > 0 ? `${count} STUCK` : "";
+    return out;
+  }
+  if (kind === "reel") {
+    out.state = flag ? "ready" : "";
+    out.label = flag ? "READY" : "";
+    return out;
+  }
   if (kind === "windup") {
     out.state = flag ? "overheat" : value >= 0.7 ? "hot" : "";
     out.label = flag ? "OVERHEAT" : "";
@@ -89,7 +102,7 @@ export class Hud {
   private altName = document.createElement("span");
   private altGauge = document.createElement("i");
   private altLabel = document.createElement("span");
-  private altShown = { name: "", kind: "", step: -1, state: "" };
+  private altShown = { name: "", kind: "", step: -1, state: "", label: "" };
   private altScratch: AltMeter = { step: 0, label: "", state: "" };
   private mechBox = byId("mechTitle");
   private abilityBox = byId("ability");
@@ -224,12 +237,16 @@ export class Hud {
   }
 
   // The gun in hand's right-click: its name, and a heat bar (OVERHEAT when it locks), a charge ring (it kicks and says
-  // PIERCE when full) or a ready dot. Hidden with a null name.
-  setAltFire(name: string | null, kind: "windup" | "slug" | "charge", value: number, flag: boolean): void {
-    const m = altMeter(kind, value, flag, this.altScratch);
+  // PIERCE when full), a ready dot, the rivets stuck (a bar of them and the count) or the harpoon's cooldown ring.
+  // Hidden with a null name. `count` is the rivets stuck, for detonate.
+  setAltFire(name: string | null, kind: AltKind, value: number, flag: boolean, count = 0): void {
+    const m = altMeter(kind, value, flag, this.altScratch, count);
     const shown = this.altShown;
     const shownName = name ?? "";
-    if (shown.name === shownName && shown.kind === kind && shown.step === m.step && shown.state === m.state) return;
+    if (shown.name === shownName && shown.kind === kind && shown.step === m.step && shown.state === m.state && shown.label === m.label) return;
+    // A rivet more, or the harpoon ready again: the gauge kicks, so it is felt without looking.
+    const kick = shown.kind === kind && ((kind === "detonate" && m.label !== shown.label && m.step > shown.step) || (kind === "reel" && m.state === "ready" && shown.state !== "ready"));
+    shown.label = m.label;
     const newly = m.state !== shown.state;
     if (shown.name !== shownName) { shown.name = shownName; this.altBox.style.display = name ? "flex" : "none"; this.altName.textContent = shownName; }
     if (shown.kind !== kind) { shown.kind = kind; this.altGauge.className = kind; }
@@ -238,7 +255,7 @@ export class Hud {
     this.altBox.dataset.state = m.state;
     this.altGauge.style.setProperty("--fill", String(m.step / ALT_STEPS));
     this.altLabel.textContent = m.label;
-    if (newly && (m.state === "full" || m.state === "overheat")) replay(this.altGauge);
+    if ((newly && (m.state === "full" || m.state === "overheat")) || kick) replay(this.altGauge);
   }
 
   // The mech you are driving, and the one you picked for next match if it is a different one.

@@ -47,6 +47,9 @@ export interface Player {
   watchId: number;
   heard: NoiseEvent[];
   shotsFired: number; // trigger pulls so far, for taking turns between two guns
+  // A harpoon fired with right-click that is still flying (gate 18b): the pull on this mech starts right after its
+  // own step `step`, the step the client predicts it on. Null for none.
+  reel: PendingReel | null;
   sentPickupIds: number[]; // the pickups in the last snapshot, so an unchanged list is not sent again // sounds to pass on in the next snapshot
   quietUntil: Int32Array; // per noise kind, the tick before which this mech makes no new pulse // when knocked out, the mech this client says it is watching (0 for none) // ids of the mechs this client is currently being sent
   dead: boolean;
@@ -56,4 +59,13 @@ export interface Player {
   // Recent positions, one per tick, so shots can be checked against where a target was a moment ago.
   historyTick: Int32Array;
   history: Float32Array; // x, y, z, yaw per entry
+}
+
+export interface PendingReel {
+  step: number;
+  weapon: number; // the harpoon's index in weapons.json
+  goalX: number; goalY: number; goalZ: number; // where the pull heads (shared reelPoint)
+  hit: "mech" | "prop" | "world"; // what it struck, for the message
+  target: number; // that mech's or prop's id, 0 for the world
+  x: number; y: number; z: number; // where it struck
 }

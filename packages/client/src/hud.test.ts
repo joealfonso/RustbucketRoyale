@@ -76,3 +76,15 @@ describe("altMeter", () => {
     expect(altMeter("slug", 0, false, m)).toMatchObject({ step: 0, state: "" });
   });
 });
+
+describe("altMeter for the rivet gun and the harpoon", () => {
+  const m = { step: 0, label: "", state: "" as const } as Parameters<typeof altMeter>[3];
+  it("counts the rivets stuck", () => {
+    expect(altMeter("detonate", 0, false, m, 0)).toMatchObject({ step: 0, state: "", label: "" });
+    expect(altMeter("detonate", 3 / 6, false, m, 3)).toMatchObject({ step: ALT_STEPS / 2, state: "ready", label: "3 STUCK" });
+  });
+  it("fills the harpoon's ring as it cools down and says when it is ready", () => {
+    expect(altMeter("reel", 0.5, false, m)).toMatchObject({ step: ALT_STEPS / 2, state: "", label: "" });
+    expect(altMeter("reel", 1, true, m)).toMatchObject({ step: ALT_STEPS, state: "ready", label: "READY" });
+  });
+});

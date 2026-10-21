@@ -15,8 +15,11 @@ export class ShotFx {
   private flashes: MuzzleFlashes;
   private altFlashes: MuzzleFlashes;
   readonly impacts: ImpactFx;
-  // Called where a bullet hits the map, for the sound.
-  onImpact?: (x: number, y: number, z: number) => void;
+  // Called where a bullet hits the map, for the sound; with the weapon (index in weapons.json) and the face it hit,
+  // so offline a rivet can stick there.
+  onImpact?: (x: number, y: number, z: number, weapon: number, nx: number, ny: number, nz: number) => void;
+  // Called where a bullet the shooter was told hit a mech arrives (the style page's firing range sticks rivets there).
+  onMechImpact?: (x: number, y: number, z: number, weapon: number) => void;
   // Called where a bullet goes into the water, for the splash and its sound.
   onWater?: (x: number, y: number, z: number) => void;
 
@@ -42,9 +45,9 @@ export class ShotFx {
       const tracer = new Projectiles(scene, fx.tracer, color(this.weapons[i]!.color), color(fx.tracer.core), () => cap(fx.tracer.pool));
       tracer.onImpact = (x, y, z, nx, ny, nz, box) => {
         this.impacts.world(fx.impact, x, y, z, nx, ny, nz, box);
-        this.onImpact?.(x, y, z);
+        this.onImpact?.(x, y, z, i, nx, ny, nz);
       };
-      tracer.onMechImpact = (x, y, z) => this.impacts.mech(fx.impact, x, y, z);
+      tracer.onMechImpact = (x, y, z) => { this.impacts.mech(fx.impact, x, y, z); this.onMechImpact?.(x, y, z, i); };
       tracer.onWater = (x, y, z) => this.onWater?.(x, y, z);
       return tracer;
     });
@@ -59,6 +62,13 @@ export class ShotFx {
     const lifetime = Math.min(stats.projectileLifetime, shot.length / stats.projectileSpeed);
     const altLook = usesAltLook(stats.secondary.kind, alt);
     (altLook ? this.altTracers : this.tracers)[w]!.spawn(shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz, stats.projectileSpeed, lifetime, hitMech);
+    (altLook ? this.altFlashes : this.flashes).spawn(w, shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz);
+  }
+
+  // Only the muzzle flash, for a shot drawn some other way (the harpoon, whose head and cable are harpoonView's).
+  flash(shot: Shot, weapon: number, alt = -1): void {
+    const w = this.tracers[weapon] ? weapon : 0;
+    const altLook = usesAltLook(this.weapons[w]!.secondary.kind, alt);
     (altLook ? this.altFlashes : this.flashes).spawn(w, shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz);
   }
 

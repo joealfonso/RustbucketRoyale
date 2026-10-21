@@ -33,10 +33,20 @@ export interface BotSecondaryStats {
   chargeMinRange: number; // a spike driver charges up on targets this far off...
   chargeStillSpeed: number; // ...or on any target moving slower than this, in m/s
   chargeChancePerSecond: number; // once one of those holds and the bot is lined up
+  // Gate 18b. The rivet gun pops its rivets once this many ride mechs within detonateMaxRange (and out of the blast).
+  detonateMinRivets: number;
+  detonateMaxRange: number;
+  harpoonMinRange: number; // the harpoon is fired at targets at least this far off...
+  harpoonFleeSpeed: number; // ...or nearer ones moving away faster than this, in m/s
+  reelHurtChancePerSecond: number; // hurt lately, it reels away from its target
+  reelHighChancePerSecond: number; // and in any fight, it reels up onto a top...
+  reelMinClimb: number; // ...at least this far above its feet
+  reelMinMeters: number; // never reels to anything nearer than this
 }
 
 const SECONDARY_KEYS: readonly (keyof BotSecondaryStats)[] = [
   "slugMinRange", "windupMaxRange", "windupHeatLimit", "windupResumeHeat", "chargeMinRange", "chargeStillSpeed", "chargeChancePerSecond",
+  "detonateMinRivets", "detonateMaxRange", "harpoonMinRange", "harpoonFleeSpeed", "reelHurtChancePerSecond", "reelHighChancePerSecond", "reelMinClimb", "reelMinMeters",
 ];
 
 const KEYS: readonly (keyof Omit<BotAbilityStats, "secondary">)[] = [

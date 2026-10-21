@@ -25,6 +25,9 @@ export interface LootConfig {
   maxPickups: number;
   colors: { grenade: string; armor: string };
   drops: Record<string, LootDrop>;
+  // Per map tier, weights that replace a table's own for the items named, in every table that has them (gate 18b: the
+  // rivet gun suits small maps' close fights, the harpoon large maps' distances). A tier left out uses the tables as they are.
+  tierWeights?: Record<string, Record<string, number>>;
 }
 
 export function parseLootConfig(raw: unknown, weapons: WeaponSet, props: PropConfig): LootConfig {
@@ -43,6 +46,17 @@ export function parseLootConfig(raw: unknown, weapons: WeaponSet, props: PropCon
       if (name !== "grenade" && name !== "armor" && name !== "upgrade" && !weapons.weapons.some((w) => w.id === name)) throw new Error(`loot.json: ${prop.id} drops unknown item "${name}"`);
     }
   }
+  const tierWeights = d.tierWeights as Record<string, Record<string, unknown>> | undefined;
+  if (tierWeights !== undefined) {
+    if (typeof tierWeights !== "object" || tierWeights === null) throw new Error("loot.json: tierWeights must be an object of tiers");
+    for (const [tier, weights] of Object.entries(tierWeights)) {
+      if (typeof weights !== "object" || weights === null) throw new Error(`loot.json: tierWeights.${tier} must be an object`);
+      for (const [name, weight] of Object.entries(weights)) {
+        if (name !== "grenade" && name !== "armor" && name !== "upgrade" && !weapons.weapons.some((w) => w.id === name)) throw new Error(`loot.json: tierWeights.${tier} names unknown item "${name}"`);
+        if (typeof weight !== "number" || !(weight >= 0)) throw new Error(`loot.json: tierWeights.${tier}.${name} must be 0 or more`);
+      }
+    }
+  }
   return d as unknown as LootConfig;
 }
 
@@ -54,11 +68,13 @@ export const itemUpgrade = (item: number) => (item >= ITEM_UPGRADE_FIRST ? item 
 export const takenWithE = (item: number) => item >= ITEM_WEAPON_FIRST;
 export const itemArmorZone = (item: number) => (item >= ITEM_ARMOR_FIRST && item < ITEM_WEAPON_FIRST ? item - ITEM_ARMOR_FIRST : -1);
 
-// Picks what a broken prop drops, if anything. `random` returns a number from 0 up to but not including 1.
-export function rollLoot(loot: LootConfig, weapons: WeaponSet, upgradeCount: number, propId: string, random: () => number): number | null {
+// Picks what a broken prop drops, if anything. `random` returns a number from 0 up to but not including 1. `tier` is the
+// map's, for loot.json tierWeights.
+export function rollLoot(loot: LootConfig, weapons: WeaponSet, upgradeCount: number, propId: string, random: () => number, tier = ""): number | null {
   const drop = loot.drops[propId];
   if (!drop || random() >= drop.chance) return null;
-  const entries = Object.entries(drop.table);
+  const overrides = loot.tierWeights?.[tier];
+  const entries = Object.entries(drop.table).map(([name, w]): [string, number] => [name, overrides?.[name] ?? w]);
   const total = entries.reduce((sum, [, w]) => sum + w, 0);
   if (total <= 0) return null;
   let roll = random() * total;

@@ -48,6 +48,7 @@ export class HeadlessPlayer {
   private dropPlan: DropPlan | null = null;
   private alt = createAltFireState(); // its heat and charge as the server last said, for the brain's right-click
   secondaryShots = 0; // its own secondary shots seen coming back, so the soak shows right-click is being used
+  private stuckOn = new Map<number, number>(); // its own rivets still stuck: rivet id to the mech it rides (0 the world)
 
   constructor(
     private room: Room,
@@ -88,6 +89,12 @@ export class HeadlessPlayer {
     if (message.t === "shot" && message.id === this.id && message.alt !== undefined) this.secondaryShots++;
     // Being rammed is a shove only the server knows about, so the snapshots right after it are not judged.
     if (message.t === "ability" && message.event === "hit" && this.predictor && Math.hypot(message.x - this.predictor.state.x, message.z - this.predictor.state.z) < RAMMED_NEAR) this.settleSnapshots = 3;
+    // Its own rivets, from what it is told, so the brain knows when popping them is worth it.
+    if (message.t === "rivet" && message.event === "stick" && message.owner === this.id) this.stuckOn.set(message.id, message.on ?? 0);
+    if (message.t === "explode" && message.rivet !== undefined) this.stuckOn.delete(message.rivet);
+    // A harpoon yank on it, or its own reel, starts on the server. The browser books its own reel from its own aim;
+    // this pretend player does not, so neither is judged.
+    if (message.t === "harpoon" && message.seconds !== undefined && ((message.hit === "mech" && message.target === this.id && !message.reel) || (message.reel && message.id === this.id))) this.settleSnapshots = 3;
     // So is the Junk Titan's stomp.
     if (message.t === "titan" && message.event === "stomp" && this.predictor && Math.hypot(message.x - this.predictor.state.x, message.z - this.predictor.state.z) <= (message.radius ?? 0) + 1) this.settleSnapshots = 3;
   }
@@ -121,6 +128,19 @@ export class HeadlessPlayer {
       this.aimDropAtRing();
     }
     this.settleSnapshots = 3;
+  }
+
+  // Its own rivets riding mechs it can see, out of their blast but within the brain's range for popping them.
+  private rivetsReady(snap: Snapshot, blastRadius: number): number {
+    const range = this.botAbilities?.secondary.detonateMaxRange ?? 0;
+    const me = this.predictor!.state;
+    let count = 0;
+    for (const on of this.stuckOn.values()) {
+      const o = on ? snap.others.find((m) => m.id === on && !m.dead) : undefined;
+      const d = o ? Math.hypot(o.x - me.x, o.z - me.z) : 0;
+      if (o && d > blastRadius + 1 && d <= range) count++;
+    }
+    return count;
   }
 
   // The first circle the ring closes to, which is where the brain wants to land.
@@ -172,7 +192,10 @@ export class HeadlessPlayer {
     this.brain.abilityKind = this.abilityOf(this.predictor.state.mech)?.kind ?? null;
     this.brain.body = this.statsOf(this.predictor.state.mech);
     const held = snap.loadout.slots[snap.loadout.active] ?? -1;
-    this.brain.secondary = (held >= 0 ? this.weapons?.weapons[held]?.secondary : null) ?? null;
+    const weapon = (held >= 0 ? this.weapons?.weapons[held] : null) ?? null;
+    this.brain.secondary = weapon?.secondary ?? null;
+    this.brain.weapon = weapon;
+    this.brain.rivetsReady = weapon?.projectile.kind === "rivet" ? this.rivetsReady(snap, weapon.projectile.blastRadius) : 0;
     this.brain.alt = this.alt;
     if (dropping(this.predictor.state) && this.dropPlan) {
       // It cannot know where the room's bots mean to land, only where the mechs it is sent are now.

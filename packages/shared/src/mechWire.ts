@@ -14,6 +14,7 @@ export function writeSelf(s: MechState, alt?: AltFireState): SelfState {
     fuelScale: s.fuelScale, speedScale: s.speedScale, dropPhase: s.dropPhase, dropTime: s.dropTime, mech: s.mech,
     heat: alt?.heat ?? 0, overheat: alt?.overheat ?? 0, windup: alt?.windup ?? 0, charge: alt?.charge ?? 0,
     pinTime: s.pinTime, pinSpeed: s.pinSpeed,
+    pullTime: s.pullTime, pullVx: s.pullVx, pullVy: s.pullVy, pullVz: s.pullVz,
   };
 }
 
@@ -29,6 +30,7 @@ export function readSelf(s: MechState, from: SelfState): void {
   s.speedScale = from.speedScale;
   s.dropPhase = from.dropPhase; s.dropTime = from.dropTime;
   s.pinTime = from.pinTime; s.pinSpeed = from.pinSpeed;
+  s.pullTime = from.pullTime; s.pullVx = from.pullVx; s.pullVy = from.pullVy; s.pullVz = from.pullVz;
   s.mech = from.mech;
   s.stamina.value = from.stamina; s.stamina.locked = from.staminaLocked; s.stamina.regenTimer = from.staminaTimer;
 }

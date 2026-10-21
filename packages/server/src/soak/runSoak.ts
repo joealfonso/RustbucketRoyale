@@ -40,7 +40,8 @@ export interface SoakReport {
   medianLandingSeconds: number;
   medianSteerMeters: number; // how far mechs came down from where they hung, median
   secondaryShots: number; // right-click trigger pulls by everyone in the match (gate 18a)
-  secondaryByKind: { windup: number; slug: number; charge: number };
+  secondaryByKind: { windup: number; slug: number; charge: number; detonate: number; reel: number };
+  projectiles: Room["projectileCount"]; // what rivets and harpoons did (gate 18b)
   startWeapon: string;
   headlessSecondaryShots: number; // ...of which by the headless players, through the real input path
   pierced: number; // mechs a full charge spike went on through to
@@ -204,7 +205,8 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
     medianSteerMeters: median(steered),
     startWeapon: config.weapons.weapons[config.weapons.start]!.id,
     secondaryShots: room.secondaryCount.shots,
-    secondaryByKind: { windup: room.secondaryCount.windup, slug: room.secondaryCount.slug, charge: room.secondaryCount.charge }, headlessSecondaryShots: players.reduce((n, p) => n + p.secondaryShots, 0),
+    secondaryByKind: { windup: room.secondaryCount.windup, slug: room.secondaryCount.slug, charge: room.secondaryCount.charge, detonate: room.secondaryCount.detonate, reel: room.secondaryCount.reel },
+    projectiles: { ...room.projectileCount }, headlessSecondaryShots: players.reduce((n, p) => n + p.secondaryShots, 0),
     pierced: room.secondaryCount.pierced, pinned: room.secondaryCount.pinned,
   };
 }

@@ -7,6 +7,8 @@
     "grenade": "G: throw a grenade",
     "weapons": "1 / 2 or the wheel: switch weapons",
     "drop": "Look where you want to land",
-    "secondary": "Right-click: {secondary}"
+    "secondary": "Right-click: {secondary}",
+    "detonate": "Right-click: pop every rivet you have stuck",
+    "reel": "Right-click: harpoon a wall and reel yourself to it"
   }
 }

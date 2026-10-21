@@ -5,7 +5,7 @@ import weaponsJson from "../../../data/weapons.json";
 import weaponFxJson from "../../../data/weaponFx.json";
 import { SlotRing } from "./fx/flipbook";
 import { SpritePool } from "./fx/sprites";
-import { capFor, flashFrame, nearestFamily, parseWeaponFx, sparkVelocity, usesAltLook, weaponFxFor } from "./weaponFxData";
+import { capFor, fuseBlink, flashFrame, nearestFamily, parseWeaponFx, sparkVelocity, usesAltLook, weaponFxFor } from "./weaponFxData";
 
 const config = parseWeaponFx(weaponFxJson);
 
@@ -113,5 +113,26 @@ describe("right-click looks (gate 18a)", () => {
     expect(usesAltLook("slug", 1)).toBe(true);
     expect(usesAltLook("windup", 1)).toBe(true);
     expect(usesAltLook("windup", -1)).toBe(false);
+  });
+});
+
+describe("rivet fuse", () => {
+  it("steps up through the fuse and blinks faster each step", () => {
+    // 3 steps over 1.5 s: 0 to 0.5 s blinking at 2 Hz (on for a quarter second), the last step at 8 Hz.
+    expect(fuseBlink(0.1, 1.5, 3, 2, 8)).toBe(0);
+    expect(fuseBlink(0.3, 1.5, 3, 2, 8)).toBe(-1);
+    expect(fuseBlink(0.8, 1.5, 3, 2, 8)).toBe(1);
+    expect(fuseBlink(1.4, 1.5, 3, 2, 8)).toBe(2); // at 8 Hz each half blink is 1/16 s: 1.4 s is the 23rd, on
+    expect(fuseBlink(1.44, 1.5, 3, 2, 8)).toBe(-1); // and 1.44 s the 24th, off
+    expect(fuseBlink(1.5, 1.5, 3, 2, 8)).toBe(2);
+    expect(fuseBlink(9, 1.5, 3, 2, 8)).toBe(2); // past the fuse it stays on the last step
+  });
+
+  it("has rivet and harpoon looks wherever weapons.json has those guns", () => {
+    const weapons = parseWeapons(weaponsJson).weapons;
+    weaponFxFor(config, weapons).forEach((fx, i) => {
+      if (weapons[i]!.projectile.kind === "rivet") expect(fx.rivet).toBeDefined();
+      if (weapons[i]!.projectile.kind === "harpoon") expect(fx.harpoon).toBeDefined();
+    });
   });
 });

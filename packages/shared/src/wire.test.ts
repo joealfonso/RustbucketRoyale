@@ -10,7 +10,7 @@ const snapshot = (others: OtherState[]): Snapshot => ({
   t: "snapshot", tick: 123456, ack: 99, ackAgeMs: 12.4,
   you: {
     x: -321.123456, y: 4.5, z: 888.25, vx: 3.5, vz: -2.25, vy: 0.5, bodyYaw: 2.75, grounded: true, running: false, jetting: true, crawling: true,
-    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, abilityTime: 0.35, abilityCooldown: 5.5, abilityX: -0.8, abilityZ: 0.6, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0, fuelScale: 1.6, speedScale: 1.2, dropPhase: 0, dropTime: 0, heat: 0, overheat: 0, windup: 0, charge: 0, pinTime: 0, pinSpeed: 0, mech: 3,
+    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, abilityTime: 0.35, abilityCooldown: 5.5, abilityX: -0.8, abilityZ: 0.6, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0, fuelScale: 1.6, speedScale: 1.2, dropPhase: 0, dropTime: 0, heat: 0, overheat: 0, windup: 0, charge: 0, pinTime: 0, pinSpeed: 0, pullTime: 0, pullVx: 0, pullVy: 0, pullVz: 0, mech: 3,
   },
   health: { hp: [60, 12, 88], dead: false, respawnIn: 0 },
   match: { state: "active", seconds: 91.5, alive: 7, total: 24 },
@@ -23,6 +23,17 @@ const snapshot = (others: OtherState[]): Snapshot => ({
 });
 
 describe("snapshot wire format", () => {
+  it("carries a harpoon pull, past the old 32 numbers of your own state (gate 18b)", () => {
+    const s = snapshot([]);
+    Object.assign(s.you, { pullTime: 0.4, pullVx: -12.5, pullVy: 3, pullVz: 20.25 });
+    const memory = new SnapshotMemory(), read = new SnapshotMemory();
+    const back = decodeSnapshot(encodeSnapshot(s, memory), read)!;
+    expect([back.you.pullTime, back.you.pullVx, back.you.pullVy, back.you.pullVz]).toEqual([Math.fround(0.4), -12.5, 3, 20.25]);
+    // Unchanged next time, so not sent again, and still read back the same.
+    const again = encodeSnapshot(s, memory);
+    expect(decodeSnapshot(again, read)!.you.pullVz).toBe(20.25);
+    expect(again.length).toBe(snapshotSize(0, 0, 0, 0));
+  });
   it("round trips, with your own state to float precision and others rounded to centimetres", () => {
     const original = snapshot([other(7, 412.34), other(300, -999.9)]);
     const back = decodeSnapshot(encodeSnapshot(original))!;
@@ -94,13 +105,13 @@ describe("snapshot wire format", () => {
 
   // Your own ability timers added 16 bytes (four float32s) and the ability byte one per other mech. The Junk Titan
   // (gate 13c) added a byte to every snapshot saying whether it is near, and 11 more when it is. The drop-in (16a)
-  // added two of your numbers, which only go while you are dropping, so the worst case went from 127 to 135 bytes.
-  it("is small: under 165 bytes with nobody else near (every one of your own numbers changing), 21 bytes per extra mech, 9 per pickup, 11 for the Titan", () => {
+  // added two of your numbers, which only go while you are dropping, so the worst case went from 127 to 135 bytes. The harpoon pull (18b) added four more and a mask byte.
+  it("is small: under 180 bytes with nobody else near (every one of your own numbers changing, the harpoon pull too), 21 bytes per extra mech, 9 per pickup, 11 for the Titan", () => {
     expect(encodeSnapshot(snapshot([])).length).toBe(snapshotSize(0, 0, 0, 20)); // staminaTimer is 0
-    expect(snapshotSize(0)).toBeLessThan(165);
+    expect(snapshotSize(0)).toBeLessThan(180);
     expect(snapshotSize(10) - snapshotSize(0)).toBe(210);
     expect(snapshotSize(0, 0, 10) - snapshotSize(0)).toBe(90);
-    expect(snapshotSize(0, 0, 0, 29, true) - snapshotSize(0)).toBe(11);
+    expect(snapshotSize(0, 0, 0, 33, true) - snapshotSize(0)).toBe(11);
   });
 
   it("carries the Junk Titan when it is near, to a mech's steps, and null when it is not", () => {

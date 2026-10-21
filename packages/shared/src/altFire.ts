@@ -14,10 +14,11 @@ export interface AltFireState {
   windup: number; // 0 to 1, how far the spin up has got
   charge: number; // seconds the charge has been held
   weaponId: string; // the gun these belong to: changing gun drops the spin and the charge
+  held: boolean; // right-click was down last step, so a detonate goes off on the press only. Not sent: both sides see the same inputs
 }
 
 export function createAltFireState(): AltFireState {
-  return { heat: 0, overheat: 0, windup: 0, charge: 0, weaponId: "" };
+  return { heat: 0, overheat: 0, windup: 0, charge: 0, weaponId: "", held: false };
 }
 
 // What fired this step. `weapon` is a scratch copy of the gun with the secondary's numbers laid over it (damage
@@ -28,15 +29,17 @@ export interface AltShot {
   pierce: number; // extra mechs the shot passes through
   pinSeconds: number; // 0 for no pin
   pinSpeedShare: number;
+  detonate: boolean; // a rivet gun's right-click press: pop your stuck rivets. No shot (pellets 0)
+  reel: boolean; // a harpoon fired with right-click: it pulls the shooter to where it lands
   weapon: WeaponStats;
 }
 
 export function createAltShot(): AltShot {
   return {
-    mode: FIRE_NONE, share: 1, pierce: 0, pinSeconds: 0, pinSpeedShare: 1,
+    mode: FIRE_NONE, share: 1, pierce: 0, pinSeconds: 0, pinSpeedShare: 1, detonate: false, reel: false,
     weapon: {
       id: "", name: "", color: "", pellets: 1, shotsPerSecond: 1, projectileSpeed: 0, projectileLifetime: 0, spreadDegrees: 0,
-      maxAimDistance: 0, shakeForce: 0, damage: 0, secondary: { kind: "slug", shotsPerSecond: 1, damage: 0, spreadDegrees: 0, maxAimDistance: 0, shakeForce: 0 },
+      maxAimDistance: 0, shakeForce: 0, damage: 0, projectile: { kind: "hitscan" }, secondary: { kind: "slug", shotsPerSecond: 1, damage: 0, spreadDegrees: 0, maxAimDistance: 0, shakeForce: 0 },
     },
   };
 }
@@ -55,7 +58,7 @@ export function chargeShare(state: AltFireState, weapon: WeaponStats): number {
 
 function shoot(out: AltShot, weapon: WeaponStats, mode: number): true {
   out.mode = mode;
-  out.share = 1; out.pierce = 0; out.pinSeconds = 0; out.pinSpeedShare = 1;
+  out.share = 1; out.pierce = 0; out.pinSeconds = 0; out.pinSpeedShare = 1; out.detonate = false; out.reel = false;
   Object.assign(out.weapon, weapon);
   return true;
 }
@@ -64,6 +67,8 @@ function shoot(out: AltShot, weapon: WeaponStats, mode: number): true {
 // Right-click wins over left-click while held. `rateScale` is the fire rate upgrade.
 export function stepAltFire(state: AltFireState, gate: FireGate, input: MechInput, weapon: WeaponStats, time: number, dt: number, rateScale: number, out: AltShot): boolean {
   out.mode = FIRE_NONE;
+  const pressed = input.altFire && !state.held;
+  state.held = input.altFire;
   if (state.weaponId !== weapon.id) { state.weaponId = weapon.id; state.windup = 0; state.charge = 0; }
   // A vent runs out whatever is in hand, and clears the heat when it ends. The same half-step end as the ram: the
   // time crosses the wire as a float32.
@@ -96,6 +101,23 @@ export function stepAltFire(state: AltFireState, gate: FireGate, input: MechInpu
       shoot(out, weapon, FIRE_SECONDARY);
       const w = out.weapon;
       w.pellets = 1; w.damage = sec.damage; w.spreadDegrees = sec.spreadDegrees; w.maxAimDistance = sec.maxAimDistance; w.shakeForce = sec.shakeForce;
+      return true;
+    }
+  } else if (sec.kind === "detonate") {
+    if (pressed) {
+      shoot(out, weapon, FIRE_SECONDARY);
+      out.detonate = true;
+      out.weapon.pellets = 0;
+      return true;
+    }
+    if (input.altFire) return false; // still held: right-click wins over left
+  } else if (sec.kind === "reel") {
+    if (input.altFire) {
+      // The same gate as the left button, so a reel and a harpoon never go one straight after the other.
+      if (!gate.tryFire(time, sec.shotsPerSecond * rateScale)) return false;
+      shoot(out, weapon, FIRE_SECONDARY);
+      out.reel = true;
+      out.weapon.pellets = 1; out.weapon.spreadDegrees = 0;
       return true;
     }
   } else {

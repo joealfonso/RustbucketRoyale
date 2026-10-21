@@ -76,6 +76,24 @@
         "torsoMeters": 0.13,
         "torsoHz": 4
       },
+      "rivetGun": {
+        "backMeters": 0.12,
+        "climbDegrees": 4.5,
+        "hz": 8,
+        "damping": 0.55,
+        "cap": 1.4,
+        "torsoMeters": 0.02,
+        "torsoHz": 7
+      },
+      "magnetHarpoon": {
+        "backMeters": 0.36,
+        "climbDegrees": 8,
+        "hz": 3.5,
+        "damping": 0.5,
+        "cap": 1,
+        "torsoMeters": 0.15,
+        "torsoHz": 3.5
+      },
       "spikeDriverAlt": {
         "backMeters": 0.42,
         "climbDegrees": 13,

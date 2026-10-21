@@ -35,12 +35,37 @@ export interface AltFx extends WeaponFx {
   pin?: Pin;
 }
 
+// The rivet gun's rivets (gate 18b): drawn stuck where they hit, a fuse light blinking faster in steps until they pop.
+// `head` is the rivet's colour; `fuse` the blink (its glow grows from sizes[0] to sizes[1] over the fuse, blinking
+// from slowHz to fastHz); `rippleSeconds` the gap between pops when you detonate them all; `popShake` the camera shake
+// a pop gives within `popShakeRadius`. The pop's size is weapons.json's blastRadius.
+export interface RivetLook {
+  pool: number; headMeters: number; shankMeters: number; head: string;
+  fuse: { steps: number; slowHz: number; fastHz: number; sizes: [number, number] };
+  rippleSeconds: number; popShakeRadius: number; popShake: number;
+}
+
+// The magnet harpoon (gate 18b): the head and its cable, flying out, latching, pulling, and winding back in.
+// `cable` is a thin inked line from the muzzle to the head; `tug` the sparks spitting off the latch while it pulls;
+// `yankShake` the jerk on your camera when you are the one yanked; `holdSeconds` how long the cable stays taut when
+// the server does not say; `reelLines` the speed lines rushing past while you reel in.
+export interface HarpoonLook {
+  pool: number; speed: number; retractSpeed: number; holdSeconds: number; missSeconds: number;
+  head: { lengthMeters: number; widthMeters: number; core: string };
+  cable: { widthMeters: number; color: string; core: string; coreShare: number };
+  tug: { everySeconds: number; sparks: number; sparkSpeed: number };
+  yankShake: number; reelShake: number;
+  reelLines: { count: number; radiusMeters: number; clearRadiusMeters: number; lengthMeters: number; widthMeters: number; fromSpeed: number; fullSpeed: number };
+}
+
+export type WeaponLook = WeaponFx & { alt: AltFx; rivet?: RivetLook; harpoon?: HarpoonLook };
+
 export interface WeaponFxConfig {
   lowShare: number; // share of every pool kept on the low effects setting
   sparks: { pool: number; world: Bands; mech: Bands; lifeSeconds: number; size: number; aspect: number; streakSeconds: number; gravity: number; drag: number; lift: number };
   grit: { pool: number; lifeSeconds: number; startSize: number; endSize: number; rise: number; families: { like: string; colors: Bands }[] };
   mechFlash: { pool: number; points: number; inner: number; coreScale: number; colors: [string, string]; frameSeconds: number; sizes: number[] };
-  weapons: Record<string, WeaponFx & { alt: AltFx }>;
+  weapons: Record<string, WeaponLook>;
 }
 
 const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
@@ -82,8 +107,38 @@ export function parseWeaponFx(raw: unknown): WeaponFxConfig {
     }
     if (alt.vent) { numbers(alt.vent, ["everySeconds", "lifeSeconds", "rise"], `weapons.${id}.alt.vent`); pair(alt.vent.size, `weapons.${id}.alt.vent.size`); }
     if (alt.pin) numbers(alt.pin, ["everySeconds", "sparks", "sparkSpeed", "ringMeters", "ringSeconds"], `weapons.${id}.alt.pin`);
+    if (w.rivet) checkRivet(w.rivet, `weapons.${id}.rivet`);
+    if (w.harpoon) checkHarpoon(w.harpoon, `weapons.${id}.harpoon`);
   }
   return d;
+}
+
+function checkRivet(r: RivetLook, where: string): void {
+  numbers(r, ["pool", "headMeters", "shankMeters", "rippleSeconds", "popShakeRadius", "popShake"], where);
+  if (typeof r.head !== "string") throw new Error(`weaponFx.json: ${where}.head must be a colour`);
+  numbers(r.fuse, ["steps", "slowHz", "fastHz"], `${where}.fuse`);
+  if (r.fuse.steps < 1) throw new Error(`weaponFx.json: ${where}.fuse.steps must be 1 or more`);
+  pair(r.fuse.sizes, `${where}.fuse.sizes`);
+}
+
+function checkHarpoon(h: HarpoonLook, where: string): void {
+  numbers(h, ["pool", "speed", "retractSpeed", "holdSeconds", "missSeconds", "yankShake", "reelShake"], where);
+  numbers(h.head, ["lengthMeters", "widthMeters"], `${where}.head`);
+  numbers(h.cable, ["widthMeters", "coreShare"], `${where}.cable`);
+  for (const [part, key] of [[h.head, "core"], [h.cable, "color"], [h.cable, "core"]] as const) {
+    if (typeof (part as Record<string, unknown>)[key] !== "string") throw new Error(`weaponFx.json: ${where} needs colours for its head and cable`);
+  }
+  numbers(h.tug, ["everySeconds", "sparks", "sparkSpeed"], `${where}.tug`);
+  numbers(h.reelLines, ["count", "radiusMeters", "clearRadiusMeters", "lengthMeters", "widthMeters", "fromSpeed", "fullSpeed"], `${where}.reelLines`);
+}
+
+// Which step of a rivet's fuse it is in `age` seconds into a `fuse` (0 to steps - 1), or -1 while the light is
+// blinked off. It blinks faster each step, so a rivet about to pop reads as urgent from across a fight.
+export function fuseBlink(age: number, fuse: number, steps: number, slowHz: number, fastHz: number): number {
+  if (fuse <= 0) return steps - 1;
+  const step = Math.max(0, Math.min(steps - 1, Math.floor((age / fuse) * steps)));
+  const hz = steps > 1 ? slowHz + ((fastHz - slowHz) * step) / (steps - 1) : slowHz;
+  return Math.floor(Math.max(0, age) * hz * 2) % 2 === 0 ? step : -1;
 }
 
 function pair(v: unknown, where: string): void {
@@ -104,7 +159,7 @@ function checkLook(w: WeaponFx, where: string): void {
 
 // The look of each weapon, in the order of weapons.json. Every weapon must have one, so a new gun cannot ship
 // without its effects.
-export function weaponFxFor(config: WeaponFxConfig, weapons: readonly { id: string }[]): (WeaponFx & { alt: AltFx })[] {
+export function weaponFxFor(config: WeaponFxConfig, weapons: readonly { id: string }[]): WeaponLook[] {
   return weapons.map((w) => {
     const fx = config.weapons[w.id];
     if (!fx) throw new Error(`weaponFx.json: no effects for weapon ${w.id}`);

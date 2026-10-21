@@ -25,9 +25,10 @@ export const isBinaryType = (first: number) => first === TYPE_SNAPSHOT || first 
 // stamina, the fuel scale, the facing while standing). A 3-byte mask says which are sent; one left out is the same
 // float as last time (0 for a fresh memory), so prediction replays from exactly the numbers the server has. Then one
 // byte of flags.
-// Gate 18a added six more (heat, vent, spin, charge, pin time and pin speed) and a fourth mask byte.
-const SELF_FLOATS = 29;
-const SELF_MASK_BYTES = 4;
+// Gate 18a added six more (heat, vent, spin, charge, pin time and pin speed) and a fourth mask byte; gate 18b four
+// more (the harpoon pull) and a fifth.
+const SELF_FLOATS = 33;
+const SELF_MASK_BYTES = 5;
 // Another mech: id, a byte saying what follows, its flags, its position, its yaw, then its details (hit points,
 // weapon, armour, upgrades). Once a client has been sent a mech, the position goes as the change since last time,
 // 1 byte an axis, and the details only when one changes, so a mech in view usually costs 9 bytes instead of 21.
@@ -108,9 +109,11 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
   const noises = m.noises.slice(0, 255);
   const pickups = m.pickups?.slice(0, PICKUPS_UNCHANGED - 1) ?? [];
   const s = m.you;
-  const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale, s.speedScale, s.dropPhase, s.dropTime, s.heat, s.overheat, s.windup, s.charge, s.pinTime, s.pinSpeed];
-  let mask = 0, present = 0;
-  selfNumbers.forEach((n, i) => { if (!Object.is(Math.fround(n), memory.self[i])) { mask |= 1 << i; present++; } });
+  const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale, s.speedScale, s.dropPhase, s.dropTime, s.heat, s.overheat, s.windup, s.charge, s.pinTime, s.pinSpeed, s.pullTime, s.pullVx, s.pullVy, s.pullVz];
+  // More than 32 bits, so the mask is kept as bytes.
+  const mask = new Uint8Array(SELF_MASK_BYTES);
+  let present = 0;
+  selfNumbers.forEach((n, i) => { if (!Object.is(Math.fround(n), memory.self[i])) { mask[i >> 3]! |= 1 << (i & 7); present++; } });
 
   // Each other mech against what this connection was last sent about it.
   const seen = new Map<number, OtherMemory>();
@@ -149,8 +152,8 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
   v.setUint8(o, m.health.dead ? 1 : 0); o += 1;
   v.setUint8(o, u8(Math.ceil(m.health.respawnIn))); o += 1;
 
-  for (let i = 0; i < SELF_MASK_BYTES; i++) { v.setUint8(o, (mask >>> (i * 8)) & 255); o += 1; }
-  selfNumbers.forEach((n, i) => { if (mask & (1 << i)) { v.setFloat32(o, n, true); o += 4; } });
+  for (let i = 0; i < SELF_MASK_BYTES; i++) { v.setUint8(o, mask[i]!); o += 1; }
+  selfNumbers.forEach((n, i) => { if (mask[i >> 3]! & (1 << (i & 7))) { v.setFloat32(o, n, true); o += 4; } });
   memory.self.set(selfNumbers);
   v.setUint8(o, (s.grounded ? 1 : 0) | (s.running ? 2 : 0) | (s.jetting ? 4 : 0) | (s.fuelLocked ? 8 : 0) | (s.staminaLocked ? 16 : 0) | (s.crawling ? 32 : 0)); o += 1;
   v.setUint8(o, s.mech); o += 1; // your own roster mech, a byte of its own since the flags byte is full
@@ -222,20 +225,21 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
   const dead = v.getUint8(o) === 1; o += 1;
   const respawnIn = v.getUint8(o); o += 1;
 
-  const mask = v.getUint32(o, true); o += SELF_MASK_BYTES;
+  const mask = bytes.subarray(o, o + SELF_MASK_BYTES); o += SELF_MASK_BYTES;
+  const sent = (i: number) => (mask[i >> 3]! & (1 << (i & 7))) !== 0;
   let present = 0;
-  for (let i = 0; i < SELF_FLOATS; i++) if (mask & (1 << i)) present++;
+  for (let i = 0; i < SELF_FLOATS; i++) if (sent(i)) present++;
   if (bytes.length < snapshotSize(0, 0, 0, present)) return null;
   let field = 0;
-  const f = () => { const i = field++; if (!(mask & (1 << i))) return memory.self[i]!; const n = v.getFloat32(o, true); o += 4; return n; };
+  const f = () => { const i = field++; if (!sent(i)) return memory.self[i]!; const n = v.getFloat32(o, true); o += 4; return n; };
   const you: SelfState = {
     x: f(), y: f(), z: f(), vx: f(), vz: f(), vy: f(), bodyYaw: f(), dashTime: f(), dashCooldown: f(), dashX: f(), dashZ: f(),
     abilityTime: f(), abilityCooldown: f(), abilityX: f(), abilityZ: f(),
     fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(), speedScale: f(), dropPhase: f(), dropTime: f(),
-    heat: f(), overheat: f(), windup: f(), charge: f(), pinTime: f(), pinSpeed: f(), mech: 0,
+    heat: f(), overheat: f(), windup: f(), charge: f(), pinTime: f(), pinSpeed: f(), pullTime: f(), pullVx: f(), pullVy: f(), pullVz: f(), mech: 0,
     grounded: false, running: false, jetting: false, crawling: false, fuelLocked: false, staminaLocked: false,
   };
-  const selfOrder = [you.x, you.y, you.z, you.vx, you.vz, you.vy, you.bodyYaw, you.dashTime, you.dashCooldown, you.dashX, you.dashZ, you.abilityTime, you.abilityCooldown, you.abilityX, you.abilityZ, you.fuel, you.fuelTimer, you.stamina, you.staminaTimer, you.fuelScale, you.speedScale, you.dropPhase, you.dropTime, you.heat, you.overheat, you.windup, you.charge, you.pinTime, you.pinSpeed];
+  const selfOrder = [you.x, you.y, you.z, you.vx, you.vz, you.vy, you.bodyYaw, you.dashTime, you.dashCooldown, you.dashX, you.dashZ, you.abilityTime, you.abilityCooldown, you.abilityX, you.abilityZ, you.fuel, you.fuelTimer, you.stamina, you.staminaTimer, you.fuelScale, you.speedScale, you.dropPhase, you.dropTime, you.heat, you.overheat, you.windup, you.charge, you.pinTime, you.pinSpeed, you.pullTime, you.pullVx, you.pullVy, you.pullVz];
   const flags = v.getUint8(o); o += 1;
   you.grounded = (flags & 1) !== 0; you.running = (flags & 2) !== 0; you.jetting = (flags & 4) !== 0;
   you.fuelLocked = (flags & 8) !== 0; you.staminaLocked = (flags & 16) !== 0; you.crawling = (flags & 32) !== 0;
