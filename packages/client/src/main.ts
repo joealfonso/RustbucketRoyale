@@ -257,6 +257,7 @@ let autoStart = params.has("play");
 const tuningAllowed = import.meta.env.DEV || params.has("tuning");
 const tipsConfig = parseTips(tipsJson);
 const tips = new Tips(tipsConfig, browserTipStore(() => localStorage));
+let dropTipDue = false; // a supply drop was announced and its tip has not been said yet
 let clickedIn = false;
 hint.addEventListener("click", () => { clickedIn = true; });
 
@@ -1601,8 +1602,8 @@ function frame(now: number): void {
   const ring: RingNow | null = ringView.update(matchSeconds);
   dropView.update(progress.state === "active" ? matchSeconds : null, frameTime);
   railFx.update(performance.now(), map.world, railPoseOf, railPose);
-  if (dropView.news === "announced") { hud.flash("SUPPLY DROP INBOUND", 2500); hud.feed("Supply drop incoming: follow the yellow beam"); }
-  else if (dropView.news === "open") hud.feed("Supply drop open");
+  if (dropView.news === "announced") { hud.flash("SUPPLY DROP INBOUND", 2500); hud.feed("Supply drop incoming: follow the yellow beam"); dropTipDue = true; }
+  else if (dropView.news === "open") { hud.feed("Supply drop open"); dropTipDue = false; }
   if (radar && progress.state === "active") dropView.forEachMarked(matchSeconds, markDrop);
   const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);
   if (net || progress.state === "countdown") hud.setProgress(progress, ring, mech.dropPhase === DROP_HANGING ? dive.hud.countdownWords : "");
@@ -1685,6 +1686,9 @@ function frame(now: number): void {
     // The rivet gun and the harpoon each say what their right-click does, the first time each is in hand.
     if (altKind === "detonate" || altKind === "reel") tips.offer(altKind);
     else if (inHand >= 0 && altLooks[inHand]) tips.offer("secondary", altLooks[inHand]!.name);
+    // The announcement is a one-frame event, so it waits here until a tip can be said while you are playing.
+    if (dropTipDue && tips.offer("supplyDrop")) dropTipDue = false;
+    if (titanNear) tips.offer("titan");
     for (const p of pickupsNow) {
       if (itemArmorZone(p.item) >= 0 && Math.hypot(p.x - mech.x, p.z - mech.z) <= tipsConfig.healthTipMeters) { tips.offer("health"); break; }
     }
