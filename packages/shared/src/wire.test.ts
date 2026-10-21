@@ -65,17 +65,17 @@ describe("snapshot wire format", () => {
   });
 
   // The drop-in (gate 16a): your own phase and landing stun as two more of your numbers, sent only while not 0, and
-  // every other mech's phase in three spare bits of a byte it already has (the shell, gate 16b, is phase 4).
+  // every other mech's phase in two spare bits of a byte it already has (gate 16c: hanging, ball, braking).
   it("carries the drop-in phase, yours and everyone else's, at no cost once everyone is down", () => {
-    // The fifth roster mech and the shell together: the mech's top bit and the phase's top bit must not meet.
-    const s = snapshot([other(1, 2), other(2, 3), other(3, 4), { ...other(5, 6), mech: 4, dropPhase: 4, ability: true }]);
+    // The fifth roster mech and the braking phase together: the mech's top bit and the phase's bits must not meet.
+    const s = snapshot([other(1, 2), other(2, 3), other(3, 4), { ...other(5, 6), mech: 4, dropPhase: 3, ability: true }]);
     const down = encodeSnapshot(s).length;
     s.you.dropPhase = 2;
     s.you.dropTime = 0.375;
     const back = decodeSnapshot(encodeSnapshot(s))!;
     expect(back.you.dropPhase).toBe(2);
     expect(back.you.dropTime).toBe(0.375);
-    expect(back.others.map((o) => o.dropPhase)).toEqual([1, 2, 3, 4]);
+    expect(back.others.map((o) => o.dropPhase)).toEqual([1, 2, 3, 3]);
     expect(back.others[3]!.mech).toBe(4);
     expect(back.others[3]!.ability).toBe(true);
     expect(encodeSnapshot(s).length - down).toBe(8);
@@ -283,6 +283,13 @@ describe("input wire format", () => {
     const original = base({ fire: true, targetX: Math.fround(10.5), targetY: Math.fround(-2), targetZ: Math.fround(300.125), lagMs: 85 });
     const back = decodeInput(encodeInput(original, true))!;
     expect(back).toEqual({ ...original, watchId: undefined });
+  });
+
+  // The drop-in ball steers toward the aim point (gate 16c), so it goes along without firing when the caller asks.
+  it("carries the aim point without firing when asked, as every step of the drop does", () => {
+    const original = base({ targetX: Math.fround(-120.5), targetY: Math.fround(3), targetZ: Math.fround(88.25) });
+    expect(decodeInput(encodeInput(original, true))).toMatchObject({ fire: false, targetX: -120.5, targetZ: 88.25 });
+    expect(decodeInput(encodeInput(original, false))).toMatchObject({ targetX: 0, targetZ: 0 });
   });
 
   it("carries the weapon slot wanted, E and F", () => {

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
   parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
-  createRayHit, parseDropsConfig, parseTitanConfig, DROP_BURNING, DROP_DIVING, DROP_NONE, DROP_RIDING, DROP_SHELL, dropping, boardShip, launchDrop, parseShipStats, planShipPath, shipEndsAt, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
+  createRayHit, parseDropsConfig, parseTitanConfig, DROP_BALL, DROP_BURNING, DROP_HANGING, DROP_NONE, dropping, hangAtSpot, parseDropSpotStats, planDropSpots, releaseDrop, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import audioJson from "../../../data/audio.json";
@@ -133,9 +133,8 @@ import { LandingImpact } from "./landingImpact";
 import { LandingMarker } from "./landingMarker";
 import { SpeedLines } from "./speedLines";
 import { DropSprites } from "./fx/dropSprites";
-import { LaunchFx } from "./launchFx";
-import { ShipView, shipLook } from "./shipView";
-import shipKitJson from "../../../data/shipKit.json";
+import { ScrapBalls } from "./scrapBall";
+import { AimRing } from "./aimRing";
 
 const KILL_HEIGHT = -50;
 
@@ -327,8 +326,8 @@ explosions.setTerrain(map.terrain);
 const thrusters = new Thrusters(fxSprites, parseThrusterFx(thrusterFxJson));
 const splashes = new Splashes(fxSprites.water, waterLook.splashes);
 const breakFx = new BreakFx(chunks, fxSprites, parsePropFx(propFxJson), (c) => toon.color(c));
-// The drop-in (gates 16a and 16b): the Rustbucket and its cannon, the shell, the dive's camera, HUD, landing marker,
-// falling pose, smoke trails and landing (data/dive.json). Its effects are inked toon sprites of their own.
+// The drop-in (gates 16a to 16c): the flaming scrap balls, the drop's camera, HUD, aim ring, landing marker, smoke
+// trails, the burst and the landing (data/dive.json). Its effects are inked toon sprites of their own.
 const dive = parseDive(diveJson);
 const dropSprites = new DropSprites(scene, (c) => toon.color(c), dive.toon);
 const divePose = new DivePose(dive.pose);
@@ -336,11 +335,8 @@ const diveTrails = new DiveTrails(dropSprites, dive.trail);
 const landingImpact = new LandingImpact(dropSprites, chunks, dive.impact, dive.impact.debrisColors.map((c) => new THREE.Color(toon.color(c))));
 const speedLines = new SpeedLines(dive.speedLines, dropSprites);
 const diveHud = new DiveHud(dive.hud);
-const shipView = new ShipView(toon, dropSprites, dive.ship, shipLook(shipKitJson, dive.ship.kit));
-scene.add(shipView.group);
-void shipView.load();
-const launchFx = new LaunchFx(scene, toon, dropSprites, chunks, dive);
-const shipStats = parseShipStats(dropJson.ship, Object.keys(dropJson.altitudeMeters));
+const scrapBalls = new ScrapBalls(scene, toon, dropSprites, chunks, dive);
+const dropSpotStats = parseDropSpotStats(dropJson.spots);
 scene.add(propView.group);
 let treeView = makeTrees();
 // What the map casts in the sun. The dressing and the near edge wall mark their own as they rebuild near you.
@@ -524,18 +520,16 @@ remotes.onKnockedOut = (id, model, alreadyDown) => {
   const at = model.group.position;
   deathFx.blowApart(model, from ? at.x - from.x : 0, from ? at.z - from.z : 0, id);
 };
-// Someone else's drop-in: fired out of the cannon, the shell bursting, the retro-jets lighting, and coming down.
-// Their pose, shell and smoke trail are drawn each frame.
+// Someone else's drop-in: the ball bursting as the retro-jets light, and coming down. Their ball, pose and smoke
+// trail are drawn each frame.
 remotes.onDropPhase = (_model, from, to, x, y, z) => {
-  if (to === DROP_SHELL) showCannon(false);
-  else if (from === DROP_SHELL && to !== DROP_NONE) showBurst(x, y, z);
-  if (to === DROP_BURNING) { dropAt.x = x; dropAt.y = y; dropAt.z = z; sound.play("landingBurn", dropAt); }
+  if (to === DROP_BURNING && from !== DROP_NONE) showBurn(x, y, z);
   else if (to === DROP_NONE && from !== DROP_NONE) showLanding(x, y, z, false);
 };
 const dropRemote = (model: MechModel, phase: number, vx: number, vy: number, vz: number, id: number) => {
-  divePose.apply(model, phase, vx, vy, vz, fxDt, id);
+  divePose.apply(model, phase, fxDt);
   diveTrails.emit(model, phase, vx, vy, vz, fxDt);
-  if (phase === DROP_SHELL && !model.dead) { const p = model.group.position; launchFx.shell(p.x, p.y, p.z, vx, vy, vz, id); }
+  if ((phase === DROP_HANGING || phase === DROP_BALL) && !model.dead) { const p = model.group.position; scrapBalls.ball(p.x, p.y, p.z, vx, vy, vz, id); }
 };
 // The Junk Titan (gate 13c): drawn from the snapshots, its moments from "titan" messages (titanView.ts). Its model is
 // fetched the first time one is near, so a map without one never downloads it; until then a grey-box stand-in.
@@ -676,8 +670,9 @@ mech.mech = shownMech; // offline this is the mech you drive; online the first s
 const aim = { yaw: Math.PI, pitch: 0 };
 const diveCamera = new DiveCamera(dive.camera, mechStats);
 const landingMarker = new LandingMarker(dive.marker, toon.color(dive.marker.color), mechStats);
-scene.add(landingMarker.group);
-let bayHold = 0; // seconds the view stays in the ship's bay after you are fired out
+const aimRing = new AimRing(dive.aim, toon.color(dive.aim.color));
+scene.add(landingMarker.group, aimRing.group);
+let aimOnGround = false; // the crosshair is on the map, not the sky, so the drop's aim ring can show
 let ownDropPhase = DROP_NONE; // your drop phase as last drawn, to catch the burn lighting and the touchdown
 const mechInput = createMechInput();
 const look = { dx: 0, dy: 0 };
@@ -889,7 +884,6 @@ if (net) {
     if (r.seed !== map.seed || r.tier !== map.tier) swapMap(r.seed, r.tier);
     ringView.setSchedule(r.ring);
     dropView.setDrops(r.drops);
-    shipView.setPath(r.ship);
     hud.setRoom(r, net.id);
     if (r.state === "countdown") { hud.hideResult(); myPlace = null; killReplay.clear(); knockedFrom.clear(); titanView.clear(); }
     if (r.state === "active" && wasCountdown) hud.flash("GO", 900);
@@ -979,24 +973,12 @@ function shakeNear(x: number, y: number, z: number, radius: number, force: numbe
 // A mech touching down from the drop-in: dust and scrap thrown out round it (a splash in the water, from the thrusters'
 // landing), a heavy thud, and the camera shaken if it is near, or hard if it is yours.
 const dropAt = { x: 0, y: 0, z: 0 };
-// The cannon going off at the ship's muzzle: a blast, smoke, a boom heard across the map, and a kick to the camera,
-// hard if it fired you.
-const muzzleAt = new THREE.Vector3();
-const muzzleDir = new THREE.Vector3();
-function showCannon(own: boolean): void {
-  if (!shipView.group.visible) return;
-  shipView.muzzleAt(muzzleAt, muzzleDir);
-  launchFx.cannon(muzzleAt.x, muzzleAt.y, muzzleAt.z, muzzleDir.x, muzzleDir.y, muzzleDir.z);
-  sound.play("cannonFire", muzzleAt);
-  if (own) rig.addShake(dive.cannon.shake);
-  else shakeNear(muzzleAt.x, muzzleAt.y, muzzleAt.z, dive.cannon.nearShakeMeters, dive.cannon.shake * 0.4);
-}
-
-// A shell bursting open as its dive starts: rust plates tumbling off, a pop of flame and a clatter.
-function showBurst(x: number, y: number, z: number): void {
+// The ball bursting open as the retro-jets light: rust plates tumbling off, a pop of flame, a clatter and the burn's roar.
+function showBurn(x: number, y: number, z: number): void {
   dropAt.x = x; dropAt.y = y; dropAt.z = z;
-  launchFx.burst(x, y, z, groundBelow(x, y, z));
+  scrapBalls.burst(x, y, z, groundBelow(x, y, z));
   sound.play("shellBurst", dropAt);
+  sound.play("landingBurn", dropAt);
 }
 
 function showLanding(x: number, y: number, z: number, own: boolean): void {
@@ -1122,28 +1104,25 @@ function swapOwnMech(m: number): void {
   shownNext = -2; // says the HUD line is out of date
 }
 
-// Offline practice drops in like a match: aboard the Rustbucket on the same kind of line the server picks (shared
-// shipPath.ts), riding through a countdown that starts once you click in, then free to fire yourself out until the
-// ship throws you out at the end of its line. The range has no drop-in. Offline has no ring, so the line passes
-// through the middle of the map instead of the first circle.
+// Offline practice drops in like a match: hanging as a ball over the first of the match's drop spots (shared
+// dropSpots.ts, the server's rule) through a countdown that starts once you click in, then falling. The range has
+// no drop-in.
 let offlineDropIn = 0;
-let offlineClock = 0; // the match clock offline: minus the countdown left, then seconds since it ended
 function startDropOffline(): void {
-  shipView.setPath(null);
   const altitude = startAltitude(dropJson.altitudeMeters, map.tier);
-  const speed = (dropJson.ship.speedMeters as Record<string, number>)[map.tier];
-  if (altitude === null || speed === undefined) return;
-  const circle = { cx: 0, cz: 0, radius: map.meters * dive.ship.offlineCircleShare };
-  const path = planShipPath(map.seed, map.world, map.meters, circle, altitude, speed, shipStats, matchJson.countdownSeconds);
-  shipView.setPath(path);
-  offlineDropIn = matchJson.countdownSeconds;
-  offlineClock = -offlineDropIn;
-  boardShip(mech, path, offlineClock, 0, shipStats);
+  if (altitude === null) return;
+  const spot = planDropSpots(map.seed, 1, map.world, map.meters, dropSpotStats)[0]!;
+  hangAtSpot(mech, spot.x, spot.z, map.world, altitude);
   prevX = mech.x; prevY = mech.y; prevZ = mech.z;
-  // Looking the way the cannon points, back along the line and down past the barrel. (Yaw 0 faces -z, so facing
-  // back along the line is the yaw of the line itself.)
-  aim.yaw = Math.atan2(path.x1 - path.x0, path.z1 - path.z0);
-  aim.pitch = -30 * Math.PI / 180;
+  faceDrop();
+  offlineDropIn = matchJson.countdownSeconds;
+}
+
+// Hanging over your spot: the view looks down toward the middle of the map, where most of the fight will be.
+// (Yaw 0 faces -z: the middle at (0, 0) is straight ahead at atan2(x, z).)
+function faceDrop(): void {
+  if (Math.hypot(mech.x, mech.z) > 1) aim.yaw = Math.atan2(mech.x, mech.z);
+  aim.pitch = dive.camera.startPitchDegrees * Math.PI / 180;
 }
 
 function respawnOffline(): void {
@@ -1152,30 +1131,18 @@ function respawnOffline(): void {
 }
 if (net === null) startDropOffline();
 
-// The offline countdown, ticking only while you are in the game: "LAUNCH IN 3", then the cannon is yours. Until it
-// ends you are held at your slot for the clock, so the ship waits while you have not clicked in.
+// The offline countdown, ticking only while you are in the game: "DROP IN 3", then the ball falls.
 function countDownOffline(dt: number): void {
-  const path = shipView.line;
-  if (offlineDropIn <= 0) return;
-  if (input.locked) offlineDropIn -= dt;
-  offlineClock = -Math.max(0, offlineDropIn);
-  if (path && mech.dropPhase === DROP_RIDING) boardShip(mech, path, offlineClock, 0, shipStats);
+  if (offlineDropIn <= 0 || !input.locked) return;
+  offlineDropIn -= dt;
   if (offlineDropIn > 0) {
     progress = { state: "countdown", seconds: offlineDropIn, alive: 1, total: 1 };
     return;
   }
   progress = { state: "lobby", seconds: 0, alive: 1, total: 1 };
+  releaseDrop(mech);
   hud.flash("GO", 900);
   sound.play("go");
-}
-
-// Offline, the ship's clock runs with the simulation once the countdown is over, and at the end of its line it
-// throws out anyone still aboard, as the server does.
-function rideOffline(): void {
-  const path = shipView.line;
-  if (!path || offlineDropIn > 0) return;
-  offlineClock += STEP;
-  if (mech.dropPhase === DROP_RIDING && offlineClock >= shipEndsAt(path)) launchDrop(mech, aim.yaw, simPitch(aim.pitch, mechStats), mechStats);
 }
 
 window.addEventListener("resize", () => {
@@ -1231,7 +1198,11 @@ function frame(now: number): void {
     const wantedSlot = loadout.slots[mechInput.slot]! >= 0 ? mechInput.slot : loadout.active;
     if (wantedSlot !== firingSlot) { firingSlot = wantedSlot; gate.holdUntil(simTime + lootConfig.switchSeconds); }
     const weapon = weaponSet.weapons[loadout.slots[firingSlot]!] ?? weaponStats;
-    setAimTarget(rig.camera, map.world, weapon.maxAimDistance, mechInput, aimAtMechs);
+    // Dropping, the crosshair's ground point steers the ball, so it reaches the ground far below and ignores mechs.
+    const droppingNow = dropping(mech);
+    aimOnGround = droppingNow
+      ? setAimTarget(rig.camera, map.world, dive.aim.rangeMeters, mechInput)
+      : setAimTarget(rig.camera, map.world, weapon.maxAimDistance, mechInput, aimAtMechs);
     mechInput.targetX = Math.fround(mechInput.targetX); mechInput.targetY = Math.fround(mechInput.targetY); mechInput.targetZ = Math.fround(mechInput.targetZ);
     // A destroyed mech can only look around, and nobody moves during the countdown: the same rules the server applies,
     // so prediction does not run ahead and get pulled back.
@@ -1251,9 +1222,8 @@ function frame(now: number): void {
     const moment = ownAbility ? abilityMoment(abilityBefore, mech.abilityTime, ownAbility.kind) : null;
     if (moment === "start") showAbilityStart(ownAbility!.kind, prevX, prevY, prevZ);
     else if (moment === "land") showSlam(mech.x, mech.y, mech.z, slamRadiusOf(mech.mech));
-    net?.sendInput(seq, mechInput);
+    net?.sendInput(seq, mechInput, droppingNow);
     if (net === null && mech.y < KILL_HEIGHT) respawnOffline();
-    if (net === null) rideOffline();
 
     simTime += STEP;
     if (mechInput.fire && gate.tryFire(simTime, weapon.shotsPerSecond * upgradeScale(loadout, upgradeSet, "fireRate"))) {
@@ -1293,13 +1263,12 @@ function frame(now: number): void {
   mechGroup.position.set(x, y, z);
   // With an instant body turn, face exactly where the camera looks, even between sim steps.
   mechGroup.rotation.y = mechStats.turnSpeedDegrees > 0 ? mech.bodyYaw : aim.yaw;
-  divePose.tick(frameTime);
-  divePose.apply(ownModel, mech.dropPhase, mech.vx, mech.vy, mech.vz, frameTime, 0);
-  // Your own launch, burst, burn and touchdown, from prediction, the moment they happen on your screen.
+  divePose.apply(ownModel, mech.dropPhase, frameTime);
+  // Your own hang, fall, burst and touchdown, from prediction, the moment they happen on your screen.
   if (mech.dropPhase !== ownDropPhase) {
-    if (mech.dropPhase === DROP_SHELL) { showCannon(true); bayHold = dive.ship.bayCamera.holdSeconds; }
-    else if (ownDropPhase === DROP_SHELL && mech.dropPhase !== DROP_NONE) showBurst(x, y, z);
-    if (mech.dropPhase === DROP_BURNING) sound.play("landingBurn", mechGroup.position);
+    if (mech.dropPhase === DROP_HANGING && ownDropPhase === DROP_NONE) faceDrop();
+    else if (mech.dropPhase === DROP_BALL) hud.flash(dive.hud.aimCall, dive.hud.aimCallSeconds * 1000);
+    else if (mech.dropPhase === DROP_BURNING && ownDropPhase !== DROP_NONE) showBurn(x, y, z);
     else if (mech.dropPhase === DROP_NONE && !health.dead) showLanding(mech.x, mech.y, mech.z, true);
     ownDropPhase = mech.dropPhase;
   }
@@ -1308,10 +1277,10 @@ function frame(now: number): void {
   if (killReplay.busy && progress.state !== "active") killReplay.cancel();
   const replaying = killReplay.update(performance.now(), frameTime, remotes, ownModel, rig.camera, map.world);
   remotes.update(performance.now());
-  launchFx.begin(frameTime * killReplay.timeScale);
+  scrapBalls.begin(frameTime * killReplay.timeScale);
   remotes.forEachDrop(dropRemote);
-  if (mech.dropPhase === DROP_SHELL && !health.dead) launchFx.shell(x, y, z, mech.vx, mech.vy, mech.vz, 0, false);
-  launchFx.end();
+  if ((mech.dropPhase === DROP_HANGING || mech.dropPhase === DROP_BALL) && !health.dead) scrapBalls.ball(x, y, z, mech.vx, mech.vy, mech.vz, 0);
+  scrapBalls.end();
   killReplay.record(performance.now(), net?.id ?? 0, ownModel, mech, health, remotes);
   // Effects keep the replay's slow motion (tracers move on the sim step and stay at full speed).
   const fxTime = frameTime * killReplay.timeScale;
@@ -1373,28 +1342,14 @@ function frame(now: number): void {
   // The camera can ride a little of your walk's bob (camera.json walkBob, off by default).
   const bob = spectating ? 0 : (ownModel.gait?.bob ?? 0) * cameraStats.walkBob;
   if (!replaying) rig.update(viewX, viewY + cameraStats.pivotHeight + bob, viewZ, aim.yaw, aim.pitch, map.world, frameTime);
-  // Riding the Rustbucket, you look out of its cannon bay; your own mech is somewhere behind you in the slots.
-  const matchClock = net === null ? offlineClock : progress.state === "countdown" ? -progress.seconds + (performance.now() - progressAt) / 1000 : progress.state === "active" ? progress.seconds + (performance.now() - progressAt) / 1000 : -Infinity;
-  shipView.update(matchClock, fxTime);
-  // Just fired, the view stays in the bay a moment to watch your shell shoot away, and to keep the chase camera from
-  // starting inside the ship.
-  bayHold = Math.max(0, bayHold - frameTime);
-  const inBay = (ownDrop === DROP_RIDING || (ownDrop === DROP_SHELL && bayHold > 0)) && !spectating && !replaying && shipView.group.visible;
-  // The cannon's kick in the bay: the view jolts up and shudders, dying away over the hold.
-  const kick = ownDrop === DROP_SHELL ? (bayHold / dive.ship.bayCamera.holdSeconds) ** 2 * dive.cannon.bayKickDegrees * (Math.PI / 180) : 0;
-  if (inBay) shipView.bayView(rig.camera, aim.yaw + kick * 0.3 * Math.sin(bayHold * 90), aim.pitch + kick);
-  if (inBay && ownDrop === DROP_RIDING) mechGroup.visible = false;
   dressing.update(viewX, viewZ);
-  // The rush of air, where you would land, and your height and fall speed, while you drop in.
-  const diving = ownDrop === DROP_DIVING || ownDrop === DROP_BURNING || ownDrop === DROP_SHELL;
+  // The rush of air, where you are aiming and where you will really land, and your height and fall speed.
+  const diving = ownDrop === DROP_BALL || ownDrop === DROP_BURNING;
   speedLines.update(rig.camera.position, diving ? mech.vx : 0, diving ? mech.vy : 0, diving ? mech.vz : 0, frameTime);
   landingMarker.update(mech, mechInput, ownStats, map.world, ownAbilityStats, rig.camera.position, frameTime);
   landingMarker.group.visible &&= ownDrop !== DROP_NONE;
+  aimRing.update(aimOnGround && ownDrop !== DROP_NONE && !spectating && !replaying, mechInput.targetX, mechInput.targetY, mechInput.targetZ, rig.camera.position);
   diveHud.update(ownDrop, ownDrop === DROP_NONE ? 0 : mech.y - groundBelow(mech.x, mech.y, mech.z), -mech.vy);
-  // Aboard once the cannon is yours: the call to launch and the seconds until the ship throws you out.
-  const shipLine = shipView.line;
-  const mayLaunch = inBay && ownDrop === DROP_RIDING && shipLine !== null && (net === null ? offlineDropIn <= 0 : progress.state === "active");
-  diveHud.launchCall(mayLaunch ? Math.max(0, shipEndsAt(shipLine) - matchClock) : -1);
   sound.setWind(diving ? share(Math.hypot(mech.vx, mech.vy, mech.vz), dive.wind.fromSpeed, dive.wind.fullSpeed) : 0);
 
   const matchSeconds = progress.state === "active" ? progress.seconds + (performance.now() - progressAt) / 1000 : 0;
@@ -1405,7 +1360,7 @@ function frame(now: number): void {
   else if (dropView.news === "open") hud.feed("Supply drop open");
   if (radar && progress.state === "active") dropView.forEachMarked(matchSeconds, markDrop);
   const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);
-  if (net || progress.state === "countdown") hud.setProgress(progress, ring, mech.dropPhase === DROP_RIDING ? dive.hud.countdownWords : "");
+  if (net || progress.state === "countdown") hud.setProgress(progress, ring, mech.dropPhase === DROP_HANGING ? dive.hud.countdownWords : "");
 
   // Sound: the ears go where the camera is, jets hiss while firing, and the countdown beeps each second then says go.
   rig.camera.getWorldDirection(camForward);
@@ -1469,9 +1424,8 @@ function frame(now: number): void {
   pickupView.update(performance.now());
   // Tips, once each in this browser, at the moment they help (tips.ts). Only while you are playing, not watching.
   const playing = !health.dead && !spectating && input.locked && (net === null || progress.state === "active");
-  // Aboard, the launch tip goes up before the countdown is out; once fired out, the dive's.
-  if (!health.dead && input.locked && mech.dropPhase === DROP_RIDING) tips.offer("launch");
-  else if (!health.dead && input.locked && dropping(mech)) tips.offer("dive");
+  // Hanging or falling, the one thing to know about the drop.
+  if (!health.dead && input.locked && dropping(mech)) tips.offer("drop");
   else if (playing) {
     tips.walking(frameTime, mech.grounded && !mech.running && Math.hypot(mech.vx, mech.vz) > 1);
     if (ownAbilityStats && mech.abilityCooldown <= 0) tips.offer("ability", ownAbilityStats.name);

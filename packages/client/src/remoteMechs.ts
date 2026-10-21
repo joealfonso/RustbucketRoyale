@@ -21,7 +21,7 @@ interface Remote {
   jetting: boolean;
   running: boolean;
   ability: boolean; // using its ability right now: ramming, or in the air on a pounce
-  dropPhase: number; // the drop-in (drop.ts): 0 down, 1 riding, 2 diving, 3 braking
+  dropPhase: number; // the drop-in (drop.ts): 0 down, 1 hanging, 2 falling in the ball, 3 braking
   mech: number; // the roster mech it is drawn as. A new one swaps the model.
   weapon: number; // the weapon in hand, by index in weapons.json, so its shots are drawn in that weapon's look
   dead: boolean;

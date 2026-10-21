@@ -6,7 +6,6 @@
     "ability": "Q: {ability} ready",
     "grenade": "G: throw a grenade",
     "weapons": "1 / 2 or the wheel: switch weapons",
-    "dive": "Look down to dive faster, look ahead to glide farther",
-    "launch": "Look where you want to land, then Space: the cannon fires you out"
+    "drop": "Look where you want to land"
   }
 }

@@ -1,6 +1,6 @@
 import {
   Predictor, STEP, SnapshotMemory, abilityFor, propsInReach, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
-  dropping, mechStatsFor, ringAt, type Roster, type BotConfig, type TitanConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type ShipPath, type AbilitySet, type AbilityStats, type RingSchedule, type ServerMessage, type TierSet, type World,
+  dropping, mechStatsFor, ringAt, type Roster, type BotConfig, type TitanConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type AbilitySet, type AbilityStats, type RingSchedule, type ServerMessage, type TierSet, type World,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "../Bot";
 import { TITAN_ID } from "../Titan";
@@ -46,7 +46,6 @@ export class HeadlessPlayer {
   private smashScratch: number[] = [];
   private smashed: number[] = [];
   private dropPlan: DropPlan | null = null;
-  private ship: ShipPath | null = null; // this match's Rustbucket line, from the room message
 
   constructor(
     private room: Room,
@@ -76,7 +75,7 @@ export class HeadlessPlayer {
     const message = packed ? decodeServerBinary(packed, this.readMemory)! : m;
 
     if (message.t === "welcome" || message.t === "room") this.useMap(message.seed, message.tier);
-    if (message.t === "room") { this.ring = message.ring; this.ship = message.ship; this.settleSnapshots = 3; this.aimDropAtRing(); }
+    if (message.t === "room") { this.ring = message.ring; this.settleSnapshots = 3; this.aimDropAtRing(); }
     if (message.t === "snapshot") this.onSnapshot(message);
     // A destroyed prop leaves this player's world too, as in the browser, or prediction walks into walls that are gone.
     if (message.t === "prop") { this.breakProp(message.id); this.propsBroken++; }
@@ -114,17 +113,16 @@ export class HeadlessPlayer {
     }
     if (this.dropBots) {
       const scenery = this.propConfig.types.map((t) => t.scenery === true);
-      this.dropPlan = { world: map.world, propOfBox: map.propOfBox, props: map.props, scenery, cx: 0, cz: 0, radius: map.meters / 2, half: map.meters / 2, taken: [], stats: this.dropBots, ship: null };
+      this.dropPlan = { world: map.world, propOfBox: map.propOfBox, props: map.props, scenery, cx: 0, cz: 0, radius: map.meters / 2, half: map.meters / 2, taken: [], stats: this.dropBots };
       this.aimDropAtRing();
     }
     this.settleSnapshots = 3;
   }
 
-  // The first circle the ring closes to, which is where the brain wants to land, and the line it can reach it from.
+  // The first circle the ring closes to, which is where the brain wants to land.
   private aimDropAtRing(): void {
     const first = this.ring?.stages[0];
     if (!this.dropPlan || !first) return;
-    this.dropPlan.ship = this.ship;
     this.dropPlan.cx = first.cx; this.dropPlan.cz = first.cz; this.dropPlan.radius = first.radius;
   }
 
@@ -190,6 +188,7 @@ export class HeadlessPlayer {
     // Knocked out, it watches the first mech still standing in what it was last sent, like the browser does.
     const watchId = snap.health.dead ? (snap.others.find((o) => !o.dead)?.id ?? 0) : undefined;
     Object.assign(this.message, input, { t: "input", seq, lagMs: 20, watchId });
-    this.room.receive(this.id, encodeInput(this.message, input.fire || input.grenade));
+    // The target goes every step of the drop, as the browser sends it: the ball steers toward it.
+    this.room.receive(this.id, encodeInput(this.message, input.fire || input.grenade || dropping(this.predictor.state)));
   }
 }

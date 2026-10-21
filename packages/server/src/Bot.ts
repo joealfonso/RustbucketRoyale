@@ -1,4 +1,4 @@
-import { DROP_RIDING, createRayHit, type AbilityStats, type BotPathStats, type BotStats, type MechInput, type MechState, type MechStats, type RingNow, type World } from "@rustbucket/shared";
+import { createRayHit, type AbilityStats, type BotPathStats, type BotStats, type MechInput, type MechState, type MechStats, type RingNow, type World } from "@rustbucket/shared";
 import type { BotAbilityStats } from "./botAbilities";
 import { DropBrain, type DropAim, type DropPlan } from "./botDrop";
 import type { Pathfinder } from "./Pathfinder";
@@ -92,7 +92,7 @@ export class Bot {
   private dangerZ = 0;
   private dangerRadius = 0;
   private drop = new DropBrain();
-  private dropAim: DropAim = { yaw: 0, pitch: 0, moveY: 0, fire: false };
+  private dropAim: DropAim = { yaw: 0, pitch: 0, targetX: 0, targetZ: 0 };
 
   constructor(
     private stats: BotStats,
@@ -165,31 +165,24 @@ export class Bot {
     this.drop.forget();
   }
 
-  // The drop-in at the start of a match. Nothing to do but steer the dive (botDrop.ts): no weapons until it is down.
-  // Aboard the ship it chooses its spot at once, and fires itself out (the jet) when the brain says so. Its aim snaps
-  // to the shot rather than turning, since nobody can see where a rider looks.
+  // The drop-in at the start of a match. Nothing to do but aim the ball at its spot (botDrop.ts): no weapons until it
+  // is down. Its view turns at its usual speed, so it swings round like a person's rather than snapping.
   thinkDrop(self: MechState, plan: DropPlan, mech: MechStats, dt: number, out: MechInput): void {
     out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.grenade = false; out.interact = false; out.repair = false; out.ability = false;
     if (!this.drop.chosen) this.drop.choose(self, plan, mech, this.random);
     const aim = this.dropAim;
-    this.drop.steer(self, plan, mech, aim);
-    if (self.dropPhase === DROP_RIDING) {
-      this.aimYaw = aim.yaw;
-      this.aimPitch = aim.pitch;
-      out.jet = aim.fire;
-    } else {
-      // Turned at its usual speed, so its dive swings round like a person's rather than snapping.
-      const maxTurn = this.stats.turnDegreesPerSecond * DEG * dt;
-      const diff = Math.atan2(Math.sin(aim.yaw - this.aimYaw), Math.cos(aim.yaw - this.aimYaw));
-      this.aimYaw += Math.max(-maxTurn, Math.min(maxTurn, diff));
-      this.aimPitch += Math.max(-maxTurn, Math.min(maxTurn, aim.pitch - this.aimPitch));
-      out.moveY = aim.moveY;
-    }
+    this.drop.steer(self, aim);
+    const maxTurn = this.stats.turnDegreesPerSecond * DEG * dt;
+    const diff = Math.atan2(Math.sin(aim.yaw - this.aimYaw), Math.cos(aim.yaw - this.aimYaw));
+    this.aimYaw += Math.max(-maxTurn, Math.min(maxTurn, diff));
+    this.aimPitch += Math.max(-maxTurn, Math.min(maxTurn, aim.pitch - this.aimPitch));
     out.aimYaw = this.aimYaw;
     out.aimPitch = this.aimPitch;
+    out.targetX = aim.targetX;
+    out.targetZ = aim.targetZ;
   }
 
-  // Where it means to land, for checks. Chosen aboard the ship.
+  // Where it means to land, for checks. Chosen as the match goes live.
   get dropSpot(): { x: number; z: number } | null {
     return this.drop.chosen ? { x: this.drop.spotX, z: this.drop.spotZ } : null;
   }

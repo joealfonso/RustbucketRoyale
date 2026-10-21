@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { DROP_RIDING, STEP, parseChunkSet, parsePropConfig, parseTiers, shipAt, shipEndsAt, type MechStats } from "@rustbucket/shared";
+import { DROP_HANGING, STEP, ballFallSeconds, parseChunkSet, parsePropConfig, parseTiers } from "@rustbucket/shared";
 import { loadRoomConfig } from "../config";
 import { MapPool } from "../MapPool";
 import { Room } from "../Room";
@@ -35,23 +35,16 @@ export interface SoakReport {
   titanHpLeft: number | null; // the Junk Titan's share of hit points at the end, null when it never woke
   lastLandingSeconds: number; // how long after the start the last mech came down from the drop-in
   medianLandingSeconds: number;
-  shipSeconds: number; // how long after the start the Rustbucket reached the end of its line, 0 without one
-  shipMeters: number; // the live part of its line, over the map
-  medianLaunchSeconds: number; // when mechs fired out of it, seconds into the match
+  medianSteerMeters: number; // how far mechs came down from where they hung, median
 }
 
 const CONTACT_METERS = 150; // the radar's range: anything closer can be seen or heard to matter
-// The ground a mech glides over can lie this far below the ground at its spawn, which the drop height is measured from.
-// A guess with room to spare: the hills on the biggest maps rise and fall by less.
+// The ground a mech steers over can lie this far below the ground at its start spot, which the drop height is
+// measured from. A guess with room to spare: the hills on the biggest maps rise and fall by less.
 const DROP_VALLEY_METERS = 60;
-
-// The longest a dive can take, once out of the shell: looking level all the way, the slowest fall there is, then the whole burn at landing
-// speed. Anyone still in the air after this (and a second more) is stuck up there.
-function slowestDropSeconds(mech: MechStats, altitude: number): number {
-  const fall = mech.diveLevelFall, a = mech.diveAcceleration;
-  const dive = altitude + DROP_VALLEY_METERS - mech.burnMeters;
-  return fall / a + Math.max(0, dive - (fall * fall) / (2 * a)) / fall + mech.burnMeters / mech.landingFall + 1;
-}
+// Anyone still in the air this long after the slowest fall there is (from the drop height plus the deepest valley) is
+// stuck up there.
+const DROP_SPARE_SECONDS = 1;
 
 const readData = (name: string) => JSON.parse(readFileSync(new URL(`../../../../data/${name}`, import.meta.url), "utf8"));
 
@@ -96,8 +89,9 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
   const firstContact = new Map<number, number>();
   const altitude = config.drop?.altitudeMeters[tier];
   const landedAt = new Map<number, number>();
-  const launchedAt = new Map<number, number>();
-  let landBy = 0, shipSeconds = 0, shipMeters = 0;
+  const hungAt = new Map<number, { x: number; z: number }>();
+  const steered: number[] = [];
+  const landBy = altitude === undefined ? 0 : ballFallSeconds(altitude + DROP_VALLEY_METERS, config.mech) + DROP_SPARE_SECONDS;
   let stuckReported = false;
 
   for (let tick = 0; tick < maxTicks && room.matchState !== "results"; tick++) {
@@ -106,24 +100,20 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
     room.tick();
     times.push(performance.now() - started);
     if (room.matchState === "active") activeTicks++;
-    // The ride: everyone can wait aboard to the end of the line, then has the shell and the slowest dive to come down.
-    const ship = room.shipPath;
-    if (activeTicks === 1 && ship && altitude !== undefined) {
-      shipSeconds = shipEndsAt(ship);
-      const live = { x: 0, z: 0 };
-      shipAt(ship, 0, live);
-      shipMeters = Math.hypot(ship.x1 - live.x, ship.z1 - live.z);
-      landBy = shipSeconds + config.mech.shellSeconds + slowestDropSeconds(config.mech, altitude);
-    }
 
     // Every mech, every tick: real numbers, on the map, health inside its limits.
     let alive = 0;
     for (const m of room.inspect()) {
       if (![m.x, m.y, m.z, ...m.hp].every(Number.isFinite)) { problem(`tick ${tick}: mech ${m.id} has a bad number`); continue; }
-      // Aboard the ship, through the countdown, a mech is still flying in from outside the map.
-      const aboard = m.dropPhase === DROP_RIDING;
-      if (!aboard && (Math.abs(m.x) > edge || Math.abs(m.z) > edge)) problem(`tick ${tick}: mech ${m.id} is outside the map at ${m.x.toFixed(1)}, ${m.z.toFixed(1)}`);
-      if (!aboard && room.mapTerrain && !room.mapTerrain.mayStand(m.x, m.z)) problem(`tick ${tick}: mech ${m.id} is out past the island's limit at ${m.x.toFixed(1)}, ${m.z.toFixed(1)}`);
+      if (Math.abs(m.x) > edge || Math.abs(m.z) > edge) problem(`tick ${tick}: mech ${m.id} is outside the map at ${m.x.toFixed(1)}, ${m.z.toFixed(1)}`);
+      // Through the countdown everyone hangs still where the room put them, and nobody hangs once the match is live.
+      if (m.dropPhase === DROP_HANGING) {
+        if (room.matchState !== "countdown") problem(`tick ${tick}: mech ${m.id} is still hanging in a ${room.matchState} match`);
+        const at = hungAt.get(m.id);
+        if (!at) hungAt.set(m.id, { x: m.x, z: m.z });
+        else if (at.x !== m.x || at.z !== m.z) problem(`tick ${tick}: mech ${m.id} moved while hanging`);
+      }
+      if (room.mapTerrain && !room.mapTerrain.mayStand(m.x, m.z)) problem(`tick ${tick}: mech ${m.id} is out past the island's limit at ${m.x.toFixed(1)}, ${m.z.toFixed(1)}`);
       if (m.y < -50) problem(`tick ${tick}: mech ${m.id} fell under the map`);
       m.hp.forEach((hp, zone) => { if (hp < 0 || hp > zoneMax[zone]! + 1e-9) problem(`tick ${tick}: mech ${m.id} zone ${zone} has ${hp} hit points`); });
       if (m.participant && !m.eliminated) alive++;
@@ -142,8 +132,11 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
       for (const m of mechs) {
         if (!m.participant || landedAt.has(m.id)) continue;
         if (altitude !== undefined && activeTicks === 1 && m.dropPhase === 0) problem(`mech ${m.id} started the match on the ground, not in the drop`);
-        if (m.dropPhase !== DROP_RIDING && !launchedAt.has(m.id)) launchedAt.set(m.id, seconds);
-        if (m.dropPhase === 0 || altitude === undefined) landedAt.set(m.id, seconds);
+        if (m.dropPhase === 0 || altitude === undefined) {
+          landedAt.set(m.id, seconds);
+          const at = hungAt.get(m.id);
+          if (at) steered.push(Math.hypot(m.x - at.x, m.z - at.z));
+        }
         else if (seconds > landBy && !stuckReported) {
           stuckReported = true;
           problem(`mech ${m.id} is still in the drop ${seconds.toFixed(1)} s into the match (at ${m.y.toFixed(0)} m), over ${landBy.toFixed(1)}`);
@@ -194,8 +187,7 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
     titanHpLeft: room.junkTitan ? room.junkTitan.hp / config.titan.hp : null,
     lastLandingSeconds: Math.max(0, ...landedAt.values()),
     medianLandingSeconds: median([...landedAt.values()]),
-    shipSeconds, shipMeters,
-    medianLaunchSeconds: median([...launchedAt.values()]),
+    medianSteerMeters: median(steered),
   };
 }
 

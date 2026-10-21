@@ -1,7 +1,6 @@
 import type { BotDifficulty } from "./botDifficulty";
 import type { MatchState } from "./match";
 import type { MechInput } from "./MechInput";
-import type { ShipPath } from "./drop";
 import type { SupplyDrop } from "./drops";
 import type { RingSchedule } from "./ring";
 
@@ -110,7 +109,7 @@ export interface SelfState {
   stamina: number; staminaLocked: boolean; staminaTimer: number;
   fuelScale: number;
   speedScale: number;
-  dropPhase: number; dropTime: number; // the drop-in (drop.ts): phase 0 down, 1 riding, 2 diving, 3 braking, 4 in the shell; landing stun (or shell time) left
+  dropPhase: number; dropTime: number; // the drop-in (drop.ts): phase 0 down, 1 hanging, 2 ball, 3 braking; landing stun left
   mech: number; // which roster mech you are driving. Can change between matches.
 }
 
@@ -124,7 +123,7 @@ export interface OtherState {
   dead: boolean;
   looted: boolean; // a wreck already emptied, so there is nothing left to take
   repairing: boolean; // standing still fixing a part, shown with welding sparks
-  dropPhase: number; // the drop-in (drop.ts): 0 down, 1 riding, 2 diving, 3 braking, 4 in the shell, for drawing the dive
+  dropPhase: number; // the drop-in (drop.ts): 0 down, 1 hanging, 2 ball, 3 braking, for drawing the drop
   bot: boolean;
   hp: number[]; // legs, arms, torso
   weapon: number; // index of the weapon in hand, for drawing the right gun
@@ -222,7 +221,6 @@ export type ServerMessage =
       t: "room"; code: string; tier: string; state: MatchState; seed: number; hostId: number;
       players: number; ring: RingSchedule | null; matchSeconds: number;
       drops: SupplyDrop[] | null; // this match's supply drops, planned with the ring
-      ship: ShipPath | null; // the Rustbucket's line for this match's drop-in (drop.ts); null in the lobby or without one
       difficulty: BotDifficulty; // so someone who joined by code also sees how hard the bots are
     }
   | { t: "eliminated"; id: number; killerId: number | null; place: number; alive: number; left?: boolean; how?: KnockoutHow } // left: their connection closed

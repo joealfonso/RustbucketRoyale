@@ -41,9 +41,9 @@ const DELTA_BIT = 2;
 const DETAILS_BIT = 4;
 // A roster mech's number is 3 bits: two in the mech's flags byte, the top one here (gate 15b's fifth mech).
 const MECH_HIGH_BIT = 8;
-// The drop-in phase (drop.ts), 0 to 4, in the three spare bits of the same byte (64 was free for the shell).
+// The drop-in phase (drop.ts), 0 to 3, in two spare bits of the same byte.
 const DROP_SHIFT = 4;
-const DROP_MASK = 7;
+const DROP_MASK = 3;
 const LOADOUT_BYTES = 9;
 const LOOTING_BYTES = 2; // how far through looting a wreck, then through a repair, 0 to 255 each
 const PICKUP_BYTES = 9;
@@ -330,9 +330,10 @@ export function decodeShot(bytes: Uint8Array): ShotMessage | null {
 
 // ---- input
 
-// A pounce lands on the aim point, so the target goes along whenever the ability key is down, whatever the caller says.
-export function encodeInput(m: InputMessage, shooting: boolean): Uint8Array {
-  const hasTarget = shooting || m.ability;
+// The target goes along when the caller says it is needed: firing, throwing, and every step of the drop, which steers
+// toward it. A pounce lands on the aim point, so it also goes whenever the ability key is down, whatever the caller says.
+export function encodeInput(m: InputMessage, withTarget: boolean): Uint8Array {
+  const hasTarget = withTarget || m.ability;
   const hasLag = m.lagMs !== undefined;
   const hasWatch = m.watchId !== undefined;
   const buffer = new ArrayBuffer(INPUT_BASE_BYTES + (hasTarget ? 12 : 0) + (hasLag ? 2 : 0) + (hasWatch ? 2 : 0));

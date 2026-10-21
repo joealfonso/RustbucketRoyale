@@ -4,10 +4,10 @@ import type { ThirdPersonCamera } from "./thirdPersonCamera";
 
 const DEG = Math.PI / 180;
 
-// The camera while you drop in: further back and higher so you see the ground coming, wider the faster you fall,
-// and free to look further down than walking allows, so looking down to dive fast also shows where you are going.
-// The dive counts any pitch at or below mech.json diveSteepPitch as the steepest, so the extra range is only for
-// seeing; the aim sent to the server is held to the walking limit (simPitch).
+// The camera while you drop in: further back and higher, above and behind your ball, wider the faster you fall, and
+// free to look further down than walking allows, so you can put the crosshair on the ground you want to land on.
+// The ball steers by the crosshair's ground point, not the pitch, so the extra range is only for aiming; the pitch
+// sent to the server is held to the walking limit (simPitch).
 export class DiveCamera {
   private blend = 0; // 0 walking, 1 fully pulled back
   private floor: number; // the lowest pitch allowed right now, in degrees
@@ -37,7 +37,7 @@ export class DiveCamera {
 }
 
 // The pitch the simulation is given: never below the walking limit, the same as the server allows, so prediction
-// and the server step the dive with the same number.
+// and the server step the drop with the same number.
 export function simPitch(pitch: number, stats: MechStats): number {
   return Math.max(pitch, stats.minPitch * DEG);
 }

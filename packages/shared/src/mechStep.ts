@@ -1,4 +1,4 @@
-import { DROP_BURNING, DROP_RIDING, dropping, landDrop, steerDrop } from "./drop";
+import { DROP_BURNING, DROP_HANGING, dropping, landDrop, steerDrop } from "./drop";
 import type { AbilityStats, PounceStats } from "./abilities";
 import type { MechInput } from "./MechInput";
 import { Meter } from "./Meter";
@@ -34,7 +34,7 @@ export interface MechState {
   abilityTime: number; // seconds of ram charge or mortar brace left, or above 0 while a pounce is in the air
   abilityCooldown: number; // seconds until the ability can be used again
   abilityX: number; abilityZ: number; // direction of the ram, leap, strike or decoys, unit length
-  dropPhase: number; // the drop-in at the start of a match (drop.ts): 0 down, 1 riding, 2 diving, 3 braking
+  dropPhase: number; // the drop-in at the start of a match (drop.ts): 0 down, 1 hanging, 2 ball, 3 braking
   dropTime: number; // seconds of landing stun left: no moving, jets, dash or ability
   fuel: Meter;
   stamina: Meter;
@@ -210,12 +210,8 @@ function stepDrop(s: MechState, input: MechInput, stats: MechStats, dt: number, 
   s.running = false;
   s.jetting = s.dropPhase === DROP_BURNING;
   steerDrop(s, input, stats, dt, world.terrain?.heightAt(s.x, s.z) ?? 0);
-  // Aboard the ship: carried along at its speed, through nothing, so a rider's prediction is exact.
-  if (s.dropPhase === DROP_RIDING) {
-    s.x += s.vx * dt;
-    s.z += s.vz * dt;
-    return;
-  }
+  // Hanging through the countdown: nothing moves it, so nothing needs colliding.
+  if (s.dropPhase === DROP_HANGING) return;
   s.grounded = false;
   const before = s.y;
   moveHorizontal(s, stats, s.vx * dt, 0, world);
@@ -225,7 +221,7 @@ function stepDrop(s: MechState, input: MechInput, stats: MechStats, dt: number, 
   if (s.y > before) s.grounded = true;
   else moveVertical(s, stats, s.vy * dt, world);
   standOnTerrain(s, world, false);
-  // A long glide stays over the map: the edge wall is only so tall, and the dive starts far above it.
+  // A ball steered at the horizon stays over the map: the edge wall is only so tall, and the drop starts far above it.
   const terrain = world.terrain;
   if (terrain) {
     const edge = terrain.meters / 2 - stats.halfWidth;
@@ -233,6 +229,10 @@ function stepDrop(s: MechState, input: MechInput, stats: MechStats, dt: number, 
     s.z = Math.min(edge, Math.max(-edge, s.z));
   }
   if (s.grounded) landDrop(s, stats);
+  // Kept at float32, as the snapshot sends them: the burn starts at a height threshold, and a client replaying from
+  // rounded numbers would otherwise cross it a step apart from the server and brake differently.
+  s.x = Math.fround(s.x); s.y = Math.fround(s.y); s.z = Math.fround(s.z);
+  s.vx = Math.fround(s.vx); s.vy = Math.fround(s.vy); s.vz = Math.fround(s.vz);
 }
 
 function capToRunSpeed(s: MechState, stats: MechStats): void {

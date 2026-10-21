@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { DROP_BURNING, DROP_DIVING, DROP_NONE, DROP_RIDING, DROP_SHELL, World, boxFromData, createMechInput, createMechState, parseMechStats, stepMech, type OtherState } from "@rustbucket/shared";
+import { DROP_BALL, DROP_BURNING, DROP_HANGING, DROP_NONE, World, boxFromData, createMechInput, createMechState, parseMechStats, stepMech, type OtherState } from "@rustbucket/shared";
 import diveJson from "../../../data/dive.json";
 import dropJson from "../../../data/drop.json";
 import mechJson from "../../../data/mech.json";
@@ -19,7 +19,8 @@ describe("the drop-in on the client", () => {
   it("reads dive.json and refuses a broken one", () => {
     expect(dive.camera.minPitchDegrees).toBeLessThan(stats.minPitch);
     expect(() => parseDive({ ...diveJson, camera: { ...diveJson.camera, pullBackMeters: -1 } })).toThrow(/pullBackMeters/);
-    expect(() => parseDive({ ...diveJson, hud: { ...diveJson.hud, riding: "" } })).toThrow(/riding/);
+    expect(() => parseDive({ ...diveJson, hud: { ...diveJson.hud, aimCall: "" } })).toThrow(/aimCall/);
+    expect(() => parseDive({ ...diveJson, camera: { ...diveJson.camera, startPitchDegrees: -95 } })).toThrow(/startPitchDegrees/);
   });
 
   it("starts at the server's height for the tier, and not at all on the range", () => {
@@ -40,45 +41,37 @@ describe("the drop-in on the client", () => {
     expect(aim.pitch).toBeCloseTo(stats.minPitch * DEG, 6);
   });
 
-  it("leans steeper the steeper the fall, and back for the burn", () => {
-    const level = diveTilt(dive.pose, DROP_DIVING, 42, -32, 0);
-    const steep = diveTilt(dive.pose, DROP_DIVING, 14, -85, 0);
-    expect(steep).toBeGreaterThan(level);
-    expect(diveTilt(dive.pose, DROP_BURNING, 8, -14, 0)).toBeLessThanOrEqual(0);
-    expect(diveTilt(dive.pose, DROP_RIDING, 0, 0, 0)).toBe(0);
+  it("stays upright in the ball and rocks back for the burn", () => {
+    expect(diveTilt(dive.pose, DROP_BALL)).toBe(0);
+    expect(diveTilt(dive.pose, DROP_HANGING)).toBe(0);
+    expect(diveTilt(dive.pose, DROP_BURNING)).toBeLessThanOrEqual(0);
   });
 
-  it("marks where the dive really comes down", () => {
+  it("marks where the ball really comes down, short of an aim out of reach", () => {
     const marker = new LandingMarker(dive.marker, "#ffffff", stats);
     const s = createMechState(stats, 0, 300, 0, 0);
-    s.dropPhase = DROP_DIVING;
+    s.dropPhase = DROP_BALL;
     const input = createMechInput();
-    input.aimPitch = -30 * DEG; input.moveY = 1;
+    input.targetX = 2000; input.targetZ = -40; // far beyond what the steering can reach in one fall
     marker.update(s, input, stats, ground, null, new THREE.Vector3(0, 300, 10), 1 / 60);
     expect(marker.group.visible).toBe(true);
     // The real thing at the game's own step.
     while (s.dropPhase !== DROP_NONE) stepMech(s, input, stats, 1 / 60, ground);
-    // The coarse step lands within a few metres of the fine one over a dive of a few hundred.
+    // The coarse step lands within a few metres of the fine one over a fall of a few hundred.
     expect(Math.hypot(marker.at.x - s.x, marker.at.z - s.z)).toBeLessThan(6);
     expect(marker.at.y).toBeCloseTo(0, 3);
+    expect(marker.at.x).toBeLessThan(1000);
   });
 
-  it("aboard the ship, marks where a shot out of the cannon now would come down", () => {
+  it("hanging in the countdown, marks where falling now would come down", () => {
     const marker = new LandingMarker(dive.marker, "#ffffff", stats);
     const s = createMechState(stats, 0, 300, 0, 0);
-    s.dropPhase = DROP_RIDING;
-    s.vx = 20; // carried along by the ship
+    s.dropPhase = DROP_HANGING;
     const input = createMechInput();
-    input.aimPitch = -30 * DEG; input.moveY = 1;
+    input.targetX = 30; input.targetZ = 20; // within reach
     marker.update(s, input, stats, ground, null, new THREE.Vector3(0, 300, 10), 1 / 60);
     expect(marker.group.visible).toBe(true);
-    // The real thing: fired with Space, then the shell and the dive at the game's own step.
-    input.jet = true;
-    stepMech(s, input, stats, 1 / 60, ground);
-    expect(s.dropPhase).toBe(DROP_SHELL);
-    input.jet = false;
-    while (s.dropPhase !== DROP_NONE) stepMech(s, input, stats, 1 / 60, ground);
-    expect(Math.hypot(marker.at.x - s.x, marker.at.z - s.z)).toBeLessThan(8);
+    expect(Math.hypot(marker.at.x - 30, marker.at.z - 20)).toBeLessThan(6);
   });
 
   it("says when someone else's retro-jets light and when they touch down", () => {
@@ -86,9 +79,9 @@ describe("the drop-in on the client", () => {
     const seen: [number, number][] = [];
     remotes.onDropPhase = (_m, from, to) => seen.push([from, to]);
     const other = (dropPhase: number): OtherState => ({ id: 3, x: 0, y: 0, z: 0, yaw: 0, running: false, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp: [60, 60, 100], weapon: 0, armor: [0, 0, 0], upgrades: [-1, -1], mech: 0, ability: false, dropPhase });
-    remotes.push([other(DROP_DIVING)], 1, 0); // first seen mid dive: nothing to say yet
+    remotes.push([other(DROP_BALL)], 1, 0); // first seen mid fall: nothing to say yet
     remotes.push([other(DROP_BURNING)], 2, 50);
     remotes.push([other(DROP_NONE)], 3, 100);
-    expect(seen).toEqual([[DROP_DIVING, DROP_BURNING], [DROP_BURNING, DROP_NONE]]);
+    expect(seen).toEqual([[DROP_BALL, DROP_BURNING], [DROP_BURNING, DROP_NONE]]);
   });
 });

@@ -1,15 +1,23 @@
 {
   "camera": {
     "minPitchDegrees": -85,
+    "startPitchDegrees": -50,
     "pitchReturnDegreesPerSecond": 120,
-    "pullBackMeters": 8,
-    "liftMeters": 3,
+    "pullBackMeters": 16,
+    "liftMeters": 14,
     "burnPull": 0.45,
     "followPerSecond": 2.5,
     "fovWidenDegrees": 10,
-    "fovFromSpeed": 30,
-    "fovFullSpeed": 85,
+    "fovFromSpeed": 12,
+    "fovFullSpeed": 30,
     "landingShake": 0.75
+  },
+  "aim": {
+    "rangeMeters": 3000,
+    "radiusMeters": 2.5,
+    "sizePerMeter": 0.035,
+    "opacity": 0.9,
+    "color": "warmLight"
   },
   "speedLines": {
     "count": 16,
@@ -17,8 +25,8 @@
     "clearRadiusMeters": 4,
     "lengthMeters": 12,
     "widthMeters": 0.45,
-    "fromSpeed": 25,
-    "fullSpeed": 80
+    "fromSpeed": 12,
+    "fullSpeed": 30
   },
   "marker": {
     "stepSeconds": 0.1,
@@ -39,17 +47,13 @@
     "centerMeters": 3
   },
   "pose": {
-    "levelTiltDegrees": 22,
-    "steepTiltDegrees": 58,
     "burnTiltDegrees": -6,
-    "levelFallDegrees": 37,
-    "steepFallDegrees": 80,
     "pivotMeters": 3,
-    "followPerSecond": 5,
-    "wobbleDegrees": 3,
-    "wobblePerSecond": 1.4
+    "followPerSecond": 5
   },
-  "burn": { "flameScale": 2.6 },
+  "burn": {
+    "flameScale": 2.6
+  },
   "impact": {
     "dustPuffs": 12,
     "ringMeters": 2.5,
@@ -71,36 +75,20 @@
     "shakeRadiusMeters": 45,
     "shakeForce": 0.45
   },
-  "wind": { "fromSpeed": 15, "fullSpeed": 85 },
-  "ship": {
-    "kit": "rustbucket",
-    "offlineCircleShare": 0.3,
-    "turnDegrees": 180,
-    "standIn": { "lengthMeters": 120, "widthMeters": 36, "heightMeters": 22, "hull": "scrapSteel", "trim": "deepRust", "patch": "rustOrange", "barrel": "soot" },
-    "bayCamera": { "mount": "Mount_Camera", "back": 0, "up": 0, "side": 0, "holdSeconds": 0.6 },
-    "exhaust": { "every": 0.12, "width": 7, "grow": 1.8, "seconds": 2.2, "backSpeed": 6 }
+  "wind": {
+    "fromSpeed": 8,
+    "fullSpeed": 30
   },
-  "cannon": {
-    "flashSize": 14,
-    "flashSeconds": 0.3,
-    "flashPuffs": 4,
-    "smokePuffs": 8,
-    "smokeSize": 6,
-    "smokeSpeed": 8,
-    "smokeSeconds": 1.6,
-    "shake": 0.9,
-    "bayKickDegrees": 6,
-    "nearShakeMeters": 160
-  },
-  "shell": {
+  "ball": {
     "radiusMeters": 3.4,
     "centerMeters": 3,
     "colors": ["deepRust", "rustOrange", "scrapSteel"],
     "flameLength": 9,
     "flameWidth": 3,
+    "hangFlameShare": 0.45,
+    "rollPerSecond": 2,
     "framesPerSecond": 10,
-    "smokeEvery": 0.08,
-    "capacity": 16
+    "capacity": 64
   },
   "burst": {
     "plates": 10,
@@ -116,17 +104,16 @@
   "toon": {
     "growSteps": 4,
     "smoke": { "colors": ["#B7B2A6", "#7E7A71", "#4F4D48"], "ink": "soot", "inkWidth": 0.35, "holeWidth": 0.06, "capacity": 420, "immediate": 0 },
-    "fire": { "colors": ["#FFE27A", "#F7902F", "#D2402A"], "ink": "#5A2614", "inkWidth": 0.3, "holeWidth": 0.05, "capacity": 120, "immediate": 64 },
+    "fire": { "colors": ["#FFE27A", "#F7902F", "#D2402A"], "ink": "#5A2614", "inkWidth": 0.3, "holeWidth": 0.05, "capacity": 120, "immediate": 96 },
     "dust": { "colors": ["warmLight", "#C8B48F", "#8F7B5E"], "ink": "#4E4032", "inkWidth": 0.3, "holeWidth": 0.06, "capacity": 160, "immediate": 0 },
     "streaks": { "colors": ["warmLight", "#E2D3B0", "#CDBD98"], "ink": "#4A3F33", "inkWidth": 0.45, "holeWidth": 0, "capacity": 0, "immediate": 24 }
   },
   "hud": {
-    "countdownWords": "LAUNCH IN",
-    "riding": "Aboard",
-    "launch": "PRESS SPACE TO LAUNCH",
-    "ejectIn": "Ejected in",
-    "shell": "Launched",
-    "diving": "Diving",
-    "burning": "Retro burn"
+    "countdownWords": "DROP IN",
+    "hanging": "Hanging",
+    "ball": "Falling",
+    "burning": "Retro burn",
+    "aimCall": "AIM YOUR LANDING",
+    "aimCallSeconds": 2.5
   }
 }

@@ -189,7 +189,8 @@ export class NetClient {
     this.rttMs = this.rttMs === 0 ? sample : this.rttMs + (sample - this.rttMs) * 0.2;
   }
 
-  sendInput(seq: number, input: MechInput): void {
+  // `dropping`: your predicted mech is dropping in, when the ball steers by the aim point on every step.
+  sendInput(seq: number, input: MechInput, dropping: boolean): void {
     if (!this.open) return;
     this.sentAt[seq & 255] = performance.now();
     const m = this.message;
@@ -201,7 +202,7 @@ export class NetClient {
     m.aimYaw = input.aimYaw; m.aimPitch = input.aimPitch;
     m.run = input.run; m.jet = input.jet; m.dash = input.dash; m.fire = input.fire; m.grenade = input.grenade; m.slot = input.slot; m.interact = input.interact; m.repair = input.repair; m.ability = input.ability;
     m.targetX = input.targetX; m.targetY = input.targetY; m.targetZ = input.targetZ;
-    // The aim point only matters on a step that shoots, throws or pounces, so it is left out of the rest.
-    this.socket.send(encodeInput(m, input.fire || input.grenade).buffer as ArrayBuffer);
+    // The aim point only matters on a step that shoots, throws, pounces or steers the drop, so it is left out of the rest.
+    this.socket.send(encodeInput(m, input.fire || input.grenade || dropping).buffer as ArrayBuffer);
   }
 }

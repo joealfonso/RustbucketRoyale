@@ -235,11 +235,6 @@
       "echo": 0.6,
       "file": null
     },
-    "cannonFire": {
-      "volume": 1.2,
-      "echo": 0.7,
-      "file": null
-    },
     "shellBurst": {
       "volume": 0.9,
       "echo": 0.4,

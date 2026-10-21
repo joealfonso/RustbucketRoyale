@@ -193,7 +193,7 @@ canvas { display: block; width: 100%; height: 100%; }
 #replayTag b { display: block; height: 100%; background: var(--hud-amber); transform-origin: left; scale: 0 1; }
 #crosshair.off { display: none; }
 /* The drop-in (gate 16a, diveHud.ts): no guns until you are down, so nothing about them shows; your height and fall
-   speed sit right of the middle, where the eye already is while aiming the dive. */
+   speed sit right of the middle, where the eye already is while aiming the landing. */
 body.dropping #crosshair, body.dropping #aimCooldown, body.dropping #loadout { display: none !important; }
 #diveHud { display: none; left: calc(50% + 7rem); top: 50%; transform: translateY(-50%); flex-direction: column; gap: 0.15rem; padding: 0.4rem 0.7rem; min-width: 8.5rem; }
 body.dropping #diveHud { display: flex; }
@@ -203,11 +203,6 @@ body.dropping #diveHud { display: flex; }
 #diveHud div .label { min-width: 2.6rem; }
 #diveHud .num { font-size: 1.5rem; color: var(--hud-text); min-width: 4ch; text-align: right; }
 #diveHud small { font: 400 0.75rem var(--hud-num); color: var(--hud-amber-dim); }
-/* Aboard the Rustbucket once the match is live (gate 16b): the one thing to do, under the middle of the view. */
-#launchCall { display: none; left: 50%; bottom: 22%; transform: translateX(-50%); flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.5rem 1.1rem; }
-#launchCall.shown { display: flex; }
-#launchCall strong { font: 700 1.5rem var(--hud-word); letter-spacing: 0.06em; color: var(--hud-amber); }
-#launchCall .label { color: var(--hud-text); }
 
 /* Title screen: over the hangar scene, so only three things stand on it: the name top left, one panel of choices
    on the right, the mech cards along the bottom. The middle stays open for the mech in the loading bay. */

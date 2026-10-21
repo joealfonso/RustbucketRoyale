@@ -33,14 +33,10 @@ export interface MechStats {
   dashCooldown: number;
   dashStaminaCost: number;
   sprintDoubleTapSeconds: number; // two presses of W this close together start a sprint
-  // The drop-in dive (drop.ts): pitches in degrees (level at or above the first, steepest at or below the second),
-  // fall and glide speeds in m/s at each end, how fast the speed follows, and the braking retro-jets near the ground.
-  diveLevelPitch: number; diveSteepPitch: number;
-  diveLevelFall: number; diveSteepFall: number; diveLevelGlide: number; diveSteepGlide: number; diveAcceleration: number;
+  // The drop-in ball (drop.ts): its fall speed and top steering speed in m/s, how fast the steering follows (m/s²),
+  // and the braking retro-jets near the ground.
+  ballFall: number; ballSteer: number; ballSteerAcceleration: number;
   burnMeters: number; burnDeceleration: number; burnGlide: number; landingFall: number; landingStunSeconds: number;
-  // Fired out of the Rustbucket's cannon (gate 16b): the speed, the pitch range a shot is held to (degrees, level
-  // end then steep end, both looking down), and how long the unsteered shell flies before the dive.
-  launchSpeed: number; launchLevelPitch: number; launchSteepPitch: number; shellSeconds: number;
 }
 
 // One weapon's tuning and look. Every gun is just data: balance changes never touch code.
@@ -207,9 +203,8 @@ const MECH_KEYS: (keyof MechStats & string)[] = [
   "staminaMax", "runDrainPerSecond", "staminaRegenPerSecond", "staminaRegenDelay", "staminaUnlockFraction",
   "mouseSensitivity", "minPitch", "maxPitch",
   "dashSpeed", "dashSeconds", "dashCooldown", "dashStaminaCost", "sprintDoubleTapSeconds",
-  "diveLevelPitch", "diveSteepPitch", "diveLevelFall", "diveSteepFall", "diveLevelGlide", "diveSteepGlide", "diveAcceleration",
+  "ballFall", "ballSteer", "ballSteerAcceleration",
   "burnMeters", "burnDeceleration", "burnGlide", "landingFall", "landingStunSeconds",
-  "launchSpeed", "launchLevelPitch", "launchSteepPitch", "shellSeconds",
 ];
 const WEAPON_KEYS: (keyof WeaponStats & string)[] = [
   "shotsPerSecond", "projectileSpeed", "projectileLifetime", "spreadDegrees", "maxAimDistance", "shakeForce", "damage", "pellets",
@@ -263,7 +258,14 @@ export function parseBotConfig(raw: unknown): BotConfig {
   };
 }
 export const parseHudStats = (raw: unknown) => parseNumbers<HudStats>(raw, "hud.json", ["radarRangeMeters", "detectRangeMeters", "knockoutCardSeconds"]);
-export const parseMechStats = (raw: unknown) => parseNumbers<MechStats>(raw, "mech.json", MECH_KEYS);
+// The drop divides by these, so a 0 would hang a mech in the air forever.
+const MECH_ABOVE_ZERO: (keyof MechStats & string)[] = ["ballFall", "ballSteerAcceleration", "burnDeceleration", "landingFall"];
+
+export function parseMechStats(raw: unknown): MechStats {
+  const stats = parseNumbers<MechStats>(raw, "mech.json", MECH_KEYS);
+  for (const key of MECH_ABOVE_ZERO) if (!(stats[key] > 0)) throw new Error(`mech.json: "${key}" must be above 0`);
+  return stats;
+}
 export interface WeaponSet {
   start: number; // index of the weapon everyone begins with
   weapons: WeaponStats[];
