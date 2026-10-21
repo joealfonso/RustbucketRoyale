@@ -48,7 +48,7 @@ describe("drop-in", () => {
     // Live: everyone falls; the host steers at its target, firing the whole way, and bots aim at their spots.
     const landBy = ballFallSeconds(altitude + 60, config.mech) + 1;
     const landedAt = new Map<number, number>();
-    let seconds = 0;
+    let seconds = 0, shotsInAir = -1;
     while (seconds < landBy && landedAt.size < hung.length) {
       send(press); room.tick(); seconds += STEP;
       for (const m of room.inspect()) {
@@ -58,12 +58,14 @@ describe("drop-in", () => {
         expect(m.hp).toEqual(hung.find((h) => h.id === m.id)!.hp);
         if (m.id === host.id) expect(Math.hypot(m.x - target.x, m.z - target.z)).toBeLessThan(2);
         if (m.dropSpot) expect(Math.hypot(m.dropSpot.x - m.x, m.dropSpot.z - m.z)).toBeLessThan(15);
-        // Everyone hung at the same height, so everyone takes about the same time.
-        expect(Math.abs(seconds - ballFallSeconds(start.get(m.id)!.y - m.y, config.mech))).toBeLessThan(1);
+        // Everyone hung at the same height, so the bots take about the same time; the host holds Space and W, so falls fast.
+        const usual = ballFallSeconds(start.get(m.id)!.y - m.y, config.mech);
+        if (m.id === host.id) { expect(seconds).toBeLessThan(usual * 0.8); shotsInAir = shots(); }
+        else expect(Math.abs(seconds - usual)).toBeLessThan(1);
       }
     }
     expect(landedAt.size).toBe(hung.length);
-    expect(shots()).toBe(0);
+    expect(shotsInAir).toBe(0); // the host lands first and may fire once down
     for (const m of room.inspect()) expect(Math.max(Math.abs(m.x), Math.abs(m.z))).toBeLessThanOrEqual(room.mapMeters / 2);
 
     // Down and steady again, the same trigger fires.

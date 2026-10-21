@@ -4,7 +4,8 @@ import type { MechStats } from "./stats";
 
 // The drop-in at the start of a match (gates 16a, 16c). Every mech starts high above its own spot as a flaming scrap
 // ball and hangs there through the countdown. Once live it falls at a fixed speed and steers toward the point under
-// the pilot's crosshair (input.targetX, targetZ), so aiming is looking where you want to land. Near the ground the
+// the pilot's crosshair (input.targetX, targetZ), so aiming is looking where you want to land. Holding Space or W
+// speeds the fall, so a pilot chooses between landing first and taking time to aim. Near the ground the
 // ball bursts, the retro-jets brake the fall, and a heavy landing leaves the mech stunned for a moment. No weapons,
 // jets, dash or ability until it is down. The same code runs on the client and the server, so a drop is predicted
 // like walking.
@@ -47,8 +48,9 @@ export function steerDrop(s: MechState, input: MechInput, stats: MechStats, dt: 
     // Braking: the fall slows to the landing speed and no slower, so it never hangs in the air.
     s.vy = Math.min(-stats.landingFall, s.vy + stats.burnDeceleration * dt);
   } else {
-    // Out of the hang it picks up speed under gravity until the ball's fall speed.
-    s.vy = Math.max(-stats.ballFall, s.vy - stats.gravity * dt);
+    // Out of the hang it picks up speed under gravity until the ball's fall speed, or the faster one while held.
+    const fall = input.jet || input.moveY > 0 ? stats.ballFastFall : stats.ballFall;
+    s.vy = Math.max(-fall, s.vy - stats.gravity * dt);
   }
 }
 

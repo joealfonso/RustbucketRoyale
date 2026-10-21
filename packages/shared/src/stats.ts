@@ -33,9 +33,9 @@ export interface MechStats {
   dashCooldown: number;
   dashStaminaCost: number;
   sprintDoubleTapSeconds: number; // two presses of W this close together start a sprint
-  // The drop-in ball (drop.ts): its fall speed and top steering speed in m/s, how fast the steering follows (m/s²),
+  // The drop-in ball (drop.ts): its fall speed, its fall speed while Space or W is held, and top steering speed in m/s, how fast the steering follows (m/s²),
   // and the braking retro-jets near the ground.
-  ballFall: number; ballSteer: number; ballSteerAcceleration: number;
+  ballFall: number; ballFastFall: number; ballSteer: number; ballSteerAcceleration: number;
   burnMeters: number; burnDeceleration: number; burnGlide: number; landingFall: number; landingStunSeconds: number;
 }
 
@@ -312,7 +312,7 @@ const MECH_KEYS: (keyof MechStats & string)[] = [
   "staminaMax", "runDrainPerSecond", "staminaRegenPerSecond", "staminaRegenDelay", "staminaUnlockFraction",
   "mouseSensitivity", "minPitch", "maxPitch",
   "dashSpeed", "dashSeconds", "dashCooldown", "dashStaminaCost", "sprintDoubleTapSeconds",
-  "ballFall", "ballSteer", "ballSteerAcceleration",
+  "ballFall", "ballFastFall", "ballSteer", "ballSteerAcceleration",
   "burnMeters", "burnDeceleration", "burnGlide", "landingFall", "landingStunSeconds",
 ];
 const WEAPON_KEYS: (keyof WeaponStats & string)[] = [
@@ -368,7 +368,7 @@ export function parseBotConfig(raw: unknown): BotConfig {
 }
 export const parseHudStats = (raw: unknown) => parseNumbers<HudStats>(raw, "hud.json", ["radarRangeMeters", "detectRangeMeters", "knockoutCardSeconds"]);
 // The drop divides by these, so a 0 would hang a mech in the air forever.
-const MECH_ABOVE_ZERO: (keyof MechStats & string)[] = ["ballFall", "ballSteerAcceleration", "burnDeceleration", "landingFall"];
+const MECH_ABOVE_ZERO: (keyof MechStats & string)[] = ["ballFall", "ballFastFall", "ballSteerAcceleration", "burnDeceleration", "landingFall"];
 
 export function parseMechStats(raw: unknown): MechStats {
   const stats = parseNumbers<MechStats>(raw, "mech.json", MECH_KEYS);

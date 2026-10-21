@@ -12,14 +12,14 @@ const stats = parseMechStats(mechJson);
 const ground = new World([boxFromData({ name: "g", center: [0, -0.5, 0], size: [8000, 1, 8000], color: "" })]);
 const DT = 1 / 60;
 
-// Drops a ball from `height` metres at the origin, aiming at (tx, tz), until it lands.
-function drop(height: number, tx: number, tz: number) {
+// Drops a ball from `height` metres at the origin, aiming at (tx, tz), until it lands. `held` holds Space to fall fast.
+function drop(height: number, tx: number, tz: number, held = false) {
   const s = createMechState(stats, 0, 0, 0, 0);
   hangAtSpot(s, 0, 0, ground, height);
   releaseDrop(s);
   const input = createMechInput();
   input.targetX = tx; input.targetZ = tz;
-  input.jet = true; input.dash = true; input.fire = true; // none of these do anything in the air
+  input.jet = held; input.dash = true; input.fire = true; // dash and fire do nothing in the air
   let seconds = 0, burst = false, landingSpeed = 0, topSteer = 0;
   while (s.dropPhase !== DROP_NONE && seconds < 120) {
     landingSpeed = -s.vy;
@@ -69,6 +69,14 @@ describe("drop-in ball", () => {
     input.moveY = 1;
     stepMech(d.s, input, stats, DT, ground);
     expect(Math.hypot(d.s.vx, d.s.vz)).toBe(0);
+  });
+
+  it("falls faster while Space or W is held, and still brakes to the landing speed", () => {
+    const slow = drop(250, 0, 0), fast = drop(250, 0, 0, true);
+    expect(fast.seconds).toBeLessThan(slow.seconds * 0.7);
+    expect(fast.burst).toBe(true);
+    expect(fast.landingSpeed).toBeLessThanOrEqual(stats.landingFall + 0.01);
+    expect(Math.hypot(fast.s.x, fast.s.z)).toBeLessThan(1);
   });
 
   it("takes about the time ballFallSeconds says, whatever the steering", () => {

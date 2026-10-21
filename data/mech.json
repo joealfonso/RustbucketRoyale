@@ -33,6 +33,7 @@
   "dashStaminaCost": 25,
   "sprintDoubleTapSeconds": 0.25,
   "ballFall": 18,
+  "ballFastFall": 42,
   "ballSteer": 12,
   "ballSteerAcceleration": 8,
   "burnMeters": 70,
