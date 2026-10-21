@@ -227,6 +227,30 @@
       "echo": 0.7,
       "file": ["audio/titan-fall.mp3"]
     },
+    "pinned": {
+      "volume": 0.9,
+      "echo": 0.25,
+      "file": null
+    },
+    "dropInbound": {
+      "volume": 1.4,
+      "echo": 0.5,
+      "file": null
+    },
+    "dropLand": {
+      "volume": 0.8,
+      "echo": 0.5,
+      "file": null
+    },
+    "upgrade": {
+      "volume": 0.5,
+      "file": null
+    },
+    "carCrash": {
+      "volume": 1.1,
+      "echo": 0.4,
+      "file": null
+    },
     "diveWind": {
       "volume": 0.35,
       "file": null

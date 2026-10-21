@@ -31,6 +31,7 @@ export class DropView {
   private beaconMaterial: THREE.MeshBasicMaterial;
   // Set when a drop changes phase this frame, for the HUD to announce: "announced" or "open", or null.
   news: DropPhase | null = null;
+  landed: { x: number; z: number } | null = null; // a crate that hit the ground this frame, for its sound
 
   constructor(private toon: Toon, private sprites: FxSprites, private config: DropsConfig) {
     this.beaconMaterial = new THREE.MeshBasicMaterial({ color: toon.color(config.crate.paint), transparent: true, opacity: config.beacon.opacity, depthWrite: false, fog: false });
@@ -52,10 +53,12 @@ export class DropView {
   // `time` is match seconds, or null outside a running match (nothing shows).
   update(time: number | null, dt: number): void {
     this.news = null;
+    this.landed = null;
     for (const s of this.shown) {
       const phase = time === null ? "none" : dropPhase(s.drop, this.config, time);
       if (phase !== s.phase) {
         if (phase === "announced" || phase === "open") this.news = phase;
+        if (phase === "landed" && s.phase === "falling") this.landed = { x: s.drop.x, z: s.drop.z };
         s.phase = phase;
       }
       const d = s.drop;

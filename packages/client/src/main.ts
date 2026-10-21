@@ -440,8 +440,9 @@ thrusters.onLanding = (x, y, z) => {
 for (const el of [canvas, hint]) el.addEventListener("click", () => sound.start());
 // UI sounds: a click for clicking in (or back in) and for the room bar's buttons, a tick for hovering them.
 // Only while the mouse is free: the screen fades out under the first shots, and those clicks are not UI.
-hint.addEventListener("click", () => { if (!document.pointerLockElement) sound.play("uiClick"); });
+hint.addEventListener("click", (e) => { if (!document.pointerLockElement && !(e.target as Element).closest("button")) sound.play("uiClick"); });
 uiSounds(document.getElementById("roomBar")!, sound);
+uiSounds(document.getElementById("hint")!, sound); // the look switches on the click-to-play overlay
 // A broken barrel goes off a beat later (props.json barrelBlast.delaySeconds) and the server's word on it can lag, so
 // a blast where one broke is taken for it this long afterwards.
 const BARREL_MEMORY_SECONDS = 1;
@@ -846,6 +847,8 @@ function showOwnAltFire(dt: number): void {
   if (live && kind === "charge" && charge > 0) altFireFx.glow(ownModel, muzzle, index, charge, charge >= 1, now);
   if (live && altState.overheat > 0) altFireFx.vent(ownModel, muzzle, index, dt);
   if (mech.pinTime > 0 && pinLook >= 0) altFireFx.pin(ownModel, pinLook, dt);
+  if (mech.pinTime > 0 && !ownPinned) sound.play("pinned", { x: mech.x, y: mech.y + 1, z: mech.z });
+  ownPinned = mech.pinTime > 0;
   const whine = live && kind === "windup" && mechInput.altFire && altState.overheat <= 0 ? Math.max(0.05, altState.windup) : 0;
   sound.setHeld("windupWhine", whine);
   sound.setHeld("chargeHum", charge, charge >= 1);
@@ -858,8 +861,16 @@ function showOwnAltFire(dt: number): void {
   const flag = kind === "windup" ? altState.overheat > 0 : kind === "charge" ? charge >= 1 : gate.ready(simTime);
   hud.setAltFire(weapon ? altLooks[index]!.name : null, kind, value, flag, stuck);
 }
+let ownPinned = false;
+// Who was pinned or overheated last frame, so each is heard once when it starts.
+const remoteAltWas = new WeakMap<MechModel, { pinned: boolean; overheated: boolean }>();
 // Someone else pinned or venting: what the snapshots say, drawn from their gun and feet.
 function showRemoteAlt(model: MechModel, mechIndex: number, weapon: number, pinned: boolean, overheated: boolean, spin: number): void {
+  const was = remoteAltWas.get(model) ?? { pinned: false, overheated: false };
+  const at = { x: model.group.position.x, y: model.group.position.y + 2, z: model.group.position.z };
+  if (pinned && !was.pinned) sound.play("pinned", at);
+  if (overheated && !was.overheated) sound.play("overheat", at);
+  remoteAltWas.set(model, { pinned, overheated });
   const muzzle = muzzlesFor(Math.max(0, mechIndex))[0]!;
   if (spin > 0) altFireFx.glow(model, muzzle, weapon, spin, weaponSet.weapons[weapon]?.secondary.kind === "charge" && spin >= 1, performance.now() / 1000);
   if (overheated) altFireFx.vent(model, muzzle, weapon, fxDt);
@@ -982,6 +993,7 @@ if (net) {
     if (!wasDead && !health.dead && snap.match.state === oldState) pickupPop.show(pickupLines(lastSnapLoadout, loadout, pickupNames, pickupLook.text, poppedLines));
     lastSnapLoadout = loadout;
     if (loadout.slots[0] !== old.slots[0] || loadout.slots[1] !== old.slots[1]) sound.play("swap");
+    if (!wasDead && snap.match.state === oldState && loadout.upgrades.some((u) => u >= 0 && !old.upgrades.includes(u))) sound.play("upgrade");
     // When the server changes the weapon in hand itself (taking a weapon into an empty slot), follow it.
     if (loadout.active !== serverActive) { serverActive = loadout.active; input.setSlot(loadout.active); }
     if (snap.pickups) {
@@ -1602,7 +1614,8 @@ function frame(now: number): void {
   const ring: RingNow | null = ringView.update(matchSeconds);
   dropView.update(progress.state === "active" ? matchSeconds : null, frameTime);
   railFx.update(performance.now(), map.world, railPoseOf, railPose);
-  if (dropView.news === "announced") { hud.flash("SUPPLY DROP INBOUND", 2500); hud.feed("Supply drop incoming: follow the yellow beam"); dropTipDue = true; }
+  if (dropView.landed) sound.play("dropLand", { x: dropView.landed.x, y: groundBelow(dropView.landed.x, 500, dropView.landed.z), z: dropView.landed.z });
+  if (dropView.news === "announced") { sound.play("dropInbound"); hud.flash("SUPPLY DROP INBOUND", 2500); hud.feed("Supply drop incoming: follow the yellow beam"); dropTipDue = true; }
   else if (dropView.news === "open") { hud.feed("Supply drop open"); dropTipDue = false; }
   if (radar && progress.state === "active") dropView.forEachMarked(matchSeconds, markDrop);
   const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);

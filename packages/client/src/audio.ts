@@ -14,6 +14,7 @@ export type SoundName =
   | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz" | "wade" | "splash" | "treeFall" | "treeLand"
   | "uiHover" | "uiClick" | "uiPick" | "uiWhoosh" | "railCharge" | "railShot"
   | "titanStep" | "titanStomp" | "titanThrow" | "titanRoar" | "titanFall"
+  | "pinned" | "dropInbound" | "dropLand" | "upgrade" | "carCrash"
   | "diveWind" | "landingBurn" | "landingImpact" | "shellBurst"
   | "windupWhine" | "overheat" | "slugShot" | "chargeHum" | "chargeShot"
   | "rivetShot" | "rivetStick" | "rivetPop" | "detonateClick" | "harpoonShot" | "harpoonLatch" | "harpoonYank" | "harpoonReel";
@@ -462,6 +463,33 @@ export class Sound {
         this.clank(into, 330 * p, 0.25, 0.18, 0.11);
         return this.crunch(into, 0.5, "bandpass", 900 * p, 0.7, 0.003);
       // Overheat: steam blowing off the barrel in a long hiss, a hard clank of the lock and a falling groan of the motor.
+      // A spike driven home in a mech: a hard steel thunk, the plate ringing, a short grind as it bites.
+      case "pinned":
+        this.clank(into, 210 * p, 0.45, 0.6);
+        this.body(into, 140 * p, 55 * p, 0.2, 0.9);
+        return this.crunch(into, 0.25, "bandpass", 1600 * p, 0.7, 0.002);
+      // A supply drop announced: two falling klaxon blasts from somewhere up in the sky, so everyone looks up.
+      case "dropInbound":
+        this.glide(into, 520, 380, 0.45, "sawtooth", 0.12);
+        return this.glide(into, 520, 380, 0.45, "sawtooth", 0.12, 0.6) + 0.6;
+      // The crate hitting the ground: a deep thud, the cage clanging and settling.
+      case "dropLand":
+        this.body(into, 90 * p, 30 * p, 0.6, 1.4);
+        this.clank(into, 240 * p, 0.6, 0.5, 0.03);
+        this.clank(into, 330 * p, 0.4, 0.3, 0.18);
+        return this.burst(into, 0.9, "lowpass", 400, 0.5, 0.01);
+      // An upgrade fitted: a bright rising pair of notes over a servo click, plainly better than a plain pickup.
+      case "upgrade":
+        this.clank(into, 900, 0.05, 0.2);
+        this.tone(into, 660, 0.1, "triangle", 0.45);
+        this.tone(into, 990, 0.12, "triangle", 0.4, 0.08);
+        return this.tone(into, 1320, 0.2, "triangle", 0.35, 0.16) + 0.16;
+      // A thrown car coming down: sheet metal crumpling, glass bursting, the chassis bouncing once.
+      case "carCrash":
+        this.crunch(into, 0.5, "bandpass", 900 * p, 1.3, 0.002);
+        this.body(into, 120 * p, 40 * p, 0.35, 1);
+        this.burst(into, 0.3, "highpass", 4000, 0.4, 0.002, 0.02);
+        return this.clank(into, 260 * p, 0.5, 0.35, 0.22) + 0.22;
       case "overheat":
         this.clank(into, 320 * p, 0.25, 0.4);
         this.burst(into, 1.4, "highpass", 2400, 0.55, 0.02);
