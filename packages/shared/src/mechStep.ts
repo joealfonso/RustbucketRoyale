@@ -298,6 +298,28 @@ function overlaps(s: MechState, stats: MechStats, b: Box): boolean {
   );
 }
 
+// A step that went into a box started at most TOUCH inside it, a little more once a snapshot has rounded the position
+// to float32, so it can be no deeper in than it moved plus this.
+const ENTERED_SLOP = 2 * TOUCH;
+
+// A mech deeper in a box than its own step took it did not go in on that step: rounding left it a hair inside (the
+// snapshot sends float32, so a mech the server has flush against a wall can arrive just over the touch margin), or a
+// shove put it there. Pushing it back along the step would carry it out through the box's far side, 14 m along a long
+// wall for a sliver 2 micrometres deep, and on the server it would not happen, so the client is snapped back that far.
+// It leaves through the nearest face instead, which for a sliver is no move at all.
+function pushOutNearest(s: MechState, stats: MechStats, b: Box): void {
+  const toMinX = s.x + stats.halfWidth - b.minX, toMaxX = b.maxX - (s.x - stats.halfWidth);
+  const toMinZ = s.z + stats.halfWidth - b.minZ, toMaxZ = b.maxZ - (s.z - stats.halfWidth);
+  const toTop = b.maxY - s.y, toBottom = s.y + stats.height - b.minY;
+  const least = Math.min(toMinX, toMaxX, toMinZ, toMaxZ, toTop, toBottom);
+  if (least === toMinX) { s.x = b.minX - stats.halfWidth; if (s.vx > 0) s.vx = 0; }
+  else if (least === toMaxX) { s.x = b.maxX + stats.halfWidth; if (s.vx < 0) s.vx = 0; }
+  else if (least === toMinZ) { s.z = b.minZ - stats.halfWidth; if (s.vz > 0) s.vz = 0; }
+  else if (least === toMaxZ) { s.z = b.maxZ + stats.halfWidth; if (s.vz < 0) s.vz = 0; }
+  else if (least === toTop) { s.y = b.maxY; s.grounded = true; if (s.vy < 0) s.vy = 0; }
+  else { s.y = b.minY - stats.height; if (s.vy > 0) s.vy = 0; }
+}
+
 // Reused for every query so the sim allocates nothing per step.
 const nearby: number[] = [];
 
@@ -335,6 +357,8 @@ function resolveBoxes(s: MechState, stats: MechStats, dx: number, dz: number, wo
       s.y = b.maxY;
       continue;
     }
+    const into = dx > 0 ? s.x + stats.halfWidth - b.minX : dx < 0 ? b.maxX - (s.x - stats.halfWidth) : dz > 0 ? s.z + stats.halfWidth - b.minZ : b.maxZ - (s.z - stats.halfWidth);
+    if (into > Math.abs(dx + dz) + ENTERED_SLOP) { pushOutNearest(s, stats, b); continue; }
     if (dx > 0) { s.x = b.minX - stats.halfWidth; s.vx = 0; }
     else if (dx < 0) { s.x = b.maxX + stats.halfWidth; s.vx = 0; }
     else if (dz > 0) { s.z = b.minZ - stats.halfWidth; s.vz = 0; }
@@ -348,6 +372,8 @@ function moveVertical(s: MechState, stats: MechStats, dy: number, world: World):
   for (let i = 0; i < count; i++) {
     const b = world.boxes[nearby[i]!]!;
     if (!overlaps(s, stats, b)) continue;
+    const into = dy <= 0 ? b.maxY - s.y : s.y + stats.height - b.minY;
+    if (into > Math.abs(dy) + ENTERED_SLOP) { pushOutNearest(s, stats, b); continue; }
     if (dy <= 0) {
       s.y = b.maxY;
       s.grounded = true;

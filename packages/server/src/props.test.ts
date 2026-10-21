@@ -62,6 +62,16 @@ describe("props", () => {
     expect(messages(late, "props")[0]?.destroyed).toContain(CRATE);
   });
 
+  // Interest management keeps far mechs out of snapshots, but never broken props: a client that missed one would keep
+  // its box and predict into a wall that is gone when it later walks there.
+  it("a prop broken out of sight is still known to everyone", () => {
+    const { room, config } = makeRoom((c) => ({ ...c, net: { ...c.net, interestRange: 1 } }));
+    const shooter = new Client(room, config), other = new Client(room, config);
+    run(room, [shooter, other], (c) => (c === shooter ? idle(aimAt(-6, 18)) : idle()), 60);
+    expect(messages(other, "snapshot").at(-1)!.others.map((o) => o.id)).not.toContain(shooter.id);
+    expect(messages(other, "prop").map((m) => m.id)).toContain(CRATE);
+  });
+
   it("every match starts with everything whole again", () => {
     const { room, config } = makeRoom();
     const shooter = new Client(room, config);

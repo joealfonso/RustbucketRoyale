@@ -186,6 +186,30 @@ describe("walls", () => {
   });
 });
 
+describe("a hair inside a wall", () => {
+  // Pressed flush against a long wall, the server can hold a mech just under the touch margin inside it, and the
+  // snapshot's float32 rounding can carry it just over. Seen in a soak: a 14 m snap back along the wall.
+  const wall = boxFromData({ name: "w", center: [-85, 2.5, 41.5], size: [14, 5, 1], color: "" });
+  const world = new World([ground, wall]);
+  const sliver = () => createMechState(stats, -78.2, 0, 41 - stats.halfWidth + 1.02e-4, 0);
+
+  it("walking along the wall carries on along it, not out through its far end", () => {
+    const s = sliver();
+    stepMech(s, { ...createMechInput(), moveX: 1 }, stats, DT, world); // aim yaw 0: moveX 1 goes toward +X
+    expect(s.x).toBeGreaterThan(-78.2);
+    expect(s.z).toBeLessThanOrEqual(41 - stats.halfWidth);
+    expect(s.y).toBeCloseTo(0);
+  });
+
+  it("standing still is not lifted onto the top", () => {
+    const s = sliver();
+    s.grounded = true;
+    stepMech(s, createMechInput(), stats, DT, world);
+    expect(s.y).toBeLessThan(0.1);
+    expect(s.x).toBeCloseTo(-78.2);
+  });
+});
+
 describe("body turn", () => {
   it("faces where you look at once when the turn speed is 0", () => {
     const s = createMechState(stats, 0, 0, 0, 0);
