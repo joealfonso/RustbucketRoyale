@@ -1594,7 +1594,7 @@ function frame(now: number): void {
   landingMarker.update(mech, mechInput, ownStats, map.world, ownAbilityStats, rig.camera.position, frameTime);
   landingMarker.group.visible &&= ownDrop !== DROP_NONE;
   aimRing.update(aimOnGround && ownDrop !== DROP_NONE && !spectating && !replaying, mechInput.targetX, mechInput.targetY, mechInput.targetZ, rig.camera.position);
-  diveHud.update(ownDrop, ownDrop === DROP_NONE ? 0 : mech.y - groundBelow(mech.x, mech.y, mech.z), -mech.vy);
+  diveHud.update(ownDrop, ownDrop === DROP_NONE ? 0 : mech.y - groundBelow(mech.x, mech.y, mech.z), -mech.vy, mechInput.jet || mechInput.moveY > 0);
   sound.setWind(diving ? share(Math.hypot(mech.vx, mech.vy, mech.vz), dive.wind.fromSpeed, dive.wind.fullSpeed) : 0);
 
   const matchSeconds = progress.state === "active" ? progress.seconds + (performance.now() - progressAt) / 1000 : 0;

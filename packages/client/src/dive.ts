@@ -34,12 +34,12 @@ export interface DiveConfig {
   ball: { radiusMeters: number; centerMeters: number; colors: string[]; flameLength: number; flameWidth: number; hangFlameShare: number; rollPerSecond: number; framesPerSecond: number; capacity: number };
   burst: { plates: number; plateSpeed: number; plateLift: number; plateSize: number; plateSeconds: number; plateColors: string[]; fireballs: number; fireballSize: number; fireballSeconds: number };
   toon: DropSpritesConfig;
-  hud: { countdownWords: string; hanging: string; ball: string; burning: string; aimCall: string; aimCallSeconds: number };
+  hud: { countdownWords: string; hanging: string; ball: string; burning: string; fastKeys: string[]; fastCall: string; aimCall: string; aimCallSeconds: number };
 }
 
 // Keys that may be below zero: angles that point up or down.
 const SIGNED = new Set(["minPitchDegrees", "startPitchDegrees", "burnTiltDegrees"]);
-const STRINGS = new Set(["color", "countdownWords", "hanging", "ball", "burning", "aimCall"]);
+const STRINGS = new Set(["color", "countdownWords", "hanging", "ball", "burning", "fastCall", "aimCall"]);
 const GROUPS: Record<string, string[]> = {
   camera: ["minPitchDegrees", "startPitchDegrees", "pitchReturnDegreesPerSecond", "pullBackMeters", "liftMeters", "burnPull", "followPerSecond", "fovWidenDegrees", "fovFromSpeed", "fovFullSpeed", "landingShake"],
   aim: ["rangeMeters", "radiusMeters", "sizePerMeter", "opacity", "color"],
@@ -52,7 +52,7 @@ const GROUPS: Record<string, string[]> = {
   wind: ["fromSpeed", "fullSpeed"],
   ball: ["radiusMeters", "centerMeters", "flameLength", "flameWidth", "hangFlameShare", "rollPerSecond", "framesPerSecond", "capacity"],
   burst: ["plates", "plateSpeed", "plateLift", "plateSize", "plateSeconds", "fireballs", "fireballSize", "fireballSeconds"],
-  hud: ["countdownWords", "hanging", "ball", "burning", "aimCall", "aimCallSeconds"],
+  hud: ["countdownWords", "hanging", "ball", "burning", "fastCall", "aimCall", "aimCallSeconds"],
 };
 
 export function parseDive(raw: unknown): DiveConfig {
@@ -74,6 +74,8 @@ export function parseDive(raw: unknown): DiveConfig {
   names("ball", "colors");
   names("burst", "plateColors");
   names("impact", "debrisColors");
+  const keys = (d.hud as Record<string, unknown>).fastKeys;
+  if (!Array.isArray(keys) || keys.length === 0 || !keys.every((x) => typeof x === "string" && x.length > 0)) throw new Error("dive.json: hud.fastKeys must be a list of key names");
   parseDropSprites(d.toon);
   const c = d.camera as unknown as DiveConfig["camera"];
   if (c.minPitchDegrees >= 0 || c.minPitchDegrees < -89) throw new Error("dive.json: camera.minPitchDegrees must be between -89 and 0");

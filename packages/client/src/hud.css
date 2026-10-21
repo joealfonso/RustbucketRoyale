@@ -226,6 +226,12 @@ body.dropping #diveHud { display: flex; }
 #diveHud div .label { min-width: 2.6rem; }
 #diveHud .num { font-size: 1.5rem; color: var(--hud-text); min-width: 4ch; text-align: right; }
 #diveHud small { font: 400 0.75rem var(--hud-num); color: var(--hud-amber-dim); }
+#diveHud .fast { margin-top: 0.3rem; gap: 0; color: var(--hud-amber-dim); }
+#diveHud .fast[hidden] { display: none; }
+#diveHud .fast .key { margin-right: 0.3em; }
+#diveHud .fast .label { margin-left: 0.15em; min-width: 0; }
+#diveHud .fast.on { color: var(--hud-amber); }
+#diveHud .fast.on .key { background: var(--hud-amber); color: var(--hud-soot); border-color: var(--hud-amber); }
 
 /* Title screen: over the hangar scene, so only three things stand on it: the name top left, one panel of choices
    on the right, the mech cards along the bottom. The middle stays open for the mech in the loading bay. */

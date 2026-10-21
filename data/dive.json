@@ -113,6 +113,8 @@
     "hanging": "Hanging",
     "ball": "Falling",
     "burning": "Retro burn",
+    "fastKeys": ["SPACE", "W"],
+    "fastCall": "Fall faster",
     "aimCall": "AIM YOUR LANDING",
     "aimCallSeconds": 2.5
   }
