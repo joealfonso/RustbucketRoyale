@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRoomSearch, playSearch, rejoinQuery, serverQuery } from "./roomLinks";
+import { createRoomSearch, offlineSearch, playSearch, rejoinQuery, serverQuery } from "./roomLinks";
 
 describe("room links", () => {
   it("puts tier, bots and difficulty in the Create room link", () => {
@@ -7,11 +7,15 @@ describe("room links", () => {
     expect(createRoomSearch({ tier: "small", bots: "", difficulty: "mixed" })).toBe("?create&tier=small&difficulty=mixed");
   });
 
-  it("Play makes a small room filled to size with the picked bots, which starts itself only on that first page", () => {
-    const play = new URLSearchParams(playSearch("hard").slice(1));
-    expect(serverQuery(play).toString()).toBe("tier=small&difficulty=hard"); // no bots count: fill to the tier size
+  it("Play makes a room of the picked size filled with the picked bots, which starts itself only on that first page", () => {
+    const play = new URLSearchParams(playSearch("medium", "hard").slice(1));
+    expect(serverQuery(play).toString()).toBe("tier=medium&difficulty=hard"); // no bots count: fill to the tier size
     expect(play.has("play")).toBe(true);
     expect(rejoinQuery(play, "PLAY", "small").has("play")).toBe(false); // a reload or invite never starts it again
+  });
+
+  it("practises offline on the picked map size", () => {
+    expect(offlineSearch("large")).toBe("?offline&tier=large");
   });
 
   it("tells the server the difficulty, cleaned up", () => {

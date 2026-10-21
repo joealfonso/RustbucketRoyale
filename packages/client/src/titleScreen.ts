@@ -1,39 +1,39 @@
 import { parseBotDifficulty, type Roster } from "@rustbucket/shared";
 import audioJson from "../../../data/audio.json";
 import { Sound, type AudioConfig } from "./audio";
-import { rememberDifficulty, savedDifficulty } from "./difficultyChoice";
 import { Hangar } from "./hangar/hangar";
 import { mechCards } from "./mechPicker";
-import { createRoomSearch, playSearch } from "./roomLinks";
+import { pickedRadio, rememberRadios } from "./playChoices";
+import { createRoomSearch, offlineSearch, playSearch } from "./roomLinks";
 import { uiSounds } from "./uiSounds";
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-// The title screen: pick a mech and how hard the bots are, then Play (a small yard of bots), join a friend's room by
-// code, make a custom room (map and how many bots), or practise offline (alone, so the bot difficulty does not apply).
+// The title screen: pick a mech, a map size and how hard the bots are, then Play (a yard of bots), join a friend's
+// room by code, make a custom room (how many bots), or practise offline (alone, so the bot difficulty does not apply).
 // The mech is chosen here and nowhere else. Every button reloads the page with the choice in the address (see
 // main.ts). Behind it the hangar runs, with the picked mech standing in the loading bay.
 export function showTitleScreen(roster: Roster, picked: number): void {
   const menu = byId("menu");
   menu.style.display = "grid";
   document.body.classList.add("titleScreen"); // hides the match HUD, which would otherwise show over the hangar
-  const tier = byId<HTMLSelectElement>("tierSelect");
   const bots = byId<HTMLSelectElement>("botSelect");
   const code = byId<HTMLInputElement>("roomCode");
-  const difficulty = () => parseBotDifficulty(document.querySelector<HTMLInputElement>('input[name="difficulty"]:checked')?.value);
-  // One difficulty for Play and Create room, remembered in this browser. A room you join by code keeps its maker's.
-  const saved = document.querySelector<HTMLInputElement>(`input[name="difficulty"][value="${savedDifficulty()}"]`);
-  if (saved) saved.checked = true;
-  byId("difficulty").addEventListener("change", () => rememberDifficulty(difficulty()));
+  // One map size and difficulty for Play, Create room and (the size only) offline practice, remembered in this
+  // browser. A room you join by code keeps its maker's.
+  rememberRadios("mapSize");
+  rememberRadios("difficulty");
+  const tier = () => pickedRadio("mapSize") ?? "small";
+  const difficulty = () => parseBotDifficulty(pickedRadio("difficulty"));
 
-  byId("play").addEventListener("click", () => { location.search = playSearch(difficulty()); });
+  byId("play").addEventListener("click", () => { location.search = playSearch(tier(), difficulty()); });
   byId("createRoom").addEventListener("click", () => {
-    location.search = createRoomSearch({ tier: tier.value, bots: bots.value, difficulty: difficulty() });
+    location.search = createRoomSearch({ tier: tier(), bots: bots.value, difficulty: difficulty() });
   });
   const join = () => { if (code.value.trim()) location.search = `?room=${encodeURIComponent(code.value.trim().toUpperCase())}`; };
   byId("joinRoom").addEventListener("click", join);
   code.addEventListener("keydown", (e) => { if (e.key === "Enter") join(); });
-  byId("playOffline").addEventListener("click", () => { location.search = `?offline&tier=${encodeURIComponent(tier.value)}`; });
+  byId("playOffline").addEventListener("click", () => { location.search = offlineSearch(tier()); });
 
   // A picked mech is remembered in this browser, so the game it opens next starts you in it.
   let hangar: Hangar | null = null;

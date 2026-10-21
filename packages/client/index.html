@@ -50,7 +50,16 @@
       </header>
       <section id="deploy" class="panel" aria-label="Play">
         <button id="play">Play</button>
-        <small>A small yard full of bots. The match starts when you click in.</small>
+        <small>A yard full of bots. The match starts when you click in.</small>
+        <fieldset id="mapSize" class="field">
+          <legend class="label">Map size</legend>
+          <div class="segments">
+            <label><input type="radio" name="mapSize" value="small" checked /><span>Small</span></label>
+            <label><input type="radio" name="mapSize" value="medium" /><span>Medium</span></label>
+            <label><input type="radio" name="mapSize" value="large" /><span>Large</span></label>
+            <label><input type="radio" name="mapSize" value="arena" /><span>Arena</span></label>
+          </div>
+        </fieldset>
         <fieldset id="difficulty" class="field">
           <legend class="label">Bot difficulty</legend>
           <div class="segments">
@@ -64,7 +73,6 @@
         <div class="row"><input id="roomCode" maxlength="4" placeholder="CODE" aria-labelledby="joinTitle" autocomplete="off" spellcheck="false" /><button id="joinRoom" class="ghost">Join room</button></div>
         <details id="custom">
         <summary>Custom room</summary>
-        <label class="field"><span class="label">Map</span><select id="tierSelect"><option value="small" selected>Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="arena">Arena (quick test)</option></select></label>
         <label class="field"><span class="label">Bots</span><select id="botSelect"><option value="" selected>Fill with bots</option><option value="0">No bots</option><option value="3">3 bots</option><option value="5">5 bots</option><option value="8">8 bots</option></select></label>
         <button id="createRoom">Create room</button>
         <small>Create a room, then share the invite link with friends.</small>

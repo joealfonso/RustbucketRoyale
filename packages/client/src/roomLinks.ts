@@ -17,9 +17,14 @@ export function createRoomSearch(choice: RoomChoice): string {
   return `?create&${query}`;
 }
 
-// The title screen's Play: a small yard filled with bots, started by the first click into the game.
-export function playSearch(difficulty: BotDifficulty): string {
-  return `?create&tier=small&difficulty=${difficulty}&play`;
+// The title screen's Play: a yard of the picked size filled with bots, started by the first click into the game.
+export function playSearch(tier: string, difficulty: BotDifficulty): string {
+  return `?create&${new URLSearchParams({ tier, difficulty })}&play`;
+}
+
+// The title screen's Practice offline: alone on a map of the picked size.
+export function offlineSearch(tier: string): string {
+  return `?offline&${new URLSearchParams({ tier })}`;
 }
 
 // What the game server is told when connecting. It reads only these, and ignores them for a room that already exists.
