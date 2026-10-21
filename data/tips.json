@@ -5,6 +5,7 @@
     "sprint": "Double-tap W and hold: sprint",
     "ability": "Q: {ability} ready",
     "grenade": "G: throw a grenade",
-    "weapons": "1 / 2 or the wheel: switch weapons"
+    "weapons": "1 / 2 or the wheel: switch weapons",
+    "dive": "Look down to dive faster, look ahead to glide farther"
   }
 }

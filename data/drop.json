@@ -1,0 +1,20 @@
+{
+  "altitudeMeters": {
+    "arena": 150,
+    "small": 250,
+    "medium": 450,
+    "large": 600
+  },
+  "bots": {
+    "ringMarginMeters": 15,
+    "reachShare": 0.75,
+    "tries": 10,
+    "hotDropChance": 0.2,
+    "hotDropMeters": 18,
+    "spreadMeters": 60,
+    "lootWeight": 0.6,
+    "nearMeters": 20,
+    "clearMeters": 4,
+    "holdBackMeters": 6
+  }
+}

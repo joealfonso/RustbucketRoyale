@@ -21,6 +21,7 @@ interface Remote {
   jetting: boolean;
   running: boolean;
   ability: boolean; // using its ability right now: ramming, or in the air on a pounce
+  dropPhase: number; // the drop-in (drop.ts): 0 down, 1 riding, 2 diving, 3 braking
   mech: number; // the roster mech it is drawn as. A new one swaps the model.
   weapon: number; // the weapon in hand, by index in weapons.json, so its shots are drawn in that weapon's look
   dead: boolean;
@@ -61,6 +62,9 @@ export class RemoteMechs {
   // A mech just knocked out, for the blow-apart (deathFx.ts). `alreadyDown`: it was a wreck when first seen, or came
   // back from a replay a wreck that the replay never showed going down, so it should lie there rather than blow up.
   onKnockedOut: ((id: number, model: MechModel, alreadyDown: boolean) => void) | null = null;
+  // A mech's drop-in moved on a phase (drop.ts), as the server saw it, at the spot it was then: the retro burn
+  // lighting, or touching down (to 0). Not called for a mech first seen mid drop.
+  onDropPhase: ((model: MechModel, from: number, to: number, x: number, y: number, z: number) => void) | null = null;
 
   constructor(
     private scene: THREE.Scene,
@@ -119,12 +123,19 @@ export class RemoteMechs {
 
   // Calls `fn` for every mech within `range` of a point, with how it is moving where it is drawn, for its walk.
   // Allocates nothing.
-  forEachNear(x: number, z: number, range: number, fn: (model: MechModel, mech: number, vx: number, vy: number, vz: number, jetting: boolean, running: boolean, ability: boolean) => void): void {
+  forEachNear(x: number, z: number, range: number, fn: (model: MechModel, mech: number, vx: number, vy: number, vz: number, jetting: boolean, running: boolean, ability: boolean, dropPhase: number) => void): void {
     for (const r of this.remotes.values()) {
       const p = r.model.group.position;
       if (Math.abs(p.x - x) > range || Math.abs(p.z - z) > range) continue;
-      fn(r.model, r.mech, r.vx, r.vy, r.vz, r.jetting, r.running, r.ability);
+      fn(r.model, r.mech, r.vx, r.vy, r.vz, r.jetting, r.running, r.ability, r.dropPhase);
     }
+  }
+
+  // Calls `fn` for every mech, however far, with its drop phase and how it moves where it is drawn, for the dive's
+  // pose and smoke trail. Not while the kill replay is placing everyone. Allocates nothing.
+  forEachDrop(fn: (model: MechModel, dropPhase: number, vx: number, vy: number, vz: number, id: number) => void): void {
+    if (this.replaying) return;
+    for (const r of this.remotes.values()) fn(r.model, r.dropPhase, r.vx, r.vy, r.vz, r.id);
   }
 
   // Whether a wreck that still has something in it is within range of a spot, for the "hold E" prompt.
@@ -223,7 +234,7 @@ export class RemoteMechs {
         remote.mech = o.mech;
       }
       if (!remote) {
-        remote = { id: o.id, model: this.makeModel(o), mech: o.mech, weapon: o.weapon, vx: 0, vy: 0, vz: 0, jetting: false, running: false, ability: false, dead: false, hp: [...o.hp], looted: false, bot: o.bot, ghost: null, samples: [], seen: true };
+        remote = { id: o.id, model: this.makeModel(o), mech: o.mech, weapon: o.weapon, vx: 0, vy: 0, vz: 0, jetting: false, running: false, ability: false, dropPhase: o.dropPhase, dead: false, hp: [...o.hp], looted: false, bot: o.bot, ghost: null, samples: [], seen: true };
         this.remotes.set(o.id, remote);
       }
       remote.seen = true;
@@ -234,6 +245,11 @@ export class RemoteMechs {
       remote.jetting = o.jetting;
       remote.running = o.running;
       remote.ability = o.ability;
+      if (o.dropPhase !== remote.dropPhase) {
+        const from = remote.dropPhase;
+        remote.dropPhase = o.dropPhase;
+        if (!this.replaying) this.onDropPhase?.(remote.model, from, o.dropPhase, o.x, o.y, o.z);
+      }
       remote.model.repairing = o.repairing;
       for (let zone = 0; zone < remote.hp.length; zone++) remote.hp[zone] = o.hp[zone] ?? 0;
       // Going down during a replay shows when it ends, lying there: the replay has the old picture on screen.

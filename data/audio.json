@@ -209,6 +209,20 @@
       "volume": 2.5,
       "echo": 0.7,
       "file": ["audio/titan-fall.mp3"]
+    },
+    "diveWind": {
+      "volume": 0.35,
+      "file": null
+    },
+    "landingBurn": {
+      "volume": 0.8,
+      "echo": 0.4,
+      "file": null
+    },
+    "landingImpact": {
+      "volume": 1.1,
+      "echo": 0.6,
+      "file": null
     }
   }
 }

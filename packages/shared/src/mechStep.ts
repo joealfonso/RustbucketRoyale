@@ -1,3 +1,4 @@
+import { DROP_BURNING, DROP_RIDING, dropping, landDrop, steerDrop } from "./drop";
 import type { AbilityStats, PounceStats } from "./abilities";
 import type { MechInput } from "./MechInput";
 import { Meter } from "./Meter";
@@ -33,6 +34,8 @@ export interface MechState {
   abilityTime: number; // seconds of ram charge or mortar brace left, or above 0 while a pounce is in the air
   abilityCooldown: number; // seconds until the ability can be used again
   abilityX: number; abilityZ: number; // direction of the ram, leap, strike or decoys, unit length
+  dropPhase: number; // the drop-in at the start of a match (drop.ts): 0 down, 1 riding, 2 diving, 3 braking
+  dropTime: number; // seconds of landing stun left: no moving, jets, dash or ability
   fuel: Meter;
   stamina: Meter;
 }
@@ -41,7 +44,7 @@ export function createMechState(stats: MechStats, x: number, y: number, z: numbe
   return {
     x, y, z, vx: 0, vz: 0, vy: 0, bodyYaw: yaw, mech,
     grounded: false, running: false, jetting: false, fuelScale: 1, speedScale: 1, crawling: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
-    abilityTime: 0, abilityCooldown: 0, abilityX: 0, abilityZ: 0,
+    abilityTime: 0, abilityCooldown: 0, abilityX: 0, abilityZ: 0, dropPhase: 0, dropTime: 0,
     fuel: new Meter(stats.fuelMax), stamina: new Meter(stats.staminaMax),
   };
 }
@@ -59,6 +62,15 @@ export function moveTowardsAngle(current: number, target: number, maxDelta: numb
 export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: number, world: World, ability: AbilityStats | null = null): void {
   s.fuel.setMax(stats.fuelMax * s.fuelScale);
   s.stamina.setMax(stats.staminaMax);
+  if (dropping(s)) {
+    stepDrop(s, input, stats, dt, world);
+    return;
+  }
+  // Just landed from the drop: the impact holds the mech still for a moment.
+  const stunned = s.dropTime > 0;
+  // Ends with under half a step left, as the ram does: the time crosses the wire as a float32, and an exact count to
+  // zero would end a step later on the client than on the server.
+  if (stunned) s.dropTime = s.dropTime - dt < dt * 0.5 ? 0 : s.dropTime - dt;
 
   // 0 means the body always faces where you look. Above 0 it swings round at that many degrees a second, which feels heavier.
   s.bodyYaw = stats.turnSpeedDegrees > 0 ? moveTowardsAngle(s.bodyYaw, input.aimYaw, stats.turnSpeedDegrees * DEG * dt) : input.aimYaw;
@@ -67,8 +79,9 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   const yaw = input.aimYaw;
   const forwardX = -Math.sin(yaw), forwardZ = -Math.cos(yaw);
   const rightX = Math.cos(yaw), rightZ = -Math.sin(yaw);
-  let wishX = rightX * input.moveX + forwardX * input.moveY;
-  let wishZ = rightZ * input.moveX + forwardZ * input.moveY;
+  const moveX = stunned ? 0 : input.moveX, moveY = stunned ? 0 : input.moveY;
+  let wishX = rightX * moveX + forwardX * moveY;
+  let wishZ = rightZ * moveX + forwardZ * moveY;
   const wishLength2 = wishX * wishX + wishZ * wishZ;
   if (wishLength2 > 1) {
     const inv = 1 / Math.sqrt(wishLength2);
@@ -85,7 +98,7 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   if (!ability) s.abilityTime = 0;
   s.abilityCooldown = Math.max(0, s.abilityCooldown - dt);
   // The server spots a start by the cooldown going up, so every kind sets it here.
-  if (ability && input.ability && s.abilityCooldown <= 0 && s.abilityTime <= 0 && s.grounded && !s.crawling) {
+  if (ability && input.ability && !stunned && s.abilityCooldown <= 0 && s.abilityTime <= 0 && s.grounded && !s.crawling) {
     s.abilityCooldown = ability.cooldownSeconds;
     if (ability.kind === "pounce") {
       s.dashTime = 0;
@@ -107,7 +120,7 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
 
   // A dash goes the way you are steering, in any of the eight directions, or straight ahead if you are standing still.
   s.dashCooldown = Math.max(0, s.dashCooldown - dt);
-  if (input.dash && !s.crawling && s.abilityTime <= 0 && s.dashCooldown <= 0 && s.dashTime <= 0 && s.stamina.canUse && s.stamina.value >= stats.dashStaminaCost) {
+  if (input.dash && !stunned && !s.crawling && s.abilityTime <= 0 && s.dashCooldown <= 0 && s.dashTime <= 0 && s.stamina.canUse && s.stamina.value >= stats.dashStaminaCost) {
     let dirX = forwardX, dirZ = forwardZ;
     const length = Math.hypot(wishX, wishZ);
     if (length > 1e-4) {
@@ -164,7 +177,7 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
     }
   }
 
-  s.jetting = input.jet && s.fuel.canUse && !pouncing && !bracing;
+  s.jetting = input.jet && !stunned && s.fuel.canUse && !pouncing && !bracing;
   if (s.jetting) {
     s.fuel.drain(stats.fuelDrainPerSecond * dt, stats.fuelRegenDelay);
     s.vy = Math.min(s.vy + stats.jetLift * dt, stats.jetMaxRiseSpeed);
@@ -189,6 +202,32 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
     s.abilityTime -= dt;
     if (s.grounded || s.abilityTime < dt * 0.5) s.abilityTime = 0;
   }
+}
+
+// A step of the drop-in: drop.ts sets the speed, the usual collision moves the mech, and touching down ends it.
+function stepDrop(s: MechState, input: MechInput, stats: MechStats, dt: number, world: World): void {
+  s.bodyYaw = input.aimYaw;
+  s.running = false;
+  s.jetting = s.dropPhase === DROP_BURNING;
+  steerDrop(s, input, stats, dt, world.terrain?.heightAt(s.x, s.z) ?? 0);
+  if (s.dropPhase === DROP_RIDING) return;
+  s.grounded = false;
+  const before = s.y;
+  moveHorizontal(s, stats, s.vx * dt, 0, world);
+  moveHorizontal(s, stats, 0, s.vz * dt, world);
+  // Sliding into a low wall top steps the mech up onto it: that is touching down, or it would step up and fall
+  // back every step and hang on the edge forever.
+  if (s.y > before) s.grounded = true;
+  else moveVertical(s, stats, s.vy * dt, world);
+  standOnTerrain(s, world, false);
+  // A long glide stays over the map: the edge wall is only so tall, and the dive starts far above it.
+  const terrain = world.terrain;
+  if (terrain) {
+    const edge = terrain.meters / 2 - stats.halfWidth;
+    s.x = Math.min(edge, Math.max(-edge, s.x));
+    s.z = Math.min(edge, Math.max(-edge, s.z));
+  }
+  if (s.grounded) landDrop(s, stats);
 }
 
 function capToRunSpeed(s: MechState, stats: MechStats): void {

@@ -1,10 +1,12 @@
 import {
   Predictor, STEP, SnapshotMemory, abilityFor, propsInReach, createMechInput, createRingNow, decodeServerBinary, encodeInput, encodeServerBinary, generateMap,
-  mechStatsFor, ringAt, type Roster, type BotConfig, type TitanConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type AbilitySet, type AbilityStats, type RingSchedule, type ServerMessage, type TierSet, type World,
+  dropping, mechStatsFor, ringAt, type Roster, type BotConfig, type TitanConfig, type ChunkSet, type PropConfig, type PropInstance, type InputMessage, type MechStats, type AbilitySet, type AbilityStats, type RingSchedule, type ServerMessage, type TierSet, type World,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "../Bot";
 import { TITAN_ID } from "../Titan";
 import type { BotAbilityStats } from "../botAbilities";
+import type { DropPlan } from "../botDrop";
+import type { DropBotStats } from "../dropConfig";
 import { Pathfinder } from "../Pathfinder";
 import type { Room } from "../Room";
 
@@ -43,6 +45,7 @@ export class HeadlessPlayer {
   private propOfBox: Int32Array = new Int32Array(0);
   private smashScratch: number[] = [];
   private smashed: number[] = [];
+  private dropPlan: DropPlan | null = null;
 
   constructor(
     private room: Room,
@@ -57,6 +60,7 @@ export class HeadlessPlayer {
     abilities: AbilitySet | null = null,
     private botAbilities: BotAbilityStats | null = null,
     private titan: TitanConfig | null = null,
+    private dropBots: DropBotStats | null = null, // how its brain picks a landing spot, as the room's bots do
   ) {
     this.abilityOf = abilities ? abilityFor(abilities, roster) : () => null;
     this.statsOf = mechStatsFor(mech, roster);
@@ -71,7 +75,7 @@ export class HeadlessPlayer {
     const message = packed ? decodeServerBinary(packed, this.readMemory)! : m;
 
     if (message.t === "welcome" || message.t === "room") this.useMap(message.seed, message.tier);
-    if (message.t === "room") { this.ring = message.ring; this.settleSnapshots = 3; }
+    if (message.t === "room") { this.ring = message.ring; this.settleSnapshots = 3; this.aimDropAtRing(); }
     if (message.t === "snapshot") this.onSnapshot(message);
     // A destroyed prop leaves this player's world too, as in the browser, or prediction walks into walls that are gone.
     if (message.t === "prop") { this.breakProp(message.id); this.propsBroken++; }
@@ -107,7 +111,19 @@ export class HeadlessPlayer {
       this.predictor.setWorld(map.world);
       this.brain!.setFinder(finder);
     }
+    if (this.dropBots) {
+      const scenery = this.propConfig.types.map((t) => t.scenery === true);
+      this.dropPlan = { world: map.world, propOfBox: map.propOfBox, props: map.props, scenery, cx: 0, cz: 0, radius: map.meters / 2, half: map.meters / 2, taken: [], stats: this.dropBots };
+      this.aimDropAtRing();
+    }
     this.settleSnapshots = 3;
+  }
+
+  // The first circle the ring closes to, which is where the brain wants to land.
+  private aimDropAtRing(): void {
+    const first = this.ring?.stages[0];
+    if (!this.dropPlan || !first) return;
+    this.dropPlan.cx = first.cx; this.dropPlan.cz = first.cz; this.dropPlan.radius = first.radius;
   }
 
   private breakProp(id: number): void {
@@ -140,7 +156,7 @@ export class HeadlessPlayer {
     if (!this.predictor || !this.brain || !this.world || !snap) return;
     const input = this.input;
 
-    const targets: BotTarget[] = snap.others.filter((o) => !o.dead).map((o) => ({ id: o.id, x: o.x, y: o.y, z: o.z }));
+    const targets: BotTarget[] = snap.others.filter((o) => !o.dead && o.dropPhase === 0).map((o) => ({ id: o.id, x: o.x, y: o.y, z: o.z }));
     // The Titan as the room's bots see it: something to shoot, and somewhere not to stand.
     const titan = snap.titan && this.titan && snap.titan.action !== "down" ? snap.titan : null;
     if (titan) targets.push({ id: TITAN_ID, x: titan.x, y: titan.y, z: titan.z, aimHeight: this.titan!.aimHeight });
@@ -148,7 +164,15 @@ export class HeadlessPlayer {
     const ring = this.ring && snap.match.state === "active" ? ringAt(this.ring, snap.match.seconds, this.ringNow) : null;
     this.brain.abilityKind = this.abilityOf(this.predictor.state.mech)?.kind ?? null;
     this.brain.body = this.statsOf(this.predictor.state.mech);
-    this.brain.think(this.predictor.state, targets, ring, this.world, STEP, input);
+    if (dropping(this.predictor.state) && this.dropPlan) {
+      // It cannot know where the room's bots mean to land, only where the mechs it is sent are now.
+      const taken = this.dropPlan.taken;
+      taken.length = 0;
+      for (const o of snap.others) if (!o.dead) taken.push(o.x, o.z);
+      this.brain.thinkDrop(this.predictor.state, this.dropPlan, this.statsOf(this.predictor.state.mech), STEP, input);
+    } else {
+      this.brain.think(this.predictor.state, targets, ring, this.world, STEP, input);
+    }
     // The same rules the browser applies before sending.
     if (snap.health.dead || snap.match.state === "countdown") {
       input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.grenade = false; input.ability = false;

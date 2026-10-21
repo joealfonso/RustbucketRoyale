@@ -31,5 +31,17 @@
   "dashSeconds": 0.18,
   "dashCooldown": 0.9,
   "dashStaminaCost": 25,
-  "sprintDoubleTapSeconds": 0.25
+  "sprintDoubleTapSeconds": 0.25,
+  "diveLevelPitch": -15,
+  "diveSteepPitch": -60,
+  "diveLevelFall": 32,
+  "diveSteepFall": 85,
+  "diveLevelGlide": 42,
+  "diveSteepGlide": 14,
+  "diveAcceleration": 30,
+  "burnMeters": 70,
+  "burnDeceleration": 60,
+  "burnGlide": 8,
+  "landingFall": 14,
+  "landingStunSeconds": 0.6
 }

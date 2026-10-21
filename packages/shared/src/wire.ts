@@ -21,11 +21,11 @@ export const isBinaryType = (first: number) => first === TYPE_SNAPSHOT || first 
 
 // ---- sizes
 
-// Your own state: 20 float32s, but most do not change from one snapshot to the next (timers at 0, full fuel and
+// Your own state: 23 float32s, but most do not change from one snapshot to the next (timers at 0, full fuel and
 // stamina, the fuel scale, the facing while standing). A 3-byte mask says which are sent; one left out is the same
 // float as last time (0 for a fresh memory), so prediction replays from exactly the numbers the server has. Then one
 // byte of flags.
-const SELF_FLOATS = 21;
+const SELF_FLOATS = 23;
 const SELF_MASK_BYTES = 3;
 // Another mech: id, a byte saying what follows, its flags, its position, its yaw, then its details (hit points,
 // weapon, armour, upgrades). Once a client has been sent a mech, the position goes as the change since last time,
@@ -41,6 +41,8 @@ const DELTA_BIT = 2;
 const DETAILS_BIT = 4;
 // A roster mech's number is 3 bits: two in the mech's flags byte, the top one here (gate 15b's fifth mech).
 const MECH_HIGH_BIT = 8;
+// The drop-in phase (drop.ts), 0 to 3, in the two spare bits of the same byte.
+const DROP_SHIFT = 4;
 const LOADOUT_BYTES = 9;
 const LOOTING_BYTES = 2; // how far through looting a wreck, then through a repair, 0 to 255 each
 const PICKUP_BYTES = 9;
@@ -92,7 +94,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
   const noises = m.noises.slice(0, 255);
   const pickups = m.pickups?.slice(0, PICKUPS_UNCHANGED - 1) ?? [];
   const s = m.you;
-  const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale, s.speedScale];
+  const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale, s.speedScale, s.dropPhase, s.dropTime];
   let mask = 0, present = 0;
   selfNumbers.forEach((n, i) => { if (!Object.is(Math.fround(n), memory.self[i])) { mask |= 1 << i; present++; } });
 
@@ -112,7 +114,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
     const was = memory.others.get(other.id);
     const delta = was !== undefined && fitsByte(now.x - was.x) && fitsByte(now.y - was.y) && fitsByte(now.z - was.z);
     const details = was === undefined || now.details.some((b, i) => b !== was.details[i]);
-    kinds.push((other.ability ? ABILITY_BIT : 0) | (delta ? DELTA_BIT : 0) | (details ? DETAILS_BIT : 0) | (other.mech & 4 ? MECH_HIGH_BIT : 0));
+    kinds.push((other.ability ? ABILITY_BIT : 0) | (delta ? DELTA_BIT : 0) | (details ? DETAILS_BIT : 0) | (other.mech & 4 ? MECH_HIGH_BIT : 0) | ((other.dropPhase & 3) << DROP_SHIFT));
     otherBytes += OTHER_HEAD_BYTES + (delta ? POSITION_DELTA_BYTES : POSITION_BYTES) + YAW_BYTES + (details ? DETAIL_BYTES : 0);
     seen.set(other.id, now);
   }
@@ -214,10 +216,10 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
   const you: SelfState = {
     x: f(), y: f(), z: f(), vx: f(), vz: f(), vy: f(), bodyYaw: f(), dashTime: f(), dashCooldown: f(), dashX: f(), dashZ: f(),
     abilityTime: f(), abilityCooldown: f(), abilityX: f(), abilityZ: f(),
-    fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(), speedScale: f(), mech: 0,
+    fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(), speedScale: f(), dropPhase: f(), dropTime: f(), mech: 0,
     grounded: false, running: false, jetting: false, crawling: false, fuelLocked: false, staminaLocked: false,
   };
-  const selfOrder = [you.x, you.y, you.z, you.vx, you.vz, you.vy, you.bodyYaw, you.dashTime, you.dashCooldown, you.dashX, you.dashZ, you.abilityTime, you.abilityCooldown, you.abilityX, you.abilityZ, you.fuel, you.fuelTimer, you.stamina, you.staminaTimer, you.fuelScale, you.speedScale];
+  const selfOrder = [you.x, you.y, you.z, you.vx, you.vz, you.vy, you.bodyYaw, you.dashTime, you.dashCooldown, you.dashX, you.dashZ, you.abilityTime, you.abilityCooldown, you.abilityX, you.abilityZ, you.fuel, you.fuelTimer, you.stamina, you.staminaTimer, you.fuelScale, you.speedScale, you.dropPhase, you.dropTime];
   const flags = v.getUint8(o); o += 1;
   you.grounded = (flags & 1) !== 0; you.running = (flags & 2) !== 0; you.jetting = (flags & 4) !== 0;
   you.fuelLocked = (flags & 8) !== 0; you.staminaLocked = (flags & 16) !== 0; you.crawling = (flags & 32) !== 0;
@@ -248,7 +250,7 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
     others.push({
       id, x: qx * POSITION_STEP, y: qy * HEIGHT_STEP, z: qz * POSITION_STEP, yaw,
       running: (bits & 1) !== 0, jetting: (bits & 2) !== 0, dead: (bits & 4) !== 0, looted: (bits & 16) !== 0, repairing: (bits & 32) !== 0, bot: (bits & 8) !== 0,
-      hp: [d![0]!, d![1]!, d![2]!], weapon: d![3]!, armor: [d![4]!, d![5]!, d![6]!], upgrades: [slot(d![7]!), slot(d![8]!)], mech: (bits >> 6) | (kind & MECH_HIGH_BIT ? 4 : 0), ability: (kind & ABILITY_BIT) !== 0,
+      hp: [d![0]!, d![1]!, d![2]!], weapon: d![3]!, armor: [d![4]!, d![5]!, d![6]!], upgrades: [slot(d![7]!), slot(d![8]!)], mech: (bits >> 6) | (kind & MECH_HIGH_BIT ? 4 : 0), ability: (kind & ABILITY_BIT) !== 0, dropPhase: (kind >> DROP_SHIFT) & 3,
     });
   }
   if (bytes.length < o + 1) return null;

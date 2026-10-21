@@ -11,7 +11,8 @@ export type SoundName =
   | "dash" | "jets" | "step" | "grenadeThrow" | "countdown" | "go" | "pickup" | "swap" | "loot" | "repair"
   | "ram" | "pounce" | "slam" | "mortar" | "shellIncoming" | "decoy" | "fizz" | "wade" | "splash" | "treeFall" | "treeLand"
   | "uiHover" | "uiClick" | "uiPick" | "uiWhoosh" | "railCharge" | "railShot"
-  | "titanStep" | "titanStomp" | "titanThrow" | "titanRoar" | "titanFall";
+  | "titanStep" | "titanStomp" | "titanThrow" | "titanRoar" | "titanFall"
+  | "diveWind" | "landingBurn" | "landingImpact";
 
 export interface AudioConfig {
   master: number;
@@ -36,6 +37,7 @@ export class Sound {
   private files = new Map<SoundName, AudioBuffer[]>();
   private voices = 0;
   private jets: { source: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
+  private wind: { source: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
   private ears = { x: 0, y: 0, z: 0 };
   muted = false;
 
@@ -143,6 +145,27 @@ export class Sound {
     }
     const target = on ? this.config.sounds.jets.volume : 0;
     this.jets.gain.gain.setTargetAtTime(target, ctx.currentTime, on ? 0.03 : 0.08);
+  }
+
+  // The wind howling past while you dive in, held like the jets: `level` 0 is silent, 1 the full rush, rising in pitch
+  // as it gets louder so a steep dive screams and a glide whistles. Stand-in noise; a `file` would not loop here yet.
+  setWind(level: number): void {
+    const ctx = this.ctx, out = this.out;
+    if (!ctx || !out || !this.noise) return;
+    if (!this.wind) {
+      if (level <= 0) return;
+      const source = ctx.createBufferSource();
+      source.buffer = this.noise;
+      source.loop = true;
+      const filter = new BiquadFilterNode(ctx, { type: "bandpass", frequency: 400, Q: 1.4 });
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      source.connect(filter).connect(gain).connect(out);
+      source.start();
+      this.wind = { source, gain, filter };
+    }
+    this.wind.gain.gain.setTargetAtTime(this.config.sounds.diveWind.volume * level, ctx.currentTime, 0.15);
+    this.wind.filter.frequency.setTargetAtTime(300 + level * 1300, ctx.currentTime, 0.2);
   }
 
   private playFile(name: SoundName, into: AudioNode, pitch: number): number {
@@ -327,7 +350,21 @@ export class Sound {
         this.burst(into, 3.2, "lowpass", 260 * p, 1, 0.05, 0.4);
         this.clank(into, 210 * p, 0.6, 0.3, 0.9);
         return this.clank(into, 330 * p, 0.5, 0.22, 1.3) + 0.5;
-      case "jets": return 0;
+      // The retro-jets lighting for the landing burn: a thump of ignition and a deep roar braking the fall.
+      case "landingBurn":
+        this.burst(into, 0.03, "highpass", 1800, 0.6, 0.001);
+        this.body(into, 110 * p, 55 * p, 0.4, 0.9);
+        this.roar(into, 55 * p, 90 * p, 1.4, 1);
+        return this.burst(into, 1.6, "lowpass", 700 * p, 0.6, 0.08);
+      // Touching down from the sky: a crack, a huge low punch, steel ringing and the ground's grit raining back.
+      case "landingImpact":
+        this.burst(into, 0.02, "highpass", 2000, 0.9, 0.0005);
+        this.body(into, 90 * p, 24 * p, 0.9, 1.6, 0.003);
+        this.body(into, 190 * p, 60 * p, 0.3, 0.8);
+        this.clank(into, 130 * p, 0.6, 0.45, 0.01);
+        this.crunch(into, 0.5, "lowpass", 1500 * p, 1.2, 0.002);
+        return this.burst(into, 1.4, "lowpass", 380 * p, 0.7, 0.04);
+      case "jets": case "diveWind": return 0;
     }
   }
 

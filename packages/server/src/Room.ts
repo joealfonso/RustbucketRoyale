@@ -11,9 +11,12 @@ import {
   ITEM_ARMOR_FIRST, ITEM_GRENADE, type DropsConfig, type SupplyDrop,
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
   titanHitBoxes, type TitanConfig, type TitanState,
+  DROP_DIVING, DROP_RIDING, dropping,
 } from "@rustbucket/shared";
 import { Bot, type BotTarget } from "./Bot";
 import { parseBotAbilities, type BotAbilityStats } from "./botAbilities";
+import type { DropPlan } from "./botDrop";
+import type { DropConfig } from "./dropConfig";
 import { AbstractFights, RATINGS, botsNeeded, pickDifficulty, type FarBot } from "./botLod";
 import { decoyAlong, spawnDecoys, stepDecoy, type Decoy } from "./decoys";
 import { Pathfinder } from "./Pathfinder";
@@ -73,6 +76,9 @@ export interface RoomConfig {
   zones: ZoneSet;
   abilities: AbilitySet;
   titan: TitanConfig;
+  // The drop-in that starts every match (data/drop.json). Null starts matches on the ground, which the tests of
+  // fights and loot are built around.
+  drop: DropConfig | null;
   // Builds the map for a tier and seed. The room asks for a fresh one at the start of every match.
   mapFor: (tier: string, seed: number) => MapForRoom;
   // The real server builds match maps on worker threads (MapPool) through this. With it, the room asks for the next
@@ -133,6 +139,8 @@ export class Room {
   private titan: Titan | null = null; // the Junk Titan, from when it wakes up until the next countdown
   private titanHit = createZoneHit();
   private titanHost: TitanHost;
+  private landed: Player[] = []; // the mechs on the ground this tick, the only ones the Titan knows about
+  private dropPlan: DropPlan | null = null; // this match's map and first circle, for bots choosing where to land
 
   private botInput = createMechInput();
   private botTargets: BotTarget[] = [];
@@ -240,9 +248,10 @@ export class Room {
   }
 
   // A read-only look at every mech, for the soak test's checks. Not used by the game itself.
-  inspect(): { id: number; bot: boolean; rating: number | null; x: number; y: number; z: number; hp: number[]; dead: boolean; eliminated: boolean; participant: boolean }[] {
+  inspect(): { id: number; bot: boolean; rating: number | null; x: number; y: number; z: number; hp: number[]; dead: boolean; eliminated: boolean; participant: boolean; dropPhase: number; dropTime: number; dropSpot: { x: number; z: number } | null }[] {
     return [...this.players.values()].map((p) => ({
       id: p.id, bot: p.bot !== null, rating: p.bot?.rating ?? null, x: p.state.x, y: p.state.y, z: p.state.z, hp: [...p.hp], dead: p.dead, eliminated: p.eliminated, participant: p.participant,
+      dropPhase: p.state.dropPhase, dropTime: p.state.dropTime, dropSpot: p.bot?.dropSpot ?? null,
     }));
   }
 
@@ -329,6 +338,7 @@ export class Room {
     };
     this.players.set(id, player);
     if (this.hostId === 0) this.hostId = id;
+    if (this.state === "countdown") this.placeForDrop(player);
 
     // In the lobby a person arriving takes a bot's place. Mid match nothing changes.
     if (this.state === "lobby") this.fillBots();
@@ -529,6 +539,18 @@ export class Room {
       return;
     }
 
+    // Diving in: nothing to think about but where to land. A bot far from everyone steers a few times a second, like
+    // its walking, but it still dives and lands.
+    if (dropping(player.state)) {
+      const far = !this.nearAnyPerson(player, lod.fullRangeMeters);
+      if (far && (this.tickCount + player.slot) % lod.cheapEveryTicks !== 0) return;
+      const dt = far ? lod.cheapEveryTicks * STEP : STEP;
+      if (this.dropPlan) bot.thinkDrop(player.state, this.dropPlan, this.statsFor(player.state.mech), dt, input);
+      else Object.assign(input, createMechInput(), { aimYaw: player.state.bodyYaw });
+      this.processInput(player, input, dt);
+      return;
+    }
+
     if ((this.tickCount + player.slot) % this.config.bots.loot.refreshTicks === 0) {
       this.aimBotAtLoot(player);
       this.aimBotAtPrey(player);
@@ -550,7 +572,7 @@ export class Room {
 
     this.botTargets.length = 0;
     for (const other of this.players.values()) {
-      if (other === player || !other.participant || other.dead) continue;
+      if (other === player || !other.participant || other.dead || dropping(other.state)) continue;
       this.botTargets.push({ id: other.id, x: other.state.x, y: other.state.y, z: other.state.z, person: other.bot === null });
     }
     // Decoys look like any mech to a bot, so it chases and shoots them. Its own are not worth fooling itself with.
@@ -607,7 +629,7 @@ export class Room {
     let best: Player | null = null;
     let bestDistance = this.config.bots.hunt.searchMeters;
     for (const other of this.players.values()) {
-      if (other === player || !other.participant || other.dead) continue;
+      if (other === player || !other.participant || other.dead || dropping(other.state)) continue;
       const distance = Math.hypot(other.state.x - x, other.state.z - z);
       if (distance < bestDistance) { best = other; bestDistance = distance; }
     }
@@ -660,10 +682,13 @@ export class Room {
   // It wakes on its tiers at its time in the match, announced to everyone, then walks and fights every tick.
   private runTitan(): void {
     const config = this.config.titan;
+    // A mech still diving in is out of its reach and beneath its notice.
+    this.landed.length = 0;
+    for (const p of this.players.values()) if (!dropping(p.state)) this.landed.push(p);
     if (!this.titan) {
       const elapsed = this.elapsedSeconds();
       if (!config.tiers.includes(this.tier) || !this.ring || elapsed < config.appearSeconds) return;
-      const at = placeTitan(config, this.ring, elapsed, this.map, this.players.values(), this.random);
+      const at = placeTitan(config, this.ring, elapsed, this.map, this.landed, this.random);
       this.titan = new Titan(config, this.map.world, this.finder, this.config.bots.path, this.map.meters, this.titanHost, titanHitBoxes(config, this.config.kitHitboxes ?? null), at.x, at.z);
       this.tellEveryone({ t: "notice", text: config.announce });
       this.makeNoise(null, "explosion", at.x, at.z);
@@ -674,7 +699,7 @@ export class Room {
   // What the Titan does goes through the room's own rules: armor, knockouts, props, loot, who hears what.
   private makeTitanHost(): TitanHost {
     return {
-      mechs: () => this.players.values(),
+      mechs: () => this.landed,
       hurt: (target, zoneDamage, cause) => this.titanHurts(target, zoneDamage, cause),
       smashProps: (x, y, z, radius, height) => this.smashPropsAt(x, y, z, radius, height, null),
       blast: (x, y, z, damage, radius, cause) => this.blast(x, y, z, damage, radius, null, cause),
@@ -825,14 +850,42 @@ export class Room {
       clearCauses(player);
       clearTally(player.tally);
       player.state = this.freshState(player.slot, player.mech);
+      this.placeForDrop(player);
+      player.bot?.forgetDrop();
       player.queue.length = 0;
     }
+    this.dropPlan = this.makeDropPlan(this.ring);
     this.state = "countdown";
     this.phaseEndTick = this.tickCount + Math.ceil(this.config.match.countdownSeconds / STEP);
     this.broadcastRoom();
   }
 
+  // High above its spawn, held there through the countdown, to dive in when the match starts.
+  private placeForDrop(player: Player): void {
+    const altitude = this.config.drop?.altitudeMeters[this.tier];
+    if (altitude === undefined) return;
+    const s = player.state;
+    const ground = this.map.world.groundAt(s.x, s.z);
+    s.y = (Number.isFinite(ground) ? ground : s.y) + altitude;
+    s.vx = 0; s.vy = 0; s.vz = 0;
+    s.grounded = false;
+    s.dropPhase = DROP_RIDING;
+  }
+
+  // What bots choose a landing spot from. Null without a drop-in.
+  private makeDropPlan(ring: RingSchedule): DropPlan | null {
+    const drop = this.config.drop;
+    const first = ring.stages[0] ?? ring.initial;
+    if (!drop) return null;
+    return {
+      world: this.map.world, propOfBox: this.map.propOfBox, props: this.map.props, scenery: this.config.props.types.map((t) => t.scenery === true),
+      cx: first.cx, cz: first.cz, radius: first.radius, half: this.map.meters / 2, taken: [], stats: drop.bots,
+    };
+  }
+
   private beginMatch(): void {
+    // Everyone riding up top goes at once.
+    for (const p of this.players.values()) if (p.state.dropPhase === DROP_RIDING) p.state.dropPhase = DROP_DIVING;
     this.state = "active";
     this.matchStartTick = this.tickCount;
     this.startedWith = this.players.size;
@@ -926,7 +979,8 @@ export class Room {
     // The same circle the clients draw, worked out from the same schedule and the match clock.
     ringAt(this.ring, elapsed, ring);
     for (const player of this.alivePlayers()) {
-      if (!isOutsideRing(ring, player.state.x, player.state.z)) continue;
+      // Up in the air the ring cannot touch it yet. Every spot it can glide to is inside the first circle anyway.
+      if (dropping(player.state) || !isOutsideRing(ring, player.state.x, player.state.z)) continue;
       noteCause(player, CAUSE_RING);
       for (let zone = 0; zone < ZONE_COUNT; zone++) applyDamage(player.hp, this.config.zones, zone, ring.damagePerSecond * STEP);
       if (isDestroyed(player.hp)) this.eliminate(player, null);
@@ -941,6 +995,10 @@ export class Room {
     if (player.dead || this.state === "countdown") {
       input.moveX = 0; input.moveY = 0; input.run = false; input.jet = false; input.dash = false; input.fire = false; input.grenade = false; input.ability = false;
     }
+    // Diving in, or stunned by the landing: no weapons, grenades, ability, looting or repair, whatever the client asks.
+    // Steering the dive is still allowed. (The shared step already ignores jets, dash and the ability here.)
+    const held = dropping(player.state) || player.state.dropTime > 0;
+    if (held) { input.fire = false; input.grenade = false; input.ability = false; input.interact = false; input.repair = false; }
     const dashBefore = player.state.dashTime;
     const ability = this.abilityFor(player.state.mech);
     // Hit while charging a Rail Shot: the charge breaks and the shot is lost (the cooldown is still spent).
@@ -969,7 +1027,7 @@ export class Room {
     }
     if (input.fire) this.tryShoot(player, input);
     if (input.grenade) this.tryThrow(player, input);
-    if (!player.dead && player.participant && this.state !== "countdown") {
+    if (!player.dead && player.participant && this.state !== "countdown" && !held) {
       this.interact(player, input.interact, dt);
       this.walkOver(player);
       this.repair(player, input, dt);
@@ -1072,7 +1130,8 @@ export class Room {
     let bestZone = -1;
 
     for (const target of this.players.values()) {
-      if (target === shooter || target.dead || !target.participant) continue;
+      // A mech still in the air cannot be hit: the drop is safe, the landing is not.
+      if (target === shooter || target.dead || !target.participant || dropping(target.state)) continue;
       const index = ((wanted % this.historyLength) + this.historyLength) % this.historyLength;
       const old = target.historyTick[index] === wanted;
       const x = old ? target.history[index * 4]! : target.state.x;
@@ -1132,7 +1191,7 @@ export class Room {
     if (this.state === "countdown") return;
 
     for (const target of this.players.values()) {
-      if (target.dead || !target.participant) continue;
+      if (target.dead || !target.participant || dropping(target.state)) continue;
       const dx = target.state.x - bx, dy = target.state.y + CHEST_HEIGHT - by, dz = target.state.z - bz;
       const distance = Math.hypot(dx, dy, dz);
       if (distance >= radius) continue;
@@ -1235,7 +1294,7 @@ export class Room {
     const s = player.state;
     const height = this.statsFor(s.mech).height;
     for (const target of this.players.values()) {
-      if (target === player || target.dead || !target.participant || player.rammed.includes(target.id)) continue;
+      if (target === player || target.dead || !target.participant || dropping(target.state) || player.rammed.includes(target.id)) continue;
       const t = target.state;
       if (Math.hypot(t.x - s.x, t.z - s.z) > ram.hitRadius || Math.abs(t.y - s.y) > height) continue;
       player.rammed.push(target.id);
@@ -1265,7 +1324,7 @@ export class Room {
     this.makeNoise(player, "smash", s.x, s.z);
     noteLongest(player.tally, "longestPounce", Math.hypot(s.x - player.launchX, s.z - player.launchZ));
     for (const target of this.players.values()) {
-      if (target === player || target.dead || !target.participant) continue;
+      if (target === player || target.dead || !target.participant || dropping(target.state)) continue;
       const t = target.state;
       if (Math.hypot(t.x - s.x, t.z - s.z) > pounce.slamRadius || Math.abs(t.y - s.y) > height) continue;
       this.abilityDamage(player, target, pounce.damage, abilityCause(pounce.kind));
@@ -1686,7 +1745,7 @@ export class Room {
       everyone.push({
         id: p.id, x: p.state.x, y: p.state.y, z: p.state.z, yaw: p.state.bodyYaw,
         running: p.state.running, jetting: p.state.jetting, dead: p.dead, looted: p.looted, repairing: p.repairZone >= 0, bot: p.bot !== null, hp: p.hp.map(Math.ceil),
-        weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil), upgrades: p.loadout.upgrades, mech: p.state.mech, ability: p.state.abilityTime > 0,
+        weapon: Math.max(0, activeWeapon(p.loadout)), armor: p.loadout.armor.map(Math.ceil), upgrades: p.loadout.upgrades, mech: p.state.mech, ability: p.state.abilityTime > 0, dropPhase: p.state.dropPhase,
       });
     }
     // A decoy is drawn exactly as its owner is right now, damage and all, so nothing on it gives it away but how it
@@ -1696,7 +1755,7 @@ export class Room {
       if (!owner) continue;
       const s = d.state;
       everyone.push({
-        id: d.id, x: s.x, y: s.y, z: s.z, yaw: s.bodyYaw, running: s.running, jetting: s.jetting, dead: false, looted: false, repairing: false,
+        id: d.id, x: s.x, y: s.y, z: s.z, yaw: s.bodyYaw, running: s.running, jetting: s.jetting, dead: false, looted: false, repairing: false, dropPhase: 0,
         bot: owner.bot !== null, hp: owner.hp.map(Math.ceil), weapon: Math.max(0, activeWeapon(owner.loadout)), armor: owner.loadout.armor.map(Math.ceil),
         upgrades: owner.loadout.upgrades, mech: s.mech, ability: false,
       });

@@ -33,6 +33,11 @@ export interface MechStats {
   dashCooldown: number;
   dashStaminaCost: number;
   sprintDoubleTapSeconds: number; // two presses of W this close together start a sprint
+  // The drop-in dive (drop.ts): pitches in degrees (level at or above the first, steepest at or below the second),
+  // fall and glide speeds in m/s at each end, how fast the speed follows, and the braking retro-jets near the ground.
+  diveLevelPitch: number; diveSteepPitch: number;
+  diveLevelFall: number; diveSteepFall: number; diveLevelGlide: number; diveSteepGlide: number; diveAcceleration: number;
+  burnMeters: number; burnDeceleration: number; burnGlide: number; landingFall: number; landingStunSeconds: number;
 }
 
 // One weapon's tuning and look. Every gun is just data: balance changes never touch code.
@@ -199,6 +204,8 @@ const MECH_KEYS: (keyof MechStats & string)[] = [
   "staminaMax", "runDrainPerSecond", "staminaRegenPerSecond", "staminaRegenDelay", "staminaUnlockFraction",
   "mouseSensitivity", "minPitch", "maxPitch",
   "dashSpeed", "dashSeconds", "dashCooldown", "dashStaminaCost", "sprintDoubleTapSeconds",
+  "diveLevelPitch", "diveSteepPitch", "diveLevelFall", "diveSteepFall", "diveLevelGlide", "diveSteepGlide", "diveAcceleration",
+  "burnMeters", "burnDeceleration", "burnGlide", "landingFall", "landingStunSeconds",
 ];
 const WEAPON_KEYS: (keyof WeaponStats & string)[] = [
   "shotsPerSecond", "projectileSpeed", "projectileLifetime", "spreadDegrees", "maxAimDistance", "shakeForce", "damage", "pellets",

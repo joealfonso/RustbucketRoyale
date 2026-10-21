@@ -18,6 +18,9 @@ export class ThirdPersonCamera {
   private fovKick = 0;
   private zoomTo: number | null = null;
   private zoom: number;
+  private pullBack = 0; // extra metres back and up while dropping in (diveCamera.ts)
+  private lift = 0;
+  private fovExtra = 0; // extra degrees, set each frame by the dive
 
   constructor(private stats: CameraStats, aspect: number) {
     this.camera = new THREE.PerspectiveCamera(stats.fov, aspect, stats.near, 3000);
@@ -44,11 +47,22 @@ export class ThirdPersonCamera {
   setFovKick(target: number, dt: number): void {
     this.fovKick += (target - this.fovKick) * Math.min(1, dt * 14);
     this.zoom += ((this.zoomTo ?? this.stats.fov) - this.zoom) * Math.min(1, dt * 12);
-    const fov = this.zoom + this.fovKick * this.stats.dashFovKick;
+    const fov = this.zoom + this.fovKick * this.stats.dashFovKick + this.fovExtra;
     if (Math.abs(fov - this.camera.fov) > 0.01) {
       this.camera.fov = fov;
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  // Sits the camera this many metres further back and higher than camera.json says, for this frame on.
+  setPull(back: number, lift: number): void {
+    this.pullBack = back;
+    this.lift = lift;
+  }
+
+  // Widens the view by this many degrees on top of everything else, applied with the next setFovKick.
+  setFovExtra(degrees: number): void {
+    this.fovExtra = degrees;
   }
 
   // Screen shake strength, added by each shot. Decays on its own.
@@ -58,12 +72,13 @@ export class ThirdPersonCamera {
 
   update(px: number, py: number, pz: number, yaw: number, pitch: number, world: World, dt: number): void {
     const s = this.stats;
+    py += this.lift;
     euler.set(pitch, yaw, 0);
     quaternion.setFromEuler(euler);
     right.set(1, 0, 0).applyQuaternion(quaternion);
     up.set(0, 1, 0).applyQuaternion(quaternion);
     // Local +Z points back from where the camera looks.
-    offset.set(s.shoulderX, 0, s.distance).applyQuaternion(quaternion);
+    offset.set(s.shoulderX, 0, s.distance + this.pullBack).applyQuaternion(quaternion);
 
     const length = offset.length();
     const dirX = offset.x / length, dirY = offset.y / length, dirZ = offset.z / length;

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { STEP, parseChunkSet, parsePropConfig, parseTiers } from "@rustbucket/shared";
+import { STEP, parseChunkSet, parsePropConfig, parseTiers, type MechStats } from "@rustbucket/shared";
 import { loadRoomConfig } from "../config";
 import { MapPool } from "../MapPool";
 import { Room } from "../Room";
@@ -33,9 +33,21 @@ export interface SoakReport {
   knockoutsPerMinute: number;
   propsBroken: number; // props (crates, barrels, trees) broken in the match, as one player was told of them
   titanHpLeft: number | null; // the Junk Titan's share of hit points at the end, null when it never woke
+  lastLandingSeconds: number; // how long after the start the last mech came down from the drop-in
 }
 
 const CONTACT_METERS = 150; // the radar's range: anything closer can be seen or heard to matter
+// The ground a mech glides over can lie this far below the ground at its spawn, which the drop height is measured from.
+// A guess with room to spare: the hills on the biggest maps rise and fall by less.
+const DROP_VALLEY_METERS = 60;
+
+// The longest a drop can take: looking level all the way, the slowest fall there is, then the whole burn at landing
+// speed. Anyone still in the air after this (and a second more) is stuck up there.
+function slowestDropSeconds(mech: MechStats, altitude: number): number {
+  const fall = mech.diveLevelFall, a = mech.diveAcceleration;
+  const dive = altitude + DROP_VALLEY_METERS - mech.burnMeters;
+  return fall / a + Math.max(0, dive - (fall * fall) / (2 * a)) / fall + mech.burnMeters / mech.landingFall + 1;
+}
 
 const readData = (name: string) => JSON.parse(readFileSync(new URL(`../../../../data/${name}`, import.meta.url), "utf8"));
 
@@ -62,7 +74,7 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
   const chunks = parseChunkSet(readData("chunks.json"));
   const tiers = parseTiers(readData("tiers.json"));
   const room = new Room("SOAK", tier, config, null);
-  const players = Array.from({ length: fakePlayers }, (_, i) => new HeadlessPlayer(room, config.mech, config.bots, chunks, tiers, parsePropConfig(readData("props.json")), lcg(seed + i + 1), config.roster ?? null, i, config.abilities, config.botAbilities, config.titan));
+  const players = Array.from({ length: fakePlayers }, (_, i) => new HeadlessPlayer(room, config.mech, config.bots, chunks, tiers, parsePropConfig(readData("props.json")), lcg(seed + i + 1), config.roster ?? null, i, config.abilities, config.botAbilities, config.titan, config.drop?.bots ?? null));
   const problems: string[] = [];
   const problem = (text: string) => { if (problems.length < 20) problems.push(text); };
 
@@ -78,6 +90,10 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
   const edge = room.mapMeters / 2 + 5;
   let aliveTicks = 0, aloneTicks = 0;
   const firstContact = new Map<number, number>();
+  const altitude = config.drop?.altitudeMeters[tier];
+  const landBy = altitude === undefined ? 0 : slowestDropSeconds(config.mech, altitude);
+  const landedAt = new Map<number, number>();
+  let stuckReported = false;
 
   for (let tick = 0; tick < maxTicks && room.matchState !== "results"; tick++) {
     for (const p of players) p.step();
@@ -105,6 +121,17 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
     }
     if (room.matchState === "active") {
       const mechs = room.inspect();
+      // The drop-in: everyone starts it in the air, and everyone is down in good time.
+      const seconds = activeTicks * STEP;
+      for (const m of mechs) {
+        if (!m.participant || landedAt.has(m.id)) continue;
+        if (altitude !== undefined && activeTicks === 1 && m.dropPhase === 0) problem(`mech ${m.id} started the match on the ground, not in the drop`);
+        if (m.dropPhase === 0 || altitude === undefined) landedAt.set(m.id, seconds);
+        else if (seconds > landBy && !stuckReported) {
+          stuckReported = true;
+          problem(`mech ${m.id} is still in the drop ${seconds.toFixed(1)} s into the match (at ${m.y.toFixed(0)} m), over ${landBy.toFixed(1)}`);
+        }
+      }
       for (const p of players) {
         const me = mechs.find((m) => m.id === p.id);
         if (!me || me.dead || me.eliminated) continue;
@@ -148,5 +175,6 @@ async function playSoak(tier: string, seed: number, options: SoakOptions, pool: 
     tier, seed, problems, matchSeconds: activeTicks * STEP, players: fakePlayers, eliminations: places.length,
     tickP99Ms, tickWorstMs: times.at(-1) ?? 0, kbpsPerPlayer, worstCorrection, propsBroken: players[0]!.propsBroken,
     titanHpLeft: room.junkTitan ? room.junkTitan.hp / config.titan.hp : null,
+    lastLandingSeconds: Math.max(0, ...landedAt.values()),
   };
 }

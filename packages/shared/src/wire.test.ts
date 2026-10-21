@@ -5,12 +5,12 @@ import type { InputMessage, OtherState, ServerMessage, ShotMessage, TitanState }
 
 type Snapshot = Extract<ServerMessage, { t: "snapshot" }>;
 
-const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12], upgrades: [3, -1], mech: id % 4, ability: id % 2 === 1 });
+const other = (id: number, x: number): OtherState => ({ id, x, y: 1.25, z: -77.3, yaw: 5.5, running: true, jetting: false, dead: false, looted: false, repairing: false, bot: true, hp: [60, 33, 100], weapon: 2, armor: [0, 30, 12], upgrades: [3, -1], mech: id % 4, ability: id % 2 === 1, dropPhase: id % 4 });
 const snapshot = (others: OtherState[]): Snapshot => ({
   t: "snapshot", tick: 123456, ack: 99, ackAgeMs: 12.4,
   you: {
     x: -321.123456, y: 4.5, z: 888.25, vx: 3.5, vz: -2.25, vy: 0.5, bodyYaw: 2.75, grounded: true, running: false, jetting: true, crawling: true,
-    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, abilityTime: 0.35, abilityCooldown: 5.5, abilityX: -0.8, abilityZ: 0.6, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0, fuelScale: 1.6, speedScale: 1.2, mech: 3,
+    dashTime: 0.1, dashCooldown: 0.5, dashX: 0.6, dashZ: -0.8, abilityTime: 0.35, abilityCooldown: 5.5, abilityX: -0.8, abilityZ: 0.6, fuel: 71.5, fuelLocked: false, fuelTimer: 0.25, stamina: 30, staminaLocked: true, staminaTimer: 0, fuelScale: 1.6, speedScale: 1.2, dropPhase: 0, dropTime: 0, mech: 3,
   },
   health: { hp: [60, 12, 88], dead: false, respawnIn: 0 },
   match: { state: "active", seconds: 91.5, alive: 7, total: 24 },
@@ -48,7 +48,7 @@ describe("snapshot wire format", () => {
   });
 
   it("carries who is using an ability right now, in a byte of its own", () => {
-    const back = decodeSnapshot(encodeSnapshot(snapshot([other(3, 0), other(4, 0), { ...other(6, 0), dead: true, looted: true, repairing: true, ability: true }])))!;
+    const back = decodeSnapshot(encodeSnapshot(snapshot([other(3, 0), other(4, 0), { ...other(6, 0), dead: true, looted: true, repairing: true, ability: true, dropPhase: 0 }])))!;
     expect(back.others.map((o) => o.ability)).toEqual([true, false, true]);
     expect(back.others[2]).toMatchObject({ dead: true, looted: true, repairing: true, bot: true, mech: 2 });
   });
@@ -64,6 +64,20 @@ describe("snapshot wire format", () => {
     expect(back.repairing).toBeCloseTo(0.25, 2);
   });
 
+  // The drop-in (gate 16a): your own phase and landing stun as two more of your numbers, sent only while not 0, and
+  // every other mech's phase in two spare bits of a byte it already has.
+  it("carries the drop-in phase, yours and everyone else's, at no cost once everyone is down", () => {
+    const s = snapshot([other(1, 2), other(2, 3), other(3, 4)]);
+    const down = encodeSnapshot(s).length;
+    s.you.dropPhase = 2;
+    s.you.dropTime = 0.375;
+    const back = decodeSnapshot(encodeSnapshot(s))!;
+    expect(back.you.dropPhase).toBe(2);
+    expect(back.you.dropTime).toBe(0.375);
+    expect(back.others.map((o) => o.dropPhase)).toEqual([1, 2, 3]);
+    expect(encodeSnapshot(s).length - down).toBe(8);
+  });
+
   it("carries the sounds heard this snapshot, to half a metre, 5 bytes each", () => {
     const s = snapshot([other(1, 2)]);
     s.noises = [{ x: 120.3, z: -455.6, kind: 3 }, { x: -1, z: 2, kind: 0 }];
@@ -76,13 +90,14 @@ describe("snapshot wire format", () => {
   });
 
   // Your own ability timers added 16 bytes (four float32s) and the ability byte one per other mech. The Junk Titan
-  // (gate 13c) added a byte to every snapshot saying whether it is near, and 11 more when it is.
-  it("is small: under 130 bytes with nobody else near, 21 bytes per extra mech, 9 per pickup, 11 for the Titan", () => {
+  // (gate 13c) added a byte to every snapshot saying whether it is near, and 11 more when it is. The drop-in (16a)
+  // added two of your numbers, which only go while you are dropping, so the worst case went from 127 to 135 bytes.
+  it("is small: under 140 bytes with nobody else near, 21 bytes per extra mech, 9 per pickup, 11 for the Titan", () => {
     expect(encodeSnapshot(snapshot([])).length).toBe(snapshotSize(0, 0, 0, 20)); // staminaTimer is 0
-    expect(snapshotSize(0)).toBeLessThan(130);
+    expect(snapshotSize(0)).toBeLessThan(140);
     expect(snapshotSize(10) - snapshotSize(0)).toBe(210);
     expect(snapshotSize(0, 0, 10) - snapshotSize(0)).toBe(90);
-    expect(snapshotSize(0, 0, 0, 21, true) - snapshotSize(0)).toBe(11);
+    expect(snapshotSize(0, 0, 0, 23, true) - snapshotSize(0)).toBe(11);
   });
 
   it("carries the Junk Titan when it is near, to a mech's steps, and null when it is not", () => {

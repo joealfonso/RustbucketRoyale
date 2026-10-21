@@ -1,0 +1,77 @@
+{
+  "camera": {
+    "minPitchDegrees": -85,
+    "pitchReturnDegreesPerSecond": 120,
+    "pullBackMeters": 8,
+    "liftMeters": 3,
+    "burnPull": 0.45,
+    "followPerSecond": 2.5,
+    "fovWidenDegrees": 10,
+    "fovFromSpeed": 30,
+    "fovFullSpeed": 85,
+    "landingShake": 0.75
+  },
+  "speedLines": {
+    "count": 48,
+    "radiusMeters": 16,
+    "clearRadiusMeters": 5,
+    "lengthMeters": 7,
+    "fromSpeed": 30,
+    "fullSpeed": 85,
+    "opacity": 0.5,
+    "color": "warmLight"
+  },
+  "marker": {
+    "stepSeconds": 0.1,
+    "maxSteps": 400,
+    "everySeconds": 0.1,
+    "radiusMeters": 3,
+    "sizePerMeter": 0.035,
+    "pulsePerSecond": 1.6,
+    "opacity": 0.85,
+    "color": "sparkYellow"
+  },
+  "trail": {
+    "puffsPerSecond": 6,
+    "seconds": 3.2,
+    "width": 1.8,
+    "grow": 2,
+    "overlap": 1.6,
+    "rise": 0.4,
+    "centerMeters": 3
+  },
+  "pose": {
+    "levelTiltDegrees": 22,
+    "steepTiltDegrees": 58,
+    "burnTiltDegrees": -6,
+    "levelFallDegrees": 37,
+    "steepFallDegrees": 80,
+    "pivotMeters": 3,
+    "followPerSecond": 5,
+    "wobbleDegrees": 3,
+    "wobblePerSecond": 1.4
+  },
+  "burn": { "flameScale": 2.6 },
+  "impact": {
+    "dustPuffs": 14,
+    "ringMeters": 2.5,
+    "dustSpeed": 9,
+    "dustSize": 2.6,
+    "dustSeconds": 1.1,
+    "debris": 7,
+    "debrisSpeed": 7,
+    "debrisLift": 1.3,
+    "debrisSize": 0.4,
+    "debrisSeconds": 2.5,
+    "debrisColors": ["scrapSteel", "deepRust", "soot"],
+    "shakeRadiusMeters": 45,
+    "shakeForce": 0.45
+  },
+  "wind": { "fromSpeed": 15, "fullSpeed": 85 },
+  "hud": {
+    "countdownWords": "DROP IN",
+    "riding": "Hold tight",
+    "diving": "Diving",
+    "burning": "Retro burn"
+  }
+}

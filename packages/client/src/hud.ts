@@ -129,10 +129,11 @@ export class Hud {
     if (value) replay(this.bigText);
   }
 
-  setProgress(progress: MatchProgress, ring: RingNow | null): void {
+  // `countdownWords` go before the countdown's number ("DROP IN 3" while you hang above the map), or nothing.
+  setProgress(progress: MatchProgress, ring: RingNow | null, countdownWords = ""): void {
     const { state } = progress;
     // A countdown at 0 is the frame it ends on, not a number to show.
-    if (state === "countdown") this.big(progress.seconds > 0 ? String(Math.ceil(progress.seconds)) : "");
+    if (state === "countdown") this.big(progress.seconds > 0 ? `${countdownWords ? `${countdownWords} ` : ""}${Math.ceil(progress.seconds)}` : "");
     else if (!this.flashTimer) this.big("");
     const live = state === "active";
     this.display(this.matchHud, live ? "grid" : "none");

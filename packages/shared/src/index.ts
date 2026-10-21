@@ -25,6 +25,7 @@ export * from "./roster";
 export * from "./muzzles";
 export * from "./abilities";
 export * from "./botDifficulty";
+export * from "./drop";
 export * from "./drops";
 export * from "./sightlines";
 export * from "./titan";

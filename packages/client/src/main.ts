@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import {
-  FireGate, Predictor, STEP, applyLook, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
+  FireGate, Predictor, STEP, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createMechState, createShot,
   parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
-  createRayHit, parseDropsConfig, parseTitanConfig, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
+  createRayHit, parseDropsConfig, parseTitanConfig, DROP_BURNING, DROP_DIVING, DROP_NONE, DROP_RIDING, dropping, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
 import audioJson from "../../../data/audio.json";
@@ -121,6 +121,17 @@ import { parseTitanLook } from "./titanLook";
 import { TitanView } from "./titanView";
 import { carFuseSeconds, carLanding, loadCarModel } from "./thrownCars";
 import { bossBarShown } from "./hud";
+import diveJson from "../../../data/dive.json";
+import dropJson from "../../../data/drop.json";
+import matchJson from "../../../data/match.json";
+import { parseDive, share, startAltitude } from "./dive";
+import { DiveCamera, simPitch } from "./diveCamera";
+import { DiveHud } from "./diveHud";
+import { DivePose } from "./divePose";
+import { DiveTrails } from "./diveTrails";
+import { LandingImpact } from "./landingImpact";
+import { LandingMarker } from "./landingMarker";
+import { SpeedLines } from "./speedLines";
 
 const KILL_HEIGHT = -50;
 
@@ -312,6 +323,14 @@ explosions.setTerrain(map.terrain);
 const thrusters = new Thrusters(fxSprites, parseThrusterFx(thrusterFxJson));
 const splashes = new Splashes(fxSprites.water, waterLook.splashes);
 const breakFx = new BreakFx(chunks, fxSprites, parsePropFx(propFxJson), (c) => toon.color(c));
+// The drop-in dive (gate 16a): its camera, HUD, landing marker, falling pose, smoke trails and landing (data/dive.json).
+const dive = parseDive(diveJson);
+const divePose = new DivePose(dive.pose);
+const diveTrails = new DiveTrails(fxSprites, dive.trail);
+const landingImpact = new LandingImpact(fxSprites, chunks, dive.impact, dive.impact.debrisColors.map((c) => new THREE.Color(toon.color(c))));
+const speedLines = new SpeedLines(dive.speedLines, toon.color(dive.speedLines.color));
+scene.add(speedLines.mesh);
+const diveHud = new DiveHud(dive.hud);
 scene.add(propView.group);
 let treeView = makeTrees();
 // What the map casts in the sun. The dressing and the near edge wall mark their own as they rebuild near you.
@@ -436,20 +455,22 @@ function footfalls(model: MechModel, feet: number, audible: boolean): void {
     }
   }
 }
-const walkRemote = (model: MechModel, m: number, vx: number, vy: number, vz: number, jetting: boolean, running: boolean, ability: boolean) => {
+const walkRemote = (model: MechModel, m: number, vx: number, vy: number, vz: number, jetting: boolean, running: boolean, ability: boolean, dropPhase = DROP_NONE) => {
   const stats = statsFor(m);
   gaitInput.vx = vx; gaitInput.vz = vz; gaitInput.yaw = model.group.rotation.y;
-  // Others carry no grounded flag: jets on, or rising or falling fast, means in the air.
-  gaitInput.grounded = !jetting && Math.abs(vy) < 2;
+  // Others carry no grounded flag: jets on, or rising or falling fast, means in the air. Dropping in is always in
+  // the air, even hanging still up top.
+  gaitInput.grounded = dropPhase === DROP_NONE && !jetting && Math.abs(vy) < 2;
   // A ram leans like a dash. A pounce is in the air, so the feet tuck instead. A mortar strike plants the feet.
   const kind = abilityOf(m)?.kind;
-  gaitInput.dashing = (ability && kind === "ram" && gaitInput.grounded) || Math.hypot(vx, vz) > stats.runSpeed * 1.15;
+  // Gliding in from the drop-in is faster than any run, but it is not a dash.
+  gaitInput.dashing = dropPhase === DROP_NONE && ((ability && kind === "ram" && gaitInput.grounded) || Math.hypot(vx, vz) > stats.runSpeed * 1.15);
   gaitInput.braced = ability && kind === "barrage";
   gaitInput.limping = legsLimping(model);
   gaitInput.walkSpeed = stats.walkSpeed; gaitInput.runSpeed = stats.runSpeed;
   const feet = walkMech(model, gaitConfig, gaitInput, fxDt);
   moveMechParts(model, fxDt);
-  thrusters.drive(model, jetting, gaitInput.dashing, gaitInput.grounded, vy, fxDt);
+  thrusters.drive(model, jetting, gaitInput.dashing, gaitInput.grounded, vy, fxDt, dropPhase === DROP_BURNING ? dive.burn.flameScale : 1);
   if (feet) {
     const p = model.group.position, me = mechGroup.position;
     footfalls(model, feet, running || Math.abs(p.x - me.x) + Math.abs(p.z - me.z) < gaitConfig.hearWalkMeters);
@@ -491,6 +512,15 @@ remotes.onKnockedOut = (id, model, alreadyDown) => {
   knockedFrom.delete(id);
   const at = model.group.position;
   deathFx.blowApart(model, from ? at.x - from.x : 0, from ? at.z - from.z : 0, id);
+};
+// Someone else's drop-in: the retro-jets lighting, and coming down. Their pose and smoke trail are drawn each frame.
+remotes.onDropPhase = (_model, from, to, x, y, z) => {
+  if (to === DROP_BURNING) { dropAt.x = x; dropAt.y = y; dropAt.z = z; sound.play("landingBurn", dropAt); }
+  else if (to === DROP_NONE && from !== DROP_NONE) showLanding(x, y, z, false);
+};
+const dropRemote = (model: MechModel, phase: number, vx: number, vy: number, vz: number, id: number) => {
+  divePose.apply(model, phase, vx, vy, vz, fxDt, id);
+  diveTrails.emit(model, phase, vx, vy, vz, fxDt);
 };
 // The Junk Titan (gate 13c): drawn from the snapshots, its moments from "titan" messages (titanView.ts). Its model is
 // fetched the first time one is near, so a map without one never downloads it; until then a grey-box stand-in.
@@ -629,6 +659,10 @@ if (net) {
 }
 mech.mech = shownMech; // offline this is the mech you drive; online the first snapshot says
 const aim = { yaw: Math.PI, pitch: 0 };
+const diveCamera = new DiveCamera(dive.camera, mechStats);
+const landingMarker = new LandingMarker(dive.marker, toon.color(dive.marker.color), mechStats);
+scene.add(landingMarker.group);
+let ownDropPhase = DROP_NONE; // your drop phase as last drawn, to catch the burn lighting and the touchdown
 const mechInput = createMechInput();
 const look = { dx: 0, dy: 0 };
 const shot: Shot = createShot();
@@ -925,6 +959,17 @@ function shakeNear(x: number, y: number, z: number, radius: number, force: numbe
   if (distance < radius) rig.addShake((1 - distance / radius) * force);
 }
 
+// A mech touching down from the drop-in: dust and scrap thrown out round it (a splash in the water, from the thrusters'
+// landing), a heavy thud, and the camera shaken if it is near, or hard if it is yours.
+const dropAt = { x: 0, y: 0, z: 0 };
+function showLanding(x: number, y: number, z: number, own: boolean): void {
+  dropAt.x = x; dropAt.y = y; dropAt.z = z;
+  if (!wadingAt(map.terrain, x, y, z)) landingImpact.land(x, y, z, groundBelow(x, y + 1, z));
+  sound.play("landingImpact", dropAt);
+  if (own) rig.addShake(dive.camera.landingShake);
+  else shakeNear(x, y, z, dive.impact.shakeRadiusMeters, dive.impact.shakeForce);
+}
+
 const groundHit = createRayHit();
 // The ground under a spot: the top of whatever box is below it, or the hillside. The ray reaches down past the lowest
 // valley; on the range, with no hills, it meets the floor box.
@@ -1040,8 +1085,42 @@ function swapOwnMech(m: number): void {
   shownNext = -2; // says the HUD line is out of date
 }
 
+// Offline practice drops in like a match: up above the spawn at the server's height for this tier (data/drop.json),
+// hanging there through a countdown that starts once you click in, then diving. The range has no drop-in.
+let offlineDropIn = 0;
+function startDropOffline(): void {
+  const altitude = startAltitude(dropJson.altitudeMeters, map.tier);
+  if (altitude === null) return;
+  const ground = map.world.groundAt(mech.x, mech.z);
+  mech.y = (Number.isFinite(ground) ? ground : mech.y) + altitude;
+  mech.vx = 0; mech.vy = 0; mech.vz = 0;
+  mech.grounded = false;
+  mech.dropPhase = DROP_RIDING;
+  prevX = mech.x; prevY = mech.y; prevZ = mech.z;
+  // Facing the middle of the map, so a level glide carries you in rather than out over the edge wall.
+  // (Yaw 0 faces -z: the middle at (0, 0) is straight ahead at atan2(x, z).)
+  if (Math.hypot(mech.x, mech.z) > 1) aim.yaw = Math.atan2(mech.x, mech.z);
+  offlineDropIn = matchJson.countdownSeconds;
+}
+
 function respawnOffline(): void {
   Object.assign(mech, createMechState(statsFor(mech.mech), spawnX, spawnY, spawnZ, aim.yaw, mech.mech));
+  startDropOffline();
+}
+if (net === null) startDropOffline();
+
+// The offline countdown, ticking only while you are in the game: "DROP IN 3", then the dive.
+function countDownOffline(dt: number): void {
+  if (offlineDropIn <= 0 || !input.locked) return;
+  offlineDropIn -= dt;
+  if (offlineDropIn > 0) {
+    progress = { state: "countdown", seconds: offlineDropIn, alive: 1, total: 1 };
+    return;
+  }
+  progress = { state: "lobby", seconds: 0, alive: 1, total: 1 };
+  if (mech.dropPhase === DROP_RIDING) mech.dropPhase = DROP_DIVING;
+  hud.flash("GO", 900);
+  sound.play("go");
 }
 
 window.addEventListener("resize", () => {
@@ -1081,7 +1160,9 @@ function frame(now: number): void {
 
   // Look is applied every frame so the camera answers the mouse at once, not once per sim step.
   input.takeLook(look);
-  applyLook(aim, look.dx * rig.zoomShare, look.dy * rig.zoomShare, mechStats); // slower while scoped, so aim keeps pace on screen
+  // Slower while scoped, so aim keeps pace on screen. Dropping in, you can look further down (diveCamera.ts).
+  diveCamera.look(aim, look.dx * rig.zoomShare, look.dy * rig.zoomShare, mechStats, dropping(mech) && !health.dead, frameTime);
+  if (net === null) countDownOffline(frameTime);
 
   if (ready) accumulator += frameTime;
   else accumulator = 0;
@@ -1090,7 +1171,7 @@ function frame(now: number): void {
     input.sample(mechInput);
     // Rounded to float precision, which is what the server receives, so both sides run identical numbers.
     mechInput.aimYaw = Math.fround(aim.yaw);
-    mechInput.aimPitch = Math.fround(aim.pitch);
+    mechInput.aimPitch = Math.fround(simPitch(aim.pitch, mechStats));
     // The weapon to fire: the slot asked for if it holds one, otherwise the one in hand.
     const wantedSlot = loadout.slots[mechInput.slot]! >= 0 ? mechInput.slot : loadout.active;
     if (wantedSlot !== firingSlot) { firingSlot = wantedSlot; gate.holdUntil(simTime + lootConfig.switchSeconds); }
@@ -1103,6 +1184,8 @@ function frame(now: number): void {
       mechInput.moveX = 0; mechInput.moveY = 0; mechInput.run = false; mechInput.jet = false;
       mechInput.fire = false; mechInput.grenade = false; mechInput.ability = false;
     }
+    // No guns or grenades while dropping in or stunned by the landing; the server refuses them too.
+    if (dropping(mech) || mech.dropTime > 0) { mechInput.fire = false; mechInput.grenade = false; }
 
     const dashBefore = mech.dashTime;
     const abilityBefore = mech.abilityTime;
@@ -1154,11 +1237,20 @@ function frame(now: number): void {
   mechGroup.position.set(x, y, z);
   // With an instant body turn, face exactly where the camera looks, even between sim steps.
   mechGroup.rotation.y = mechStats.turnSpeedDegrees > 0 ? mech.bodyYaw : aim.yaw;
+  divePose.tick(frameTime);
+  divePose.apply(ownModel, mech.dropPhase, mech.vx, mech.vy, mech.vz, frameTime, 0);
+  // Your own burn and touchdown, from prediction, the moment they happen on your screen.
+  if (mech.dropPhase !== ownDropPhase) {
+    if (mech.dropPhase === DROP_BURNING) sound.play("landingBurn", mechGroup.position);
+    else if (mech.dropPhase === DROP_NONE && !health.dead) showLanding(mech.x, mech.y, mech.z, true);
+    ownDropPhase = mech.dropPhase;
+  }
   // While the kill replay plays it places everyone, your own mech too, from its recording; remotes.update then
   // leaves them be. Recorded after, so the recording holds this frame as drawn.
   if (killReplay.busy && progress.state !== "active") killReplay.cancel();
   const replaying = killReplay.update(performance.now(), frameTime, remotes, ownModel, rig.camera, map.world);
   remotes.update(performance.now());
+  remotes.forEachDrop(dropRemote);
   killReplay.record(performance.now(), net?.id ?? 0, ownModel, mech, health, remotes);
   // Effects keep the replay's slow motion (tracers move on the sim step and stay at full speed).
   const fxTime = frameTime * killReplay.timeScale;
@@ -1179,7 +1271,7 @@ function frame(now: number): void {
   } else {
     const ownFeet = walkMech(ownModel, gaitConfig, gaitInput, frameTime);
     moveMechParts(ownModel, frameTime);
-    thrusters.drive(ownModel, mech.jetting && !health.dead, gaitInput.dashing, mech.grounded, mech.vy, frameTime);
+    thrusters.drive(ownModel, mech.jetting && !health.dead, gaitInput.dashing, mech.grounded, mech.vy, frameTime, mech.dropPhase === DROP_BURNING ? dive.burn.flameScale : 1);
     if (ownFeet && !health.dead) footfalls(ownModel, ownFeet, true);
   }
   remotes.forEachNear(mechGroup.position.x, mechGroup.position.z, gaitConfig.farMeters, walkRemote);
@@ -1194,6 +1286,8 @@ function frame(now: number): void {
   // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.
   const ownRail = ownAbilityStats?.kind === "rail" && mech.abilityTime > 0 && !health.dead ? ownAbilityStats : null;
   rig.setZoom(ownRail ? ownRail.zoomFov : null);
+  const ownDrop = health.dead ? DROP_NONE : mech.dropPhase;
+  diveCamera.update(rig, ownDrop, -mech.vy, frameTime);
   rig.setFovKick(mech.dashTime > 0 ? mech.dashTime / mechStats.dashSeconds : 0, frameTime);
   // A knocked out player (or someone who arrived mid match) watches a mech that is still standing.
   const spectating = net !== null && progress.state === "active" && health.dead;
@@ -1218,6 +1312,13 @@ function frame(now: number): void {
   const bob = spectating ? 0 : (ownModel.gait?.bob ?? 0) * cameraStats.walkBob;
   if (!replaying) rig.update(viewX, viewY + cameraStats.pivotHeight + bob, viewZ, aim.yaw, aim.pitch, map.world, frameTime);
   dressing.update(viewX, viewZ);
+  // The rush of air, where you would land, and your height and fall speed, while you drop in.
+  const diving = ownDrop === DROP_DIVING || ownDrop === DROP_BURNING;
+  speedLines.update(rig.camera.position, diving ? mech.vx : 0, diving ? mech.vy : 0, diving ? mech.vz : 0, frameTime);
+  landingMarker.update(mech, mechInput, ownStats, map.world, ownAbilityStats, rig.camera.position, frameTime);
+  landingMarker.group.visible &&= ownDrop !== DROP_NONE;
+  diveHud.update(ownDrop, ownDrop === DROP_NONE ? 0 : mech.y - groundBelow(mech.x, mech.y, mech.z), -mech.vy);
+  sound.setWind(diving ? share(Math.hypot(mech.vx, mech.vy, mech.vz), dive.wind.fromSpeed, dive.wind.fullSpeed) : 0);
 
   const matchSeconds = progress.state === "active" ? progress.seconds + (performance.now() - progressAt) / 1000 : 0;
   const ring: RingNow | null = ringView.update(matchSeconds);
@@ -1227,7 +1328,7 @@ function frame(now: number): void {
   else if (dropView.news === "open") hud.feed("Supply drop open");
   if (radar && progress.state === "active") dropView.forEachMarked(matchSeconds, markDrop);
   const outside = ring !== null && !health.dead && progress.state === "active" && isOutsideRing(ring, mech.x, mech.z);
-  if (net) hud.setProgress(progress, ring);
+  if (net || progress.state === "countdown") hud.setProgress(progress, ring, mech.dropPhase === DROP_RIDING ? dive.hud.countdownWords : "");
 
   // Sound: the ears go where the camera is, jets hiss while firing, and the countdown beeps each second then says go.
   rig.camera.getWorldDirection(camForward);
@@ -1290,7 +1391,9 @@ function frame(now: number): void {
   pickupView.update(performance.now());
   // Tips, once each in this browser, at the moment they help (tips.ts). Only while you are playing, not watching.
   const playing = !health.dead && !spectating && input.locked && (net === null || progress.state === "active");
-  if (playing) {
+  // The dive's tip goes up as soon as you hang above the map, before the countdown is out.
+  if (!health.dead && input.locked && dropping(mech)) tips.offer("dive");
+  else if (playing) {
     tips.walking(frameTime, mech.grounded && !mech.running && Math.hypot(mech.vx, mech.vz) > 1);
     if (ownAbilityStats && mech.abilityCooldown <= 0) tips.offer("ability", ownAbilityStats.name);
     if (loadout.slots[1]! >= 0) tips.offer("weapons");

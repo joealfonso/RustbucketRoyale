@@ -55,8 +55,8 @@ export class Thrusters {
   }
 
   // One mech this frame: whether its jets fire, whether it is dashing (or ramming), whether it is on the ground, and
-  // how fast it rises.
-  drive(model: MechModel, jetting: boolean, dashing: boolean, grounded: boolean, vy: number, dt: number): void {
+  // how fast it rises. `flameScale` makes the flames longer and wider, for the retro-jets braking a drop-in.
+  drive(model: MechModel, jetting: boolean, dashing: boolean, grounded: boolean, vy: number, dt: number, flameScale = 1): void {
     let state = this.states.get(model);
     if (!state) {
       state = { air: 0, lowest: 0, dashing, grounded };
@@ -70,14 +70,14 @@ export class Thrusters {
     if (jetting && !model.dead) {
       const [tx, ty, tz] = flame.tilt;
       for (let i = 0; i < nozzles.length; i++) {
-        const length = flameLength(flame, true, vy, this.time, i);
+        const length = flameLength(flame, true, vy, this.time, i) * flameScale;
         const s = this.sprites.fire.draw();
         if (!s) break;
         const [nx, ny, nz] = nozzles[i]!;
         s.mode = AXIS;
         s.x = p.x + nx * cos + nz * sin; s.y = p.y + ny + drop; s.z = p.z - nx * sin + nz * cos;
         s.ax = tx * cos + tz * sin; s.ay = ty; s.az = -tx * sin + tz * cos;
-        s.size0 = s.size1 = flame.width; s.aspect = length / flame.width;
+        s.size0 = s.size1 = flame.width * flameScale; s.aspect = length / (flame.width * flameScale);
         s.frame0 = FRAMES.flame.first; s.frames = FRAMES.flame.count; s.fps = flame.framesPerSecond;
         s.age = this.time + i * 0.37; // the nozzles flicker out of step with each other
       }

@@ -109,6 +109,7 @@ export interface SelfState {
   stamina: number; staminaLocked: boolean; staminaTimer: number;
   fuelScale: number;
   speedScale: number;
+  dropPhase: number; dropTime: number; // the drop-in (drop.ts): phase 0 down, 1 riding, 2 diving, 3 braking; landing stun left
   mech: number; // which roster mech you are driving. Can change between matches.
 }
 
@@ -122,6 +123,7 @@ export interface OtherState {
   dead: boolean;
   looted: boolean; // a wreck already emptied, so there is nothing left to take
   repairing: boolean; // standing still fixing a part, shown with welding sparks
+  dropPhase: number; // the drop-in (drop.ts): 0 down, 1 riding, 2 diving, 3 braking, for drawing the dive
   bot: boolean;
   hp: number[]; // legs, arms, torso
   weapon: number; // index of the weapon in hand, for drawing the right gun

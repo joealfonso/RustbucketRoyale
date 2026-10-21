@@ -2,10 +2,11 @@ import { Predictor, STEP, mechStatsFor, createMechInput, type MechInput, type Pi
 import { loadRoomConfig } from "./config";
 import { Room, type RoomConfig } from "./Room";
 
-// A room tuned for fast tests: short countdown and results, and the flat test map.
+// A room tuned for fast tests: short countdown and results, the flat test map, and matches that start on the ground
+// with no drop-in (patch `drop` back in to test it).
 export function makeRoom(patch: (config: RoomConfig) => RoomConfig = (c) => c, tier = "small", bots: number | null = 0): { room: Room; config: RoomConfig } {
   const base = loadRoomConfig();
-  const config = patch({ ...base, match: { ...base.match, countdownSeconds: 0.2, resultsSeconds: 0.5 }, random: lcg(12345) });
+  const config = patch({ ...base, match: { ...base.match, countdownSeconds: 0.2, resultsSeconds: 0.5 }, drop: null, random: lcg(12345) });
   return { room: new Room("TEST", tier, config, bots), config };
 }
 

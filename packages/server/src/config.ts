@@ -4,6 +4,7 @@ import {
   parseNetStats, parseNoiseStats, parsePropConfig, parseRingConfig, parseDropsConfig, parseTiers, parseWeapons, parseLootConfig, parseUpgrades, parseZones, parseRoster, parseAbilities, parseTitanConfig, TUNABLE_FILES, type Roster, type RangeData, type TuningRaws,
 } from "@rustbucket/shared";
 import { parseBotAbilities } from "./botAbilities";
+import { parseDropConfig } from "./dropConfig";
 import type { MapForRoom, RoomConfig } from "./Room";
 
 const dataDir = new URL("../../../data/", import.meta.url);
@@ -45,6 +46,7 @@ export function loadRoomConfig(options: ConfigOptions = {}): RoomConfig {
     // Loaded with or without a roster: without one no mech has an ability, so the file is simply unused.
     abilities: parseAbilities(readJson("abilities.json")),
     titan: parseTitanConfig(readJson("titan.json")),
+    drop: parseDropConfig(readJson("drop.json")),
     roster: undefined as Roster | undefined,
     kitHitboxes: undefined as unknown,
   };
