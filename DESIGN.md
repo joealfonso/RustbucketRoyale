@@ -56,7 +56,7 @@ A mech with a broken leg must be recognizable at 150 m.
 Chunks: buildings, ruins, cover clusters, open ground, all on the shared atlas with matching edges. Props have intact and destroyed versions with identical footprints. Overgrowth is painted into the atlas and added with simple card meshes, not heavy foliage.
 
 ## Lighting
-One warm key light, cool soot shadows, soft fog for depth. Shadows near range only if the budget needs it. The zone ring is the only magenta in the world.
+One warm key light, cool soot shadows, soft, stepped fog for depth. Shadows near range only if the budget needs it. The zone ring is the only magenta in the world.
 
 ## HUD
 Chunky retro CRT terminal. Amber on soot, bold squared type with monospace numbers, rectangular panels with one clipped corner. CRT post effect has an intensity slider and an off switch. Never rely on color alone for warnings. Mech damage diagram is always on screen.

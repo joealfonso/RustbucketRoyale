@@ -2,9 +2,10 @@ import * as THREE from "three";
 import { freeze } from "./freeze";
 import type { LightPreset } from "./lightPresets";
 
-// The sky (data/look.json, `sky`): one draw call behind everything. A gradient from the haze colour at the horizon to
-// the zenith, a few bands of flat toon clouds, and a flat sun disc where the key light comes from, with a hard edge
-// and one flat ring. No glow, no flare (DESIGN.md, Avoiding AI tells).
+// The sky (data/look.json, `sky`): one draw call behind everything. Flat bands from the haze colour at the horizon up
+// to the zenith, each step a soft edge a degree or so wide (gate V16a: a toon sky, not an airbrushed gradient), a few
+// bands of flat toon clouds lit and shaded in the preset's colours, and a flat sun disc where the key light comes
+// from, with a hard edge and one flat ring. No glow, no flare (DESIGN.md, Avoiding AI tells).
 // It is a unit sphere seen from inside, turned with the camera but never moved, and pushed to the far plane in the
 // vertex shader: it can never clip, whatever the camera's far distance or height.
 
@@ -17,8 +18,16 @@ export interface CloudBand {
   seed: number; // moves the pattern so bands do not line up
 }
 
+// One step of the sky's colour: from `upDegrees` above the horizon it is `share` of the way from the horizon colour
+// to the zenith colour.
+export interface SkyStep {
+  upDegrees: number;
+  share: number;
+}
+
 export interface SkyConfig {
-  zenithCurve: number; // below 1 the zenith colour takes over quickly, above 1 the horizon colour climbs higher
+  steps: SkyStep[]; // in order up the sky; the last share is 1, the zenith colour
+  stepSoftDegrees: number; // how wide each step's soft edge is
   sunDegrees: number; // radius of the disc
   ringDegrees: number; // width of the flat ring round it, 0 for none
   ringMix: number; // how far the ring goes from sky colour toward sun colour
@@ -26,15 +35,40 @@ export interface SkyConfig {
 }
 
 const MAX_BANDS = 3;
+const MAX_STEPS = 4;
 
 export function parseSky(raw: unknown): SkyConfig {
   const s = raw as SkyConfig;
-  if (typeof s?.zenithCurve !== "number" || typeof s.sunDegrees !== "number" || typeof s.ringDegrees !== "number" || typeof s.ringMix !== "number") throw new Error("look.json: sky needs zenithCurve, sunDegrees, ringDegrees and ringMix");
+  if (typeof s?.sunDegrees !== "number" || typeof s.ringDegrees !== "number" || typeof s.ringMix !== "number") throw new Error("look.json: sky needs sunDegrees, ringDegrees and ringMix");
+  if (!Array.isArray(s.steps) || s.steps.length < 2 || s.steps.length > MAX_STEPS) throw new Error(`look.json: sky needs 2 to ${MAX_STEPS} steps`);
+  let up = 0, share = 0;
+  for (const step of s.steps) {
+    if (!(typeof step?.upDegrees === "number" && typeof step.share === "number" && step.upDegrees > up && step.share > share && step.share <= 1)) {
+      throw new Error("look.json: each sky step needs upDegrees and share above the step before (share at most 1)");
+    }
+    up = step.upDegrees;
+    share = step.share;
+  }
+  if (share !== 1) throw new Error("look.json: the last sky step must reach the zenith colour (share 1)");
+  if (!(typeof s.stepSoftDegrees === "number" && s.stepSoftDegrees > 0 && s.stepSoftDegrees < s.steps[0]!.upDegrees)) throw new Error("look.json: sky stepSoftDegrees must be above 0 and below the first step");
   if (!Array.isArray(s.clouds) || s.clouds.length > MAX_BANDS) throw new Error(`look.json: sky needs at most ${MAX_BANDS} cloud bands`);
   for (const c of s.clouds) {
     if (![c.baseDegrees, c.heightDegrees, c.frequency, c.cover, c.shade, c.seed].every((v) => typeof v === "number")) throw new Error("look.json: each cloud band needs baseDegrees, heightDegrees, frequency, cover, shade and seed");
   }
   return s;
+}
+
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
+  return t * t * (3 - 2 * t);
+};
+
+// How far from the horizon colour toward the zenith colour the sky is, `upDegrees` above the horizon. The same sum
+// as the shader, for tests and tuning.
+export function skyShare(c: Pick<SkyConfig, "steps" | "stepSoftDegrees">, upDegrees: number): number {
+  let share = 0;
+  for (const step of c.steps) share += (step.share - share) * smoothstep(step.upDegrees - c.stepSoftDegrees, step.upDegrees + c.stepSoftDegrees, upDegrees);
+  return share;
 }
 
 const VERTEX = `
@@ -53,7 +87,8 @@ const FRAGMENT = `
   uniform vec3 cloudLit;
   uniform vec3 cloudShade;
   uniform vec3 sunDir;
-  uniform float zenithCurve;
+  uniform vec2 skySteps[${MAX_STEPS}]; // up (radians), share; unused steps are past the zenith
+  uniform float skySoft;
   uniform float sunCos;
   uniform float ringCos;
   uniform float ringMix;
@@ -74,7 +109,9 @@ const FRAGMENT = `
     vec3 d = normalize(vDir);
     float up = asin(clamp(d.y, -1.0, 1.0));
     float aa = fwidth(up);
-    vec3 col = mix(horizon, zenith, pow(max(d.y, 0.0), zenithCurve));
+    float share = 0.0;
+    for (int i = 0; i < ${MAX_STEPS}; i++) share = mix(share, skySteps[i].y, smoothstep(skySteps[i].x - skySoft, skySteps[i].x + skySoft, up));
+    vec3 col = mix(horizon, zenith, share);
 
     float toSun = dot(d, sunDir);
     float sunAa = fwidth(toSun);
@@ -113,7 +150,11 @@ export class Sky {
       cloudLit: { value: new THREE.Color() },
       cloudShade: { value: new THREE.Color() },
       sunDir: { value: new THREE.Vector3(0, 1, 0) },
-      zenithCurve: { value: config.zenithCurve },
+      skySteps: { value: Array.from({ length: MAX_STEPS }, (_, i) => {
+        const step = config.steps[i];
+        return step ? new THREE.Vector2(step.upDegrees * toRadians, step.share) : new THREE.Vector2(Math.PI, 1);
+      }) },
+      skySoft: { value: config.stepSoftDegrees * toRadians },
       sunCos: { value: Math.cos(config.sunDegrees * toRadians) },
       ringCos: { value: Math.cos((config.sunDegrees + config.ringDegrees) * toRadians) },
       ringMix: { value: config.ringDegrees > 0 ? config.ringMix : 0 },

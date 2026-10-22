@@ -316,13 +316,13 @@ let dressing = makeDressing();
 const barrierConfig = parseBarrier(backdropJson.barrier);
 const backdropConfig = parseBackdrop(backdropJson.backdrop);
 let edgeBarrier = new EdgeBarrier(scene, toon, map, mapMeshes, barrierConfig);
-// An island tier (the Arena) gets open sea, distant islets and rigs instead of the junkyard round it (backdrop.ts).
-const makeBackdrop = () => (map.tier === "range" ? null : new Backdrop(scene, toon, map.meters, tiersJson.edgeWallThickness, backdropConfig, map.terrain));
+// Every tier is an island: open sea, distant islets and rigs round it, not the old junkyard (backdrop.ts).
+const makeBackdrop = () => (map.tier === "range" ? null : new Backdrop(scene, toon, map.meters, tiersJson.edgeWallThickness, backdropConfig, lookConfig.backdrop, map.terrain));
 let backdrop = makeBackdrop();
 // Mountains on the horizon beyond all of it, travelling with the camera; not round the range, which has no backdrop.
-const ranges = new Ranges(parseRanges(backdropJson.ranges), toon.bands, toon.hazeColor, (c) => toon.color(c));
+const ranges = new Ranges(parseRanges(backdropJson.ranges), lookConfig.backdrop, toon.bands, toon.hazeColor, lookConfig.rim.color, (c) => toon.color(c));
 scene.add(ranges.mesh);
-ranges.mesh.visible = map.tier !== "range" && !map.terrain?.island;
+ranges.mesh.visible = map.tier !== "range";
 let propView = new PropView(map, propConfig, toon, PROP_MODELS);
 // The woods (data/forest.json): the pines are props, but drawn and felled here.
 const forestConfig = parseForest(forestJson);
@@ -924,7 +924,7 @@ function swapMap(newSeed: number, newTier: string): void {
     backdrop?.dispose();
     backdrop = makeBackdrop();
   }
-  ranges.mesh.visible = map.tier !== "range" && !map.terrain?.island;
+  ranges.mesh.visible = map.tier !== "range";
   propView = new PropView(map, propConfig, toon, PROP_MODELS);
   contactShadows.setMap(map.boxes, map.world);
   scene.add(propView.group);

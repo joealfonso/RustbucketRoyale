@@ -50,9 +50,16 @@
           "shade": "cloudShade"
         },
         "haze": {
-          "color": "hazeGold",
+          "color": "#E2DBC2",
           "near": 60,
-          "far": 1300
+          "far": 1300,
+          "steps": [
+            { "at": 0.14, "amount": 0.2, "tint": "#CDB58A" },
+            { "at": 0.42, "amount": 0.5, "tint": "#C9C8B4" }
+          ],
+          "fullAt": 0.84,
+          "distant": "#BDC4C0",
+          "rangeMist": 1.0
         }
       },
       {
@@ -82,7 +89,14 @@
         "haze": {
           "color": "duskHaze",
           "near": 40,
-          "far": 850
+          "far": 850,
+          "steps": [
+            { "at": 0.14, "amount": 0.2, "tint": "#B4836A" },
+            { "at": 0.42, "amount": 0.5, "tint": "#B89A94" }
+          ],
+          "fullAt": 0.84,
+          "distant": "#BCA4A2",
+          "rangeMist": 1.0
         }
       },
       {
@@ -102,17 +116,24 @@
         "fillIntensity": 0.72,
         "shade": { "shadow": 0.6, "mid": 0.2 },
         "sky": {
-          "zenith": "overcastZenith",
+          "zenith": "#8A979E",
           "sun": "overcastSun"
         },
         "clouds": {
-          "lit": "overcastCloudLit",
-          "shade": "overcastCloudShade"
+          "lit": "#E6E4DA",
+          "shade": "#8E918C"
         },
         "haze": {
-          "color": "overcastHaze",
+          "color": "#D3D1C4",
           "near": 30,
-          "far": 650
+          "far": 760,
+          "steps": [
+            { "at": 0.16, "amount": 0.24, "tint": "#7E857C" },
+            { "at": 0.45, "amount": 0.52, "tint": "#A3A8A1" }
+          ],
+          "fullAt": 0.86,
+          "distant": "#AEB5B5",
+          "rangeMist": 0.9
         }
       }
     ]
@@ -162,7 +183,8 @@
       "scale": 0.35,
       "cover": 0.5,
       "rim": 0.05,
-      "minUp": 0.7
+      "minUp": 0.55,
+      "soft": 0.3
     },
     "streaks": {
       "color": "deepRust",
@@ -177,10 +199,16 @@
     }
   },
   "haze": {
-    "heightFalloff": 0.015
+    "heightFalloff": 0.015,
+    "stepSoftness": 0.025
   },
   "sky": {
-    "zenithCurve": 0.55,
+    "steps": [
+      { "upDegrees": 2.5, "share": 0.3 },
+      { "upDegrees": 9, "share": 0.62 },
+      { "upDegrees": 22, "share": 1 }
+    ],
+    "stepSoftDegrees": 0.7,
     "sunDegrees": 2.6,
     "ringDegrees": 0.9,
     "ringMix": 0.45,
@@ -210,6 +238,11 @@
         "seed": 73
       }
     ]
+  },
+  "backdrop": {
+    "rim": { "strength": 0.3, "width": 0.28, "shadeSide": 0.25 },
+    "ink": { "darken": 0.5, "pixels": 1.6 },
+    "outline": { "pixels": 1.8, "minMeters": 0.05, "maxMeters": 8, "thinFromMeters": 300, "thinToMeters": 1200, "thinShare": 0.7 }
   },
   "mech": {
     "normals": { "smoothAngleDegrees": 50, "bigShare": 0.4, "wearWidthMeters": 0.09 },

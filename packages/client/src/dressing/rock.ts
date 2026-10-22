@@ -1,5 +1,7 @@
+import dressingJson from "../../../../data/dressing.json";
 import { rng, type DressBox, type DressPiece, type KindBuilder } from "./kinds";
 import { convex, merge, turn, type MeshData, type V3 } from "./shapes";
+import { smoothNormals, towardEllipsoid } from "./softNormals";
 
 // A rock box: one chunky faceted boulder, or a cluster of two or three, filling the box. Each boulder is a stack of
 // jittered octagon rings (widest near the middle, narrowing to a domed top), so it reads as hewn stone in the toon
@@ -16,8 +18,29 @@ const rings: { y: [number, number]; reach: [number, number] }[] = [
 
 const lerp = (r: () => number, [a, b]: [number, number]) => a + (b - a) * r();
 
+// How stone shades (data/dressing.json "stone", V16a): its normals smoothed across edges flatter than `smoothDegrees`,
+// then bent `round` of the way toward an ellipsoid round the boulder whose middle sits `centreAt` of its height up.
+// The three toon bands then fall as a lit top, a mid flank and a dark foot instead of one flat tone per facet, and
+// the moss (mossEdge.ts) follows the same rounded form. Near stones, far stones (farBoulders.ts) and the rocks all
+// come from `boulder` below, so they always shade alike.
+export interface StoneLook {
+  smoothDegrees: number;
+  round: number;
+  centreAt: number;
+}
+
+export function parseStone(raw: unknown): StoneLook {
+  const s = raw as StoneLook;
+  if (!(s && s.smoothDegrees > 0 && s.smoothDegrees < 90 && s.round >= 0 && s.round <= 1 && s.centreAt > 0 && s.centreAt < 1)) {
+    throw new Error("dressing.json: stone needs smoothDegrees between 0 and 90, round 0 to 1 and centreAt between 0 and 1");
+  }
+  return s;
+}
+
+const STONE = parseStone(dressingJson.stone);
+
 // One boulder over the footprint x0..x1 by z0..z1, standing on y = 0, h tall. Also the stone of boulder.ts.
-export function boulder(r: () => number, x0: number, x1: number, z0: number, z1: number, h: number): MeshData {
+export function boulder(r: () => number, x0: number, x1: number, z0: number, z1: number, h: number, look: StoneLook = STONE): MeshData {
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, ax = (x1 - x0) / 2, az = (z1 - z0) / 2;
   const c = Math.min(ax, az) * lerp(r, [0.3, 0.45]); // the corner chamfer that makes the footprint an octagon
   const octagon: [number, number][] = [[-ax + c, -az], [ax - c, -az], [ax, -az + c], [ax, az - c], [ax - c, az], [-ax + c, az], [-ax, az - c], [-ax, -az + c]];
@@ -44,7 +67,8 @@ export function boulder(r: () => number, x0: number, x1: number, z0: number, z1:
   const top = levels[levels.length - 1]!;
   const peak: V3 = [cx + leanX, h, cz + leanZ];
   for (let i = 0; i < top.length; i++) faces.push([top[i]!, top[(i + 1) % top.length]!, peak]);
-  return convex(faces);
+  const stone = smoothNormals(convex(faces), look.smoothDegrees);
+  return towardEllipsoid(stone, [cx, h * look.centreAt, cz], [ax, h * (1 - look.centreAt), az], look.round);
 }
 
 export const rock: KindBuilder = (box: DressBox): DressPiece[] => {

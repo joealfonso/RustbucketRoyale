@@ -2,6 +2,7 @@ import dressingJson from "../../../../data/dressing.json";
 import type { Scatter } from "./dressing";
 import { rng, type DressBox, type DressPiece } from "./kinds";
 import { box, convex, cylinder, merge, turn, type MeshData, type V3 } from "./shapes";
+import { towardEllipsoid } from "./softNormals";
 
 // Loose junk on open ground. Nothing here collides, so everything stays low enough that it never reads as cover. The
 // junk comes in a few piles, most of them along the foot of a wall, a building or a rock (where junk ends up), a few
@@ -24,6 +25,7 @@ export interface ScatterLook {
   anchorAboveMeters: number; // a box at least this tall (not a tree) gathers junk at its foot
   openShare: number; // the share of piles out in the open instead of along a wall
   bushByTree: number; // the share of trees with a bush at their foot
+  bushRound: number; // how far a bush mound's normals bend toward a ball round it, 0 to 1 (softNormals.ts)
   mix: Record<ItemName, number>; // weights of each item in a pile
 }
 
@@ -31,10 +33,10 @@ export function parseScatterLook(raw: unknown): ScatterLook {
   const c = raw as ScatterLook;
   const fail = (what: string) => { throw new Error(`dressing.json: scatter.${what}`); };
   if (!c || typeof c !== "object") fail("is missing");
-  for (const key of ["spreadMeters", "anchorAboveMeters", "openShare", "bushByTree"] as const) {
+  for (const key of ["spreadMeters", "anchorAboveMeters", "openShare", "bushByTree", "bushRound"] as const) {
     if (typeof c[key] !== "number" || !(c[key] >= 0)) fail(`${key} must be a number, 0 or more`);
   }
-  if (c.openShare > 1 || c.bushByTree > 1) fail("openShare and bushByTree are shares, 0 to 1");
+  if (c.openShare > 1 || c.bushByTree > 1 || c.bushRound > 1) fail("openShare, bushByTree and bushRound are shares, 0 to 1");
   for (const key of ["pileSize", "wallGapMeters"] as const) {
     const v = c[key];
     if (!Array.isArray(v) || v.length !== 2 || !(v[0]! > 0) || !(v[1]! >= v[0]!)) fail(`${key} must be [low, high], above 0`);
@@ -108,8 +110,9 @@ const drum: Item = (r) => {
   return [{ paint: pick(r, ["deepRust", "sparkYellow"]), mesh: turn(can, [between(r, -0.15, 0.15), 0, between(r, -0.15, 0.15)]) }];
 };
 
-// A low faceted mound of leaves: a jittered hexagon at the foot, a wider ring above it and a small cap, so it reads
-// as a clump, not a cone.
+// A low mound of leaves: a jittered hexagon at the foot, a wider ring above it and a small cap, so it reads as a
+// clump, not a cone. Its outline keeps the facets; its shading is rounded toward a ball (V16a), so under the toon
+// bands it reads as one soft lump of leaves like the tree crowns, not a cut gem.
 function mound(r: Rand, radius: number, height: number): MeshData {
   const turnBy = r() * Math.PI;
   const ring = (y: number, reach: number, shift: number): V3[] => Array.from({ length: 6 }, (_, i) => {
@@ -119,7 +122,7 @@ function mound(r: Rand, radius: number, height: number): MeshData {
   const lean = radius * between(r, -0.12, 0.12);
   const foot = ring(0, 0.8, 0), belly = ring(height * 0.45, 1, lean * 0.5), cap = ring(height, 0.4, lean);
   const band = (a: V3[], b: V3[]) => a.map((_, i) => { const j = (i + 1) % a.length; return [a[i]!, a[j]!, b[j]!, b[i]!]; });
-  return convex([foot, cap, ...band(foot, belly), ...band(belly, cap)]);
+  return towardEllipsoid(convex([foot, cap, ...band(foot, belly), ...band(belly, cap)]), [lean * 0.5, height * 0.4, 0], [radius, height * 0.6, radius], LOOK.bushRound);
 }
 
 // A bush: two or three mounds leaning together, mostly green, now and then a dead brown one. Low enough (under

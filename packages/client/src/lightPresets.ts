@@ -1,3 +1,5 @@
+import { parsePresetHaze, type PresetHaze } from "./haze";
+
 // The light of a match (data/look.json, `light`): a few named presets, each a whole mood (key and fill light, sky,
 // clouds, haze). The map seed picks one, so everyone in a room sees the same sky, and ?look=<name> forces one offline.
 
@@ -14,11 +16,12 @@ export interface LightPreset {
   // Shadow colour, not darkness: how far the shadow band's and the middle band's light turn from the sun's colour
   // toward the sky's hue (fillSky), 0 to 1 (toonLight.ts).
   shade: { shadow: number; mid: number };
-  // The sky fades from the haze colour at the horizon up to `zenith`, so far ground melts into the sky with no seam.
+  // The sky steps from the haze colour at the horizon up to `zenith` (sky.ts), so far ground melts into the sky with
+  // no seam.
   sky: { zenith: string; sun: string };
   clouds: { lit: string; shade: string };
-  // Haze starts at `near` metres and is all but solid (98%) at ground level by `far`.
-  haze: { color: string; near: number; far: number };
+  // Haze starts at `near` metres and is all but solid (98%) at ground level by `far`, in tinted steps (haze.ts).
+  haze: PresetHaze;
 }
 
 export interface LightConfig {
@@ -46,14 +49,14 @@ export function parseLight(raw: unknown): LightConfig {
     if (!isText(p.fillSky) || !isText(p.fillGround) || !isNumber(p.fillIntensity)) throw new Error(`${where} needs fillSky, fillGround and fillIntensity`);
     if (!(isNumber(p.shade?.shadow) && p.shade.shadow >= 0 && p.shade.shadow <= 1 && isNumber(p.shade.mid) && p.shade.mid >= 0 && p.shade.mid <= 1)) throw new Error(`${where} needs shade shadow and mid, 0 to 1`);
     if (!isText(p.sky?.zenith) || !isText(p.sky.sun) || !isText(p.clouds?.lit) || !isText(p.clouds.shade)) throw new Error(`${where} needs sky and cloud colours`);
-    if (!isText(p.haze?.color) || !isNumber(p.haze.near) || !isNumber(p.haze.far) || p.haze.near < 0 || p.haze.far <= p.haze.near) throw new Error(`${where} needs haze colour and near < far`);
+    parsePresetHaze(p.haze, where);
   }
   return { presets };
 }
 
 // Every colour a preset names, for checking them against the palette.
 export function presetColors(p: LightPreset): string[] {
-  return [p.key.color, p.fillSky, p.fillGround, p.sky.zenith, p.sky.sun, p.clouds.lit, p.clouds.shade, p.haze.color];
+  return [p.key.color, p.fillSky, p.fillGround, p.sky.zenith, p.sky.sun, p.clouds.lit, p.clouds.shade, p.haze.color, p.haze.distant, ...p.haze.steps.map((s) => s.tint)];
 }
 
 // The same seed always gives the same preset. The seed is mixed first, because seeds are often small and

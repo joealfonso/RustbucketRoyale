@@ -5,12 +5,14 @@ import type { SurfaceKind } from "./paint/paintLook";
 import type { Terrain } from "@rustbucket/shared";
 import { vfxConfig } from "./fx/quality";
 import { groundMaterial } from "./groundMaterial";
-import { installHaze } from "./haze";
+import { installHaze, useHaze } from "./haze";
+import { parseBackdropLook, type BackdropLook } from "./backdrop/backdropLook";
 import { parseLight, presetColors, presetForSeed, presetNamed, type LightConfig, type LightPreset } from "./lightPresets";
 import { Sky, parseSky, type SkyConfig } from "./sky";
 import { parseSunShadowLook, type SunShadowLook } from "./sunShadows";
 import { installToonLight, setToonShade } from "./toonLight";
 import { parseCrease, type CreaseLook } from "./creasePass";
+import { mossGlsl, parseMoss, type MossLook } from "./mossEdge";
 import { OUTLINE_UNIT_GLSL, outlineWidthGlsl, parseOutlineWidth, pushOutGlsl, type OutlineWidth } from "./outlineWidth";
 
 // The look of the game, from data/look.json and data/palette.json: one master toon material for everything (three
@@ -46,7 +48,7 @@ export interface LookConfig {
   // The junkyard's weathering on map boxes and dressing: moss patches on upward faces (`minUp` is how upward), rust
   // streaks running down walls, and grime along the foot of walls up to `height` metres.
   world: {
-    moss: { color: string; dark: string; scale: number; cover: number; rim: number; minUp: number };
+    moss: MossLook; // mossEdge.ts
     streaks: { color: string; scale: number; cover: number; strength: number };
     grime: { color: string; height: number; strength: number };
   };
@@ -57,9 +59,11 @@ export interface LookConfig {
   // in `steps` flat steps (a toon band, not a gradient), the edge broken up by `ragged` of the height with noise.
   // Ambient (sky and bounce) light loses all of it, the sun's `directShare`. Faces turned up are left alone.
   ao: { heightMeters: number; strength: number; steps: number; ragged: number; directShare: number };
-  // How fast the haze thins with height, per metre (see haze.ts). The haze colour and distances are per preset.
-  haze: { heightFalloff: number };
+  // How fast the haze thins with height, per metre, and how soft the edges of its steps are, as a share of the haze
+  // amount (see haze.ts). The haze colours, steps and distances are per preset.
+  haze: { heightFalloff: number; stepSoftness: number };
   sky: SkyConfig;
+  backdrop: BackdropLook; // the world beyond the map: backdrop/backdropLook.ts
   mech: MechSurfaceLook;
   crease: CreaseLook; // the crease line pass, creasePass.ts
 }
@@ -109,11 +113,14 @@ export function parseLook(raw: unknown): LookConfig {
   parseOutlineWidth(l.outline.world, "outline.world");
   parseOutlineWidth(l.outline.mech, "outline.mech");
   if (typeof l.haze?.heightFalloff !== "number" || l.haze.heightFalloff < 0) throw new Error("look.json: needs haze.heightFalloff");
+  if (!(typeof l.haze.stepSoftness === "number" && l.haze.stepSoftness > 0 && l.haze.stepSoftness <= 0.1)) throw new Error("look.json: haze.stepSoftness must be above 0, at most 0.1");
   parseLight(l.light);
   parseSky(l.sky);
+  parseBackdropLook(l.backdrop);
   parseSunShadowLook(l.shadows, Object.keys(vfxConfig.levels));
   const ao = l.ao;
   if (!(ao?.heightMeters > 0 && ao.strength >= 0 && ao.strength <= 1 && Number.isInteger(ao.steps) && ao.steps >= 1 && ao.ragged >= 0 && ao.directShare >= 0 && ao.directShare <= 1)) throw new Error("look.json: ao needs heightMeters above 0, strength and directShare 0 to 1, whole steps of 1 or more, ragged 0 or more");
+  parseMoss(l.world?.moss);
   parseMechSurface(l.mech);
   parseCrease(l.crease, Object.keys(vfxConfig.levels));
   return l;
@@ -403,7 +410,7 @@ export class Toon {
           .replace("#include <color_fragment>", `#include <color_fragment>
             if (vWorldN.y > ${moss.minUp.toFixed(3)}) {
               float n = rustNoise(vec3(vWorldPos.xz * ${moss.scale.toFixed(3)}, 3.0)) * 0.7 + rustNoise(vec3(vWorldPos.xz * ${(moss.scale * 3).toFixed(3)}, 9.0)) * 0.3;
-              if (n < ${moss.cover.toFixed(3)}) diffuseColor.rgb = n > ${(moss.cover - moss.rim).toFixed(3)} ? mossDark : mossColor;
+              ${mossGlsl(moss)}
             } else if (abs(vWorldN.y) < 0.4) {
               float along = vWorldPos.x + vWorldPos.z;
               float n = rustNoise(vec3(along * ${streaks.scale.toFixed(3)}, vWorldPos.y * ${(streaks.scale * 0.12).toFixed(3)}, 5.0));
@@ -559,7 +566,7 @@ export class Toon {
   // Lights, sky and haze for a scene, in one preset's colours. Call before anything renders: the haze replaces
   // Three's fog shader code, which every material compiles in.
   light(scene: THREE.Scene, preset: LightPreset): void {
-    installHaze(this.look.haze.heightFalloff);
+    installHaze(this.look.haze.heightFalloff, this.look.haze.stepSoftness);
     scene.fog = this.haze;
     // The haze colour is the sky's horizon too; as the background it only shows if the sky is ever taken out.
     scene.background = this.haze.color;
@@ -580,6 +587,7 @@ export class Toon {
     this.haze.color.set(this.color(preset.haze.color));
     this.haze.near = preset.haze.near;
     this.haze.far = preset.haze.far;
+    useHaze(preset.haze, (c) => this.color(c));
     this.sky.use(preset);
   }
 }

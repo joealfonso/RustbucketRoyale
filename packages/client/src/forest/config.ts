@@ -11,7 +11,9 @@ export interface Tier {
 
 export interface PineLook {
   trunk: { paint: string; radius: number; topRadius: number; sides: number; sinkMeters: number };
-  crown: { sides: number; jag: number; fromMeters: number };
+  // round: how far each tier's normals bend toward an ellipsoid round it (share, 0 to 1), and how far up the tier
+  // that ellipsoid's middle sits (centreAt, a share of its height), so it shades as a soft blob (pineModel.ts).
+  crown: { sides: number; jag: number; fromMeters: number; round: { share: number; centreAt: number } };
   shapes: { weight: number; tiers: Tier[] }[];
   tierShades: number[]; // brightness of each tier from the bottom, so stacked tiers read apart in one colour
   colors: { paint: string; weight: number }[];
@@ -50,6 +52,8 @@ export function parseForest(raw: unknown): ForestConfig {
   if (!p?.trunk || !p.crown || !p.far || !p.stump || !p.fade || !c.fall) throw new Error("forest.json: needs pine (trunk, crown, far, stump, fade) and fall");
   if (!positive(p.trunk.radius) || !positive(p.trunk.topRadius) || !(p.trunk.sides >= 3)) throw new Error("forest.json: pine.trunk needs radius, topRadius and sides");
   if (!(p.crown.sides >= 3) || !(p.crown.jag >= 0 && p.crown.jag < 1)) throw new Error("forest.json: pine.crown needs sides and a jag under 1");
+  const round = p.crown.round;
+  if (!(round && round.share >= 0 && round.share <= 1 && round.centreAt > 0 && round.centreAt < 1)) throw new Error("forest.json: pine.crown.round needs share 0 to 1 and centreAt between 0 and 1");
   if (!Array.isArray(p.shapes) || p.shapes.length === 0) throw new Error("forest.json: pine.shapes needs at least one shape");
   for (const s of p.shapes) {
     if (!positive(s.weight) || !Array.isArray(s.tiers) || s.tiers.length === 0) throw new Error("forest.json: each pine shape needs a weight and tiers");

@@ -1,10 +1,13 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import backdropJson from "../../../../data/backdrop.json";
+import lookJson from "../../../../data/look.json";
 import tiersJson from "../../../../data/tiers.json";
+import { parseBackdropLook } from "./backdropLook";
 import { Ranges, SHRINK, parseRanges, rangesMesh } from "./ranges";
 
 const config = parseRanges(backdropJson.ranges);
+const look = parseBackdropLook(lookJson.backdrop);
 const mesh = rangesMesh(config);
 const CAMERA_FAR = 3000; // thirdPersonCamera.ts
 const tiers = Object.values(tiersJson.tiers).filter((t) => t.meters >= 300);
@@ -38,7 +41,7 @@ describe("mountain ranges", () => {
   });
 
   it("are painted behind everything, like the sky, so no heap or hill is ever hidden by them", () => {
-    const ranges = new Ranges(config, new THREE.Texture(), new THREE.Color(), (c) => c);
+    const ranges = new Ranges(config, look, new THREE.Texture(), new THREE.Color(), "#ffffff", (c) => c);
     const material = ranges.mesh.material as THREE.Material;
     expect(material.depthTest).toBe(false);
     expect(material.depthWrite).toBe(false);
@@ -62,21 +65,52 @@ describe("mountain ranges", () => {
     expect(high).toBeGreaterThan(400);
   });
 
-  it("are cheap: one mesh of a few thousand triangles, each facing the way its normal says", () => {
-    const triangles = mesh.positions.length / 9;
+  it("are cheap: one mesh of a few thousand triangles, each facing the camera at the middle, with smooth normals", () => {
+    const triangles = mesh.indices.length / 3;
     expect(triangles).toBeLessThan(20000);
-    expect(mesh.paints.length).toBe(triangles);
     const p = mesh.positions, n = mesh.normals;
-    for (let t = 0; t < p.length; t += 9) {
-      const u = [p[t + 3]! - p[t]!, p[t + 4]! - p[t + 1]!, p[t + 5]! - p[t + 2]!], v = [p[t + 6]! - p[t]!, p[t + 7]! - p[t + 1]!, p[t + 8]! - p[t + 2]!];
+    const at = (i: number) => [p[i * 3]!, p[i * 3 + 1]!, p[i * 3 + 2]!];
+    for (let t = 0; t < mesh.indices.length; t += 3) {
+      const [a, b, c] = [mesh.indices[t]!, mesh.indices[t + 1]!, mesh.indices[t + 2]!].map(at) as [number[], number[], number[]];
+      const u = [b[0]! - a[0]!, b[1]! - a[1]!, b[2]! - a[2]!], v = [c[0]! - a[0]!, c[1]! - a[1]!, c[2]! - a[2]!];
       const cross = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!];
       if (Math.hypot(...cross) < 1e-6) continue;
-      expect(cross[0]! * n[t]! + cross[1]! * n[t + 1]! + cross[2]! * n[t + 2]!).toBeGreaterThan(0);
+      // Front faces toward the camera, and the corner normals agree.
+      expect(cross[0]! * a[0]! + cross[2]! * a[2]!).toBeLessThan(0);
+      const k = mesh.indices[t]! * 3;
+      expect(cross[0]! * n[k]! + cross[1]! * n[k + 1]! + cross[2]! * n[k + 2]!).toBeGreaterThan(0);
+    }
+    for (let k = 0; k < n.length; k += 3) {
+      expect(Math.hypot(n[k]!, n[k + 1]!, n[k + 2]!)).toBeCloseTo(1, 5);
+      expect(n[k]! * p[k]! + n[k + 2]! * p[k + 2]!).toBeLessThan(0); // facing the camera
     }
   });
 
-  it("haze more the further back a layer stands, never past full", () => {
+  it("have rounded ridges: at every peak the points either side fall away gently, a curve, not a spike", () => {
+    const rows = config.rows;
+    for (let li = 0; li < config.layers.length; li++) {
+      const first = li * config.ridgePoints * rows;
+      const top = (i: number) => mesh.positions[(first + (((i % config.ridgePoints) + config.ridgePoints) % config.ridgePoints) * rows + rows - 1) * 3 + 1]! - config.baseMeters;
+      let peaks = 0;
+      for (let i = 0; i < config.ridgePoints; i++) {
+        if (top(i) < top(i - 1) || top(i) < top(i + 1)) continue;
+        peaks++;
+        expect(top(i) - Math.min(top(i - 1), top(i + 1))).toBeLessThan(top(i) * 0.05);
+      }
+      expect(peaks).toBeGreaterThan(5);
+    }
+  });
+
+  it("mark the ridge for the ink, and haze the foot more than the top, never past full", () => {
+    for (let k = 0; k < mesh.belowRidge.length; k++) {
+      expect(mesh.belowRidge[k]!).toBeGreaterThanOrEqual(-1e-6);
+      if (k % config.rows === config.rows - 1) expect(mesh.belowRidge[k]!).toBeCloseTo(0, 6);
+    }
     for (const m of mesh.mist) { expect(m).toBeGreaterThanOrEqual(0); expect(m).toBeLessThanOrEqual(1); }
+    expect(mesh.mist[0]!).toBeGreaterThan(mesh.mist[config.rows - 1]!);
+  });
+
+  it("are paler the further back a layer stands", () => {
     const mists = config.layers.map((l) => l.mist);
     const radii = config.layers.map((l) => l.radiusMeters);
     for (let i = 1; i < mists.length; i++) {

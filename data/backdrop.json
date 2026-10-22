@@ -86,9 +86,10 @@
         130
       ],
       "sides": [
-        7,
-        10
+        20,
+        26
       ],
+      "rings": 6,
       "junkPerHeap": 3,
       "paints": [
         "#5C4B40",
@@ -111,9 +112,10 @@
         320
       ],
       "sides": [
-        8,
-        11
+        24,
+        30
       ],
+      "rings": 7,
       "junkPerHeap": 2,
       "paints": [
         "#4B4C55",
@@ -203,9 +205,10 @@
           140
         ],
         "sides": [
-          6,
-          9
+          18,
+          24
         ],
+        "rings": 5,
         "junkPerHeap": 1,
         "paints": [
           "#4F5A3E",
@@ -236,8 +239,11 @@
   "ranges": {
     "seed": 9191,
     "baseMeters": -80,
-    "valleyMist": 0.3,
-    "mistSteps": 6,
+    "ridgePoints": 800,
+    "rows": 4,
+    "slope": 0.45,
+    "valleyMist": 0.35,
+    "mistSteps": 3,
     "layers": [
       {
         "radiusMeters": 2700,
@@ -248,12 +254,11 @@
         ],
         "widthMeters": [
           900,
-          1300
+          1400
         ],
-        "sides": 7,
+        "floorShare": 0.3,
         "paint": "#7E7B6E",
-        "peak": "#9A9584",
-        "mist": 0.5
+        "mist": 0.8
       },
       {
         "radiusMeters": 2460,
@@ -266,10 +271,9 @@
           700,
           1200
         ],
-        "sides": 7,
-        "paint": "#746C5C",
-        "peak": "#8C8371",
-        "mist": 0.38
+        "floorShare": 0.25,
+        "paint": "#6E6858",
+        "mist": 0.58
       },
       {
         "radiusMeters": 2250,
@@ -282,10 +286,9 @@
           600,
           1000
         ],
-        "sides": 6,
+        "floorShare": 0.2,
         "paint": "#3E5232",
-        "peak": "#5A5347",
-        "mist": 0.27
+        "mist": 0.32
       }
     ]
   }

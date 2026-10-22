@@ -28,9 +28,26 @@ export interface CoverConfig {
   treeMeters: number; // ground this close to a tree trunk is woodland floor
   maxPerKind: number; // instances one kind may draw; the farthest are dropped past this
   dryTint: number[]; // the colour a dry clump is multiplied by, red, green, blue
+  grass: GrassLook; // the grass clump model, coverShapes.ts
   kinds: Record<CoverKind, { scale: number[] }>; // each kind's size range, a share of its model's size
   mixes: Record<CoverGround, Record<CoverKind, number>>; // weights per kind on each kind of ground
 }
+
+// A grass clump (V16a): a few broad blades in one green close to the ground's, so a field reads as soft tufts, not
+// static. Each blade darkens toward its root so the clump sits in the ground.
+export interface GrassLook {
+  blades: number; // blades per clump
+  width: number[]; // blade width at the base, metres at scale 1, least and most
+  height: number[]; // blade height, metres at scale 1, least and most
+  spread: number; // how far from the clump's middle a blade's foot may stand, metres at scale 1
+  lean: number[]; // how far a blade leans out, radians, least and most
+  skyward: number; // how far the blades' normals bend toward straight up (0 to 1), so they light like the ground
+  rootShade: number; // brightness at the foot of a blade
+  tipShade: number; // brightness at `rootMeters` up and above
+  rootMeters: number; // the height over which a blade goes from rootShade to tipShade, metres at scale 1
+}
+
+const isRange = (v: unknown) => Array.isArray(v) && v.length === 2 && v[0] > 0 && v[1] >= v[0];
 
 export function parseCover(raw: unknown): CoverConfig {
   const c = raw as CoverConfig;
@@ -51,6 +68,13 @@ export function parseCover(raw: unknown): CoverConfig {
     if (!Array.isArray(e) || e.length !== 2 || !(e[0]! >= 0) || !(e[1]! > e[0]!) || e[1]! > 1) fail(`${key} must be [low, high], 0 to 1, low under high`);
   }
   if (!Array.isArray(c.dryTint) || c.dryTint.length !== 3) fail("dryTint must be [r, g, b]");
+  const g = c.grass;
+  if (!g || !Number.isInteger(g.blades) || g.blades < 1 || !isRange(g.width) || !isRange(g.height) || !isRange(g.lean) || !(g.spread >= 0)) {
+    fail("grass needs whole blades of 1 or more, width, height and lean as [low, high] above 0, and spread 0 or more");
+  }
+  if (!(g.skyward >= 0 && g.skyward <= 1) || !(g.rootShade > 0 && g.rootShade <= g.tipShade) || !(g.rootMeters > 0)) {
+    fail("grass needs skyward 0 to 1, rootShade above 0 and at most tipShade, and rootMeters above 0");
+  }
   for (const kind of COVER_KINDS) {
     const s = c.kinds?.[kind]?.scale;
     if (!Array.isArray(s) || s.length !== 2 || !(s[0]! > 0) || !(s[1]! >= s[0]!)) fail(`kinds.${kind}.scale must be [low, high]`);

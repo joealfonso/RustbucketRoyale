@@ -5,7 +5,7 @@ import { parseMechStats } from "@rustbucket/shared";
 import { buildPlayMap } from "../loadMap";
 import { COVER_KINDS, parseCover } from "./coverConfig";
 import { CoverSites, ITEM_FLOATS, MAX_HEIGHT, planCell } from "./coverPlan";
-import { coverModel } from "./coverShapes";
+import { bladeShade, coverModel } from "./coverShapes";
 
 const config = parseCover(dressingJson.cover);
 const mech = parseMechStats(mechJson);
@@ -113,15 +113,16 @@ describe("ground cover", () => {
   });
 
   it("grows grass in patches with bare ground between, not an even sprinkle", () => {
-    // Clumps per 2 m square over the 13 by 13 cells round the spawn: plenty of squares are bare, and of the rest
-    // most are lush rather than a lone clump. Before V11 only about one square in seven was bare.
+    // Clumps per 3 m square over the 13 by 13 cells round the spawn: plenty of squares are bare, and of the rest
+    // most are lush rather than a lone clump. Before V11 only about one square in seven was bare. The squares were
+    // 2 m until V16a made the clumps fewer and bigger.
     const squares = new Map<string, number>();
     for (const item of itemsAround(map.spawn[0], map.spawn[2])) {
-      const key = `${Math.floor(item[1]! / 2)},${Math.floor(item[3]! / 2)}`;
+      const key = `${Math.floor(item[1]! / 3)},${Math.floor(item[3]! / 3)}`;
       squares.set(key, (squares.get(key) ?? 0) + 1);
     }
     const counts = [...squares.values()];
-    const all = ((13 * config.cellMeters) / 2) ** 2;
+    const all = ((13 * config.cellMeters) / 3) ** 2;
     const lush = counts.filter((n) => n >= 3).length, sparse = counts.filter((n) => n === 1).length;
     expect(1 - counts.length / all).toBeGreaterThan(0.35);
     expect(lush).toBeGreaterThan(sparse * 2);
@@ -139,7 +140,7 @@ describe("ground cover", () => {
 
   it("each kind's model is small and cheap", () => {
     for (const kind of COVER_KINDS) {
-      const pieces = coverModel(kind);
+      const pieces = coverModel(kind, config.grass);
       let triangles = 0, top = 0, reach = 0;
       for (const { mesh } of pieces) {
         triangles += mesh.indices.length / 3;
@@ -153,6 +154,23 @@ describe("ground cover", () => {
       expect(top, kind).toBeLessThan(0.85);
       expect(reach, kind).toBeLessThan(0.85);
     }
+  });
+
+  it("draws grass as a few broad blades in one green, dark at the root and lighter up the blade", () => {
+    const g = config.grass;
+    const pieces = coverModel("grass", g);
+    expect(pieces.length).toBe(g.blades);
+    expect(new Set(pieces.map((p) => p.paint)).size).toBe(1);
+    expect(bladeShade(0, g)).toBeCloseTo(g.rootShade, 6);
+    expect(bladeShade(g.rootMeters, g)).toBeCloseTo(g.tipShade, 6);
+    expect(bladeShade(g.rootMeters * 3, g)).toBeCloseTo(g.tipShade, 6);
+    expect(bladeShade(g.rootMeters / 2, g)).toBeGreaterThan(g.rootShade);
+    expect(bladeShade(-0.05, g)).toBeCloseTo(g.rootShade, 6);
+  });
+
+  it("rejects grass with no blades or a root brighter than the tip", () => {
+    expect(() => parseCover({ ...dressingJson.cover, grass: { ...dressingJson.cover.grass, blades: 0 } })).toThrow(/grass/);
+    expect(() => parseCover({ ...dressingJson.cover, grass: { ...dressingJson.cover.grass, rootShade: 1.2 } })).toThrow(/grass/);
   });
 
   it("rejects a mix with no weight", () => {
