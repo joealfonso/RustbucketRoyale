@@ -63,9 +63,11 @@ describe("generated hills", () => {
   const mech = { halfWidth: stats.halfWidth, height: stats.height, stepHeight: stats.stepHeight };
   const build = (seed: number, tier: string) => generateMap(seed, tier, parseChunkSet(chunksJson), tiers, mech, parsePropConfig(propsJson));
 
+  // Many seeds: a steep spot needs the hills' bumps (or an island's bays) to line up, which only some maps do.
+  const seedsOf: Record<string, number> = { small: 40, medium: 10 };
   for (const tier of ["small", "medium"]) {
     it(`${tier}: never steeper than the limit, and everything built stands on level ground`, () => {
-      for (const seed of [1, 2, 3]) {
+      for (let seed = 1; seed <= seedsOf[tier]!; seed++) {
         const map = build(seed, tier);
         const t = map.terrain;
         const limit = tiers.terrain!.maxRisePercent / 100 + 1e-6;
@@ -74,7 +76,7 @@ describe("generated hills", () => {
         for (let j = 0; j < t.corners; j++) for (let i = 0; i + 1 < t.corners; i++) {
           steepest = Math.max(steepest, Math.abs(t.corner(i + 1, j) - t.corner(i, j)) / t.cell, Math.abs(t.corner(j, i + 1) - t.corner(j, i)) / t.cell);
         }
-        expect(steepest).toBeLessThanOrEqual(limit);
+        expect(steepest, `${tier} seed ${seed}: too steep`).toBeLessThanOrEqual(limit);
         const unlevel: number[] = [];
         map.boxes.forEach((b, k) => {
           if (k === 0 || map.propOfBox[k]! >= 0 || map.kindNames[map.kinds[k]!] === "boulder") return; // the ground slab, props and boulders sit on slopes (an island has no edge walls)
