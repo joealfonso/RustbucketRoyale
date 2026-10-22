@@ -1,7 +1,7 @@
 import { World, type Box } from "../world";
 import { Terrain } from "../terrain";
 import { cornersFor, floodBed, noiseHeights, padHeights, shapeTerrain, valueNoise, waterLevelFor, type Rect } from "./terrainGen";
-import { islandCoast, onLand, reachOf, shapeShore } from "./islandGen";
+import { inlandOf, islandCoast, onLand, reachOf, shapeShore } from "./islandGen";
 import { addProp, type PropConfig, type PropInstance } from "../props";
 import { orient, type ChunkSet } from "./chunks";
 import { buildNavGrid, floodFill, navCell, raised, type NavGrid, type NavParams } from "./navGrid";
@@ -195,6 +195,15 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
   // The hills: noise first, then each built chunk's pad height (terrainGen.ts).
   const flatCorners = cornersFor(def.meters, chunks.size);
   const noise = settings ? noiseHeights(seed, tier, def.meters, settings) : new Int32Array(flatCorners * flatCorners);
+  // An island's hills are lifted so that only `waterShare` of its land lies under the sea's level, as ponds and marsh
+  // (the sea is a map's one water level); with no share, so that none does. Never lowered: flat land stays at 0.
+  if (coast && island && settings) {
+    const share = settings.tiers[tier]?.waterShare ?? 0;
+    const land = noise.filter((_, k) => coast[k]! >= 0);
+    const sea = Math.round(island.seaLevelMeters * 100);
+    const lift = land.length === 0 ? 0 : share > 0 ? sea - waterLevelFor(land, share)! : Math.max(0, sea + 1 - land.reduce((a, b) => Math.min(a, b)));
+    for (let k = 0; k < noise.length; k++) noise[k]! += lift;
+  }
   // On an island the shore cuts the hills down into the sea. Pads still come from the hills before the cut: a chunk's
   // middle can be out at sea while its buildings stand well inland, and the seabed is no height for them.
   const shored = coast && island ? Int32Array.from(noise) : noise;
@@ -215,7 +224,12 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
       return { minX: cx - oriented.size[0] / 2 - padMargin, maxX: cx + oriented.size[0] / 2 + padMargin, minZ: cz - oriented.size[2] / 2 - padMargin, maxZ: cz + oriented.size[2] / 2 + padMargin };
     }));
   }
-  const padOf = settings ? padHeights(noise, def.meters, chunks.size, held, settings) : new Int32Array(n * n);
+  // A pad near the shore may stand no higher than the beach rising to it, not the steeper apron: its apron must reach
+  // the waterline below the beach, or the ground at the wading line would stand high over the sea's drop beyond it.
+  const shoreGap = coast && island && settings
+    ? (r: Rect) => (inlandOf(coast, def.meters, cellMeters, r.minX, r.minZ, r.maxX, r.maxZ) * island.beachRisePercent) / (settings.apronRisePercent * 100)
+    : undefined;
+  const padOf = settings ? padHeights(noise, def.meters, chunks.size, held, settings, shoreGap) : new Int32Array(n * n);
   const padsAt = () => held.flatMap((rects, cell) => rects.map((r) => ({ ...r, height: padOf[cell]! })));
   let heights = settings ? shapeTerrain(shored, def.meters, padsAt(), settings, !island) : noise;
   // Water fills the lowest ground. Its bed is raised so it is never deeper than a wade; a building pad lower than
@@ -268,6 +282,16 @@ function build(seed: number, tier: string, chunks: ChunkSet, tiers: TierSet, pro
 
   // Spawns: shuffled candidate chunks, kept only if far enough from the ones already chosen.
   rng.shuffle(spawnCandidates);
+  // On an island, squares wholly on land go first: a shore square has less land for loot props round its spawn, and
+  // failing the loot check there would retry the whole map.
+  if (coast) {
+    const inland = (cell: number) => {
+      const x = cell % n, z = (cell - x) / n;
+      return ashore(x * chunks.size - half, z * chunks.size - half, (x + 1) * chunks.size - half, (z + 1) * chunks.size - half);
+    };
+    const first = spawnCandidates.filter(inland);
+    spawnCandidates.splice(0, spawnCandidates.length, ...first, ...spawnCandidates.filter((c) => !inland(c)));
+  }
   const spawns: [number, number, number][] = [];
   const chosen: number[] = [];
   const sep = def.spawnSeparationChunks;
@@ -409,7 +433,7 @@ const MASK_RANGE = 1000; // forest and boulder masks run from -MASK_RANGE to MAS
 const ROCKS_SALT = 3000, FOREST_SALT = 3001, OUTCROP_SALT = 3002;
 const LOW_HELD_METERS = 1.6; // a floor slab or one of the old grey-box hill terraces, not a wall
 const WALL_GAP_METERS = 3; // an outcrop keeps this clear of any wall, so a gap beside it still fits a mech // each scatter draws from its own stream, apart from the hills and props
-const ISLAND_REPICKS = 4; // tries at a chunk that fits on the island before the shore gets open ground
+const ISLAND_REPICKS = 16; // tries at a chunk that fits on the island before the shore gets open ground
 const ISLAND_PROP_TRIES = 32; // a shore chunk has little land, so its props get more tries at finding some
 
 // The ground mechs can stand on, in square metres: the whole map, or on an island the land and the shallows. Counted

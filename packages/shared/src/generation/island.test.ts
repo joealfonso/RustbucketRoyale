@@ -197,11 +197,12 @@ describe("the sea as the map's limit", () => {
   });
 
   it("lets a mech slide along the limit instead of sticking to it", () => {
-    // Heading out at an angle to the shore: the sideways part of the walk carries on.
-    const { s } = runOut({ moveX: 1 }, 8);
-    const along = Math.hypot(s.x - lane.x, s.z - lane.z);
+    // Heading out at an angle to the shore: the sideways part of the walk carries on. Both ways are tried, since the
+    // lane can end in a cove where one way runs straight back into the sea.
+    const ends = [runOut({ moveX: 1 }, 8).s, runOut({ moveX: -1 }, 8).s];
+    const along = Math.max(...ends.map((s) => Math.hypot(s.x - lane.x, s.z - lane.z)));
     expect(along).toBeGreaterThan(30);
-    expect(t.mayStand(s.x, s.z)).toBe(true);
+    for (const s of ends) expect(t.mayStand(s.x, s.z)).toBe(true);
   });
 
   it("lets a mech that is somehow past the limit walk back in, but no further out", () => {

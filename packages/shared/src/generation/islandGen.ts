@@ -109,9 +109,15 @@ export function reachOf(coast: Int32Array, island: IslandSettings): Int32Array {
 
 // Whether a rectangle (metres) lies at least `inlandCm` from the waterline: every corner of the cells it touches.
 export function onLand(coast: Int32Array, meters: number, cell: number, minX: number, minZ: number, maxX: number, maxZ: number, inlandCm: number): boolean {
+  return inlandOf(coast, meters, cell, minX, minZ, maxX, maxZ) >= inlandCm;
+}
+
+// How far a rectangle (metres) lies from the waterline, in centimetres: the least of the corners of the cells it touches.
+export function inlandOf(coast: Int32Array, meters: number, cell: number, minX: number, minZ: number, maxX: number, maxZ: number): number {
   const n = cornersFor(meters, cell), half = meters / 2;
   const i0 = Math.max(0, Math.floor((minX + half) / cell)), i1 = Math.min(n - 1, Math.ceil((maxX + half) / cell));
   const j0 = Math.max(0, Math.floor((minZ + half) / cell)), j1 = Math.min(n - 1, Math.ceil((maxZ + half) / cell));
-  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (coast[j * n + i]! < inlandCm) return false;
-  return true;
+  let least = Infinity;
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) least = Math.min(least, coast[j * n + i]!);
+  return least;
 }

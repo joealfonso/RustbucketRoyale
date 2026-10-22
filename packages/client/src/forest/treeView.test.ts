@@ -35,7 +35,7 @@ function lookingAt(x: number, y: number, z: number, from: [number, number, numbe
 
 describe("tree view", () => {
   it("draws the woods of a medium map, and the props view leaves them to it", () => {
-    expect(trees.length).toBeGreaterThan(500);
+    expect(trees.length).toBeGreaterThan(300); // medium is an island, about two thirds land
     const props = new PropView(map, propConfig, toon, PROP_MODELS);
     const meshes = props.group.children as THREE.InstancedMesh[];
     expect(meshes.every((m) => m.count <= map.props.length - trees.length)).toBe(true);

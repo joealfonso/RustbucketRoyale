@@ -3,8 +3,9 @@ import mechJson from "../../../../data/mech.json";
 import tiersJson from "../../../../data/tiers.json";
 import backdropJson from "../../../../data/backdrop.json";
 import dressingJson from "../../../../data/dressing.json";
-import { parseMechStats } from "@rustbucket/shared";
-import { buildPlayMap } from "../loadMap";
+import chunksJson from "../../../../data/chunks.json";
+import { generateMap, parseChunkSet, parseMechStats, parseTiers } from "@rustbucket/shared";
+import { propConfig } from "../loadMap";
 import { farBay, nearBay, planBay } from "./edgeBay";
 import { edgeBoxIndices, edgeChunks, edgeRuns, parseBarrier, parseEdgeVariety, runToWorld } from "./edgeLayout";
 import { seedOf } from "./kinds";
@@ -12,6 +13,10 @@ import { turn } from "./shapes";
 
 const config = { ...parseBarrier(backdropJson.barrier), variety: parseEdgeVariety(dressingJson.edge) };
 const mech = parseMechStats(mechJson);
+// Every tier is an island now, with no edge wall; a tier still gets one when its island section is taken out.
+const walled = parseTiers(tiersJson);
+for (const t of Object.values(walled.terrain!.tiers)) delete t.island;
+const buildPlayMap = (tier: string, seed: number, m: typeof mech) => ({ ...generateMap(seed, tier, parseChunkSet(chunksJson), walled, m, propConfig), seed });
 
 describe("edge barrier", () => {
   it("finds the four edge walls on every tier and cuts them into whole bays", () => {

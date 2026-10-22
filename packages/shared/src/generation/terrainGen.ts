@@ -76,8 +76,10 @@ function gapBetween(a: Rect, b: Rect): number {
 // ground between any two neighbouring pads, and between a pad and the map's edge (held at 0), can ease from one to
 // the other at the gentle apron slope across the real gap between them. Wide gaps allow big height changes, so the
 // hills still roll; buildings packed close together share a level. `held` lists each chunk's level areas (empty for
-// an unbuilt chunk). Returns centimetres per chunk.
-export function padHeights(noise: Int32Array, meters: number, chunkSize: number, held: readonly Rect[][], settings: TerrainSettings): Int32Array {
+// an unbuilt chunk). `edgeGap` measures a level area's distance to that 0 edge: by default the map's edge, on an
+// island the waterline, so no pad stands so high near the shore that its apron runs off a cliff into the sea.
+// Returns centimetres per chunk.
+export function padHeights(noise: Int32Array, meters: number, chunkSize: number, held: readonly Rect[][], settings: TerrainSettings, edgeGap?: (r: Rect) => number): Int32Array {
   const n = cornersFor(meters, settings.cellMeters);
   const chunks = meters / chunkSize;
   const perChunk = chunkSize / settings.cellMeters;
@@ -95,9 +97,9 @@ export function padHeights(noise: Int32Array, meters: number, chunkSize: number,
   const neighbours: number[][] = [];
   for (let z = 0; z < chunks; z++) for (let x = 0; x < chunks; x++) {
     const a = z * chunks + x;
-    let edgeGap = Infinity;
-    for (const r of held[a]!) edgeGap = Math.min(edgeGap, r.minX + half, half - r.maxX, r.minZ + half, half - r.maxZ);
-    fromEdge[a] = Number.isFinite(edgeGap) ? rise(Math.max(0, edgeGap)) : FAR;
+    let gapToEdge = Infinity;
+    for (const r of held[a]!) gapToEdge = Math.min(gapToEdge, edgeGap ? edgeGap(r) : Math.min(r.minX + half, half - r.maxX, r.minZ + half, half - r.maxZ));
+    fromEdge[a] = Number.isFinite(gapToEdge) ? rise(Math.max(0, gapToEdge)) : FAR;
     const list: number[] = [];
     if (built(a)) {
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
