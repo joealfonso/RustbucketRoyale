@@ -10,10 +10,11 @@ import { parseBackdropLook, type BackdropLook } from "./backdrop/backdropLook";
 import { parseLight, presetColors, presetForSeed, presetNamed, type LightConfig, type LightPreset } from "./lightPresets";
 import { Sky, parseSky, type SkyConfig } from "./sky";
 import { parseSunShadowLook, type SunShadowLook } from "./sunShadows";
-import { installToonLight, setToonShade } from "./toonLight";
-import { parseCrease, type CreaseLook } from "./creasePass";
+import { installToonLight, parseShadowBrush, setToonShade, type ShadowBrush } from "./toonLight";
+import { parseCrease, withoutCreases, type CreaseLook } from "./creasePass";
 import { mossGlsl, parseMoss, type MossLook } from "./mossEdge";
 import { OUTLINE_UNIT_GLSL, outlineWidthGlsl, parseOutlineWidth, pushOutGlsl, type OutlineWidth } from "./outlineWidth";
+import { crestInkMaterial, inkOf, parseCrestInk, type CrestInk } from "./crestInk";
 
 // The look of the game, from data/look.json and data/palette.json: one master toon material for everything (three
 // flat bands of light plus a hard rim), a dark outline round every box, and one warm key light (the sun, casting
@@ -39,8 +40,10 @@ export interface LookConfig {
   rim: { strength: number; width: number; color: string; skyTint: number; shadeSide: number; fade: { startMeters: number; endMeters: number } };
   // Both darkens are a share of the brightness you see, so outlines read as ink, not a pale halo (scaling in linear
   // light made 0.35 show as about 62%). Mechs are inked a little darker than the world so they stand out from it.
-  // Widths are about even on screen (outlineWidth.ts), the world's and the mechs' each their own.
-  outline: { darken: number; mechDarken: number; world: OutlineWidth; mech: OutlineWidth };
+  // Widths are about even on screen (outlineWidth.ts), the world's and the mechs' each their own. Silhouettes are
+  // the heavier line: about 1.5 times the crease lines inside them (V16b), checked below. `crest` inks the hills'
+  // skylines in the ground's own colours (crestInk.ts).
+  outline: { darken: number; mechDarken: number; world: OutlineWidth; mech: OutlineWidth; crest: CrestInk };
   // Damage eats paint to rust: `cover` share of a part at zero hit points, in patches `scale` per metre, with a dark
   // rim `rim` wide (in noise units) round each patch.
   // `spread` below 1 makes the first hits show: the share of damage is raised to this power before it becomes cover.
@@ -66,6 +69,14 @@ export interface LookConfig {
   backdrop: BackdropLook; // the world beyond the map: backdrop/backdropLook.ts
   mech: MechSurfaceLook;
   crease: CreaseLook; // the crease line pass, creasePass.ts
+  shadowBrush: ShadowBrush; // brush marks in the shadow band, toonLight.ts
+  // One hard highlight from the sun on bare metal (mech parts with the metal finish): a flat stripe of `color`, lit by
+  // the sun's hue, covering `strength` of the paint under it, along the line where a curved part turns most toward
+  // the sun, reaching `size` (the sine of the turn) round the curve either side (toonLight.ts). Only in the top band,
+  // so it always sits on the lit side, and only where the surface bends by at least `minBendPerMeter` (its normal's
+  // turn per metre, so 2 is a curve about half a metre in radius): pistons, barrels and bezels carry the stripe, big
+  // flat plates never flash white whole.
+  highlight: { strength: number; size: number; color: string; minBendPerMeter: number };
 }
 
 // How the roster mechs' surfaces take paint and light (gate V9). `normals` is read by the model scripts when they
@@ -77,9 +88,8 @@ export interface MechSurfaceLook {
   // patches `scale` per metre; rust starts on edges, `rustFirst` ahead of the rest. Gone between the fade distances,
   // where a chamfer is a pixel wide and chips would only flicker.
   edgeWear: { color: string; cover: number; scale: number; rustFirst: number; fade: { startMeters: number; endMeters: number } };
-  // Bare metal parts: bands of their own, and one hard highlight from the sun, `glint` strong, where the surface is
-  // within `size` (1 minus the cosine) of mirroring it toward the eye.
-  metal: { glint: number; size: number; color: string } & FinishBands;
+  // Bare metal parts: bands of their own, and the look's `highlight`.
+  metal: FinishBands;
   // Rubber parts: no rim, flat bands of their own, the colour times `darken`.
   rubber: { darken: number } & FinishBands;
 }
@@ -97,8 +107,7 @@ export function parsePalette(raw: unknown): Palette {
   return p;
 }
 
-// A colour darkened to a share of its on-screen brightness, as a working (linear) colour.
-const ink = (hex: string, share: number) => new THREE.Color(hex).convertLinearToSRGB().multiplyScalar(share).convertSRGBToLinear();
+const ink = inkOf;
 
 export function parseLook(raw: unknown): LookConfig {
   const l = raw as LookConfig;
@@ -112,6 +121,7 @@ export function parseLook(raw: unknown): LookConfig {
   if (typeof l.outline.mechDarken !== "number") throw new Error("look.json: outline needs mechDarken");
   parseOutlineWidth(l.outline.world, "outline.world");
   parseOutlineWidth(l.outline.mech, "outline.mech");
+  parseCrestInk(l.outline.crest);
   if (typeof l.haze?.heightFalloff !== "number" || l.haze.heightFalloff < 0) throw new Error("look.json: needs haze.heightFalloff");
   if (!(typeof l.haze.stepSoftness === "number" && l.haze.stepSoftness > 0 && l.haze.stepSoftness <= 0.1)) throw new Error("look.json: haze.stepSoftness must be above 0, at most 0.1");
   parseLight(l.light);
@@ -123,6 +133,10 @@ export function parseLook(raw: unknown): LookConfig {
   parseMoss(l.world?.moss);
   parseMechSurface(l.mech);
   parseCrease(l.crease, Object.keys(vfxConfig.levels));
+  if (!(l.outline.world.pixels >= l.crease.pixels && l.outline.mech.pixels >= l.crease.pixels)) throw new Error("look.json: outline pixels must be at least crease pixels, silhouettes are the heavier line");
+  parseShadowBrush(l.shadowBrush);
+  const h = l.highlight;
+  if (!(h && share(h.strength) && h.size > 0 && h.size < 1 && typeof h.color === "string" && h.minBendPerMeter >= 0)) throw new Error("look.json: highlight needs strength 0 to 1, size between 0 and 1, a color and minBendPerMeter 0 or more");
   return l;
 }
 
@@ -147,7 +161,6 @@ function parseMechSurface(m: MechSurfaceLook): void {
   if (!(typeof w.color === "string" && share(w.cover) && w.scale > 0 && share(w.rustFirst) && w.fade?.startMeters >= 0 && w.fade.endMeters > w.fade.startMeters)) {
     throw new Error("look.json: mech.edgeWear needs a color, cover and rustFirst 0 to 1, scale above 0, and a fade that ends after it starts");
   }
-  if (!(share(m.metal.glint) && m.metal.size > 0 && m.metal.size < 1 && typeof m.metal.color === "string")) throw new Error("look.json: mech.metal needs glint 0 to 1, size between 0 and 1 and a color");
   checkBands(m.metal, "look.json mech.metal");
   if (!share(m.rubber.darken)) throw new Error("look.json: mech.rubber needs darken 0 to 1");
   checkBands(m.rubber, "look.json mech.rubber");
@@ -173,6 +186,7 @@ export class Toon {
   private ramp: THREE.DataTexture;
   private materials = new Map<string, THREE.MeshToonMaterial>();
   private groundMaterials = new Map<string, THREE.MeshToonMaterial>();
+  private groundInks = new Map<string, THREE.MeshBasicMaterial>();
   private worldMaterials = new Map<string, THREE.MeshToonMaterial>();
   private outlines = new Map<string, THREE.MeshBasicMaterial>();
   private shellOutlines = new Map<string, THREE.MeshBasicMaterial>();
@@ -210,7 +224,7 @@ export class Toon {
       for (const c of presetColors(preset)) if (!/^#[0-9a-fA-F]{6}$/.test(this.color(c))) throw new Error(`look.json: light preset ${preset.name} names ${c}, which is not in palette.json`);
     }
     this.sky = new Sky(look.sky, (c) => this.color(c));
-    installToonLight({ ...look.shadows, bands: look.bands, bandEdges: look.bandEdges, edgePixels: look.bandEdgePixels }, look.light.presets[0]!.shade);
+    installToonLight({ ...look.shadows, bands: look.bands, bandEdges: look.bandEdges, edgePixels: look.bandEdgePixels, brush: look.shadowBrush }, look.light.presets[0]!.shade);
   }
 
   // The key light, which casts the shadows (sunShadows.ts), and the unit direction toward it for this preset.
@@ -262,8 +276,21 @@ export class Toon {
     const hex = this.color(name);
     let m = this.groundMaterials.get(hex);
     if (!m) {
-      m = groundMaterial(hex, this.ramp, (c) => this.color(c), undefined, this.paint.ground());
+      // No crease lines on the ground: they traced its triangle folds like a wireframe. Its crests get the ink shell
+      // instead (crestInk.ts).
+      m = withoutCreases(groundMaterial(hex, this.ramp, (c) => this.color(c), undefined, this.paint.ground()));
       this.groundMaterials.set(hex, m);
+    }
+    return m;
+  }
+
+  // The ink on the hills' crests and skyline for a ground material made by `ground` (crestInk.ts): a shell drawn
+  // round the terrain tiles, sharing that ground's water level and beach.
+  groundInk(name: string): THREE.MeshBasicMaterial {
+    let m = this.groundInks.get(this.color(name));
+    if (!m) {
+      m = crestInkMaterial(this.ground(name), this.look.outline.crest, (c) => this.color(c));
+      this.groundInks.set(this.color(name), m);
     }
     return m;
   }
@@ -420,8 +447,9 @@ export class Toon {
       }
       if (finishes) {
         const { edgeWear, metal, rubber } = mech;
+        const { highlight } = this.look;
         shader.uniforms.wearColor = { value: new THREE.Color(this.color(edgeWear.color)) };
-        shader.uniforms.glintColor = { value: new THREE.Color(this.color(metal.color)) };
+        shader.uniforms.glintColor = { value: new THREE.Color(this.color(highlight.color)) };
         shader.vertexShader = shader.vertexShader
           .replace("void main() {", "attribute vec2 finish;\nvarying vec2 vFinish;\nvarying vec3 vFinishPos;\nvoid main() {")
           .replace("#include <begin_vertex>", `#include <begin_vertex>
@@ -439,9 +467,10 @@ export class Toon {
             diffuseColor.rgb *= mix(1.0, ${rubber.darken.toFixed(3)}, toonRubber);`)
           .replace("#include <lights_fragment_begin>", `toonEdges = mix(mix(toonEdges, ${vec(metal.bandEdges)}, toonMetal), ${vec(rubber.bandEdges)}, toonRubber);
             toonLevels = mix(mix(toonLevels, ${vec(metal.bands)}, toonMetal), ${vec(rubber.bands)}, toonRubber);
-            toonGlintSize = toonMetal * ${metal.size.toFixed(4)};
+            toonGlintSize = toonMetal * ${highlight.size.toFixed(4)};
+            toonGlintBend = ${highlight.minBendPerMeter.toFixed(3)};
             #include <lights_fragment_begin>`)
-          .replace("#include <opaque_fragment>", `outgoingLight += toonGlint * glintColor * ${metal.glint.toFixed(3)};
+          .replace("#include <opaque_fragment>", `outgoingLight = mix(outgoingLight, glintColor * toonGlintLight, toonGlint * ${highlight.strength.toFixed(3)});
             #include <opaque_fragment>`);
       }
       shader.fragmentShader = fragment;

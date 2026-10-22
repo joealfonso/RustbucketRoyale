@@ -75,7 +75,7 @@ export const groundLook = parseGroundLook(groundJson);
 const f = (n: number) => n.toFixed(4);
 
 // A sin-free hash on whole cell numbers: sin() of large world coordinates differs between graphics cards.
-const GROUND_GLSL = `
+export const GROUND_GLSL = `
   float gHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
   float gNoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -88,6 +88,19 @@ const GROUND_GLSL = `
   // Roughly how many metres past edge a value is (negative before it), from how much it changes across a pixel
   // (change, its fwidth) and how wide a pixel is. The floor stops a nearly level value reading as far from its edge.
   float gPast(float value, float edge, float change, float pixel) { return (value - edge) * pixel / max(change, pixel * 0.001); }`;
+
+// GLSL for `float groundRegionNoise(vec2 gp, float y)`: the big patches' noise at a ground position and height,
+// without the fine brush breakup, which the fragment code adds. Shared with the crest ink (crestInk.ts), which picks
+// the same patch colour per vertex, so a crest is inked in the colour of the ground it rims.
+export function groundRegionGlsl(g: GroundLook): string {
+  const { regions, hills } = g;
+  return `
+  float groundRegionNoise(vec2 gp, float y) {
+    // Hollows lean to dark moss, crests to dry grass: the same patches, pushed by height.
+    float lean = clamp(y / ${f(hills.crest.meters)}, 0.0, 1.0) * ${f(hills.crest.bias)} - clamp(-y / ${f(hills.hollow.meters)}, 0.0, 1.0) * ${f(hills.hollow.bias)};
+    return gNoise(gp * ${f(regions.scale)}) * 0.7 + gNoise(gp * ${f(regions.scale * 2.3)} + 31.0) * 0.3 + lean;
+  }`;
+}
 
 // The ground's fragment code: picks a colour for this spot from the patches, then the bands light it as usual.
 // It also leaves `groundDetailMeters` for the close-range detail (paint/groundDetail.ts): how far into dirt (x) and into
@@ -104,9 +117,7 @@ export function groundShaderCode(g: GroundLook): string {
       float fine = gKeep(1.0 / ${f(breakup.scale)}, pixel);
       vec3 c = diffuseColor.rgb;
       float ragged = (gNoise(gp * ${f(breakup.scale)}) - 0.5) * ${f(breakup.amount)} * fine;
-      // Hollows lean to dark moss, crests to dry grass: the same patches, pushed by height.
-      float lean = clamp(vGroundY / ${f(hills.crest.meters)}, 0.0, 1.0) * ${f(hills.crest.bias)} - clamp(-vGroundY / ${f(hills.hollow.meters)}, 0.0, 1.0) * ${f(hills.hollow.bias)};
-      float n = gNoise(gp * ${f(regions.scale)}) * 0.7 + gNoise(gp * ${f(regions.scale * 2.3)} + 31.0) * 0.3 + ragged + lean;
+      float n = groundRegionNoise(gp, vGroundY) + ragged;
       if (n < ${f(regions.darkMoss.below)}) c = groundDarkMoss;
       else if (n > ${f(regions.dirt.above)}) c = groundDirt;
       else if (n > ${f(regions.dryGrass.above)}) c = groundDryGrass;
@@ -209,7 +220,7 @@ export function groundMaterial(hex: string, ramp: THREE.Texture, color: (name: s
         vGroundUp = normalize(mat3(modelMatrix) * groundNormal).y;`);
     const declarations = Object.keys(colors).map((name) => `uniform vec3 ${name};`).join("\n") + "\nuniform float groundWaterLevel;\nuniform float groundBeach;";
     shader.fragmentShader = shader.fragmentShader
-      .replace("void main() {", `varying vec2 vGroundPos;\nvarying float vGroundY;\nvarying float vGroundUp;\n${declarations}\n${GROUND_GLSL}\nvoid main() {`)
+      .replace("void main() {", `varying vec2 vGroundPos;\nvarying float vGroundY;\nvarying float vGroundUp;\n${declarations}\n${GROUND_GLSL}${groundRegionGlsl(g)}\nvoid main() {`)
       .replace("#include <color_fragment>", `#include <color_fragment>\n${code}`);
     if (detail) addGroundDetail(shader, detail);
   };

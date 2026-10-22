@@ -537,3 +537,6 @@ Map building, `npx tsx scripts/measure-generation.ts` (10 seeds, median / worst 
 
 ### V16a distance and nature (2026-10-21)
 GPU per frame on the M4 at 1600 × 900, median of three interleaved rounds against the build just before. Roster 2.44 → 2.50 ms; small golden 4.94 → 4.62; medium dusk 6.46 → 5.65; medium overcast 6.95 → 6.80. No measurable cost: the far ranges, now shown round the islands, are one draw call of about 7k triangles, and grass went from 48 to 24 triangles a clump with about 29% fewer clumps (cover round the spawn 138k → 63k triangles on small seed 11). Draw calls +6 to 7 (backdrop ink shells).
+
+### V16b line, light and colour (2026-10-21, taken under load)
+Interleaved GPU timing against V16a, M4 at 1600 × 900, while a game was running on the same GPU, so rounds swung up to 2× and only the direction is trustworthy: normal quality about +0.6 to 2 ms in game (first-round pairs: small golden 5.1 → 6.0, medium dusk 4.2 → 4.8, medium overcast 5.2 → 7.3), high about +1 to 3 ms. Candidates: the colour grade (scene drawn to a 4× MSAA target, then one full-screen pass; 8-bit sRGB, about 35 to 40 MB at this size), the terrain crest-ink shells (+4 to 10 draw calls, +11k to 84k triangles), water wakes and glint, sprite rims. To be re-measured when the GPU is free, feature by feature with F1 > Performance > Look features (colour grade, crest ink).

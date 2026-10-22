@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import groundJson from "../../../data/ground.json";
-import { groundMaterial, groundShaderCode, parseGroundLook, setGroundWater } from "./groundMaterial";
+import { groundMaterial, groundRegionGlsl, groundShaderCode, parseGroundLook, setGroundWater } from "./groundMaterial";
 
 const copy = () => JSON.parse(JSON.stringify(groundJson)) as typeof groundJson;
 
@@ -38,7 +38,8 @@ describe("ground look", () => {
   it("bakes the numbers into the shader and keeps the bands and fog", () => {
     const g = parseGroundLook(groundJson);
     const code = groundShaderCode(g);
-    expect(code).toContain(g.regions.scale.toFixed(4));
+    expect(groundRegionGlsl(g)).toContain(g.regions.scale.toFixed(4));
+    expect(code).toContain("groundRegionNoise(gp, vGroundY)");
     expect(code).toContain((g.tracks.gauge / 2).toFixed(4));
     expect(code).not.toContain("sin(dot"); // the hash must not depend on how a graphics card does sin()
     expect(code).toContain(g.hills.rock.rise.toFixed(4));

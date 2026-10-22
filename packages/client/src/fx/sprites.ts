@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { freeze } from "../freeze";
 import { flickerFrame, flipbookFrame, SlotRing, stepped } from "./flipbook";
-import { CELL, COLUMNS, paintSpriteSheet, ROWS } from "./spriteArt";
+import { CELL, COLUMNS, FRAMES, INK_SPAN, paintSpriteNormals, paintSpriteSheet, ROWS } from "./spriteArt";
 
 // One pool of flat toon sprites in one palette, drawn in a single draw call however many are alive: fireballs,
 // smoke puffs, dust, sparks, flames, shockwave rings and scorch marks are all sprites from the painted sheet
@@ -49,9 +49,28 @@ export interface SpriteLook {
   // A hand-drawn outline round the shape and round the holes it dissolves into (the drop-in's effects, gate 16b):
   // its colour, its width as a share of INK_SPAN (0 to 1), and how wide the inked rim of a dissolving hole is (0 to 1).
   ink?: { color: string; width: number; holeWidth: number };
+  // A rim in the pool's own darkest colour at `darken` of its on-screen brightness (gate V16b), so explosions, smoke
+  // and dust carry a line like every outlined thing in the world, never black. `pixels` wide on a 1080 tall screen
+  // at any size or distance, but never more than `maxShare` of the sheet's INK_SPAN, so a far puff is not all rim.
+  rim?: SpriteRim;
+  // Smoke puffs lit by the sun like the world's toon bands (gate V16b): the band comes from the puff's facing toward
+  // `toSun` (read every frame, so a new light preset needs nothing here), split at the world's `bandEdges`, instead
+  // of from the sheet's painted light. Other shapes in the pool keep the sheet's bands.
+  sun?: { toSun: THREE.Vector3; bandEdges: number[] };
 }
 
+export interface SpriteRim { darken: number; pixels: number; holeWidth: number; maxShare: number }
+
 let sheet: THREE.DataTexture | null = null;
+let normals: THREE.DataTexture | null = null;
+function spriteNormals(): THREE.DataTexture {
+  if (normals) return normals;
+  normals = new THREE.DataTexture(paintSpriteNormals(), COLUMNS * CELL, ROWS * CELL, THREE.RGBAFormat);
+  normals.magFilter = THREE.LinearFilter;
+  normals.minFilter = THREE.LinearFilter;
+  normals.needsUpdate = true;
+  return normals;
+}
 function spriteSheet(): THREE.DataTexture {
   if (sheet) return sheet;
   sheet = new THREE.DataTexture(paintSpriteSheet(), COLUMNS * CELL, ROWS * CELL, THREE.RGBAFormat);
@@ -69,6 +88,14 @@ const VERTEX = /* glsl */ `
   attribute float aMode;
   varying vec2 vUv;
   varying vec3 vLook;
+  #ifdef INK_PIXELS
+  uniform float inkScale; // the rim's pixels on a 1080 tall screen, in sheet ink units for a sprite as tall as the screen
+  uniform float inkMax;
+  varying float vInk;
+  #endif
+  #ifdef SUNLIT
+  varying vec2 vSpin;
+  #endif
   #include <fog_pars_vertex>
   void main() {
     vec2 c = position.xy;
@@ -90,6 +117,15 @@ const VERTEX = /* glsl */ `
     }
     vUv = uv;
     vLook = aLook.xyz;
+    #ifdef INK_PIXELS
+    // How much of the screen's height the sprite's width covers, so the rim stays the same number of pixels.
+    float onScreen = aSize.x * projectionMatrix[1][1] / (2.0 * max(-mvPosition.z, 0.01));
+    vInk = min(inkScale / max(onScreen, 1e-4), inkMax);
+    #endif
+    #ifdef SUNLIT
+    // A billboard's sheet is turned by its spin on screen; the puff's facing turns with it.
+    vSpin = aMode < 0.5 ? vec2(k, s) : vec2(1.0, 0.0);
+    #endif
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
   }`;
@@ -101,8 +137,18 @@ const FRAGMENT = /* glsl */ `
   uniform vec3 band2;
   #ifdef INKED
   uniform vec3 inkColor;
-  uniform float inkWidth;
   uniform float holeWidth;
+  #ifdef INK_PIXELS
+  varying float vInk;
+  #else
+  uniform float inkWidth;
+  #endif
+  #endif
+  #ifdef SUNLIT
+  uniform sampler2D facing;
+  uniform vec3 toSun;
+  uniform vec2 sunEdges;
+  varying vec2 vSpin;
   #endif
   varying vec2 vUv;
   varying vec3 vLook;
@@ -112,13 +158,29 @@ const FRAGMENT = /* glsl */ `
     vec2 cell = vec2(mod(frame, ${COLUMNS}.0), floor(frame / ${COLUMNS}.0));
     // Half a pixel in from the cell's edge, so the neighbouring cell never bleeds in.
     vec2 inCell = mix(vec2(0.5 / ${CELL}.0), vec2(1.0 - 0.5 / ${CELL}.0), vUv);
-    vec4 ink = texture2D(sheet, (cell + inCell) / vec2(${COLUMNS}.0, ${ROWS}.0));
+    vec2 sheetUv = (cell + inCell) / vec2(${COLUMNS}.0, ${ROWS}.0);
+    vec4 ink = texture2D(sheet, sheetUv);
     if (ink.a < 0.5 || ink.g < vLook.y) discard;
     float band = floor(ink.r * 3.0 + vLook.z);
+    #ifdef SUNLIT
+    if (frame > ${FRAMES.smoke.first - 0.5} && frame < ${FRAMES.smoke.first + FRAMES.smoke.count - 0.5}) {
+      vec2 painted = texture2D(facing, sheetUv).rg * 2.0 - 1.0;
+      vec2 across = vec2(painted.x * vSpin.x - painted.y * vSpin.y, painted.x * vSpin.y + painted.y * vSpin.x);
+      vec3 normal = vec3(across, sqrt(max(0.0, 1.0 - dot(across, across))));
+      // The world's bands: facing the sun past the upper edge is lit, past the lower edge the middle band, else shade.
+      float toward = dot(normal, normalize((viewMatrix * vec4(toSun, 0.0)).xyz)) * 0.5 + 0.5;
+      band = floor((toward > sunEdges.y ? 0.0 : toward > sunEdges.x ? 1.0 : 2.0) + vLook.z);
+    }
+    #endif
     vec3 color = band < 0.5 ? band0 : band < 1.5 ? band1 : band2;
     #ifdef INKED
     // The outline: near the shape's edge, or at the rim of a hole it is dissolving into (only once it has begun to).
-    if (ink.b < inkWidth || (vLook.y > 0.001 && ink.g < vLook.y + holeWidth)) color = inkColor;
+    #ifdef INK_PIXELS
+    float inkWide = vInk;
+    #else
+    float inkWide = inkWidth;
+    #endif
+    if (ink.b < inkWide || (vLook.y > 0.001 && ink.g < vLook.y + holeWidth)) color = inkColor;
     #endif
     gl_FragColor = vec4(color, 1.0);
     #include <tonemapping_fragment>
@@ -167,12 +229,28 @@ export class SpritePool {
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { sheet: { value: null }, band0: { value: c0 }, band1: { value: c1 }, band2: { value: c2 } }]),
     });
     material.uniforms.sheet!.value = spriteSheet();
+    const defines: Record<string, string> = {};
     if (spriteLook.ink) {
-      material.defines = { INKED: "" };
+      defines.INKED = "";
       material.uniforms.inkColor = { value: new THREE.Color(color(spriteLook.ink.color)) };
       material.uniforms.inkWidth = { value: spriteLook.ink.width };
       material.uniforms.holeWidth = { value: spriteLook.ink.holeWidth };
+    } else if (spriteLook.rim) {
+      const r = spriteLook.rim;
+      defines.INKED = "";
+      defines.INK_PIXELS = "";
+      material.uniforms.inkColor = { value: rimColor(color(spriteLook.colors[2]), r.darken) };
+      material.uniforms.inkScale = { value: rimInkScale(r.pixels) };
+      material.uniforms.inkMax = { value: r.maxShare };
+      material.uniforms.holeWidth = { value: r.holeWidth };
     }
+    if (spriteLook.sun) {
+      defines.SUNLIT = "";
+      material.uniforms.facing = { value: spriteNormals() };
+      material.uniforms.toSun = { value: spriteLook.sun.toSun };
+      material.uniforms.sunEdges = { value: new THREE.Vector2(spriteLook.sun.bandEdges[0], spriteLook.sun.bandEdges[1]) };
+    }
+    material.defines = defines;
     if (spriteLook.layer === "ground") { material.polygonOffset = true; material.polygonOffsetFactor = -2; material.polygonOffsetUnits = -4; }
     this.mesh = new THREE.Mesh(this.geometry, material);
     this.mesh.frustumCulled = false; // the sprites are placed in the shader, so the quad's own bounds mean nothing
@@ -256,6 +334,17 @@ export class SpritePool {
     this.mode[n] = s.mode;
     return n + 1;
   }
+}
+
+// A rim's colour: the darkest band at `darken` of its brightness as the screen shows it, as outlines are inked.
+export function rimColor(hex: string, darken: number): THREE.Color {
+  return new THREE.Color(hex).convertLinearToSRGB().multiplyScalar(darken).convertSRGBToLinear();
+}
+
+// The vertex shader's rim scale: `pixels` on a 1080 tall screen, as a share of the screen's height, in the sheet's
+// ink units (B reaches 1 at INK_SPAN in from the edge, and a sprite is 2 cell units across).
+export function rimInkScale(pixels: number): number {
+  return ((pixels / 1080) * 2) / INK_SPAN;
 }
 
 function blank(): Sprite {

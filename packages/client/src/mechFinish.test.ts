@@ -71,7 +71,7 @@ describe("mech surfaces", () => {
     const kitPaint = toon.ownMaterial("#ffffff", true, "mech", true);
     const shader = patched(kitPaint);
     expect(shader.vertexShader).toContain("attribute vec2 finish;");
-    for (const line of ["wearColor", "toonGlint * glintColor", "toonLevels = mix(mix(toonLevels", "toonEdges = mix(mix(toonEdges", "(1.0 - toonRubber)", "vFinish.x * "]) expect(shader.fragmentShader).toContain(line);
+    for (const line of ["wearColor", "mix(outgoingLight, glintColor * toonGlintLight, toonGlint * ", "toonLevels = mix(mix(toonLevels", "toonEdges = mix(mix(toonEdges", "(1.0 - toonRubber)", "vFinish.x * "]) expect(shader.fragmentShader).toContain(line);
     // Chips first, then rust over them.
     expect(shader.fragmentShader.indexOf("wearColor;")).toBeLessThan(shader.fragmentShader.indexOf("rustDark : rustColor"));
     expect(kitPaint.customProgramCacheKey()).toContain("finish");

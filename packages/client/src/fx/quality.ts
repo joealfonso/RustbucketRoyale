@@ -1,4 +1,5 @@
 import vfxJson from "../../../../data/vfx.json";
+import type { SpriteRim } from "./sprites";
 
 // The effects quality setting (DESIGN.md, VFX: "pooled, capped by data file values, with a low setting"). Each level
 // in data/vfx.json is a set of caps: how many of each pooled effect can be alive, and how much one explosion throws.
@@ -10,7 +11,12 @@ export interface VfxConfig {
   quality: string; // the level a browser starts on
   levels: Record<string, VfxLevel>;
   // Sprites dissolve away between `clearFromMeters` and `clearToMeters` from the camera (fx/sprites.ts).
-  sprites: { growSteps: number; clearFromMeters: number; clearToMeters: number; palettes: Record<string, string[]> };
+  // `rim` is the darkened outline every pool named in `rimmed` draws, and `sunLit` names the pools whose smoke puffs
+  // take the world's toon bands from the sun (fx/sprites.ts, gate V16b).
+  sprites: {
+    growSteps: number; clearFromMeters: number; clearToMeters: number; palettes: Record<string, string[]>;
+    rim: SpriteRim; rimmed: string[]; sunLit: string[];
+  };
 }
 
 const STORE_KEY = "rustbucket.vfxQuality";
@@ -32,6 +38,15 @@ export function parseVfx(raw: unknown): VfxConfig {
   }
   for (const [name, colors] of Object.entries(d.sprites.palettes ?? {})) {
     if (!Array.isArray(colors) || colors.length !== 3) throw new Error(`vfx.json: sprites.palettes.${name} needs three colours, light to dark`);
+  }
+  const r = d.sprites.rim;
+  // darken above 0: a rim is the pool's own dark colour, never black.
+  if (!(r && r.darken > 0 && r.darken <= 1 && r.pixels > 0 && r.holeWidth >= 0 && r.holeWidth <= 1 && r.maxShare > 0 && r.maxShare <= 1)) {
+    throw new Error("vfx.json: sprites.rim needs darken above 0 to 1 (never black), pixels above 0, holeWidth 0 to 1 and maxShare above 0 to 1");
+  }
+  for (const list of ["rimmed", "sunLit"] as const) {
+    const names = d.sprites[list];
+    if (!Array.isArray(names) || !names.every((n) => typeof n === "string" && n in (d.sprites.palettes ?? {}))) throw new Error(`vfx.json: sprites.${list} must name palettes`);
   }
   return d;
 }

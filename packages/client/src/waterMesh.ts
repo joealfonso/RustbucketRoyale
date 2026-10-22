@@ -1,8 +1,9 @@
 import * as THREE from "three";
-import type { Terrain } from "@rustbucket/shared";
+import type { Box, Terrain } from "@rustbucket/shared";
 import { freeze } from "./freeze";
 import { seaRing, seaRingIndex } from "./terrainMesh";
 import { waterLook, type WaterLook } from "./waterLook";
+import { WaterWakes } from "./waterWakes";
 
 // The water surface: one flat mesh at the map's water level over every terrain cell that dips under it, in one draw
 // call. Each corner carries how deep the water is over the ground there (negative where the ground is above it).
@@ -81,7 +82,8 @@ const f = (n: number) => n.toFixed(4);
 // sky's hue on the far water and foam along the bank. Same sin-free hash as the ground, for the same reason: sin()
 // of large world coordinates differs between graphics cards. Every step is hard, so it stays flat toon colour.
 export function waterShaderCode(look: WaterLook["surface"]): string {
-  const { shallow, deep, ragged, streaks, glints, sky, foam } = look;
+  const { shallow, deep, deeper, ragged, streaks, glints, sky, foam, wakes, sunGlint } = look;
+  const ripple2 = sunGlint.ripple;
   const angle = (streaks.angleDegrees * Math.PI) / 180;
   const ripple = foam.ripple;
   const skySteps = sky.steps.map((t) => `if (facing < ${f(t.facingBelow)}) toSky = ${f(t.amount)};`).join("\n      ");
@@ -118,10 +120,13 @@ export function waterShaderCode(look: WaterLook["surface"]): string {
       float swell = 1.0 - abs(2.0 * beat - 1.0);
       bool glint = beat < 1.0 && abs(gl.x) < ${f(glints.lengthMeters / 2)} * swell && abs(gl.y) < ${f(glints.widthMeters / 2)} * swell && pixel < ${f(glints.widthMeters)};
 
-      vec3 c = depth > ${f(deep.aboveMeters)} ? waterDeep : waterMain;
-      float alpha = ${f(look.opacity)};
-      if (depth < ${f(shallow.belowMeters)}) { c = waterShallow; alpha = ${f(shallow.opacity)}; }
-      else if (lit) c = waterStreak;
+      // The depth bands, each edge turning over about a pixel of the depth's change on screen: hard, never stepped.
+      float aa = (abs(dx) + abs(dy)) * ${f(look.bandSoftPixels / 2)} + 1e-5;
+      vec3 c = mix(waterMain, waterDeep, smoothstep(${f(deep.aboveMeters)} - aa, ${f(deep.aboveMeters)} + aa, depth));
+      c = mix(c, waterDeeper, smoothstep(${f(deeper.aboveMeters)} - aa, ${f(deeper.aboveMeters)} + aa, depth));
+      float shoal = 1.0 - smoothstep(${f(shallow.belowMeters)} - aa, ${f(shallow.belowMeters)} + aa, depth);
+      float alpha = mix(${f(look.opacity)}, ${f(shallow.opacity)}, shoal);
+      c = mix(lit ? waterStreak : c, waterShallow, shoal);
 
       // The flatter the look, the more of the sky's hue. The hemisphere light's sky colour is each preset's sky.
       vec3 toEye = cameraPosition - vWaterPos;
@@ -135,6 +140,18 @@ export function waterShaderCode(look: WaterLook["surface"]): string {
       #endif
       if (glint && depth >= ${f(shallow.belowMeters)}) c = waterGlint;
 
+      // The sun's glint: a path of short light dashes on the water running from you toward the sun, as sunlight
+      // glitters off a rippled sea. Painted, not reflected: a band pathDegrees either side of the sun's bearing,
+      // cut from a noise stretched along the streaks where it rises over level, more of it toward the path's middle.
+      vec2 away = wp - cameraPosition.xz;
+      vec2 sunWay = waterSun.xz / max(length(waterSun.xz), 1e-4);
+      float bearing = dot(away, sunWay) / max(length(away), 1e-4);
+      float pathIn = (bearing - ${f(Math.cos((sunGlint.pathDegrees * Math.PI) / 180))}) / ${f(1 - Math.cos((sunGlint.pathDegrees * Math.PI) / 180))};
+      vec2 gr = vec2(sp.x * ${f(ripple2.scale / ripple2.stretch)}, sp.y * ${f(ripple2.scale)}) + vec2(waterTime * ${f(ripple2.driftMetersPerSecond * ripple2.scale)}, 71.0);
+      float dash = wNoise(gr);
+      float dashLevel = mix(1.0, ${f(sunGlint.level)}, clamp(pathIn, 0.0, 1.0));
+      if (waterSunOn > 0.5 && pathIn > 0.0 && depth >= ${f(shallow.belowMeters)} && dash > dashLevel && pixel < ${f(0.5 / ripple2.scale)}) c = waterSunGlint;
+
       // Foam along the bank, and a thin ripple rolling in to it, swelling then thinning as it comes, a little later
       // or sooner along each stretch of bank.
       float wave = fract(waterTime / ${f(ripple.seconds)} + n * ${f(ripple.unevenShare)});
@@ -142,6 +159,33 @@ export function waterShaderCode(look: WaterLook["surface"]): string {
       bool ring = abs(bank - ${f(foam.meters)} - ${f(ripple.fromMeters)} * (1.0 - wave)) < ringHalf && ringHalf * 2.0 > pixel;
       // Never thinner than a pixel, so far off it is a steady light line round the water, not a flicker.
       if (bank < max(${f(foam.meters)}, pixel) || ring) { c = waterFoam; alpha = ${f(foam.opacity)}; }
+
+      // Foam round what stands in the water (waterWakes.ts): the distance to the nearest shape's edge, ragged like
+      // the bank's foam, a band beside it and a ring swelling out from it. Skipped past nearMeters from the camera.
+      #if WATER_WAKES > 0
+      if (waterWakeCount > 0.5 && length(wp - cameraPosition.xz) < ${f(wakes.nearMeters)}) {
+        float edge = 1e4;
+        for (int k = 0; k < WATER_WAKES; k++) {
+          if (float(k) >= waterWakeCount) break;
+          vec4 w = waterWakes[k];
+          float d;
+          if (w.z < 0.0) d = length(wp - w.xy) + w.z;
+          else {
+            float r = min(min(w.z, w.w), ${f(wakes.cornerMeters)});
+            vec2 e = abs(wp - w.xy) - (w.zw - r);
+            d = length(max(e, 0.0)) + min(max(e.x, e.y), 0.0) - r;
+          }
+          edge = min(edge, d);
+        }
+        // A finer, drifting noise than the bank's: these shapes are only a metre or two across.
+        float wn = wNoise(wp * ${f(wakes.raggedScale)} + waterTime * 0.3);
+        edge += (wn - 0.5) * ${f(wakes.raggedMeters * 2)};
+        float wakeBeat = fract(waterTime / ${f(wakes.ring.seconds)});
+        float wakeHalf = ${f(wakes.ring.widthMeters / 2)} * (1.0 - wakeBeat);
+        bool wakeRing = abs(edge - ${f(wakes.meters)} - ${f(wakes.ring.fromMeters)} * wakeBeat) < wakeHalf && wakeHalf * 2.0 > pixel && wn > ${f(wakes.ring.gapsBelow)};
+        if ((edge > -0.05 && edge < max(${f(wakes.meters)}, pixel)) || wakeRing) { c = waterFoam; alpha = ${f(foam.opacity)}; }
+      }
+      #endif
       diffuseColor.rgb = c;
       diffuseColor.a = alpha;
     }`;
@@ -158,7 +202,23 @@ const WATER_GLSL = `
 // The water's material: the toon bands (so it is lit like the ground under every light preset, and fogged the same),
 // no rim, no gloss, the colour and see-through picked per spot. Mostly a touch see-through, so wading legs sink into
 // it; more so in the shallows, where the muddy bed shows and the bank meets it softly.
-export function waterMaterial(look: WaterLook["surface"], ramp: THREE.Texture, color: (name: string) => string, time: { value: number }): THREE.MeshToonMaterial {
+// `live` holds what changes while playing: the clock, the sun's direction and whether it glints, and the foam shapes.
+export interface WaterLive {
+  time: { value: number };
+  sun: { value: THREE.Vector3 };
+  sunOn: { value: number };
+  wakes: { value: Float32Array };
+  wakeCount: { value: number };
+}
+
+export function waterLive(maxWakes: number): WaterLive {
+  return {
+    time: { value: 0 }, sun: { value: new THREE.Vector3(0, 1, 0) }, sunOn: { value: 0 },
+    wakes: { value: new Float32Array(Math.max(maxWakes, 1) * 4) }, wakeCount: { value: 0 },
+  };
+}
+
+export function waterMaterial(look: WaterLook["surface"], ramp: THREE.Texture, color: (name: string) => string, live: WaterLive): THREE.MeshToonMaterial {
   const seeThrough = Math.min(look.opacity, look.shallow.opacity, look.foam.opacity) < 1;
   const m = new THREE.MeshToonMaterial({ color: color(look.main), gradientMap: ramp, transparent: seeThrough, opacity: look.opacity });
   // Pulled a hair toward the camera, so where it meets the shore the water wins instead of flickering with the ground.
@@ -167,12 +227,16 @@ export function waterMaterial(look: WaterLook["surface"], ramp: THREE.Texture, c
   m.polygonOffsetUnits = -1;
   const colors: Record<string, string> = {
     waterMain: look.main, waterShallow: look.shallow.color, waterDeep: look.deep.color, waterStreak: look.streaks.color,
-    waterGlint: look.glints.color, waterFoam: look.foam.color,
+    waterGlint: look.glints.color, waterFoam: look.foam.color, waterDeeper: look.deeper.color, waterSunGlint: look.sunGlint.color,
   };
   const code = waterShaderCode(look);
   m.onBeforeCompile = (shader) => {
     for (const [name, value] of Object.entries(colors)) shader.uniforms[name] = { value: new THREE.Color(color(value)) };
-    shader.uniforms.waterTime = time;
+    shader.uniforms.waterTime = live.time;
+    shader.uniforms.waterSun = live.sun;
+    shader.uniforms.waterSunOn = live.sunOn;
+    shader.uniforms.waterWakes = live.wakes;
+    shader.uniforms.waterWakeCount = live.wakeCount;
     shader.vertexShader = shader.vertexShader
       .replace("void main() {", "attribute float waterDepth;\nvarying float vWaterDepth;\nvarying vec3 vWaterPos;\nvoid main() {")
       .replace("#include <begin_vertex>", `#include <begin_vertex>
@@ -180,7 +244,7 @@ export function waterMaterial(look: WaterLook["surface"], ramp: THREE.Texture, c
         vWaterPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
     const declarations = Object.keys(colors).map((name) => `uniform vec3 ${name};`).join("\n");
     shader.fragmentShader = shader.fragmentShader
-      .replace("void main() {", `varying float vWaterDepth;\nvarying vec3 vWaterPos;\nuniform float waterTime;\n${declarations}\n${WATER_GLSL}\nvoid main() {`)
+      .replace("void main() {", `#define WATER_WAKES ${look.wakes.max}\nvarying float vWaterDepth;\nvarying vec3 vWaterPos;\nuniform float waterTime;\nuniform vec3 waterSun;\nuniform float waterSunOn;\nuniform vec4 waterWakes[${Math.max(look.wakes.max, 1)}];\nuniform float waterWakeCount;\n${declarations}\n${WATER_GLSL}\nvoid main() {`)
       .replace("#include <color_fragment>", `#include <color_fragment>\n${code}`);
   };
   m.customProgramCacheKey = () => "toon-water";
@@ -190,28 +254,45 @@ export function waterMaterial(look: WaterLook["surface"], ramp: THREE.Texture, c
 // Streaks, glints and ripples drift for this long and then start over, so the time stays small enough for float precision.
 const TIME_WRAP_SECONDS = 3600;
 
-// The water of the current map. The material is made once; a new map only swaps the geometry.
+// The water of the current map. The material is made once; a new map only swaps the geometry and the boxes standing
+// in it. Each frame: `wakes.begin()`, `wakes.addCircle` for every wading mech, then `update`.
 export class WaterMesh {
   readonly mesh: THREE.Mesh;
-  private time = { value: 0 };
+  readonly wakes: WaterWakes;
+  private live: WaterLive;
 
-  constructor(scene: THREE.Scene, look: WaterLook["surface"], ramp: THREE.Texture, color: (name: string) => string, private seaMeters = waterLook.sea.outMeters) {
-    this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), waterMaterial(look, ramp, color, this.time));
+  constructor(scene: THREE.Scene, private look: WaterLook["surface"], ramp: THREE.Texture, color: (name: string) => string, private seaMeters = waterLook.sea.outMeters) {
+    this.live = waterLive(look.wakes.max);
+    this.wakes = new WaterWakes(look.wakes.max, look.wakes.nearMeters);
+    if (look.wakes.max > 0) this.live.wakes.value = this.wakes.shapes; // with none, the uniform keeps one unused shape
+    this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), waterMaterial(look, ramp, color, this.live));
     this.mesh.visible = false;
     this.mesh.renderOrder = 1; // after the opaque world, like any see-through surface
     freeze(this.mesh);
     scene.add(this.mesh);
   }
 
-  // The map's terrain, or null for none (the range). Dry maps draw nothing.
-  setTerrain(terrain: Terrain | null): void {
+  // The map's terrain, or null for none (the range), and its boxes, for the foam round those standing in the water.
+  // Dry maps draw nothing.
+  setTerrain(terrain: Terrain | null, boxes: readonly Box[] = []): void {
     this.mesh.geometry.dispose();
     const geometry = terrain ? waterGeometry(terrain, this.seaMeters) : null;
     this.mesh.geometry = geometry ?? new THREE.BufferGeometry();
     this.mesh.visible = geometry !== null;
+    this.wakes.setStill(geometry ? boxes : [], terrain);
   }
 
-  update(dt: number): void {
-    this.time.value = (this.time.value + dt) % TIME_WRAP_SECONDS;
+  // The light preset's sun: `toSun` is kept and read every frame (Toon changes it in place); `keyShadow` is how firm
+  // its shadows are, and a hazy sun leaves no glint.
+  useSun(toSun: THREE.Vector3, keyShadow: number): void {
+    this.live.sun.value = toSun;
+    this.live.sunOn.value = keyShadow >= this.look.sunGlint.minSunShadow ? 1 : 0;
+  }
+
+  // The clock, and the frame's foam shapes (after the mechs were added) with the nearest still ones round the camera.
+  update(dt: number, cameraX: number, cameraZ: number): void {
+    this.live.time.value = (this.live.time.value + dt) % TIME_WRAP_SECONDS;
+    this.wakes.finish(cameraX, cameraZ);
+    this.live.wakeCount.value = this.wakes.count;
   }
 }

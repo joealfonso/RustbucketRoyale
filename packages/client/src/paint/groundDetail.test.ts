@@ -32,7 +32,7 @@ describe("ground detail chunk", () => {
     expect(shader.vertexShader).toContain("vDetailPos = (modelMatrix * detailPos).xyz;");
     const code = shader.fragmentShader;
     expect(code.indexOf("detailRead(")).toBeLessThan(code.indexOf("#include <emissivemap_fragment>"));
-    expect(material.customProgramCacheKey()).toBe("toon-ground-ground-detail");
+    expect(material.customProgramCacheKey()).toBe("toon-ground-ground-detail-no-crease");
   });
 
   it("reads the tile at two sizes, each with one more read only near a cell edge: 2 reads a pixel, 4 at most", () => {

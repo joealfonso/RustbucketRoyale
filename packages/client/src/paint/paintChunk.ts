@@ -139,6 +139,9 @@ function fragmentCode(edges: boolean): string {
         float paintAt = paintLayer + paintVariant * ${SURFACE_LAYERS.length}.0 + min(paintVariant, 1.0);
         vec2 paintSample = paintTurn * (paintT - paintCell - 0.5) + 0.5 + paintStart;
         vec4 paint = textureGrad(paintAtlas, vec3(paintSample, paintAt), paintTurn * paintGx / paintTile, paintTurn * paintGy / paintTile);
+        // The brush marks again, for the shadow band only (toonLight.ts): fixed to the surface, so they never swim.
+        toonBrush = paint.r - 0.5;
+        toonBrushNear = paintNear;
         float paintCellShade = (paintHash(paintId + 47.9) - 0.5) * 2.0 * paintCellTone;
         vec3 c = diffuseColor.rgb * (1.0 + paintCellShade * paintNear) * (1.0 + (paint.r - 0.5) * 2.0 * paintStrength.x * paintNear);
         float rust = smoothstep(0.45, 0.55, paint.g) * mix(1.0, paintTopRust, paintTop) * paintStrength.y * paintNear;

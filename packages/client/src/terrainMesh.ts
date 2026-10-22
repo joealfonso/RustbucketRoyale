@@ -222,8 +222,10 @@ export class TerrainMeshes {
   private checkedAt = new THREE.Vector3(Infinity, 0, 0);
   private show = (node: TerrainNode) => { node.mesh!.visible = true; };
   private seabed: THREE.Mesh | null = null;
+  private inks: THREE.Mesh[] = [];
 
-  constructor(private scene: THREE.Scene, private terrain: Terrain, material: THREE.Material, private look: TerrainMeshLook) {
+  // `ink`: the crest ink shell (crestInk.ts), drawn with each tile and switched with it; the flat seabed has none.
+  constructor(private scene: THREE.Scene, private terrain: Terrain, material: THREE.Material, private look: TerrainMeshLook, ink: THREE.Material | null = null) {
     const tileCells = Math.max(1, Math.round(look.tileMeters / terrain.cell));
     const cells = terrain.corners - 1;
     this.lod = terrain.meters >= look.lod.fromMapMeters && look.lod.maxStride > 1;
@@ -233,6 +235,11 @@ export class TerrainMeshes {
       if (node.stride <= maxStride) {
         node.mesh = new THREE.Mesh(terrainGeometry(terrain, node, this.lod), material);
         node.mesh.visible = false;
+        if (ink) {
+          const shell = new THREE.Mesh(node.mesh.geometry, ink);
+          node.mesh.add(shell);
+          this.inks.push(shell);
+        }
         this.meshes.push(node.mesh);
         this.group.add(node.mesh);
       }
@@ -261,6 +268,11 @@ export class TerrainMeshes {
   // Small maps are drawn at full detail everywhere: stride 1 only.
   private get maxStride(): number {
     return this.lod ? this.look.lod.maxStride : 1;
+  }
+
+  // The crest ink on or off, for F1's look features.
+  setInk(on: boolean): void {
+    for (const shell of this.inks) shell.visible = on;
   }
 
   // How many tiles are switched on, for tests and the performance notes.

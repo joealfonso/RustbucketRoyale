@@ -20,8 +20,9 @@
   "outline": {
     "darken": 0.3,
     "mechDarken": 0.22,
-    "world": { "pixels": 2.2, "minMeters": 0.004, "maxMeters": 0.3, "thinFromMeters": 60, "thinToMeters": 220, "thinShare": 0.5 },
-    "mech": { "pixels": 2.6, "minMeters": 0.004, "maxMeters": 0.2, "thinFromMeters": 60, "thinToMeters": 220, "thinShare": 0.5 }
+    "world": { "pixels": 2.4, "minMeters": 0.004, "maxMeters": 0.3, "thinFromMeters": 60, "thinToMeters": 220, "thinShare": 0.5 },
+    "mech": { "pixels": 2.8, "minMeters": 0.004, "maxMeters": 0.2, "thinFromMeters": 60, "thinToMeters": 220, "thinShare": 0.5 },
+    "crest": { "pixels": 2.4, "darken": 0.45, "minMeters": 0.01, "maxMeters": 2, "thinFromMeters": 150, "thinToMeters": 600, "thinShare": 0.6 }
   },
   "light": {
     "presets": [
@@ -244,11 +245,32 @@
     "ink": { "darken": 0.5, "pixels": 1.6 },
     "outline": { "pixels": 1.8, "minMeters": 0.05, "maxMeters": 8, "thinFromMeters": 300, "thinToMeters": 1200, "thinShare": 0.7 }
   },
+  "grade": {
+    "presets": {
+      "golden afternoon": {
+        "mids": { "saturation": 0.18, "center": 0.45, "width": 0.35 },
+        "shadows": { "tint": "#3E5A80", "amount": 0.35, "lift": 0.04, "upTo": 0.35 },
+        "highlights": { "tint": "warmLight", "amount": 0.25, "from": 0.6 }
+      },
+      "hazy dusk": {
+        "mids": { "saturation": 0.16, "center": 0.42, "width": 0.35 },
+        "shadows": { "tint": "#4A5080", "amount": 0.35, "lift": 0.04, "upTo": 0.35 },
+        "highlights": { "tint": "duskSun", "amount": 0.2, "from": 0.6 }
+      },
+      "overcast": {
+        "mids": { "saturation": 0.4, "center": 0.45, "width": 0.45 },
+        "shadows": { "tint": "#3E5A80", "amount": 0.45, "lift": 0, "upTo": 0.4 },
+        "highlights": { "tint": "warmLight", "amount": 0.4, "from": 0.5 }
+      }
+    }
+  },
   "mech": {
     "normals": { "smoothAngleDegrees": 50, "bigShare": 0.4, "wearWidthMeters": 0.09 },
     "edgeWear": { "color": "#8E979A", "cover": 0.4, "scale": 14, "rustFirst": 0.3, "fade": { "startMeters": 14, "endMeters": 35 } },
-    "metal": { "glint": 0.55, "size": 0.05, "color": "warmLight", "bands": [0.24, 0.8, 1.12], "bandEdges": [0.5, 0.78] },
+    "metal": { "bands": [0.24, 0.8, 1.12], "bandEdges": [0.5, 0.78] },
     "rubber": { "darken": 0.8, "bands": [0.3, 0.5, 0.62], "bandEdges": [0.5, 0.68] }
   },
-  "crease": { "onAtQuality": ["high"], "darken": 0.55, "threshold": 0.6, "stepShare": 0.02, "fade": { "startMeters": 25, "endMeters": 60 } }
+  "crease": { "onAtQuality": ["high"], "darken": 0.55, "pixels": 1.6, "threshold": 0.6, "taper": 0.15, "stepShare": 0.02, "fade": { "startMeters": 25, "endMeters": 60 } },
+  "shadowBrush": { "strength": 0.08, "reach": 0.05 },
+  "highlight": { "strength": 0.85, "size": 0.25, "color": "warmLight", "minBendPerMeter": 2 }
 }

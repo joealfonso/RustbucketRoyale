@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { Terrain } from "@rustbucket/shared";
 import waterJson from "../../../data/water.json";
-import { waterGeometry, waterMaterial, waterShaderCode } from "./waterMesh";
+import { waterGeometry, waterLive, waterMaterial, waterShaderCode } from "./waterMesh";
 import { parseWaterLook } from "./waterLook";
 
 // A 40 m square with a round pond in the middle: corners within 10 m of the centre are 1.5 m down, the water
@@ -132,11 +132,29 @@ describe("water look", () => {
     expect(code).toContain("discard");
     expect(code).not.toContain("sin(dot");
     expect(code).not.toMatch(/\bflat\b/); // a reserved word in GLSL ES 3
-    const m = waterMaterial(look.surface, new THREE.Texture(), (c) => c, { value: 0 });
+    const m = waterMaterial(look.surface, new THREE.Texture(), (c) => c, waterLive(look.surface.wakes.max));
     expect(m).toBeInstanceOf(THREE.MeshToonMaterial);
     expect(m.fog).toBe(true);
     expect(m.gradientMap).toBeTruthy();
     expect(m.opacity).toBe(look.surface.opacity);
     expect(m.transparent).toBe(true); // the shallows are see-through even if the rest is not
+  });
+
+  it("steps down in depth bands, glints toward the sun and foams round what stands in it", () => {
+    const code = waterShaderCode(look.surface);
+    expect(look.surface.deeper.aboveMeters).toBeGreaterThan(look.surface.deep.aboveMeters);
+    expect(code).toContain(look.surface.deeper.aboveMeters.toFixed(4));
+    expect(code).toContain("waterSun");
+    expect(code).toContain("waterWakes[k]");
+    expect(code).not.toMatch(/pow\(/); // a hard shape, no specular falloff
+    const bad = JSON.parse(JSON.stringify(waterJson)) as typeof waterJson;
+    bad.surface.deeper.aboveMeters = bad.surface.deep.aboveMeters;
+    expect(() => parseWaterLook(bad)).toThrow(/deeper/);
+    const wakes = JSON.parse(JSON.stringify(waterJson)) as typeof waterJson;
+    wakes.surface.wakes.max = 1.5;
+    expect(() => parseWaterLook(wakes)).toThrow(/wakes/);
+    const glint = JSON.parse(JSON.stringify(waterJson)) as typeof waterJson;
+    glint.surface.sunGlint.pathDegrees = 0;
+    expect(() => parseWaterLook(glint)).toThrow(/sunGlint/);
   });
 });

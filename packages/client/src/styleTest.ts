@@ -18,6 +18,7 @@ import { kickFor } from "./recoil";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import { SunShadows, castShadows } from "./sunShadows";
 import { CreasePass } from "./creasePass";
+import { GradePass, parseGrade } from "./grade";
 import mechKitsJson from "../../../data/mechKits.json";
 import { loadKit, parseKits, type LoadedKit } from "./mechKit";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -73,6 +74,10 @@ onVfxQuality(() => sunShadows.setQuality(vfxQuality()));
 // Crease lines at the effects levels that draw them, as in the game.
 const crease = new CreasePass(lookConfig.crease, vfxQuality());
 onVfxQuality(() => crease.setQuality(vfxQuality()));
+// The colour grade per light preset, as in the game (grade.ts).
+const grade = new GradePass(parseGrade((lookJson as { grade?: unknown }).grade, toon.presets.map((p) => p.name)), (c) => toon.color(c));
+grade.usePreset(toon.presets[preset]!.name);
+const drawScene = () => crease.render(renderer, scene, camera);
 
 // Ground, then the chunk with its middle on the origin.
 const ground = new THREE.Mesh(new THREE.BoxGeometry(600, 1, 600), toon.ground(palette.world.ground));
@@ -272,7 +277,7 @@ function fireAtRange(alt = false): void {
 // a mortar shell's and a barrel's; J switches the roster's jets on and off (off drops them, for the landing puff);
 // K dashes them; V switches the effects quality. The damage row sparks and smokes as in play.
 const explosionFx = parseExplosionFx(explosionFxJson);
-const fxSprites = new FxSprites(scene, (c) => toon.color(c), explosionFx.scorch);
+const fxSprites = new FxSprites(scene, (c) => toon.color(c), explosionFx.scorch, { toSun: toon.toSun, bandEdges: lookConfig.bandEdges });
 const fxChunks = new Debris(scene, toon, mostOf(vfxConfig, "debris"), () => vfxLevel().debris ?? 0, explosionFx.chunks);
 const explosions = new Explosions(scene, fxSprites, fxChunks, explosionFx, (c) => toon.color(c));
 const thrusters = new Thrusters(fxSprites, parseThrusterFx(thrusterFxJson));
@@ -436,7 +441,7 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "KeyQ") turn -= 0.3;
   if (e.code === "KeyE") turn += 0.3;
   if (e.code === "KeyW") walk = (walk + 1) % WALKS.length;
-  if (e.code === "KeyL") { preset = (preset + 1) % toon.presets.length; toon.useLight(toon.presets[preset]!); }
+  if (e.code === "KeyL") { preset = (preset + 1) % toon.presets.length; toon.useLight(toon.presets[preset]!); grade.usePreset(toon.presets[preset]!.name); }
   if (e.code === "KeyR") rosterFiring = true;
   if (e.code === "KeyY") kickRoster("railShot");
   if (e.code === "KeyH") sensorDamage = (sensorDamage + 1) % SENSOR_DAMAGE.length;
@@ -462,7 +467,7 @@ renderer.setAnimationLoop(() => {
   shotFx.draw(camera, fxDt);
   updateRange(fxDt);
   sunShadows.follow(camera);
-  crease.render(renderer, scene, camera);
+  grade.render(renderer, drawScene);
 });
 
 // ---- Gate 13c (client): the Junk Titan's moves. Key I stands a live Titan beside the roster, past the scale Titan

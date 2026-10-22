@@ -49,6 +49,7 @@ import type { DebugPanel } from "./debugPanel";
 import { FrameTimes } from "./frameTimes";
 import { FeatureCost } from "./featureCost";
 import { CreasePass } from "./creasePass";
+import { GradePass, parseGrade } from "./grade";
 import { GpuTimer } from "./gpuTimer";
 import { Crt, parseCrt } from "./crt";
 import crtJson from "../../../data/crt.json";
@@ -289,6 +290,9 @@ const toon = new Toon(lookConfig, palette);
 const forcedLook = offline ? params.get("look") : null;
 const scene = new THREE.Scene();
 toon.light(scene, toon.presetFor(map.seed, forcedLook));
+// The colour grade per light preset (V16b, grade.ts), over the whole frame and under the HTML HUD.
+const grade = new GradePass(parseGrade((lookJson as { grade?: unknown }).grade, toon.presets.map((p) => p.name)), (c) => toon.color(c));
+grade.usePreset(toon.presetFor(map.seed, forcedLook).name);
 toon.setGround(map.terrain);
 // Real sun shadows near the camera (V7a, sunShadows.ts), their cost following the F1 "Effects quality" switch.
 const sunShadows = new SunShadows(renderer, toon.sun, toon.toSun, lookConfig.shadows, vfxQuality());
@@ -298,15 +302,27 @@ if (params.has("overview")) scene.fog = null;
 let mapMeshes = new MapMeshes(scene, map, toon);
 // The hills (data/ground.json mesh), in the ground's toon look. The range has none: its floor is a box.
 const terrainLook = parseTerrainMeshLook(groundJson.mesh);
-const makeTerrain = () => (map.terrain ? new TerrainMeshes(scene, map.terrain, toon.ground(palette.world.ground), terrainLook) : null);
+let crestInkShown = true;
+const makeTerrain = () => {
+  if (!map.terrain) return null;
+  const meshes = new TerrainMeshes(scene, map.terrain, toon.ground(palette.world.ground), terrainLook, toon.groundInk(palette.world.ground));
+  meshes.setInk(crestInkShown);
+  return meshes;
+};
 let terrainMeshes = makeTerrain();
 // The water over the flooded low ground (data/water.json), and the ground under and round it soaked to mud.
 const water = new WaterMesh(scene, waterLook.surface, toon.bands, (c) => toon.color(c));
 const showWater = () => {
-  water.setTerrain(map.terrain);
+  water.setTerrain(map.terrain, map.boxes);
+  water.useSun(toon.toSun, toon.presetFor(map.seed, forcedLook).key.shadow);
   setGroundWater(toon.ground(palette.world.ground), map.terrain?.waterLevel ?? null);
 };
 showWater();
+// Foam round a mech wading in the water (V16b). Made once, called for every mech each frame.
+const wakeAround = (model: MechModel) => {
+  const p = model.group.position;
+  if (model.group.visible && wadingAt(map.terrain, p.x, p.y, p.z)) water.wakes.addCircle(p.x, p.z, waterLook.surface.wakes.mechMeters);
+};
 // Near you, map boxes are drawn as junkyard models of their kind and open ground gets scattered junk (data/dressing.json).
 const dressingConfig = { ...dressingJson, chunkMeters: chunksJsonForDressing.size };
 const makeDressing = () => new Dressing(scene, toon, map, mapMeshes, BUILDERS, scatter, dressingConfig);
@@ -342,7 +358,7 @@ const treeAt = { x: 0, y: 0, z: 0 };
 // Effects (V5a): shared sprite and chunk pools, sized for the most generous quality level in data/vfx.json and
 // capped by the active one; explosions, jets and prop breaks draw from them.
 const explosionFx = parseExplosionFx(explosionFxJson);
-const fxSprites = new FxSprites(scene, (c) => toon.color(c), explosionFx.scorch);
+const fxSprites = new FxSprites(scene, (c) => toon.color(c), explosionFx.scorch, { toSun: toon.toSun, bandEdges: lookConfig.bandEdges });
 const chunks = new Debris(scene, toon, mostOf(vfxConfig, "debris"), () => vfxLevel().debris ?? 0, explosionFx.chunks);
 const explosions = new Explosions(scene, fxSprites, chunks, explosionFx, (c) => toon.color(c));
 chunks.setTerrain(map.terrain);
@@ -754,11 +770,15 @@ const gpuTimer = new GpuTimer(renderer.getContext() as WebGL2RenderingContext);
 let coverShown = true;
 const crease = new CreasePass(lookConfig.crease, vfxQuality());
 onVfxQuality(() => crease.setQuality(vfxQuality()));
+// The frame's drawing, made once: the grade runs it into its own target.
+const drawScene = () => crease.render(renderer, scene, rig.camera);
 const lookFeatures = [
+  { name: "colour grade", get on() { return grade.enabled; }, set: (on: boolean) => { grade.enabled = on; } },
   { name: "sun shadows", set: (on: boolean) => sunShadows.setEnabled(on) },
   { name: "painted marks", set: (on: boolean) => toon.paint.setShown(on) },
   { name: "ground cover", set: (on: boolean) => { coverShown = on; } },
   { name: "crease lines", get on() { return crease.enabled; }, set: (on: boolean) => { crease.enabled = on; } },
+  { name: "crest ink", set: (on: boolean) => { crestInkShown = on; terrainMeshes?.setInk(on); } },
 ];
 const featureCost = new FeatureCost(lookFeatures, 2, 3);
 const gpuSummary = { median: 0, worst: 0 };
@@ -908,6 +928,7 @@ function swapMap(newSeed: number, newTier: string): void {
   treeView.dispose();
   map = buildPlayMap(newTier, newSeed, mechStats);
   toon.useLight(toon.presetFor(newSeed, forcedLook));
+  grade.usePreset(toon.presetFor(newSeed, forcedLook).name);
   toon.setGround(map.terrain);
   mapMeshes = new MapMeshes(scene, map, toon);
   terrainMeshes?.dispose();
@@ -1527,7 +1548,10 @@ function frame(now: number): void {
   remotes.forEachModel(moveGuns);
   explosions.update(fxTime);
   chunks.update(fxTime);
-  water.update(frameTime);
+  water.wakes.begin();
+  wakeAround(ownModel);
+  remotes.forEachModel(wakeAround);
+  water.update(frameTime, rig.camera.position.x, rig.camera.position.z);
   mortarWarnings.update(frameTime);
 
   // A quick widening of the view sells the dash. The fraction runs from 1 at the start of a dash to 0 at its end.
@@ -1710,7 +1734,7 @@ function frame(now: number): void {
   sunShadows.follow(rig.camera);
   if (dressing.cover) dressing.cover.group.visible = coverShown;
   gpuTimer.begin();
-  crease.render(renderer, scene, rig.camera);
+  grade.render(renderer, drawScene);
   gpuTimer.end();
   featureCost.tick(frameTime, gpuTimer.times, gpuSummary);
   frameMs.record(frameTime * 1000);
