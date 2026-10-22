@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createShot,
-  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, upgradeScale, itemUpgrade, itemArmorZone, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
+  parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, type BotDifficulty, upgradeScale, itemUpgrade, itemArmorZone, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
   FIRE_NONE, FIRE_SECONDARY, chargeShare, createAltFireState, createAltShot, stepAltFire, flightSteps, reelPoint, SURFACE_NUDGE, type HarpoonMessage, type RivetMessage,
   createRayHit, parseDropsConfig, parseTitanConfig, DROP_BALL, DROP_BURNING, DROP_HANGING, DROP_NONE, dropping, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot, type WeaponStats,
 } from "@rustbucket/shared";
@@ -33,7 +33,7 @@ import mechKitsJson from "../../../data/mechKits.json";
 import rosterJson from "../../../data/roster.json";
 import abilitiesJson from "../../../data/abilities.json";
 import { savedMech } from "./mechPicker";
-import { rejoinQuery, serverQuery } from "./roomLinks";
+import { playSearch, rejoinQuery, serverQuery } from "./roomLinks";
 import gaitJson from "../../../data/gait.json";
 import { parseGait, type GaitInput } from "./gait";
 import { footInWorld, walkMech } from "./mechWalk";
@@ -1123,8 +1123,11 @@ const showAbilityMoment = (a: AbilityMessage) => {
   else if (!own) showAbilityStart(a.kind, a.x, a.y, a.z);
 };
 net.onPropDestroyed = propDestroyed;
+// The room as last heard, for the new-match key while you watch (it only shows when you are the only person in it).
+let roomNow: { players: number; tier: string; difficulty: BotDifficulty } = { players: 1, tier: map.tier, difficulty: "mixed" };
 net.onRoom = (r) => {
   const wasCountdown = progress.state === "countdown";
+  roomNow = r;
   hostId = r.hostId;
   if (r.seed !== map.seed || r.tier !== map.tier) swapMap(r.seed, r.tier);
   ringView.setSchedule(r.ring);
@@ -1562,6 +1565,13 @@ function frame(now: number): void {
   rig.setFovKick(mech.dashTime > 0 ? mech.dashTime / mechStats.dashSeconds : 0, frameTime);
   // A knocked out player (or someone who arrived mid match) watches a mech that is still standing.
   const spectating = progress.state === "active" && health.dead;
+  // Knocked out against bots alone: N starts a fresh match now instead of watching this one out. Practice reloads
+  // its own address; a room starts a new one of the same size and difficulty.
+  const canRestart = spectating && roomNow.players === 1;
+  if (canRestart && input.wasPressed("KeyN")) {
+    if (practice) location.reload();
+    else location.search = playSearch(roomNow.tier, roomNow.difficulty);
+  }
   let viewX = x, viewY = y, viewZ = z;
   if (replaying) {
     viewX = killReplay.focus.x; viewY = killReplay.focus.y; viewZ = killReplay.focus.z;
@@ -1723,7 +1733,7 @@ function frame(now: number): void {
   }
   // While the kill replay is on, the knockout card and the REPLAY tag say what is going on, not "Watching X".
   statusText.textContent = spectating && !killReplay.busy
-    ? `${myPlace ? `You placed ${myPlace}. ` : ""}${spectateId ? `Watching ${name(spectateId)}. Click to switch.` : "Nobody left to watch."}`
+    ? `${myPlace ? `You placed ${myPlace}. ` : ""}${spectateId ? `Watching ${name(spectateId)}. Click to switch.` : "Nobody left to watch."}${canRestart ? " N: new match." : ""}`
     : health.dead && progress.state !== "active" ? `Destroyed. Back in ${Math.ceil(health.respawnIn)}...` : "";
   fuelBar.classList.toggle("locked", mech.fuel.locked);
   staminaBar.classList.toggle("locked", mech.stamina.locked);
