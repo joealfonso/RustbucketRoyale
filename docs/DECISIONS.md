@@ -477,3 +477,6 @@ The water steps down in four bands (shallow, main, deep, and `deeper` past 2.2 m
 
 ## 2026-10-21: Shared effect sprites take a rim and the world's light (V16b)
 In 16b the drop-in's sprites were inked in pools of their own so explosions and damage smoke kept their look. Since V14 every thing in the world has an outline, so un-inked fire and smoke were the only shapes without one and read as pasted in. The shared fire, smoke, dust and decoy pools now draw a rim in their own darkest band at 62% of its screen brightness (never black), about 1.6 pixels wide on a 1080 tall screen at any distance (vfx.json `sprites.rim`, `rimmed`); the drop-in's heavier comic ink is unchanged, so it still reads as its own moment. Smoke and dust puffs (`sunLit`) are lit by the sun with the world's band edges, from a second small sheet holding each puff's facing, instead of from the sheet's painted upper left, which turned with each puff's random spin. Sparks, splashes and scorch marks are unchanged.
+
+## 2026-10-22: Magnet Harpoon removed (Joseph: get rid of the grapple and pull weapon)
+The grapple and yank added a second movement system (server-driven pulls the client had to book and predict) that Joseph did not want in the game. It went whole: the pull fields left the snapshot, so the format is 4 bytes smaller and both ends must restart together.

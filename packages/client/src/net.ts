@@ -1,4 +1,4 @@
-import { SnapshotMemory, decodeServerBinary, encodeInput, type RejoinMessage, type AbilityMessage, type ExplodeMessage, type TitanMessage, type RivetMessage, type HarpoonMessage, type HurtMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
+import { SnapshotMemory, decodeServerBinary, encodeInput, type RejoinMessage, type AbilityMessage, type ExplodeMessage, type TitanMessage, type RivetMessage, type HurtMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
 
 type SnapshotMessage = Extract<ServerMessage, { t: "snapshot" }>;
 type ShotMessage = Extract<ServerMessage, { t: "shot" }>;
@@ -49,7 +49,6 @@ export class NetClient {
   onAbility?: (moment: AbilityMessage) => void;
   onTitan?: (moment: TitanMessage) => void; // the Junk Titan's stomps, thrown cars and fall (gate 13c)
   onRivet?: (rivet: RivetMessage) => void; // a rivet stuck, or someone detonating theirs (gate 18b)
-  onHarpoon?: (harpoon: HarpoonMessage) => void; // a harpoon landing: what it caught and for how long (gate 18b)
   // The newest room message is kept, so a handler attached late (while the map is still being built) still gets it.
   private latestRoom: RoomMessage | null = null;
   private roomHandler?: (room: RoomMessage) => void;
@@ -173,7 +172,6 @@ export class NetClient {
       else if (message.t === "ability") this.onAbility?.(message);
       else if (message.t === "titan") this.onTitan?.(message);
       else if (message.t === "rivet") this.onRivet?.(message);
-      else if (message.t === "harpoon") this.onHarpoon?.(message);
       else if (message.t === "refused") {
         if (message.rejoinFailed && !this.hasWelcome) {
           // A reloaded page that was too late: just join the room.

@@ -30,13 +30,12 @@ export interface AltShot {
   pinSeconds: number; // 0 for no pin
   pinSpeedShare: number;
   detonate: boolean; // a rivet gun's right-click press: pop your stuck rivets. No shot (pellets 0)
-  reel: boolean; // a harpoon fired with right-click: it pulls the shooter to where it lands
   weapon: WeaponStats;
 }
 
 export function createAltShot(): AltShot {
   return {
-    mode: FIRE_NONE, share: 1, pierce: 0, pinSeconds: 0, pinSpeedShare: 1, detonate: false, reel: false,
+    mode: FIRE_NONE, share: 1, pierce: 0, pinSeconds: 0, pinSpeedShare: 1, detonate: false,
     weapon: {
       id: "", name: "", color: "", pellets: 1, shotsPerSecond: 1, projectileSpeed: 0, projectileLifetime: 0, spreadDegrees: 0,
       maxAimDistance: 0, shakeForce: 0, damage: 0, projectile: { kind: "hitscan" }, secondary: { kind: "slug", shotsPerSecond: 1, damage: 0, spreadDegrees: 0, maxAimDistance: 0, shakeForce: 0 },
@@ -58,7 +57,7 @@ export function chargeShare(state: AltFireState, weapon: WeaponStats): number {
 
 function shoot(out: AltShot, weapon: WeaponStats, mode: number): true {
   out.mode = mode;
-  out.share = 1; out.pierce = 0; out.pinSeconds = 0; out.pinSpeedShare = 1; out.detonate = false; out.reel = false;
+  out.share = 1; out.pierce = 0; out.pinSeconds = 0; out.pinSpeedShare = 1; out.detonate = false;
   Object.assign(out.weapon, weapon);
   return true;
 }
@@ -111,15 +110,6 @@ export function stepAltFire(state: AltFireState, gate: FireGate, input: MechInpu
       return true;
     }
     if (input.altFire) return false; // still held: right-click wins over left
-  } else if (sec.kind === "reel") {
-    if (input.altFire) {
-      // The same gate as the left button, so a reel and a harpoon never go one straight after the other.
-      if (!gate.tryFire(time, sec.shotsPerSecond * rateScale)) return false;
-      shoot(out, weapon, FIRE_SECONDARY);
-      out.reel = true;
-      out.weapon.pellets = 1; out.weapon.spreadDegrees = 0;
-      return true;
-    }
   } else {
     if (input.altFire) {
       // The charge only builds once the last shot has cycled, so a release always fires.

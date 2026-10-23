@@ -85,15 +85,6 @@
         "torsoMeters": 0.02,
         "torsoHz": 7
       },
-      "magnetHarpoon": {
-        "backMeters": 0.36,
-        "climbDegrees": 8,
-        "hz": 3.5,
-        "damping": 0.5,
-        "cap": 1,
-        "torsoMeters": 0.15,
-        "torsoHz": 3.5
-      },
       "spikeDriverAlt": {
         "backMeters": 0.42,
         "climbDegrees": 13,

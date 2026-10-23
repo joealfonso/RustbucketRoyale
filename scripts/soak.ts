@@ -18,8 +18,8 @@ for (const tier of tiers) {
   );
   const k = r.secondaryByKind, j = r.projectiles;
   console.log(
-    `    start gun ${r.startWeapon}: ${r.secondaryShots} right-clicks (windup ${k.windup}, slug ${k.slug}, charge ${k.charge}, detonate ${k.detonate}, reel ${k.reel}), ` +
-    `rivets ${j.rivetsStuck} stuck / ${j.rivetsPopped} popped, harpoons ${j.harpoons} (yanks ${j.yanks}, reels ${j.reels}, items pulled ${j.itemsPulled}, crates ${j.cratesSmashed})`,
+    `    start gun ${r.startWeapon}: ${r.secondaryShots} right-clicks (windup ${k.windup}, slug ${k.slug}, charge ${k.charge}, detonate ${k.detonate}), ` +
+    `rivets ${j.rivetsStuck} stuck / ${j.rivetsPopped} popped`,
   );
   for (const p of r.problems) console.log(`    ${p}`);
   if (r.problems.length > 0) {

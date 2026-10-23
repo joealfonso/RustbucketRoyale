@@ -113,7 +113,6 @@ export interface SelfState {
   dropPhase: number; dropTime: number; // the drop-in (drop.ts): phase 0 down, 1 hanging, 2 ball, 3 braking; landing stun left
   heat: number; overheat: number; windup: number; charge: number; // your secondary fire (altFire.ts AltFireState)
   pinTime: number; pinSpeed: number; // pinned by a full charge spike: seconds left, share of speed kept
-  pullTime: number; pullVx: number; pullVy: number; pullVz: number; // a harpoon yank or reel in progress (mechStep.ts startPull)
   mech: number; // which roster mech you are driving. Can change between matches.
 }
 
@@ -232,21 +231,6 @@ export interface RivetMessage {
   fuse?: number;
 }
 
-// A harpoon landing (gate 18b), sent when it gets there (a shot message went when it was fired). `id` is the shooter,
-// `reel` true for a right-click reel. `hit` is what it struck at x, y, z; `target` is that mech's, pickup's or prop's
-// id. `seconds` is how long the pull lasts (the yank on a mech, the reel on the shooter, a pickup's slide); with none
-// the line lets go at once. `loot` is the pickup id of a smashed crate's loot, sliding toward the shooter.
-export interface HarpoonMessage {
-  t: "harpoon";
-  id: number;
-  reel: boolean;
-  hit: "mech" | "pickup" | "prop" | "world" | "none";
-  target?: number;
-  x: number; y: number; z: number;
-  seconds?: number;
-  loot?: number;
-}
-
 // A moment of somebody's ability worth showing: a ram, leap, strike or decoys starting, a ram connecting, a pounce
 // landing, a decoy shot and bursting. A barrage start is at the target point, where the warning goes, not the mech.
 export interface AbilityMessage {
@@ -290,7 +274,6 @@ export type ServerMessage =
   | GrenadeMessage
   | ExplodeMessage
   | RivetMessage
-  | HarpoonMessage
   | AbilityMessage;
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);

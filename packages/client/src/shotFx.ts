@@ -65,13 +65,6 @@ export class ShotFx {
     (altLook ? this.altFlashes : this.flashes).spawn(w, shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz);
   }
 
-  // Only the muzzle flash, for a shot drawn some other way (the harpoon, whose head and cable are harpoonView's).
-  flash(shot: Shot, weapon: number, alt = -1): void {
-    const w = this.tracers[weapon] ? weapon : 0;
-    const altLook = usesAltLook(this.weapons[w]!.secondary.kind, alt);
-    (altLook ? this.altFlashes : this.flashes).spawn(w, shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz);
-  }
-
   // The server says one of our shots hit a mech here.
   hitMech(x: number, y: number, z: number, weapon: number, alt = -1): void {
     const w = this.fx[weapon] ? weapon : 0;

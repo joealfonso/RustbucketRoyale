@@ -1,6 +1,6 @@
 // Offline practice: the game server's own Room, run inside this page. The page talks to it through a stand-in for a
 // WebSocket that passes the same packed messages both ways, so practice takes the online code path (prediction,
-// snapshots, props breaking, loot, rivets and harpoons) on the server's rules, with no copy of any of them here.
+// snapshots, props breaking, loot, rivets) on the server's rules, with no copy of any of them here.
 // main.ts loads this module only for practice, so online play never downloads the room.
 import { SnapshotMemory, encodeServerBinary, parseBotDifficulty, type ServerMessage } from "@rustbucket/shared";
 import { Room } from "../../server/src/Room";

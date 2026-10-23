@@ -17,7 +17,7 @@ export type SoundName =
   | "pinned" | "dropInbound" | "dropLand" | "upgrade" | "carCrash"
   | "diveWind" | "landingBurn" | "landingImpact" | "shellBurst"
   | "windupWhine" | "overheat" | "slugShot" | "chargeHum" | "chargeShot"
-  | "rivetShot" | "rivetStick" | "rivetPop" | "detonateClick" | "harpoonShot" | "harpoonLatch" | "harpoonYank" | "harpoonReel";
+  | "rivetShot" | "rivetStick" | "rivetPop" | "detonateClick";
 
 // The sounds held for as long as something lasts, set every frame with a level rather than played (gate 18a).
 export type HeldSound = "windupWhine" | "chargeHum";
@@ -526,24 +526,6 @@ export class Sound {
         return this.burst(into, 0.45, "lowpass", 700 * p, 0.35, 0.01);
       // The detonator: a dry switch click and a tiny rising beep, before the ripple of pops.
       case "detonateClick": this.clank(into, 2400, 0.03, 0.3); return this.glide(into, 1200, 2600, 0.09, "square", 0.08, 0.03);
-      // Magnet harpoon: a heavy pneumatic thump and the cable paying out with a whirr; the clamp biting with a
-      // magnetic clang; the yank, a taut cable twang and a groan of metal dragged; the reel, a winch whining up.
-      case "harpoonShot":
-        this.burst(into, 0.02, "highpass", 2000, 0.7, 0.0005);
-        this.body(into, 140 * p, 45 * p, 0.3, 1.1);
-        this.clank(into, 520 * p, 0.12, 0.25);
-        return this.sweep(into, 2400 * p, 700 * p, 0.45, 0.5);
-      case "harpoonLatch":
-        this.clank(into, 300 * p, 0.4, 0.5);
-        this.glide(into, 180 * p, 90 * p, 0.35, "square", 0.12);
-        return this.burst(into, 0.08, "bandpass", 2600, 0.6);
-      case "harpoonYank":
-        this.glide(into, 110 * p, 340 * p, 0.25, "sawtooth", 0.22);
-        this.creak(into, 160 * p, 70 * p, 0.6, 0.5, 0.05);
-        return this.body(into, 120 * p, 40 * p, 0.35, 1);
-      case "harpoonReel":
-        this.glide(into, 240 * p, 980 * p, 0.8, "sawtooth", 0.14, 0, true);
-        return this.sweep(into, 600 * p, 3000 * p, 0.8, 0.5);
       // Played as one-shots for someone else's gun winding up (yours is held, setHeld): a short rising whine or hum.
       case "windupWhine": return this.glide(into, 420 * p, 900 * p, 0.28, "sawtooth", 0.12, 0, true);
       case "chargeHum": this.glide(into, 160 * p, 330 * p, 0.3, "square", 0.1, 0, true); return this.glide(into, 320 * p, 660 * p, 0.3, "sine", 0.08, 0, true);

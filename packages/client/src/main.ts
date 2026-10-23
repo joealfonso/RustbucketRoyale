@@ -2,7 +2,7 @@ import * as THREE from "three";
 import {
   FireGate, Predictor, STEP, propsInReach, computeShot, isOutsideRing, createGrenade, createMechInput, createShot,
   parseCameraStats, parseGrenadeStats, parseHudStats, parseMechStats, parseNetStats, parseWeapons, parseZones, parseUpgrades, applyTune, assignDeep, type TunableFile, type TuningRaws, type BotDifficulty, upgradeScale, itemUpgrade, itemArmorZone, throwGrenade, partToRepair, createZoneHit, makeZonesFor, makeMuzzlesFor, mechStatsFor, parseRoster, ZONE_ARMS, parseLootConfig, parsePropConfig, itemWeapon, parseAbilities, abilityFor,
-  FIRE_NONE, FIRE_SECONDARY, chargeShare, createAltFireState, createAltShot, stepAltFire, flightSteps, reelPoint, SURFACE_NUDGE, type HarpoonMessage, type RivetMessage,
+  FIRE_NONE, FIRE_SECONDARY, chargeShare, createAltFireState, createAltShot, stepAltFire, type RivetMessage,
   createRayHit, parseDropsConfig, parseTitanConfig, DROP_BALL, DROP_BURNING, DROP_HANGING, DROP_NONE, dropping, type AbilityMessage, type TitanMessage, type BarrageStats, type HealthState, type Loadout, type MatchProgress, type PickupState, type RingNow, type Shot, type WeaponStats,
 } from "@rustbucket/shared";
 import mechJson from "../../../data/mech.json";
@@ -100,7 +100,6 @@ import { createMechModel, kickMech, legsLimping, moveGunsAndSensors, recoilConfi
 import { kickFor, kickIdFor } from "./recoil";
 import { AltFireFx, pinLookOf } from "./altFireFx";
 import { RivetView } from "./rivetView";
-import { ANCHOR_MECH, ANCHOR_PICKUP, ANCHOR_WORLD, HarpoonView } from "./harpoonView";
 import { NetClient, type Session } from "./net";
 import type { LocalRoom } from "./localRoom";
 import { Radar } from "./radar";
@@ -535,9 +534,8 @@ const damageFx = new DamageFx(fxSprites, damageFxConfig, zoneSet);
 const altFireFx = new AltFireFx(scene, (c) => toon.color(c), fxSprites, altLooks);
 const pinLook = pinLookOf(altLooks);
 
-// Gate 18b: the rivet gun's stuck rivets and the magnet harpoon's head and cable (rivetView.ts, harpoonView.ts).
+// Gate 18b: the rivet gun's stuck rivets (rivetView.ts).
 const rivetGun = weaponSet.weapons.findIndex((w) => w.projectile.kind === "rivet");
-const harpoonGun = weaponSet.weapons.findIndex((w) => w.projectile.kind === "harpoon");
 const selfId = () => net.id;
 const drawnMech = (id: number): MechModel | null => (id === selfId() ? ownModel : remotes.modelOf(id));
 // Read live, so tuning the rivet gun in F1 shows at once.
@@ -570,7 +568,6 @@ function showRivet(m: RivetMessage): void {
   sound.play("rivetStick", { x: m.x, y: m.y, z: m.z });
 }
 
-const harpoonLook = weaponLooks[harpoonGun]?.harpoon;
 const muzzleAt = { x: 0, y: 0, z: 0 };
 // Where someone's barrel ends as drawn: yours from your model, anyone else's from theirs (their first muzzle).
 function muzzleOf(id: number, out: { x: number; y: number; z: number }): boolean {
@@ -583,58 +580,6 @@ function muzzleOf(id: number, out: { x: number; y: number; z: number }): boolean
   const sin = Math.sin(yaw), cos = Math.cos(yaw);
   out.x = p.x + cos * muzzle[0]! + sin * muzzle[2]!; out.y = p.y + muzzle[1]!; out.z = p.z - sin * muzzle[0]! + cos * muzzle[2]!;
   return true;
-}
-const harpoonView = harpoonLook
-  ? new HarpoonView(scene, harpoonLook, (c) => toon.color(c), toon.color(weaponSet.weapons[harpoonGun]!.color), fxSprites.sparks, muzzleOf, drawnMech, (id, out) => pickupView.positionOf(id, out))
-  : null;
-if (harpoonView && harpoonLook) {
-  harpoonView.onLatch = (shooter, kind, target, x, y, z, reel) => {
-    muzzleAt.x = x; muzzleAt.y = y; muzzleAt.z = z;
-    sound.play("harpoonLatch", muzzleAt);
-    if (kind === ANCHOR_MECH) {
-      shotFx.impacts.mech(weaponLooks[harpoonGun]!.impact, x, y, z);
-      sound.play("harpoonYank", muzzleAt);
-      // Yanked yourself: the jerk on your camera as the cable goes taut.
-      if (target === selfId()) rig.addShake(harpoonLook.yankShake);
-    }
-    if (reel) {
-      if (muzzleOf(shooter, muzzleAt)) sound.play("harpoonReel", muzzleAt);
-      if (shooter === selfId()) rig.addShake(harpoonLook.reelShake);
-    }
-  };
-}
-// Speed lines rushing past while a harpoon drags you, yours or someone else's (data/weaponFx.json reelLines).
-const reelLines = harpoonLook ? new SpeedLines(harpoonLook.reelLines, dropSprites) : null;
-const reelHit = createRayHit();
-const reelTo = { x: 0, y: 0, z: 0 };
-// Your own harpoon leaving: its head and cable from your muzzle. A reel is predicted: where it will land on the map
-// is found now, and the pull starts on the step it gets there, as the server will start it.
-function fireOwnHarpoon(s: Shot, weapon: WeaponStats, reel: boolean, seq: number): void {
-  if (!harpoonView) return;
-  const hit = map.world.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, weapon.maxAimDistance, reelHit);
-  const length = hit ? reelHit.distance : Math.min(s.length, weapon.maxAimDistance);
-  harpoonView.fire(selfId(), s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, length, reel);
-  if (!hit) return;
-  const hx = s.ox + s.dx * reelHit.distance, hy = s.oy + s.dy * reelHit.distance, hz = s.oz + s.dz * reelHit.distance;
-  const sec = weapon.secondary;
-  if (reel && sec.kind === "reel") {
-    // The same nudge off the surface and no lift of its own as the server's reel, so the pull predicts exactly.
-    const n = SURFACE_NUDGE;
-    reelPoint(hx + reelHit.normalX * n, hy + reelHit.normalY * n, hz + reelHit.normalZ * n, reelHit.normalX, reelHit.normalY, reelHit.normalZ, sec, reelTo);
-    predictor.pullAfter(seq + flightSteps(reelHit.distance, weapon), reelTo.x, reelTo.y, reelTo.z, sec.speed, sec.maxSeconds, sec.stopMeters, 0);
-    harpoonView.latch(selfId(), ANCHOR_WORLD, -1, hx, hy, hz, true, sec.maxSeconds);
-  }
-}
-// The server's word on where a harpoon landed and how long it pulls.
-function showHarpoon(m: HarpoonMessage): void {
-  if (!harpoonView) return;
-  if (m.hit === "none") { harpoonView.release(m.id); return; }
-  const hold = m.seconds ?? 0;
-  if (m.hit === "mech" && m.target !== undefined) harpoonView.latch(m.id, ANCHOR_MECH, m.target, m.x, m.y, m.z, m.reel, hold);
-  else if (m.hit === "pickup" && m.target !== undefined) harpoonView.latch(m.id, ANCHOR_PICKUP, m.target, m.x, m.y, m.z, m.reel, hold);
-  // A smashed crate: the head drags its loot back.
-  else if (m.hit === "prop" && m.loot !== undefined) harpoonView.latch(m.id, ANCHOR_PICKUP, m.loot, m.x, m.y, m.z, m.reel, hold);
-  else harpoonView.latch(m.id, ANCHOR_WORLD, -1, m.x, m.y, m.z, m.reel, hold);
 }
 let fxDt = 0;
 const emitDamage = (model: MechModel) => damageFx.emitFrom(model, fxDt); // made once, so the frame loop allocates nothing
@@ -837,8 +782,6 @@ const gate = new FireGate();
 const altState = createAltFireState();
 const altShot = createAltShot();
 let lastOwnAlt = -1; // the right-click share of your last shot, -1 for a primary: how its hits on mechs look
-// When you last fired and how long until the next: the harpoon's cooldown ring (both its triggers share the gate).
-let harpoonFiredAt = -Infinity, harpoonGap = 1;
 // A held slug reaches as far as the slug does, so the crosshair converges on what it can actually hit.
 const aimRangeOf = (weapon: WeaponStats, altHeld: boolean) =>
   altHeld && weapon.secondary.kind === "slug" ? weapon.secondary.maxAimDistance : weapon.maxAimDistance;
@@ -865,7 +808,6 @@ function showOwnAltFire(dt: number): void {
   const maxStuck = kind === "detonate" ? rivetStats()?.maxStuck ?? 1 : 1;
   const value = kind === "windup" ? (altState.overheat > 0 ? 1 : altState.heat)
     : kind === "detonate" ? stuck / maxStuck
-    : kind === "reel" ? Math.min(1, (simTime - harpoonFiredAt) / harpoonGap)
     : charge;
   const flag = kind === "windup" ? altState.overheat > 0 : kind === "charge" ? charge >= 1 : gate.ready(simTime);
   hud.setAltFire(weapon ? altLooks[index]!.name : null, kind, value, flag, stuck);
@@ -954,7 +896,6 @@ function swapMap(newSeed: number, newTier: string): void {
   pickupView.clear();
   pickupPop.clear();
   rivetView?.clear();
-  harpoonView?.clear();
   predictor.setWorld(map.world);
 }
 
@@ -1040,12 +981,7 @@ net.onSnapshot = (snap) => {
 // pellet, or a blast stacks into a harsh chorus.
 const lastShotSound = new Map<number, number>();
 const showShot = (id: number, s: Shot, weapon: number, hitMech: boolean, alt: number) => {
-  if (weapon === harpoonGun && harpoonView) {
-    shotFx.flash(s, weapon, alt);
-    harpoonView.fire(id, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, s.length, alt >= 0);
-  } else {
-    shotFx.show(s, weapon, hitMech, alt);
-  }
+  shotFx.show(s, weapon, hitMech, alt);
   fallHints.shot(performance.now() / 1000, s.ox, s.oz, s.dx, s.dz, s.length);
   const now = performance.now();
   if (now - (lastShotSound.get(id) ?? -Infinity) < 40) return;
@@ -1090,7 +1026,6 @@ net.onExplode = (e) => {
   showBlast(e.x, e.y, e.z);
 };
 net.onRivet = showRivet;
-net.onHarpoon = showHarpoon;
 // Your own start and landing already showed from prediction; anyone's ram or slam connecting shows here. The
 // warning ring for a strike is always the server's, yours too, so everyone sees the same spot.
 net.onAbility = (a) => {
@@ -1135,7 +1070,7 @@ net.onRoom = (r) => {
   hud.setRoom(r, net.id);
   // The shooting range has no ring, so its room never starts a match (Room.receive): no start button for nothing.
   if (r.tier === "range") document.getElementById("startButton")!.classList.add("hidden");
-  if (r.state === "countdown") { hud.hideResult(); myPlace = null; killReplay.clear(); knockedFrom.clear(); titanView.clear(); rivetView?.clear(); harpoonView?.clear(); }
+  if (r.state === "countdown") { hud.hideResult(); myPlace = null; killReplay.clear(); knockedFrom.clear(); titanView.clear(); rivetView?.clear(); }
   if (r.state === "active" && wasCountdown) hud.flash("GO", 900);
   progress = { ...progress, state: r.state };
 };
@@ -1462,16 +1397,9 @@ function frame(now: number): void {
       const muzzles = muzzlesFor(mech.mech);
       const muzzle = muzzles[shotsFired++ % muzzles.length]!;
       const weaponIndex = weaponSet.weapons.indexOf(weapon);
-      harpoonGap = 1 / ((altShot.reel && weapon.secondary.kind === "reel" ? weapon.secondary.shotsPerSecond : weapon.shotsPerSecond) * rateScale);
-      harpoonFiredAt = simTime;
       for (let i = 0; i < fired.pellets; i++) {
         computeShot(mech, mechInput.targetX, mechInput.targetY, mechInput.targetZ, fired, Math.random, shot, armsBroken() ? zoneSet.brokenArmsSpreadMultiplier : 1, muzzle);
-        if (weaponIndex === harpoonGun && harpoonView) {
-          shotFx.flash(shot, weaponIndex, alt);
-          fireOwnHarpoon(shot, weapon, altShot.reel, seq);
-        } else {
-          shotFx.show(shot, weaponIndex, false, alt);
-        }
+        shotFx.show(shot, weaponIndex, false, alt);
         fallHints.shot(performance.now() / 1000, shot.ox, shot.oz, shot.dx, shot.dz, shot.length);
       }
       sound.play(alt >= 0 ? sound.altShotFor(weapon.id) : sound.shotFor(weapon.id), { x: shot.ox, y: shot.oy, z: shot.oz });
@@ -1488,7 +1416,6 @@ function frame(now: number): void {
       sound.play("grenadeThrow", { x: thrown.x, y: thrown.y, z: thrown.z });
     }
     shotFx.update(STEP, map.world);
-    harpoonView?.update(STEP);
     grenades.update(STEP, map.world);
     titanView.step(map.world);
     accumulator -= STEP;
@@ -1596,9 +1523,6 @@ function frame(now: number): void {
   // The rush of air, where you are aiming and where you will really land, and your height and fall speed.
   const diving = ownDrop === DROP_BALL || ownDrop === DROP_BURNING;
   speedLines.update(rig.camera.position, diving ? mech.vx : 0, diving ? mech.vy : 0, diving ? mech.vz : 0, frameTime);
-  // Dragged by a harpoon, yours or someone else's: the lines rush past along the pull.
-  const pulled = mech.pullTime > 0 && !health.dead && !spectating;
-  reelLines?.update(rig.camera.position, pulled ? mech.pullVx : 0, pulled ? mech.pullVy : 0, pulled ? mech.pullVz : 0, frameTime);
   landingMarker.update(mech, mechInput, ownStats, map.world, ownAbilityStats, rig.camera.position, frameTime);
   landingMarker.group.visible &&= ownDrop !== DROP_NONE;
   aimRing.update(aimOnGround && ownDrop !== DROP_NONE && !spectating && !replaying, mechInput.targetX, mechInput.targetY, mechInput.targetZ, rig.camera.position);
@@ -1691,8 +1615,8 @@ function frame(now: number): void {
     if (loadout.slots[1]! >= 0) tips.offer("weapons");
     const inHand = loadout.slots[firingSlot]!;
     const altKind = weaponSet.weapons[inHand]?.secondary.kind;
-    // The rivet gun and the harpoon each say what their right-click does, the first time each is in hand.
-    if (altKind === "detonate" || altKind === "reel") tips.offer(altKind);
+    // The rivet gun says what its right-click does, the first time it is in hand.
+    if (altKind === "detonate") tips.offer(altKind);
     else if (inHand >= 0 && altLooks[inHand]) tips.offer("secondary", altLooks[inHand]!.name);
     // The announcement is a one-frame event, so it waits here until a tip can be said while you are playing.
     if (dropTipDue && tips.offer("supplyDrop")) dropTipDue = false;
@@ -1740,7 +1664,6 @@ function frame(now: number): void {
   if (panel?.visible) panel.update(Math.hypot(mech.vx, mech.vz), mech.grounded, fps, remotes.count + 1, lastCorrection, net.rttMs, remotes.viewDelayMs);
 
   shotFx.draw(rig.camera, fxTime);
-  harpoonView?.draw(rig.camera);
   sunShadows.follow(rig.camera);
   if (dressing.cover) dressing.cover.group.visible = coverShown;
   gpuTimer.begin();

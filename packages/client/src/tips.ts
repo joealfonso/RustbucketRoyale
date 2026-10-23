@@ -2,10 +2,10 @@
 // is said once, at the moment it is useful, in the same prompt box as "Hold F: repair". Each tip is shown once per
 // player, remembered in this browser, and a real prompt (take, loot, repair) always wins over a tip.
 
-// "detonate" and "reel" (gate 18b) teach the rivet gun's and the harpoon's right-click, in place of "secondary".
+// "detonate" (gate 18b) teaches the rivet gun's right-click, in place of "secondary".
 // "health" is said the first time a health plate lies close by. "supplyDrop" is said when the first drop is announced
 // and "titan" the first time the Junk Titan's boss bar shows.
-export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "drop", "secondary", "detonate", "reel", "health", "supplyDrop", "titan"] as const;
+export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "drop", "secondary", "detonate", "health", "supplyDrop", "titan"] as const;
 export type TipId = (typeof TIP_IDS)[number];
 
 export interface TipsConfig {

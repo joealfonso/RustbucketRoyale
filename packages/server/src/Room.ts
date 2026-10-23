@@ -11,7 +11,7 @@ import {
   type NavGrid, type LootConfig, type PickupState, type WeaponSet, type WeaponStats, type World, type ZoneSet,
   titanHitBoxes, type TitanConfig, type TitanState,
   dropping, hangAtSpot, planDropSpots, releaseDrop,
-  HURT_PLATE, hurtKind, SURFACE_NUDGE, flightSteps, fromMechFrame, reelPoint, startPull, toMechFrame, type HarpoonMessage, type HarpoonStats, type RivetMessage, type RivetStats,
+  HURT_PLATE, hurtKind, SURFACE_NUDGE, flightSteps, fromMechFrame, toMechFrame, type RivetMessage, type RivetStats,
 } from "@rustbucket/shared";
 import { Flights, type Landing, type Rivet } from "./flights";
 import { Bot, type BotTarget } from "./Bot";
@@ -40,7 +40,6 @@ const PICKUP_LIFT = 0.5; // a pickup floats this far above whatever it lies on
 // wreck's loot spilling uphill) is found rather than missed. Lower than a mech is tall, so a roof the mech stood
 // under is not mistaken for the floor.
 const DROP_LOOK_UP = 2;
-const PICKUP_HOP = 1; // metres a harpooned pickup lifts mid slide
 
 interface LiveGrenade {
   ownerId: number;
@@ -111,18 +110,14 @@ export class Room {
   private altShot = createAltShot();
   // Secondary fire so far, by everyone: trigger pulls (all, and by kind), mechs hit by a pierce past the first, and pins.
   // For tests and the soak.
-  readonly secondaryCount = { shots: 0, windup: 0, slug: 0, charge: 0, detonate: 0, reel: 0, pierced: 0, pinned: 0 };
-  // What rivets and harpoons have done so far (gate 18b), for tests and the soak.
-  readonly projectileCount = { rivetsStuck: 0, rivetsPopped: 0, harpoons: 0, yanks: 0, reels: 0, itemsPulled: 0, cratesSmashed: 0 };
+  readonly secondaryCount = { shots: 0, windup: 0, slug: 0, charge: 0, detonate: 0, pierced: 0, pinned: 0 };
+  // What rivets have done so far (gate 18b), for tests and the soak.
+  readonly projectileCount = { rivetsStuck: 0, rivetsPopped: 0 };
   private flights = new Flights();
   private landedScratch: Landing[] = [];
   private poppingScratch: Rivet[] = [];
-  // Pickups a harpoon is sliding toward its shooter, moved a little every tick. Snapshots send pickup positions again
-  // while any is moving, and once after (pickupsMovedTick).
-  private pickupPulls: { pickup: PickupState; fromX: number; fromY: number; fromZ: number; toX: number; toY: number; toZ: number; start: number; end: number }[] = [];
-  private pickupsMovedTick = -Infinity;
   private targetPose = { x: 0, y: 0, z: 0, yaw: 0 }; // where findTarget's mech stood, rewound
-  private frame = { x: 0, y: 0, z: 0 }; // scratch for mech frame turns and reel goals
+  private frame = { x: 0, y: 0, z: 0 }; // scratch for mech frame turns
   private hpBefore = [0, 0, 0]; // a victim's hit points before splash, to tell it how bad the hit was
   private pierced: Player[] = []; // mechs one piercing shot has already gone through
   private newGrenade = createGrenade();
@@ -248,7 +243,7 @@ export class Room {
     this.players.set(id, {
       id, slot, bot: this.newBot(), send: () => {}, gone: false, goneTick: 0, rejoinToken: "", mech, state: this.freshState(slot, mech),
       gate: new FireGate(), grenadeGate: new FireGate(), alt: createAltFireState(), queue: [], lastSeq: 0, ackTick: 0, lagMs: 0, steps: 0, budget: net.maxMessagesPerSecond,
-      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, launchX: 0, launchZ: 0, cause: CAUSE_NONE, causeBefore: CAUSE_NONE, tally: createTally(), rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, reel: null, quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
+      hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, launchX: 0, launchZ: 0, cause: CAUSE_NONE, causeBefore: CAUSE_NONE, tally: createTally(), rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length), dead: false, respawnTick: 0, participant: true, eliminated: false,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     });
   }
@@ -354,7 +349,7 @@ export class Room {
     const mech = this.dealtMech(id);
     const player: Player = {
       id, slot, bot: null, send, gone: false, goneTick: 0, rejoinToken: rejoinSecret(), mech, state: this.freshState(slot, mech), gate: new FireGate(), grenadeGate: new FireGate(), alt: createAltFireState(),
-      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, launchX: 0, launchZ: 0, cause: CAUSE_NONE, causeBefore: CAUSE_NONE, tally: createTally(), rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, reel: null, quietUntil: new Int32Array(NOISE_KINDS.length),
+      queue: [], lastSeq: 0, ackTick: 0, lagMs: this.config.combat.defaultLagMs, steps: 0, budget: net.maxMessagesPerSecond, hp: createHealth(this.config.zones), loadout: freshLoadout(this.config.weapons, this.config.loot), askedSlot: 0, interactReadyTick: 0, interactHeld: false, lootingId: 0, lootSeconds: 0, looted: false, repairZone: -1, repairSeconds: 0, healthMark: 0, railHpMark: 0, launchX: 0, launchZ: 0, cause: CAUSE_NONE, causeBefore: CAUSE_NONE, tally: createTally(), rammed: [], interested: new Set(), watchId: 0, heard: [], sentPickupIds: [], shotsFired: 0, quietUntil: new Int32Array(NOISE_KINDS.length),
       dead: watching, respawnTick: 0, participant: !watching, eliminated: watching,
       historyTick: new Int32Array(this.historyLength).fill(-1), history: new Float32Array(this.historyLength * 4),
     };
@@ -535,7 +530,6 @@ export class Room {
     this.stepGrenades();
     this.landFlights();
     this.popRivets();
-    this.slidePickups();
     this.setOffPendingBlasts();
     if (this.state === "active") this.applyRing();
     if (this.state === "active") this.runDrops();
@@ -874,7 +868,6 @@ export class Room {
     this.dropsOpened = 0;
     this.grenades = [];
     this.flights.clear();
-    this.pickupPulls.length = 0;
     this.pickups.clear();
     for (const player of [...this.players.values()]) if (player.gone) this.players.delete(player.id);
     this.dropSpots = [];
@@ -893,7 +886,6 @@ export class Room {
       this.placeForDrop(player);
       player.bot?.forgetDrop();
       player.queue.length = 0;
-      player.reel = null;
     }
     this.dropPlan = this.makeDropPlan(this.ring);
     this.state = "countdown";
@@ -1065,7 +1057,6 @@ export class Room {
     stepMech(player.state, input, this.statsFor(player.state.mech), dt, this.map.world, ability);
     if (ability) this.afterAbilityStep(player, input, ability, abilityBefore, cooldownBefore);
     player.steps += Math.round(dt / STEP);
-    this.startReel(player);
     const footsteps = this.footstepShare(player.state);
     if (player.state.running) this.makeNoise(player, "run", player.state.x, player.state.z, player.quietUntil, footsteps);
     if (player.state.jetting) this.makeNoise(player, "jets", player.state.x, player.state.z);
@@ -1132,11 +1123,12 @@ export class Room {
     const spread = player.hp[ZONE_ARMS]! <= 0 ? this.config.zones.brokenArmsSpreadMultiplier : 1;
     computeShot(player.state, input.targetX, input.targetY, input.targetZ, weapon, this.random, this.shot, spread, muzzle);
     const s = this.shot;
+    const projectile = weapon.projectile;
 
     // How far the shot goes: the nearest wall, unless a mech is in the way.
     let reach = weapon.maxAimDistance;
     let hitBox = -1;
-    // The surface a rivet sticks to and a reel pulls off: the wall or ground, or facing back along the shot.
+    // The surface a rivet sticks to: the wall or ground, or facing back along the shot.
     let nx = -s.dx, ny = -s.dy, nz = -s.dz;
     let hitWorld = false;
     if (this.map.world.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.worldHit)) {
@@ -1150,13 +1142,7 @@ export class Room {
     // The Titan, when it stands nearer than any mech the shot met. It is too slow to need rewinding for lag.
     let titanHit = this.state === "active" && this.titan?.raycast(s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.titanHit) === true;
     if (titanHit) { target = null; reach = this.titanHit.distance; }
-    // A harpoon (not a reel) takes the first pickup it passes close to.
-    const projectile = weapon.projectile;
-    const pickup = projectile.kind === "harpoon" && !alt?.reel && this.state !== "countdown" ? this.pickupAlong(projectile.itemHitRadius, reach) : null;
-    if (pickup) { target = null; titanHit = false; reach = this.pickupHitDistance; }
     const flying = projectile.kind !== "hitscan";
-    const reel = alt?.reel === true;
-    if (flying) this.projectileCount.harpoons += projectile.kind === "harpoon" ? 1 : 0;
     // A decoy in front of everything else takes the shot and bursts. No damage and no hit marker: the pop is the tell.
     const decoy = decoyAlong(this.decoys, player.id, s.ox, s.oy, s.oz, s.dx, s.dy, s.dz, reach, this.zonesFor, this.decoyHit);
     if (decoy) {
@@ -1164,18 +1150,14 @@ export class Room {
       target = null;
       titanHit = false;
       this.popDecoy(decoy, player);
-      // A harpoon that popped a decoy has nothing to hold on to: it lets go where the decoy stood.
-      if (projectile.kind === "harpoon") this.launch(player, weapon, weaponIndex, reel, "none", 0, reach, 0, 0, 0, 0);
     } else if (titanHit) {
       const zone = this.titanHit.zone;
       this.hurtTitan(player, weapon.damage * this.titan!.zoneMultiplier(zone), zone, s.ox + s.dx * reach, s.oy + s.dy * reach, s.oz + s.dz * reach);
-      // Too big to ride or yank: a rivet sticks where it hit, a reel pulls you to it.
-      if (flying) this.launch(player, weapon, weaponIndex, reel, "world", 0, reach, 0, -s.dx, -s.dy, -s.dz);
-    } else if (pickup) {
-      this.launch(player, weapon, weaponIndex, reel, "pickup", pickup.id, reach, 0, -s.dx, -s.dy, -s.dz);
+      // Too big to ride: a rivet sticks where it hit.
+      if (flying) this.launch(player, weaponIndex, "world", 0, reach, 0, -s.dx, -s.dy, -s.dz);
     } else if (target && flying) {
       const damage = weapon.damage * this.shieldFactor(target, s.dx, s.dz);
-      this.launch(player, weapon, weaponIndex, reel, "mech", target.id, reach, damage, -s.dx, -s.dy, -s.dz);
+      this.launch(player, weaponIndex, "mech", target.id, reach, damage, -s.dx, -s.dy, -s.dz);
     } else if (target) {
       this.shotHits(player, target, weapon, weaponIndex, reach, alt);
       // A full charge goes on through: the next mech along the same line, up to the wall, as many times as it pierces.
@@ -1197,9 +1179,8 @@ export class Room {
       }
     } else if (flying && this.state !== "countdown") {
       const prop = hitBox >= 0 ? this.map.propOfBox[hitBox]! : -1;
-      if (prop >= 0) this.launch(player, weapon, weaponIndex, reel, "prop", prop, reach, 0, nx, ny, nz);
-      else if (hitWorld) this.launch(player, weapon, weaponIndex, reel, "world", 0, reach, 0, nx, ny, nz);
-      else if (projectile.kind === "harpoon") this.launch(player, weapon, weaponIndex, reel, "none", 0, reach, 0, 0, 0, 0);
+      if (prop >= 0) this.launch(player, weaponIndex, "prop", prop, reach, 0, nx, ny, nz);
+      else if (hitWorld) this.launch(player, weaponIndex, "world", 0, reach, 0, nx, ny, nz);
     } else if (hitBox >= 0 && this.state !== "countdown") {
       const prop = this.map.propOfBox[hitBox]!;
       if (prop >= 0) this.damageProp(prop, weapon.damage, player);
@@ -1367,19 +1348,18 @@ export class Room {
     }
   }
 
-  // ---- rivets and harpoons (gate 18b)
+  // ---- rivets (gate 18b)
 
-  // Files a rivet or harpoon shot to land when its projectile gets there, `reach` along this.shot. What it hit was
-  // settled now: `hit` and `target` (a mech's, pickup's or prop's id), the damage a mech takes, the surface's facing.
-  // A reel also books the pull on its shooter, on the shooter's own step clock, as its client predicts it.
-  private launch(player: Player, weapon: WeaponStats, weaponIndex: number, reel: boolean, hit: Landing["hit"], target: number, reach: number, damage: number, nx: number, ny: number, nz: number): void {
+  // Files a rivet shot to land when its projectile gets there, `reach` along this.shot. What it hit was settled now:
+  // `hit` and `target` (a mech's or prop's id), the damage a mech takes, the surface's facing.
+  private launch(player: Player, weaponIndex: number, hit: Landing["hit"], target: number, reach: number, damage: number, nx: number, ny: number, nz: number): void {
     const s = this.shot;
-    const kind = weapon.projectile.kind === "rivet" ? "rivet" : "harpoon";
+    const weapon = this.config.weapons.weapons[weaponIndex]!;
     const steps = flightSteps(reach, weapon);
     // Off the surface a touch, so a rivet's blast does not start inside the wall it is stuck in.
     const x = s.ox + s.dx * reach + nx * SURFACE_NUDGE, y = s.oy + s.dy * reach + ny * SURFACE_NUDGE, z = s.oz + s.dz * reach + nz * SURFACE_NUDGE;
     const landing: Landing = {
-      kind, owner: player.id, weapon: weaponIndex, tick: this.tickCount + steps, reel, hit, target, zone: this.zoneHit.zone, damage,
+      owner: player.id, weapon: weaponIndex, tick: this.tickCount + steps, hit, target, zone: this.zoneHit.zone, damage,
       x, y, z, nx, ny, nz, lx: 0, ly: 0, lz: 0,
     };
     if (hit === "mech") {
@@ -1388,32 +1368,6 @@ export class Room {
       landing.lx = this.frame.x; landing.ly = this.frame.y; landing.lz = this.frame.z;
     }
     this.flights.launch(landing);
-    const sec = weapon.secondary;
-    if (reel && sec.kind === "reel" && hit !== "none" && hit !== "pickup") {
-      reelPoint(x, y, z, nx, ny, nz, sec, this.frame);
-      player.reel = {
-        step: player.steps + steps, weapon: weaponIndex, goalX: this.frame.x, goalY: this.frame.y, goalZ: this.frame.z,
-        hit, target, x, y, z,
-      };
-    }
-  }
-
-  // The nearest pickup the shot passes within `radius` of, nearer than `reach`, or null. Its distance along the shot
-  // is left in pickupHitDistance.
-  private pickupHitDistance = 0;
-  private pickupAlong(radius: number, reach: number): PickupState | null {
-    const s = this.shot;
-    let best: PickupState | null = null;
-    let bestDistance = reach;
-    for (const p of this.pickups.near(s.ox + s.dx * reach * 0.5, s.oz + s.dz * reach * 0.5, reach * 0.5 + radius, this.pickupScratch)) {
-      const rx = p.x - s.ox, ry = p.y - s.oy, rz = p.z - s.oz;
-      const along = rx * s.dx + ry * s.dy + rz * s.dz;
-      if (along <= 0 || along >= bestDistance) continue;
-      const off2 = rx * rx + ry * ry + rz * rz - along * along;
-      if (off2 <= radius * radius) { best = p; bestDistance = along; }
-    }
-    this.pickupHitDistance = bestDistance;
-    return best;
   }
 
   private landFlights(): void {
@@ -1422,7 +1376,6 @@ export class Room {
       if (!weapon) continue;
       const owner = this.players.get(l.owner) ?? null;
       if (weapon.projectile.kind === "rivet") this.landRivet(l, owner, weapon.projectile);
-      else if (weapon.projectile.kind === "harpoon") this.landHarpoon(l, owner, weapon, weapon.projectile);
     }
   }
 
@@ -1433,7 +1386,7 @@ export class Room {
     return this.frame;
   }
 
-  // A rivet or harpoon's own hit on a mech, at the zone settled when it was fired.
+  // A rivet's own hit on a mech, at the zone settled when it was fired.
   private landDamage(owner: Player | null, target: Player, l: Landing, x: number, y: number, z: number): void {
     if (target.dead || !target.participant || dropping(target.state) || l.damage <= 0) return;
     const before = target.hp[l.zone]!;
@@ -1447,7 +1400,6 @@ export class Room {
 
   // A rivet sticks: to the world where it hit, or riding the mech it hit. One past its owner's cap pops the oldest now.
   private landRivet(l: Landing, owner: Player | null, rivet: RivetStats): void {
-    if (l.hit === "none" || l.hit === "pickup") return;
     let x = l.x, y = l.y, z = l.z;
     const carrier = l.hit === "mech" ? this.players.get(l.target) : undefined;
     if (carrier) {
@@ -1492,91 +1444,6 @@ export class Room {
     const message: RivetMessage = { t: "rivet", event: "detonate", owner: player.id, id: 0, x: s.x, y: s.y, z: s.z };
     this.sendNear(s.x, s.z, message, player);
     for (const r of [...this.flights.popping(this.tickCount, this.poppingScratch, player.id)]) this.popRivet(r);
-  }
-
-  // A harpoon lands: a yank on a mech, a pickup or a crate's loot sliding to the shooter, or plain damage. A reel's
-  // own pull starts on the shooter's step clock (startReel), which also says so; here it only does its damage.
-  private landHarpoon(l: Landing, owner: Player | null, weapon: WeaponStats, harpoon: HarpoonStats): void {
-    const message: HarpoonMessage = { t: "harpoon", id: l.owner, reel: l.reel, hit: l.hit, x: l.x, y: l.y, z: l.z };
-    if (l.hit === "mech" || l.hit === "pickup" || l.hit === "prop") message.target = l.target;
-    const shooter = owner && !owner.dead ? owner : null;
-    if (l.hit === "mech") {
-      const target = this.players.get(l.target);
-      if (target) {
-        const at = this.onMech(target, l);
-        message.x = at.x; message.y = at.y; message.z = at.z;
-        this.landDamage(owner, target, l, at.x, at.y, at.z);
-        const t = target.state;
-        if (!l.reel && shooter && !target.dead && target.participant && !dropping(t)
-          && startPull(t, shooter.state.x, shooter.state.y, shooter.state.z, harpoon.yankSpeed, harpoon.yankSeconds, harpoon.yankStopMeters, harpoon.yankLift)) {
-          message.seconds = t.pullTime;
-          this.projectileCount.yanks++;
-        }
-      }
-    } else if (l.hit === "prop") {
-      const prop = this.map.props[l.target];
-      const smash = !l.reel && shooter !== null && prop !== undefined && harpoon.smashProps.includes(this.config.props.types[prop.type]!.id);
-      if (smash && this.propHp[l.target]! > 0) {
-        this.projectileCount.cratesSmashed++;
-        const loot = this.damageProp(l.target, this.propHp[l.target]!, shooter);
-        if (loot) { message.loot = loot.id; message.seconds = this.pullPickup(loot, shooter!, harpoon); }
-      } else {
-        this.damageProp(l.target, weapon.damage, owner);
-      }
-    } else if (l.hit === "pickup") {
-      const pickup = this.pickups.get(l.target);
-      if (pickup && shooter) message.seconds = this.pullPickup(pickup, shooter, harpoon);
-    }
-    if (l.reel && l.hit !== "none") return;
-    this.sendNearEither(message.x, message.z, owner?.state.x ?? message.x, owner?.state.z ?? message.z, message, owner ?? undefined);
-  }
-
-  // A reel's pull begins right after the shooter's step it was booked for. Knocked out in the meantime, it is lost.
-  private startReel(player: Player): void {
-    const r = player.reel;
-    if (!r || player.steps < r.step) return;
-    player.reel = null;
-    const sec = this.config.weapons.weapons[r.weapon]?.secondary;
-    if (player.dead || sec?.kind !== "reel") return;
-    const message: HarpoonMessage = { t: "harpoon", id: player.id, reel: true, hit: r.hit, x: r.x, y: r.y, z: r.z };
-    if (r.hit !== "world") message.target = r.target;
-    if (startPull(player.state, r.goalX, r.goalY, r.goalZ, sec.speed, sec.maxSeconds, sec.stopMeters, 0)) {
-      message.seconds = player.state.pullTime;
-      this.projectileCount.reels++;
-    }
-    this.sendNearEither(r.x, r.z, player.state.x, player.state.z, message, player);
-  }
-
-  // Slides a pickup to the ground just in front of the shooter, over the harpoon's itemPullSeconds. Returns those seconds.
-  private pullPickup(pickup: PickupState, shooter: Player, harpoon: HarpoonStats): number {
-    const s = shooter.state;
-    const dx = pickup.x - s.x, dz = pickup.z - s.z;
-    const distance = Math.hypot(dx, dz);
-    const share = distance > harpoon.itemStopMeters ? harpoon.itemStopMeters / distance : 1;
-    const toX = s.x + dx * share, toZ = s.z + dz * share;
-    const index = this.pickupPulls.findIndex((p) => p.pickup === pickup);
-    if (index >= 0) this.pickupPulls.splice(index, 1);
-    this.pickupPulls.push({
-      pickup, fromX: pickup.x, fromY: pickup.y, fromZ: pickup.z, toX, toY: this.surfaceBelow(toX, toZ, s.y) + PICKUP_LIFT, toZ,
-      start: this.tickCount, end: this.tickCount + Math.max(1, Math.round(harpoon.itemPullSeconds / STEP)),
-    });
-    this.projectileCount.itemsPulled++;
-    return harpoon.itemPullSeconds;
-  }
-
-  // Each sliding pickup moves along its line with a little hop, until it gets there or someone takes it.
-  private slidePickups(): void {
-    for (let i = this.pickupPulls.length - 1; i >= 0; i--) {
-      const pull = this.pickupPulls[i]!;
-      const p = pull.pickup;
-      if (this.pickups.get(p.id) !== p) { this.pickupPulls.splice(i, 1); continue; }
-      const t = Math.min(1, (this.tickCount - pull.start) / (pull.end - pull.start));
-      p.x = pull.fromX + (pull.toX - pull.fromX) * t;
-      p.y = pull.fromY + (pull.toY - pull.fromY) * t + Math.sin(Math.PI * t) * PICKUP_HOP;
-      p.z = pull.fromZ + (pull.toZ - pull.fromZ) * t;
-      this.pickupsMovedTick = this.tickCount;
-      if (t >= 1) this.pickupPulls.splice(i, 1);
-    }
   }
 
   // How many of a bot's own rivets ride other mechs between a safe distance from it and `range`: worth popping now.
@@ -1965,11 +1832,10 @@ export class Room {
 
   // A prop that runs out of hit points is gone: its box leaves the world, everyone in the room is told (collision has
   // to match for everyone's prediction), it makes a loud crash, and a barrel goes off a moment later.
-  // Returns the loot it dropped, if it broke and dropped any (a harpooned crate slides it to the shooter).
-  private damageProp(id: number, amount: number, by: Player | null): PickupState | null {
-    if (this.propHp[id]! <= 0) return null;
+  private damageProp(id: number, amount: number, by: Player | null): void {
+    if (this.propHp[id]! <= 0) return;
     this.propHp[id] = this.propHp[id]! - amount;
-    if (this.propHp[id]! > 0) return null;
+    if (this.propHp[id]! > 0) return;
 
     const prop = this.map.props[id]!;
     const type = this.config.props.types[prop.type]!;
@@ -1985,17 +1851,15 @@ export class Room {
     this.makeNoise(by, "smash", prop.x, prop.z);
     const item = rollLoot(this.config.loot, this.config.weapons, this.config.upgrades.upgrades.length, type.id, this.random, this.tier);
     // Its box is already out of the world, so the drop finds the ground the prop stood on.
-    let loot: PickupState | null = null;
     if (item !== null) {
       const x = prop.x + (this.random() - 0.5), z = prop.z + (this.random() - 0.5);
-      loot = this.pickups.add(item, x, this.surfaceBelow(x, z, prop.y) + PICKUP_LIFT, z);
+      this.pickups.add(item, x, this.surfaceBelow(x, z, prop.y) + PICKUP_LIFT, z);
     }
     if (type.explodes) {
       const delay = Math.round(this.config.props.barrelBlast.delaySeconds / STEP);
       const { damage, radius } = this.config.props.barrelBlast;
       this.pendingBlasts.push({ x: prop.x, y: this.surfaceBelow(prop.x, prop.z, prop.y), z: prop.z, tick: this.tickCount + delay, owner: by, damage, radius, cause: CAUSE_BARREL });
     }
-    return loot;
   }
 
   // The props still standing whose boxes touch a rectangle, into this.nearProps. Returns how many.
@@ -2056,11 +1920,9 @@ export class Room {
 
   // Pickups lie still, so the list near someone rarely changes. It is sent only when it does: a new one appears, one
   // is taken, or one comes into or goes out of range. Snapshots arrive in order, so the client keeps the last list.
-  // While a harpoon slides one, and on the snapshot after it stops, the list goes every time so the slide is seen.
   private pickupsChanged(player: Player, near: readonly PickupState[]): PickupState[] | null {
     const sent = player.sentPickupIds;
-    const moving = this.tickCount - this.pickupsMovedTick <= this.config.net.snapshotEvery;
-    if (!moving && near.length === sent.length && near.every((p, i) => p.id === sent[i])) return null;
+    if (near.length === sent.length && near.every((p, i) => p.id === sent[i])) return null;
     sent.length = 0;
     for (const p of near) sent.push(p.id);
     return [...near];
