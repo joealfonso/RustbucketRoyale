@@ -480,3 +480,6 @@ In 16b the drop-in's sprites were inked in pools of their own so explosions and 
 
 ## 2026-10-22: Magnet Harpoon removed (Joseph: get rid of the grapple and pull weapon)
 The grapple and yank added a second movement system (server-driven pulls the client had to book and predict) that Joseph did not want in the game. It went whole: the pull fields left the snapshot, so the format is 4 bytes smaller and both ends must restart together.
+
+## 2026-10-26: The comic cel look (V17): halftone, a comic font, impact frames
+Joseph asked for more cel shading, cel-shaded particles and "like a comic at times", and approved three changes to DESIGN.md: a halftone dot pattern allowed in the darkest band at high effects quality (beside the brush marks), Bangers as a third font for comic lettering only (real words, onomatopoeia and panel captions), and comic moments as a sanctioned effect at big beats, rate limited so they stay special. On his call there is no photosensitivity warning or flashing toggle while the game is far from release ("isn't needed"); flashes run at full strength and only the system reduced-motion setting turns flashes and shake off.
