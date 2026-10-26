@@ -6,6 +6,7 @@ Current visual milestone: V11 to V16 built, waiting for Joseph's playtest
 Update the two lines above when a gate passes. Claude Code reads this file first every session and works only on the current milestone.
 
 ## Code
+- M20: the damage loop, on Joseph's call (relayed: "do 1,2,3,4,5"), queued after V17 and M19. One loop: shoot, stagger, finisher or part break, loot, fire spreads. 20a stagger (a hidden meter read from sparks and a wobble; a break locks the mech briefly with bonus damage) and damage-scaled launches on M19's knockback; 20b finishers (E on a staggered or broken mech, a 1-2 s comic finisher, vulnerable meanwhile, bots too) and part breaks dropping the gun or spilling loot; finishers become the main armour source, crates keep a small plate chance (Joseph's pick, 2026-10-26); 20c fire on a coarse server grid with seeded wind, spreading through dry grass, stopped by water and bare ground, cooking off barrels, avoided by bots. Each gate ends in his playtest.
 - M1: one mech walks, runs, jets, shoots on a fixed grey-box map, offline, in the browser. Port the feel numbers from the Unity prototype first, then tune by playing. Gate: it is fun on its own for an hour. Also test run speed against a 2000 m distance.
 - M2: authoritative Node server with one room, 2 clients in browsers, client prediction and reconciliation, snapshots with interpolation for other mechs.
 - M3: weapons, grenade, armor, server side hit zones, over the shoulder aim rule.
