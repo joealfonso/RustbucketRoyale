@@ -483,3 +483,6 @@ The grapple and yank added a second movement system (server-driven pulls the cli
 
 ## 2026-10-26: The comic cel look (V17): halftone, a comic font, impact frames
 Joseph asked for more cel shading, cel-shaded particles and "like a comic at times", and approved three changes to DESIGN.md: a halftone dot pattern allowed in the darkest band at high effects quality (beside the brush marks), Bangers as a third font for comic lettering only (real words, onomatopoeia and panel captions), and comic moments as a sanctioned effect at big beats, rate limited so they stay special. On his call there is no photosensitivity warning or flashing toggle while the game is far from release ("isn't needed"); flashes run at full strength and only the system reduced-motion setting turns flashes and shake off.
+
+## 2026-10-26: An agent team in .claude/agents
+Joseph asked for six role agents (designer, engineer, art director, artist, playtester, marketer), each with its own team. Claude Code subagents cannot start subagents, so a lead cannot run its team: the crews are flat agent files the main session dispatches, and each lead ends its report with "Crew tasks" naming who should do what. Crews are two or three per lead, split mostly by model (Haiku for runs and captures, Sonnet for routine edits, Opus for the hard design leads) rather than six each, which would overlap.

@@ -24,6 +24,9 @@ Open these on demand. Do not import them.
 - Plain names, small files, one job per module, no speculative abstractions. Comments explain why, never what. If something is a guess, say so in a comment or in your reply.
 - Every milestone ends with a playtest gate. Tell me when it is ready for the gate. Never start the next milestone on your own.
 
+## Agent team
+Role agents live in `.claude/agents/`: `designer`, `engineer`, `art-director`, `artist`, `playtester`, `marketer`, each with a small crew (e.g. `engineer-checker`). Send work to the matching role. Subagents cannot start subagents, so leads list "Crew tasks" and the main session dispatches them. Review every result before it lands.
+
 ## Fun rules
 - Game feel comes first: movement weight, jump jet response, hit feedback, screen shake, and sound hooks get tuned before later systems are built on top.
 - Every system must create a good story or a good clip. If it only adds a rule, propose cutting it.
