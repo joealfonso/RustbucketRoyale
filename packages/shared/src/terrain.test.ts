@@ -63,9 +63,11 @@ describe("generated hills", () => {
   const mech = { halfWidth: stats.halfWidth, height: stats.height, stepHeight: stats.stepHeight };
   const build = (seed: number, tier: string) => generateMap(seed, tier, parseChunkSet(chunksJson), tiers, mech, parsePropConfig(propsJson));
 
+  // Many seeds: a steep spot needs the hills' bumps (or an island's bays) to line up, which only some maps do.
+  const seedsOf: Record<string, number> = { small: 40, medium: 10 };
   for (const tier of ["small", "medium"]) {
     it(`${tier}: never steeper than the limit, and everything built stands on level ground`, () => {
-      for (const seed of [1, 2, 3]) {
+      for (let seed = 1; seed <= seedsOf[tier]!; seed++) {
         const map = build(seed, tier);
         const t = map.terrain;
         const limit = tiers.terrain!.maxRisePercent / 100 + 1e-6;
@@ -74,10 +76,10 @@ describe("generated hills", () => {
         for (let j = 0; j < t.corners; j++) for (let i = 0; i + 1 < t.corners; i++) {
           steepest = Math.max(steepest, Math.abs(t.corner(i + 1, j) - t.corner(i, j)) / t.cell, Math.abs(t.corner(j, i + 1) - t.corner(j, i)) / t.cell);
         }
-        expect(steepest).toBeLessThanOrEqual(limit);
+        expect(steepest, `${tier} seed ${seed}: too steep`).toBeLessThanOrEqual(limit);
         const unlevel: number[] = [];
         map.boxes.forEach((b, k) => {
-          if (k < 5 || map.propOfBox[k]! >= 0 || map.kindNames[map.kinds[k]!] === "boulder") return; // ground slab, edge walls, props and boulders sit on slopes
+          if (k === 0 || map.propOfBox[k]! >= 0 || map.kindNames[map.kinds[k]!] === "boulder") return; // the ground slab, props and boulders sit on slopes (an island has no edge walls)
           const ground = [[b.minX, b.minZ], [b.maxX, b.maxZ], [b.minX, b.maxZ], [b.maxX, b.minZ]].map(([x, z]) => t.heightAt(x!, z!));
           if (Math.max(...ground) - Math.min(...ground) >= 0.01) unlevel.push(k);
         });
@@ -92,10 +94,12 @@ describe("generated hills", () => {
     expect(build(7, "medium").terrain.heights).not.toEqual(build(8, "medium").terrain.heights);
   });
 
-  it("keeps the map's edge at ground level and stands spawns and props on the ground", () => {
+  it("keeps the map's edge on the seabed and stands spawns and props on the ground", () => {
     const map = build(4, "small");
     const t = map.terrain;
-    for (let i = 0; i < t.corners; i++) expect([t.corner(i, 0), t.corner(0, i), t.corner(i, t.corners - 1), t.corner(t.corners - 1, i)]).toEqual([0, 0, 0, 0]);
+    const island = tiers.terrain!.tiers.small!.island!;
+    const seabed = island.seaLevelMeters - island.seabedMeters;
+    for (let i = 0; i < t.corners; i++) expect([t.corner(i, 0), t.corner(0, i), t.corner(i, t.corners - 1), t.corner(t.corners - 1, i)]).toEqual([seabed, seabed, seabed, seabed]);
     for (const [x, y, z] of map.spawns) expect(y).toBeCloseTo(t.heightAt(x, z) + 0.05, 5);
     for (const p of map.props) expect(map.boxes[p.boxIndex]!.minY).toBeLessThanOrEqual(t.heightAt(p.x, p.z) + 1e-9);
   });
@@ -115,26 +119,31 @@ describe("water", () => {
   const build = (seed: number, tier: string) => generateMap(seed, tier, parseChunkSet(chunksJson), tiers, mech, parsePropConfig(propsJson));
 
   for (const tier of ["small", "medium"]) {
-    it(`${tier}: floods about its share of the lowest ground, never deeper than a wade, and keeps buildings level`, () => {
+    it(`${tier}: floods about its share of the island's land, never deeper than a wade, and keeps buildings level`, () => {
       const share = tiers.terrain!.tiers[tier]!.waterShare!;
-      for (const seed of [1, 2]) {
+      // Ponds and marsh on the land, over a few seeds: one island's ponds can sit under its pads and be raised dry. The
+      // sea round the island is not counted, and is deep past the wading limit.
+      let land = 0, wet = 0;
+      for (const seed of [1, 2, 3, 4]) {
         const map = build(seed, tier);
         const t = map.terrain;
-        let wet = 0, deepest = 0;
+        let deepest = 0;
         for (let k = 0; k < t.heights.length; k++) {
+          if (t.coast![k]! < 0) continue;
+          land++;
           const depth = t.waterLevel - t.heights[k]! / 100;
           if (depth > 0) { wet++; deepest = Math.max(deepest, depth); }
         }
-        expect(wet / t.heights.length).toBeGreaterThan(share * 0.5);
-        expect(wet / t.heights.length).toBeLessThan(share * 3);
         expect(deepest).toBeLessThanOrEqual(tiers.terrain!.water.maxDepthMeters + 1e-9);
         map.boxes.forEach((b, k) => {
-          if (k < 5 || map.propOfBox[k]! >= 0 || map.kindNames[map.kinds[k]!] === "boulder") return;
+          if (k === 0 || map.propOfBox[k]! >= 0 || map.kindNames[map.kinds[k]!] === "boulder") return;
           const ground = [[b.minX, b.minZ], [b.maxX, b.maxZ], [b.minX, b.maxZ], [b.maxX, b.minZ]].map(([x, z]) => t.heightAt(x!, z!));
           expect(Math.max(...ground) - Math.min(...ground), `${tier} seed ${seed} box ${k}`).toBeLessThan(0.01);
           expect(b.minY).toBeGreaterThanOrEqual(Math.min(...ground) - 0.01); // nothing sunk under the raised bed
         });
       }
+      expect(wet / land).toBeGreaterThan(share * 0.5);
+      expect(wet / land).toBeLessThan(share * 3);
     });
   }
 
@@ -195,12 +204,12 @@ describe("woods and boulders", () => {
       const count = map.world.query(a.minX, a.minZ, a.maxX, a.maxZ, near);
       for (let k = 0; k < count; k++) {
         const j = near[k]!;
-        if (j === i || j <= 4) continue; // the ground slab and edge walls
+        if (j === i || j === 0) continue; // the ground slab (an island has no edge walls)
         const b = map.boxes[j]!;
         // An outcrop's pieces lean into each other and rise out of floors and old terraces (gate 15a); the rule is for
         // the scattered boulders and trees.
         const outcrop = (k: number) => map.kinds[k] === boulder && map.boxes[k]!.maxY - map.boxes[k]!.minY > 4.6;
-        if (outcrop(i) && (outcrop(j) || b.maxY - b.minY <= 1.6)) continue;
+        if (outcrop(i) && (outcrop(j) || b.maxY - b.minY <= 1.6 + 1e-9)) continue;
         const overlap = a.minX < b.maxX && a.maxX > b.minX && a.minZ < b.maxZ && a.maxZ > b.minZ;
         expect(overlap, `box ${i} overlaps box ${j}`).toBe(false);
       }

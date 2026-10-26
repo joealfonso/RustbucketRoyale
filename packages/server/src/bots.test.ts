@@ -288,6 +288,61 @@ describe("bots that are getting nowhere", () => {
     expect(self.z).toBeGreaterThan(40);
   });
 
+  // Walks a bot for some seconds with no jets, so only its route gets it anywhere, and returns where it ended up.
+  function walkNoJets(walls: Box[], x: number, z: number, seconds: number, each: (bot: Bot, tick: number) => void, ring: (tick: number) => RingNow | null = () => null): { x: number; z: number } {
+    const world = new World([ground, ...walls]);
+    const finder = new Pathfinder(buildNavGrid(walls, 400, 0, 0, { cellMeters: 2, stepHeight: config.mech.stepHeight, mechHeight: config.mech.height }), botConfig.path);
+    const bot = new Bot(stats, random, botConfig.path, finder);
+    bot.body = config.mech;
+    const self = createMechState(config.mech, x, 0, z, 0);
+    const input = createMechInput();
+    for (let i = 0; i < 60 * seconds; i++) {
+      finder.newTick();
+      each(bot, i);
+      bot.think(self, [], ring(i), world, DT, input);
+      input.jet = false;
+      stepMech(self, input, config.mech, DT, world);
+      if (process.env.TRACE && i % 60 === 0) process.stderr.write(`${i / 60} ${self.x.toFixed(1)},${self.z.toFixed(1)} ${JSON.stringify((bot as any).path.map((v: number) => +v.toFixed(1)))} ${(bot as any).pathIndex} short ${(bot as any).shortFor.toFixed(1)}\n`);
+    }
+    return { x: self.x, z: self.z };
+  }
+
+  it("go round a long wall they stand against, not into it", () => {
+    // Small seed 1000: a bot against a 7 m wall pushed into it for 176 s, its route starting in the open cell over it.
+    const wall: Box = { minX: 2.2, maxX: 2.6, minZ: -40, maxZ: 40, minY: 0, maxY: 7 };
+    const end = walkNoJets([wall], 3.5, 0, 30, (bot, i) => { if (i % 60 === 0) bot.hear(-60, 0, 8); });
+    expect(end.x).toBeLessThan(-40);
+  });
+
+  it("go into a building by its door after a noise inside it", () => {
+    // Medium seed 2000: a bot after a noise in a building stood bumping its wall outside. The noise comes again and
+    // again, a little off each time, as the room's do.
+    const walls: Box[] = [[-10, -10, 10, -9], [-10, 9, 10, 10], [-10, -10, -9, 10], [9, -10, 10, -2], [9, 2, 10, 10]]
+      .map(([minX, minZ, maxX, maxZ]) => ({ minX: minX!, minZ: minZ!, maxX: maxX!, maxZ: maxZ!, minY: 0, maxY: 6 }));
+    const end = walkNoJets(walls, -70, 0, 40, (bot, i) => { if (i % 60 === 0) bot.hear(-3 + ((i / 60) % 3) - 1, 1, 8); });
+    expect(Math.abs(end.x)).toBeLessThan(9); // inside the room
+    expect(Math.abs(end.z)).toBeLessThan(9);
+  });
+
+  it("go to the nearer of two noises heard turn about, rather than turning round with each", () => {
+    // Medium seed 2001: beside a big fight a bot heard a new shot every quarter second, each a little off its real spot,
+    // took every newest one as where to go, and dithered on the spot.
+    const end = walkNoJets([], 0, 0, 10, (bot, i) => { if (i % 15 === 0) bot.hear((i / 15) % 2 === 0 ? 60 : -70, 0, 8); });
+    expect(end.x).toBeGreaterThan(40);
+  });
+
+  it("plan again on reaching the end of a route when the goal has moved on a little since", () => {
+    // Medium seed 2006: a route ends where its goal was when it was planned, and a goal that moved less than
+    // goalMoveReplan did not count as moved, so a bot arrived at the old spot and stood there, or circled it.
+    // Here the goal is the middle of a tiny ring. While the bot is still going round the first wall it moves on, behind
+    // a second wall from where it was.
+    const walls: Box[] = [{ minX: -20, maxX: 20, minZ: -31, maxZ: -29, minY: 0, maxY: 7 }, { minX: -10, maxX: 10, minZ: -67, maxZ: -65, minY: 0, maxY: 7 }];
+    const moved = botConfig.path.goalMoveReplan - 3;
+    const ring = (i: number): RingNow => ({ cx: 0, cz: i < 60 * 2 ? -60 : -60 - moved, radius: 1, stage: 1, shrinking: false, damagePerSecond: 2, secondsToChange: 99 });
+    const end = walkNoJets(walls, 0, 0, 40, () => {}, ring);
+    expect(Math.hypot(end.x, end.z + 60 + moved)).toBeLessThan(4);
+  });
+
   it("give up on loot that never comes, rather than holding E on it for ever", () => {
     const world = new World([ground]);
     const bot = new Bot(stats, random, botConfig.path, null);

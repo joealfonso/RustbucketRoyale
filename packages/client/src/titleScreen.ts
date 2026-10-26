@@ -1,4 +1,5 @@
-import { parseBotDifficulty, type Roster } from "@rustbucket/shared";
+import { parseAbilities, parseBotDifficulty, type Roster } from "@rustbucket/shared";
+import abilitiesJson from "../../../data/abilities.json";
 import audioJson from "../../../data/audio.json";
 import { Sound, type AudioConfig } from "./audio";
 import { Hangar } from "./hangar/hangar";
@@ -38,7 +39,8 @@ export function showTitleScreen(roster: Roster, picked: number): void {
   // A picked mech is remembered in this browser, so the game it opens next starts you in it.
   let hangar: Hangar | null = null;
   const cards = byId("menuMechs");
-  mechCards(cards, roster, picked, (mech) => { hangar?.select(mech); hangar?.hover(-1); });
+  const abilities = parseAbilities(abilitiesJson);
+  mechCards(cards, roster, picked, (mech) => { hangar?.select(mech); hangar?.hover(-1); }, (id) => abilities.mechs[id]?.name ?? "");
   // Pointing at a card lights that mech's bay in the hangar.
   cards.addEventListener("pointerover", (e) => {
     const card = (e.target as HTMLElement).closest<HTMLElement>("button[data-mech]");

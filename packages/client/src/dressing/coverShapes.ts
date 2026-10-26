@@ -1,4 +1,4 @@
-import type { CoverKind } from "./coverConfig";
+import type { CoverKind, GrassLook } from "./coverConfig";
 import { rng, type DressPiece } from "./kinds";
 import { box, convex, cylinder, turn, wedge, type MeshData, type V3 } from "./shapes";
 
@@ -9,7 +9,6 @@ import { box, convex, cylinder, turn, wedge, type MeshData, type V3 } from "./sh
 
 type Rand = () => number;
 const between = (r: Rand, lo: number, hi: number) => lo + r() * (hi - lo);
-const DRY = "#848049"; // ground.json's dry grass, so dry blades match the dry patches
 const DEAD = "#7A5A2E";
 
 // One flat triangle, either winding (the material draws both sides).
@@ -36,19 +35,22 @@ function blade(r: Rand, h: number, w: number): MeshData {
   return convex([base, [base[0]!, base[1]!, tip], [base[1]!, base[2]!, tip], [base[2]!, base[0]!, tip]]);
 }
 
-// A clump of grass: a dozen flat-ish blades leaning out from the middle, in two greens and a dry one.
-function grass(r: Rand): DressPiece[] {
+// A clump of grass: a few broad blades leaning out from a tight middle, all in the ground's own green (the clump's
+// tint and the dry patches vary it per instance), so a field reads as soft tufts rather than a scribble of thin,
+// high-contrast blades (V16a). The darker root is laid on per corner by cover.ts.
+function grass(r: Rand, look: GrassLook): DressPiece[] {
   const out: DressPiece[] = [];
-  const blades = 12;
-  for (let i = 0; i < blades; i++) {
-    const h = between(r, 0.3, 0.62);
-    const a = (i / blades) * Math.PI * 2 + between(r, -0.3, 0.3), d = between(r, 0.04, 0.3);
-    const lean = between(r, 0.15, 0.5) * (0.5 + d / 0.3);
+  const [w0, w1] = look.width as [number, number], [h0, h1] = look.height as [number, number], [l0, l1] = look.lean as [number, number];
+  for (let i = 0; i < look.blades; i++) {
+    const out01 = r();
+    // Blades nearer the middle stand taller and straighter, so the clump has a crown, not a flat fan.
+    const d = look.spread * out01, h = between(r, h0, h1) * (1 - 0.25 * out01);
+    const a = (i / look.blades) * Math.PI * 2 + between(r, -0.4, 0.4);
+    const lean = between(r, l0, l1) * (0.6 + 0.4 * out01);
     // Turned to face out from the middle, then leaned away from it.
-    const facing = turn(blade(r, h, between(r, 0.06, 0.09)), [0, Math.PI / 2 - a, 0]);
+    const facing = turn(blade(r, h, between(r, w0, w1)), [0, Math.PI / 2 - a, 0]);
     const leaned = turn(facing, [Math.sin(a) * lean, 0, -Math.cos(a) * lean]);
-    const paint = r() < 0.5 ? "moss" : r() < 0.6 ? "darkMoss" : DRY;
-    out.push({ paint, mesh: skyward(turn(leaned, [0, 0, 0], [0, 0, 0], [Math.cos(a) * d, 0, Math.sin(a) * d]), 0.6) });
+    out.push({ paint: "moss", mesh: skyward(turn(leaned, [0, 0, 0], [0, 0, 0], [Math.cos(a) * d, 0, Math.sin(a) * d]), look.skyward) });
   }
   return out;
 }
@@ -143,13 +145,20 @@ function scrap(r: Rand): DressPiece[] {
   return out;
 }
 
-const MAKERS: Record<CoverKind, (r: Rand) => DressPiece[]> = { grass, weeds, fern, rubble, scrap };
+const MAKERS: Record<CoverKind, (r: Rand, grassLook: GrassLook) => DressPiece[]> = { grass, weeds, fern, rubble, scrap };
 
 // Kinds whose model is solid enough for an outline. Plants have none: a dark line round every blade turns a
 // field of grass into scribble.
 export const OUTLINED: ReadonlySet<CoverKind> = new Set(["rubble", "scrap"]);
 
-// The model of one kind, the same every time.
-export function coverModel(kind: CoverKind): DressPiece[] {
-  return MAKERS[kind](rng(0xc0fe + kind.length * 7919 + kind.charCodeAt(0)));
+// The model of one kind, the same every time for the same look.
+export function coverModel(kind: CoverKind, grassLook: GrassLook): DressPiece[] {
+  return MAKERS[kind](rng(0xc0fe + kind.length * 7919 + kind.charCodeAt(0)), grassLook);
+}
+
+// How bright a grass corner `y` metres up its blade is drawn: rootShade at the foot rising to tipShade at rootMeters,
+// so each clump sits into the ground (a contact shadow painted in, no extra triangles).
+export function bladeShade(y: number, look: GrassLook): number {
+  const t = Math.min(1, Math.max(0, y / look.rootMeters));
+  return look.rootShade + (look.tipShade - look.rootShade) * t;
 }

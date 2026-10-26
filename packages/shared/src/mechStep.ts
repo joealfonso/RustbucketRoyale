@@ -15,8 +15,6 @@ const POUNCE_MIN_TARGET = 3;
 const POUNCE_FALLBACK_RANGE = 0.5; // share of maxRange leapt when there is no usable aim point
 // Extra seconds a pounce may stay in the air past its planned flight, for landing lower down, before it gives up.
 const POUNCE_GRACE_SECONDS = 1;
-// A pull that covers less than this share of its step has hit something, and ends.
-const PULL_BLOCKED_FRACTION = 0.5;
 
 // Everything the sim needs to know about one mech. Plain numbers so it can be copied or sent.
 export interface MechState {
@@ -40,10 +38,6 @@ export interface MechState {
   dropTime: number; // seconds of landing stun left: no moving, jets, dash or ability
   pinTime: number; // seconds left pinned by a full charge spike. Set by the server on the hit
   pinSpeed: number; // share of walk and run speed kept while pinned
-  // A harpoon pull (gate 18b): a yank toward whoever harpooned you, or your own reel. While pullTime is above 0 the
-  // mech moves at exactly this velocity. Set by startPull, on the server and in prediction alike.
-  pullTime: number;
-  pullVx: number; pullVy: number; pullVz: number;
   fuel: Meter;
   stamina: Meter;
 }
@@ -53,7 +47,6 @@ export function createMechState(stats: MechStats, x: number, y: number, z: numbe
     x, y, z, vx: 0, vz: 0, vy: 0, bodyYaw: yaw, mech,
     grounded: false, running: false, jetting: false, fuelScale: 1, speedScale: 1, crawling: false, dashTime: 0, dashCooldown: 0, dashX: 0, dashZ: 0,
     abilityTime: 0, abilityCooldown: 0, abilityX: 0, abilityZ: 0, dropPhase: 0, dropTime: 0, pinTime: 0, pinSpeed: 1,
-    pullTime: 0, pullVx: 0, pullVy: 0, pullVz: 0,
     fuel: new Meter(stats.fuelMax), stamina: new Meter(stats.staminaMax),
   };
 }
@@ -82,7 +75,6 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   if (stunned) s.dropTime = s.dropTime - dt < dt * 0.5 ? 0 : s.dropTime - dt;
   const pinned = s.pinTime > 0;
   if (pinned) s.pinTime = s.pinTime - dt < dt * 0.5 ? 0 : s.pinTime - dt;
-  const pulled = s.pullTime > 0;
 
   // 0 means the body always faces where you look. Above 0 it swings round at that many degrees a second, which feels heavier.
   s.bodyYaw = stats.turnSpeedDegrees > 0 ? moveTowardsAngle(s.bodyYaw, input.aimYaw, stats.turnSpeedDegrees * DEG * dt) : input.aimYaw;
@@ -110,7 +102,7 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   if (!ability) s.abilityTime = 0;
   s.abilityCooldown = Math.max(0, s.abilityCooldown - dt);
   // The server spots a start by the cooldown going up, so every kind sets it here.
-  if (ability && input.ability && !stunned && !pulled && s.abilityCooldown <= 0 && s.abilityTime <= 0 && s.grounded && !s.crawling) {
+  if (ability && input.ability && !stunned && s.abilityCooldown <= 0 && s.abilityTime <= 0 && s.grounded && !s.crawling) {
     s.abilityCooldown = ability.cooldownSeconds;
     if (ability.kind === "pounce") {
       s.dashTime = 0;
@@ -132,7 +124,7 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
 
   // A dash goes the way you are steering, in any of the eight directions, or straight ahead if you are standing still.
   s.dashCooldown = Math.max(0, s.dashCooldown - dt);
-  if (input.dash && !stunned && !pulled && !s.crawling && s.abilityTime <= 0 && s.dashCooldown <= 0 && s.dashTime <= 0 && s.stamina.canUse && s.stamina.value >= stats.dashStaminaCost) {
+  if (input.dash && !stunned && !s.crawling && s.abilityTime <= 0 && s.dashCooldown <= 0 && s.dashTime <= 0 && s.stamina.canUse && s.stamina.value >= stats.dashStaminaCost) {
     let dirX = forwardX, dirZ = forwardZ;
     const length = Math.hypot(wishX, wishZ);
     if (length > 1e-4) {
@@ -199,13 +191,6 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
     s.vy = s.grounded && s.vy < 0 ? STICK_TO_GROUND : Math.max(s.vy - stats.gravity * dt, -stats.maxFallSpeed);
   }
 
-  // A pull overrides everything else that moves the mech, gravity and jets included, so it is the same line whatever
-  // keys are held.
-  if (pulled) {
-    s.vx = s.pullVx; s.vy = s.pullVy; s.vz = s.pullVz;
-    s.jetting = false;
-  }
-  const fromX = s.x, fromY = s.y, fromZ = s.z;
 
   const wasGrounded = s.grounded;
   s.grounded = false;
@@ -217,14 +202,6 @@ export function stepMech(s: MechState, input: MechInput, stats: MechStats, dt: n
   if (ramming && s.abilityTime > 0 && Math.hypot(s.vx, s.vz) < ability.speed * RAM_BLOCKED_FRACTION) {
     s.abilityTime = 0;
     capToRunSpeed(s, stats);
-  }
-  if (pulled) {
-    // Ends with under half a step left, as the pin does. A wall or the ground in the way ends it too, rather than
-    // grinding along it.
-    const moved = Math.hypot(s.x - fromX, s.y - fromY, s.z - fromZ);
-    const blocked = moved < Math.hypot(s.pullVx, s.pullVy, s.pullVz) * dt * PULL_BLOCKED_FRACTION;
-    s.pullTime = s.pullTime - dt < dt * 0.5 || blocked ? 0 : s.pullTime - dt;
-    if (s.pullTime === 0) capToRunSpeed(s, stats);
   }
   // The launch step always ends in the air (it moved up), so being grounded here means the leap has landed.
   if (pouncing) {
@@ -406,20 +383,4 @@ function moveVertical(s: MechState, stats: MechStats, dy: number, world: World):
     }
     s.vy = 0;
   }
-}
-
-// Starts a harpoon pull on a mech (gate 18b): toward the point (toX, toY, toZ) from its feet, at `speed`, until it is
-// `stopMeters` short or `maxSeconds` have passed, with `lift` m/s added upward. Returns false when it is already
-// that close. Kept at float32, as the snapshot sends them, so a client replaying from the snapshot pulls the same.
-export function startPull(s: MechState, toX: number, toY: number, toZ: number, speed: number, maxSeconds: number, stopMeters: number, lift: number): boolean {
-  const dx = toX - s.x, dy = toY - s.y, dz = toZ - s.z;
-  const distance = Math.hypot(dx, dy, dz);
-  const travel = distance - stopMeters;
-  if (travel <= 0 || !(speed > 0) || !(maxSeconds > 0)) return false;
-  s.pullVx = Math.fround((dx / distance) * speed);
-  s.pullVy = Math.fround((dy / distance) * speed + lift);
-  s.pullVz = Math.fround((dz / distance) * speed);
-  s.pullTime = Math.fround(Math.min(maxSeconds, travel / speed));
-  s.dashTime = 0;
-  return true;
 }

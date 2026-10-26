@@ -1,4 +1,4 @@
-import { SnapshotMemory, decodeServerBinary, encodeInput, type RejoinMessage, type AbilityMessage, type ExplodeMessage, type TitanMessage, type RivetMessage, type HarpoonMessage, type HurtMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
+import { SnapshotMemory, decodeServerBinary, encodeInput, type RejoinMessage, type AbilityMessage, type ExplodeMessage, type TitanMessage, type RivetMessage, type HurtMessage, GrenadeMessage, HitMessage, InputMessage, MechInput, ServerMessage } from "@rustbucket/shared";
 
 type SnapshotMessage = Extract<ServerMessage, { t: "snapshot" }>;
 type ShotMessage = Extract<ServerMessage, { t: "shot" }>;
@@ -7,6 +7,19 @@ type EliminatedMessage = Extract<ServerMessage, { t: "eliminated" }>;
 type ResultMessage = Extract<ServerMessage, { t: "result" }>;
 
 const RETRY_MS = 1000; // between tries to reconnect
+
+// What the client needs of a connection. A real WebSocket, or offline practice's room in the page (localRoom.ts),
+// which passes the same packed messages both ways without a network.
+export interface Socket {
+  binaryType: BinaryType;
+  onopen: ((event: Event) => void) | null;
+  onclose: ((event: CloseEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onmessage: ((event: MessageEvent) => void) | null;
+  send(data: string | ArrayBuffer): void;
+  close(): void;
+}
+export type OpenSocket = (url: string) => Socket;
 
 // Who this player is in a room, enough to get their mech back.
 export interface Session {
@@ -36,7 +49,6 @@ export class NetClient {
   onAbility?: (moment: AbilityMessage) => void;
   onTitan?: (moment: TitanMessage) => void; // the Junk Titan's stomps, thrown cars and fall (gate 13c)
   onRivet?: (rivet: RivetMessage) => void; // a rivet stuck, or someone detonating theirs (gate 18b)
-  onHarpoon?: (harpoon: HarpoonMessage) => void; // a harpoon landing: what it caught and for how long (gate 18b)
   // The newest room message is kept, so a handler attached late (while the map is still being built) still gets it.
   private latestRoom: RoomMessage | null = null;
   private roomHandler?: (room: RoomMessage) => void;
@@ -65,7 +77,7 @@ export class NetClient {
   // Set by the game: the mech being watched while knocked out, or 0.
   watchId: () => number = () => 0;
   private sentAt = new Float64Array(256);
-  private socket!: WebSocket;
+  private socket!: Socket;
   private memory = new SnapshotMemory(); // what this connection was last sent, which snapshots are changes from
   private rejoinToken = "";
   private roomCode = ""; // from the welcome: a page that made its room has no code in its first address
@@ -83,7 +95,8 @@ export class NetClient {
   // `graceSeconds`: how long the server holds a dropped mech (net.json rejoinGraceSeconds), so how long to keep trying.
   // `resume`: who this tab was in this room before the page reloaded. It tries to get that mech back first, and joins
   // afresh if the server says it is too late.
-  constructor(private url: string, private graceSeconds = 20, resume: Session | null = null) {
+  // `open` makes the connection: a WebSocket to `url`, unless offline practice hands over its room in the page.
+  constructor(private url: string, private graceSeconds = 20, resume: Session | null = null, private openSocket: OpenSocket = (u) => new WebSocket(u)) {
     this.welcome = new Promise((resolve, reject) => { this.welcomed = resolve; this.failed = reject; });
     if (resume) {
       this.id = resume.id;
@@ -100,7 +113,7 @@ export class NetClient {
   // Opens a socket. On a rejoin it first says who this was, before anything else is sent.
   private connect(rejoin: boolean): void {
     const url = this.url;
-    const socket = new WebSocket(rejoin ? rejoinAddress(url, this.roomCode) : url);
+    const socket = this.openSocket(rejoin ? rejoinAddress(url, this.roomCode) : url);
     this.socket = socket;
     this.memory = new SnapshotMemory(); // a new connection starts from nothing on both sides
     socket.binaryType = "arraybuffer";
@@ -159,7 +172,6 @@ export class NetClient {
       else if (message.t === "ability") this.onAbility?.(message);
       else if (message.t === "titan") this.onTitan?.(message);
       else if (message.t === "rivet") this.onRivet?.(message);
-      else if (message.t === "harpoon") this.onHarpoon?.(message);
       else if (message.t === "refused") {
         if (message.rejoinFailed && !this.hasWelcome) {
           // A reloaded page that was too late: just join the room.

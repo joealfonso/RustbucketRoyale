@@ -1,9 +1,10 @@
 import { rng, type DressPiece } from "../dressing/kinds";
-import { box, convex, cylinder, merge, turn, type MeshData, type V3 } from "../dressing/shapes";
+import { box, cylinder, merge, turn, type MeshData, type V3 } from "../dressing/shapes";
 import type { BackdropConfig, BackdropItem } from "./layout";
 
-// The distant silhouettes, built at the origin and then turned and moved into place. Big, blunt, low-poly shapes:
-// they are seen from hundreds of metres, so a detail earns its place only if it changes the outline against the sky.
+// The distant silhouettes, built at the origin and then turned and moved into place. Big, blunt shapes: they are seen
+// from hundreds of metres, so a detail earns its place only if it changes the outline against the sky. Heaps are
+// rounded with smooth normals, so the toon bands sweep across them; the steel landmarks stay boxy, as steel is.
 
 type Rand = () => number;
 const between = (r: Rand, lo: number, hi: number) => lo + r() * (hi - lo);
@@ -15,38 +16,18 @@ export function backdropPieces(c: BackdropConfig, item: BackdropItem): DressPiec
   return pieces.map((p) => ({ paint: p.paint, mesh: turn(fitInside(p.mesh, item.radius), [0, item.yaw, 0], [0, 0, 0], [item.x, 0, item.z]) }));
 }
 
-// A ring of points round a middle at the given angles, each at its own share of `radius` and with its own rise, so
-// heaps never come out round or flat-topped. Every layer of a heap shares the angles, so its sides never twist.
-function lumpyRing(r: Rand, angles: number[], radius: number, y: number, rise: number, dx: number, dz: number): V3[] {
-  return angles.map((a) => {
-    const d = radius * between(r, 0.72, 1.05);
-    return [dx + Math.cos(a) * d, y + between(r, -rise, rise), dz + Math.sin(a) * d] as V3;
-  });
-}
-
-// A scrap heap: three slumped layers, each narrower and pushed off-centre, ending in a ragged ridge rather than a
-// cone. A few big pieces of junk (a girder, a slab of hull) stick out of the slopes to say what the heap is made of.
+// A scrap heap: one rounded, slumped mound with smooth normals (gate V16a: a curved silhouette, not a faceted hull),
+// its outline lumpy from a few slow waves round it and pushed off-centre as it rises, so heaps never come out round
+// or cone-topped. A few big pieces of junk (a girder, a slab of hull) stick out of the slopes to say what the heap is
+// made of.
 function heap(r: Rand, item: BackdropItem): DressPiece[] {
   const row = item.row!;
   const sides = Math.round(between(r, row.sides[0], row.sides[1]));
   const R = item.radius, H = item.height;
-  const turnBy = r() * Math.PI * 2;
-  const angles = Array.from({ length: sides }, (_, i) => turnBy + ((i + between(r, -0.25, 0.25)) / sides) * Math.PI * 2);
-  const levels: { y: number; radius: number; rise: number; dx: number; dz: number }[] = [
-    { y: 0, radius: R, rise: 0, dx: 0, dz: 0 },
-    { y: H * between(r, 0.3, 0.45), radius: R * between(r, 0.55, 0.7), rise: H * 0.05, dx: R * between(r, -0.1, 0.1), dz: R * between(r, -0.1, 0.1) },
-    { y: H * between(r, 0.68, 0.78), radius: R * between(r, 0.28, 0.4), rise: H * 0.06, dx: R * between(r, -0.15, 0.15), dz: R * between(r, -0.15, 0.15) },
-    { y: H * 0.93, radius: R * between(r, 0.08, 0.16), rise: H * 0.07, dx: R * between(r, -0.18, 0.18), dz: R * between(r, -0.18, 0.18) },
-  ];
-  const rings = levels.map((l) => lumpyRing(r, angles, l.radius, l.y, l.rise, l.dx, l.dz));
-  const body: MeshData[] = [];
-  for (let k = 0; k < rings.length - 1; k++) {
-    const a = rings[k]!, b = rings[k + 1]!;
-    body.push(convex([a, b, ...a.map((_, i) => { const j = (i + 1) % sides; return [a[i]!, a[j]!, b[j]!, b[i]!]; })]));
-  }
+  const ridge = { y: H * between(r, 0.68, 0.78), dx: R * between(r, -0.15, 0.15), dz: R * between(r, -0.15, 0.15) };
+  const body = mound(r, sides, row.rings, R, H, ridge.dx, ridge.dz);
   const junk: MeshData[] = [];
   // A girder or two jutting out of the ridge at a slant: at this range it is the one detail that says scrap, not rock.
-  const ridge = levels[2]!;
   for (let i = 0; i < 1 + Math.floor(r() * 2); i++) {
     const long = H * between(r, 0.25, 0.4), thick = Math.max(2.5, R * 0.03);
     const girder = box([0, long / 2, 0], [thick, long, thick]);
@@ -61,7 +42,56 @@ function heap(r: Rand, item: BackdropItem): DressPiece[] {
   }
   const paint = row.paints[Math.floor(r() * row.paints.length)]!;
   const junkPaint = row.paints[(row.paints.indexOf(paint) + 1) % row.paints.length]!;
-  return [{ paint, mesh: merge(...body) }, ...(junk.length > 0 ? [{ paint: junkPaint, mesh: merge(...junk) }] : [])];
+  return [{ paint, mesh: body }, ...(junk.length > 0 ? [{ paint: junkPaint, mesh: merge(...junk) }] : [])];
+}
+
+// A smooth mound `sides` points round and `rings` rings up, its foot a lumpy ring of about radius R at y = 0 and its
+// top a single point at height H, leaning to (dx, dz) as it rises. The radius at each angle is R times a few slow
+// waves (so the lumps run the full height, as slumped scrap does), the height of each ring wobbles round it the same
+// way, and the profile is a dome that rounds over into a blunt top. Normals are smooth, from the neighbours.
+function mound(r: Rand, sides: number, rings: number, R: number, H: number, dx: number, dz: number): MeshData {
+  const waves = [1, 2, 3, 5].map((k) => ({ k, size: between(r, 0.08, 0.2) / Math.sqrt(k), phase: r() * Math.PI * 2, rise: between(r, -0.12, 0.12) / Math.sqrt(k) }));
+  const turnBy = r() * Math.PI * 2;
+  const point = (i: number, j: number): V3 => {
+    const a = turnBy + (i / sides) * Math.PI * 2, t = j / rings;
+    let lump = 1, rise = 0;
+    for (const w of waves) { lump += w.size * Math.sin(w.k * a + w.phase); rise += w.rise * Math.sin(w.k * a + w.phase * 1.7); }
+    // A dome, a little flattened: wide shoulders, then rounding over to the top.
+    const reach = R * lump * Math.pow(1 - t * t, 0.7);
+    const y = H * (t + rise * Math.sin(Math.PI * t));
+    const lean = t * t;
+    return [dx * lean + Math.cos(a) * reach, y, dz * lean + Math.sin(a) * reach];
+  };
+  const out: MeshData = { positions: [], normals: [], indices: [] };
+  for (let j = 0; j < rings; j++) {
+    for (let i = 0; i < sides; i++) {
+      const p = point(i, j);
+      const along = subV(point(i + 1, j), point(i - 1, j)), up = subV(point(i, j + 1), point(i, Math.max(j - 1, 0)));
+      out.positions.push(...p);
+      out.normals.push(...outward(cross(along, up), p, dx * (j / rings) ** 2, dz * (j / rings) ** 2));
+    }
+  }
+  const top = rings * sides;
+  out.positions.push(dx, H, dz);
+  out.normals.push(0, 1, 0);
+  for (let j = 0; j < rings; j++) {
+    for (let i = 0; i < sides; i++) {
+      const k = (i + 1) % sides, a = j * sides + i, b = j * sides + k;
+      if (j < rings - 1) out.indices.push(a, b + sides, b, a, a + sides, b + sides);
+      else out.indices.push(a, top, b);
+    }
+  }
+  return out;
+}
+
+const subV = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+// `n` at unit length, turned to point away from the mound's middle line at (cx, cz).
+function outward(n: V3, p: V3, cx: number, cz: number): V3 {
+  const l = Math.hypot(...n) || 1;
+  const s = n[0] * (p[0] - cx) + n[2] * (p[2] - cz) < 0 ? -1 / l : 1 / l;
+  return [n[0] * s, n[1] * s, n[2] * s];
 }
 
 // A tower crane: a mast with a collar at each section joint, the jib reaching one way and the counter-jib with its

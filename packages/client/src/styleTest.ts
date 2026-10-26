@@ -18,6 +18,7 @@ import { kickFor } from "./recoil";
 import { Toon, parseLook, parsePalette } from "./toonMaterial";
 import { SunShadows, castShadows } from "./sunShadows";
 import { CreasePass } from "./creasePass";
+import { GradePass, parseGrade } from "./grade";
 import mechKitsJson from "../../../data/mechKits.json";
 import { loadKit, parseKits, type LoadedKit } from "./mechKit";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -28,7 +29,6 @@ import weaponFxJson from "../../../data/weaponFx.json";
 import { ShotFx } from "./shotFx";
 import { parseWeaponFx, weaponFxFor } from "./weaponFxData";
 import { RivetView } from "./rivetView";
-import { ANCHOR_MECH, ANCHOR_WORLD, HarpoonView } from "./harpoonView";
 import { mostOf, onVfxQuality, setVfxQuality, vfxConfig, vfxLevel, vfxQuality } from "./fx/quality";
 import explosionFxJson from "../../../data/explosionFx.json";
 import thrusterFxJson from "../../../data/thrusterFx.json";
@@ -73,6 +73,10 @@ onVfxQuality(() => sunShadows.setQuality(vfxQuality()));
 // Crease lines at the effects levels that draw them, as in the game.
 const crease = new CreasePass(lookConfig.crease, vfxQuality());
 onVfxQuality(() => crease.setQuality(vfxQuality()));
+// The colour grade per light preset, as in the game (grade.ts).
+const grade = new GradePass(parseGrade((lookJson as { grade?: unknown }).grade, toon.presets.map((p) => p.name)), (c) => toon.color(c));
+grade.usePreset(toon.presets[preset]!.name);
+const drawScene = () => crease.render(renderer, scene, camera);
 
 // Ground, then the chunk with its middle on the origin.
 const ground = new THREE.Mesh(new THREE.BoxGeometry(600, 1, 600), toon.ground(palette.world.ground));
@@ -240,17 +244,15 @@ let rangeShots = 0;
 let lookingAtRange = false;
 let rangeSlow = false; // quarter speed, to see each flipbook frame
 // `alt` fires the weapon's right-click look instead (C): a slug, a windup round or a full charge (gate 18a); the rivet
-// gun's detonator, or a harpoon reel that drags the range's stand-in shooter up to the wall (gate 18b).
+// gun's detonator (gate 18b).
 function fireAtRange(alt = false): void {
   const w = weapons[rangeWeapon]!;
   const sec = w.secondary;
   if (alt && sec.kind === "detonate") { rangeRivets?.detonate(0); return; }
   const pellets = alt && sec.kind === "slug" ? 1 : w.pellets;
-  const spreadDegrees = alt && (sec.kind === "slug" || sec.kind === "windup") ? sec.spreadDegrees : alt && sec.kind === "reel" ? 0 : w.spreadDegrees;
-  // A reel always goes for the wall.
-  const atMech = alt && sec.kind === "reel" ? (rangeShots++, false) : rangeShots++ % 2 === 1;
-  rangeShooter.x = -4.5; rangeShooter.y = 2.4; rangeShooter.z = RANGE_Z + 9; rangeReel = 0;
-  const ox = rangeShooter.x, oy = rangeShooter.y, oz = rangeShooter.z;
+  const spreadDegrees = alt && (sec.kind === "slug" || sec.kind === "windup") ? sec.spreadDegrees : w.spreadDegrees;
+  const atMech = rangeShots++ % 2 === 1;
+  const ox = -4.5, oy = 2.4, oz = RANGE_Z + 9;
   const tx = atMech ? 3.5 : -1.5, ty = atMech ? 2.4 : 2, tz = atMech ? RANGE_Z + 3 : RANGE_Z + 0.5;
   for (let p = 0; p < pellets; p++) {
     const spread = (spreadDegrees * Math.PI) / 180;
@@ -258,29 +260,19 @@ function fireAtRange(alt = false): void {
     const length = Math.hypot(dx, dy, dz);
     dx /= length; dy /= length; dz /= length;
     Object.assign(rangeShot, { ox, oy, oz, dx, dy, dz, length: atMech ? length - 1 : length + 5 }); // a mech hit ends on its armour
-    if (w.projectile.kind !== "harpoon" || !rangeHarpoon) { shotFx.show(rangeShot, rangeWeapon, atMech, alt ? 1 : -1); continue; }
-    // The harpoon: its head and cable, latching on the mech (a yank) or the wall (a reel, or a plain bite).
-    shotFx.flash(rangeShot, rangeWeapon, alt ? 1 : -1);
-    const hit = atMech ? length - 1 : length - 0.5;
-    rangeHarpoon.fire(0, ox, oy, oz, dx, dy, dz, hit, alt);
-    const hold = alt && sec.kind === "reel" ? sec.maxSeconds : w.projectile.yankSeconds;
-    rangeHarpoon.latch(0, atMech ? ANCHOR_MECH : ANCHOR_WORLD, 1, ox + dx * hit, oy + dy * hit, oz + dz * hit, alt, hold);
-    if (alt && sec.kind === "reel") rangeReel = hit / w.projectileSpeed + hold;
+    shotFx.show(rangeShot, rangeWeapon, atMech, alt ? 1 : -1);
   }
 }
 // Key 8: effects (V5a), the roster seen from in front. B sets off a blast behind it, in turn as big as a grenade's,
 // a mortar shell's and a barrel's; J switches the roster's jets on and off (off drops them, for the landing puff);
 // K dashes them; V switches the effects quality. The damage row sparks and smokes as in play.
 const explosionFx = parseExplosionFx(explosionFxJson);
-const fxSprites = new FxSprites(scene, (c) => toon.color(c), explosionFx.scorch);
+const fxSprites = new FxSprites(scene, (c) => toon.color(c), explosionFx.scorch, { toSun: toon.toSun, bandEdges: lookConfig.bandEdges });
 const fxChunks = new Debris(scene, toon, mostOf(vfxConfig, "debris"), () => vfxLevel().debris ?? 0, explosionFx.chunks);
 const explosions = new Explosions(scene, fxSprites, fxChunks, explosionFx, (c) => toon.color(c));
 const thrusters = new Thrusters(fxSprites, parseThrusterFx(thrusterFxJson));
 const damageFx = new DamageFx(fxSprites, parseDamageFx(damageFxJson), zones);
-// The rivets and the harpoon on the range: the stand-in shooter is a point where the shots leave, dragged up to the
-// wall by a reel; mech 1 is the target mech.
-const rangeShooter = { x: 0, y: 0, z: 0 };
-let rangeReel = 0; // seconds of reel left, counting the flight
+// The rivets on the range; mech 1 is the target mech.
 const rangeLooks = weaponFxFor(weaponFxConfig, weapons);
 const rangeRivetGun = weapons.findIndex((w) => w.projectile.kind === "rivet");
 const rangeRivetStats = weapons[rangeRivetGun]?.projectile;
@@ -301,23 +293,8 @@ if (rangeRivets && rangeRivetStats?.kind === "rivet") {
     if (weapon === rangeRivetGun) rangeRivets.stick({ owner: 0, id: rangeRivetId++, x, y, z, outX: -rangeShot.dx, outY: 0, outZ: -rangeShot.dz, mech: 1, fuseSeconds: fuse });
   };
 }
-const rangeHarpoonGun = weapons.findIndex((w) => w.projectile.kind === "harpoon");
-const rangeHarpoonLook = rangeLooks[rangeHarpoonGun]?.harpoon;
-const rangeHarpoon = rangeHarpoonLook
-  ? new HarpoonView(scene, rangeHarpoonLook, (c) => toon.color(c), toon.color(weapons[rangeHarpoonGun]!.color), fxSprites.sparks,
-    (_id, out) => { out.x = rangeShooter.x; out.y = rangeShooter.y; out.z = rangeShooter.z; return true; }, (m) => (m === 1 ? target : null), () => false)
-  : null;
-// Each frame: a reel drags the shooter point along its cable, as the server drags a reeling mech.
 function updateRange(dt: number): void {
-  if (rangeReel > 0 && weapons[rangeHarpoonGun]?.secondary.kind === "reel") {
-    rangeReel -= dt;
-    const speed = weapons[rangeHarpoonGun]!.secondary.speed;
-    const tx = -1.5, tz = RANGE_Z + 2, dx = tx - rangeShooter.x, dz = tz - rangeShooter.z, d = Math.hypot(dx, dz);
-    if (d > 0.5) { rangeShooter.x += (dx / d) * speed * dt; rangeShooter.z += (dz / d) * speed * dt; }
-  }
-  rangeHarpoon?.update(dt);
   rangeRivets?.update(dt, camera.position);
-  rangeHarpoon?.draw(camera);
 }
 const BLASTS = [["grenade", grenadeJson.blastRadius], ["mortar shell", abilitiesJson.mechs.cataclysm.blastRadius], ["barrel", props.barrelBlast.radius]] as const;
 let nextBlast = 0;
@@ -436,7 +413,7 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "KeyQ") turn -= 0.3;
   if (e.code === "KeyE") turn += 0.3;
   if (e.code === "KeyW") walk = (walk + 1) % WALKS.length;
-  if (e.code === "KeyL") { preset = (preset + 1) % toon.presets.length; toon.useLight(toon.presets[preset]!); }
+  if (e.code === "KeyL") { preset = (preset + 1) % toon.presets.length; toon.useLight(toon.presets[preset]!); grade.usePreset(toon.presets[preset]!.name); }
   if (e.code === "KeyR") rosterFiring = true;
   if (e.code === "KeyY") kickRoster("railShot");
   if (e.code === "KeyH") sensorDamage = (sensorDamage + 1) % SENSOR_DAMAGE.length;
@@ -462,7 +439,7 @@ renderer.setAnimationLoop(() => {
   shotFx.draw(camera, fxDt);
   updateRange(fxDt);
   sunShadows.follow(camera);
-  crease.render(renderer, scene, camera);
+  grade.render(renderer, drawScene);
 });
 
 // ---- Gate 13c (client): the Junk Titan's moves. Key I stands a live Titan beside the roster, past the scale Titan

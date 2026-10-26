@@ -43,11 +43,16 @@ export interface GroundLook {
   // waver by up to `raggedMeters` of height, with noise `scale` cells a metre. An island's shore is sand up to
   // `beach.meters` above the sea (setGroundBeach), so it reads as a coast, not a flooded field.
   wet: { bed: string; damp: string; dampMeters: number; dampStrength: number; raggedMeters: number; scale: number; beach: { color: string; meters: number } };
+  // A faint lighter and darker wash over everything, `scale` noise cells a metre plus a finer octave, up to `amount`
+  // either way. It never fades, so the far ground has a little of the life the close-range detail gives the near
+  // ground, and the line where that detail fades out does not show as a band.
+  tone: { scale: number; amount: number };
 }
 
 export function parseGroundLook(raw: unknown): GroundLook {
   const g = raw as GroundLook;
-  if (!g?.regions || !g.breakup || !g.gravel || !g.brush || !g.oil || !g.tracks || !g.hills || !g.wet) throw new Error("ground.json: needs regions, breakup, gravel, brush, oil, tracks, hills and wet");
+  if (!g?.regions || !g.breakup || !g.gravel || !g.brush || !g.oil || !g.tracks || !g.hills || !g.wet || !g.tone) throw new Error("ground.json: needs regions, breakup, gravel, brush, oil, tracks, hills, wet and tone");
+  if (!(g.tone.scale > 0 && g.tone.amount >= 0 && g.tone.amount <= 0.2)) throw new Error("ground.json: tone scale above 0, amount between 0 and 0.2");
   if (!(g.wet.dampMeters > 0 && g.wet.raggedMeters >= 0 && g.wet.dampStrength >= 0 && g.wet.dampStrength <= 1)) throw new Error("ground.json: wet dampMeters above 0, raggedMeters 0 or more, dampStrength between 0 and 1");
   if (!(typeof g.wet.beach?.color === "string" && g.wet.beach.meters > 0)) throw new Error("ground.json: wet needs beach color and meters above 0");
   const { hills } = g;
@@ -70,7 +75,7 @@ export const groundLook = parseGroundLook(groundJson);
 const f = (n: number) => n.toFixed(4);
 
 // A sin-free hash on whole cell numbers: sin() of large world coordinates differs between graphics cards.
-const GROUND_GLSL = `
+export const GROUND_GLSL = `
   float gHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
   float gNoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -79,22 +84,40 @@ const GROUND_GLSL = `
   }
   // 1 while a feature of this size in metres is several pixels wide, 0 once a pixel covers most of it: fine detail
   // fades out with distance instead of shimmering.
-  float gKeep(float size, float pixel) { return 1.0 - smoothstep(size * 0.25, size * 0.6, pixel); }`;
+  float gKeep(float size, float pixel) { return 1.0 - smoothstep(size * 0.25, size * 0.6, pixel); }
+  // Roughly how many metres past edge a value is (negative before it), from how much it changes across a pixel
+  // (change, its fwidth) and how wide a pixel is. The floor stops a nearly level value reading as far from its edge.
+  float gPast(float value, float edge, float change, float pixel) { return (value - edge) * pixel / max(change, pixel * 0.001); }`;
+
+// GLSL for `float groundRegionNoise(vec2 gp, float y)`: the big patches' noise at a ground position and height,
+// without the fine brush breakup, which the fragment code adds. Shared with the crest ink (crestInk.ts), which picks
+// the same patch colour per vertex, so a crest is inked in the colour of the ground it rims.
+export function groundRegionGlsl(g: GroundLook): string {
+  const { regions, hills } = g;
+  return `
+  float groundRegionNoise(vec2 gp, float y) {
+    // Hollows lean to dark moss, crests to dry grass: the same patches, pushed by height.
+    float lean = clamp(y / ${f(hills.crest.meters)}, 0.0, 1.0) * ${f(hills.crest.bias)} - clamp(-y / ${f(hills.hollow.meters)}, 0.0, 1.0) * ${f(hills.hollow.bias)};
+    return gNoise(gp * ${f(regions.scale)}) * 0.7 + gNoise(gp * ${f(regions.scale * 2.3)} + 31.0) * 0.3 + lean;
+  }`;
+}
 
 // The ground's fragment code: picks a colour for this spot from the patches, then the bands light it as usual.
+// It also leaves `groundDetailMeters` for the close-range detail (paint/groundDetail.ts): how far into dirt (x) and into
+// rock (y) this spot is, in metres, negative before the edge. The same thresholds as the colours, so the detail's
+// ragged crossing is centred on each hard colour edge.
 export function groundShaderCode(g: GroundLook): string {
-  const { regions, breakup, gravel, brush, oil, tracks, hills, wet } = g;
+  const { regions, breakup, gravel, brush, oil, tracks, hills, wet, tone } = g;
   const angle = (brush.angleDegrees * Math.PI) / 180;
   return `
+    vec2 groundDetailMeters;
     {
       vec2 gp = vGroundPos;
       float pixel = length(fwidth(gp));
       float fine = gKeep(1.0 / ${f(breakup.scale)}, pixel);
       vec3 c = diffuseColor.rgb;
       float ragged = (gNoise(gp * ${f(breakup.scale)}) - 0.5) * ${f(breakup.amount)} * fine;
-      // Hollows lean to dark moss, crests to dry grass: the same patches, pushed by height.
-      float lean = clamp(vGroundY / ${f(hills.crest.meters)}, 0.0, 1.0) * ${f(hills.crest.bias)} - clamp(-vGroundY / ${f(hills.hollow.meters)}, 0.0, 1.0) * ${f(hills.hollow.bias)};
-      float n = gNoise(gp * ${f(regions.scale)}) * 0.7 + gNoise(gp * ${f(regions.scale * 2.3)} + 31.0) * 0.3 + ragged + lean;
+      float n = groundRegionNoise(gp, vGroundY) + ragged;
       if (n < ${f(regions.darkMoss.below)}) c = groundDarkMoss;
       else if (n > ${f(regions.dirt.above)}) c = groundDirt;
       else if (n > ${f(regions.dryGrass.above)}) c = groundDryGrass;
@@ -147,7 +170,16 @@ export function groundShaderCode(g: GroundLook): string {
         if (aboveWater < groundBeach) c = groundSand;
         if (aboveWater < ${f(wet.dampMeters)}) c = mix(c, groundDamp, ${f(wet.dampStrength)});
       }
+      float wash = gNoise(gp * ${f(tone.scale)} + 91.0) * 0.6 + gNoise(gp * ${f(tone.scale * 2.7)} + 23.0) * 0.4;
+      c *= 1.0 + (wash - 0.5) * ${f(tone.amount * 2)};
       diffuseColor.rgb = c;
+
+      // Dirt is bare dirt, slope dirt, gravel, sand and the bed; rock is the steep faces, unless sand covers them.
+      float dRise = fwidth(rise), dWater = fwidth(aboveWater);
+      float pastSand = gPast(-aboveWater, -max(groundBeach, 0.0), dWater, pixel);
+      float pastGravel = min(gPast(gr, ${f(gravel.above)}, fwidth(gr), pixel), -gPast(rise, ${f(hills.flatBelow)}, dRise, pixel));
+      float pastDirt = max(max(gPast(n, ${f(regions.dirt.above)}, fwidth(n), pixel), gPast(rise, ${f(hills.dirt.rise)}, dRise, pixel)), max(pastGravel, pastSand));
+      groundDetailMeters = vec2(pastDirt, min(gPast(rise, ${f(hills.rock.rise)}, dRise, pixel), -pastSand));
     }`;
 }
 
@@ -188,7 +220,7 @@ export function groundMaterial(hex: string, ramp: THREE.Texture, color: (name: s
         vGroundUp = normalize(mat3(modelMatrix) * groundNormal).y;`);
     const declarations = Object.keys(colors).map((name) => `uniform vec3 ${name};`).join("\n") + "\nuniform float groundWaterLevel;\nuniform float groundBeach;";
     shader.fragmentShader = shader.fragmentShader
-      .replace("void main() {", `varying vec2 vGroundPos;\nvarying float vGroundY;\nvarying float vGroundUp;\n${declarations}\n${GROUND_GLSL}\nvoid main() {`)
+      .replace("void main() {", `varying vec2 vGroundPos;\nvarying float vGroundY;\nvarying float vGroundUp;\n${declarations}\n${GROUND_GLSL}${groundRegionGlsl(g)}\nvoid main() {`)
       .replace("#include <color_fragment>", `#include <color_fragment>\n${code}`);
     if (detail) addGroundDetail(shader, detail);
   };

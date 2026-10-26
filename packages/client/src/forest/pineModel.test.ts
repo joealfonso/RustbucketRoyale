@@ -74,6 +74,49 @@ describe("pine model", () => {
   });
 });
 
+describe("crown shading", () => {
+  // The normal of the first corner found at a position, within a centimetre.
+  function normalNear(parts: Part[], at: [number, number, number]): number[] | null {
+    for (const { mesh } of parts) {
+      const { positions: p, normals: n } = mesh;
+      for (let i = 0; i < p.length; i += 3) if (Math.hypot(p[i]! - at[0], p[i + 1]! - at[1], p[i + 2]! - at[2]) < 0.01) return [n[i]!, n[i + 1]!, n[i + 2]!];
+    }
+    return null;
+  }
+
+  it("shades each tier as a soft blob: the tip faces up, the rim out, the underside down", () => {
+    const m = pineModel(look, 0);
+    const t = look.shapes[0]!.tiers[0]!;
+    const tip = normalNear(m.crown, [0, t.bottom + t.height, 0])!;
+    expect(tip[1]).toBeGreaterThan(0.95);
+    const under = normalNear(m.crown, [0, t.bottom + t.height * 0.18, 0])!;
+    expect(under[1]).toBeLessThan(-0.9);
+    // A full point of the rim (the tier's first, unturned) faces mostly outward.
+    const rim = normalNear(m.crown, [t.radius, t.bottom, 0])!;
+    expect(rim[0]).toBeGreaterThan(0.8);
+  });
+
+  it("gives every corner at one place one normal, so no facet edges show in the bands", () => {
+    const m = pineModel(look, 1);
+    if (look.crown.round.share < 1) return; // with a part share the facets show through on purpose
+    const seen = new Map<string, string>();
+    for (const { mesh } of m.crown) {
+      for (let i = 0; i < mesh.positions.length; i += 3) {
+        const key = [0, 1, 2].map((a) => mesh.positions[i + a]!.toFixed(3)).join();
+        const n = [0, 1, 2].map((a) => mesh.normals[i + a]!.toFixed(3)).join();
+        if (seen.has(key)) expect(seen.get(key)).toBe(n);
+        seen.set(key, n);
+      }
+    }
+  });
+
+  it("refuses a round share outside 0 to 1", () => {
+    const bad = structuredClone(forestJson);
+    bad.pine.crown.round.share = 1.4;
+    expect(() => parseForest(bad)).toThrow(/round/);
+  });
+});
+
 describe("tree variety", () => {
   it("is the same tree for the same map and id, and differs between ids", () => {
     expect(treeLook(look, 11, 40)).toEqual(treeLook(look, 11, 40));

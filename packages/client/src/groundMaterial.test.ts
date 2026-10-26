@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import groundJson from "../../../data/ground.json";
-import { groundMaterial, groundShaderCode, parseGroundLook, setGroundWater } from "./groundMaterial";
+import { groundMaterial, groundRegionGlsl, groundShaderCode, parseGroundLook, setGroundWater } from "./groundMaterial";
 
 const copy = () => JSON.parse(JSON.stringify(groundJson)) as typeof groundJson;
 
@@ -38,7 +38,8 @@ describe("ground look", () => {
   it("bakes the numbers into the shader and keeps the bands and fog", () => {
     const g = parseGroundLook(groundJson);
     const code = groundShaderCode(g);
-    expect(code).toContain(g.regions.scale.toFixed(4));
+    expect(groundRegionGlsl(g)).toContain(g.regions.scale.toFixed(4));
+    expect(code).toContain("groundRegionNoise(gp, vGroundY)");
     expect(code).toContain((g.tracks.gauge / 2).toFixed(4));
     expect(code).not.toContain("sin(dot"); // the hash must not depend on how a graphics card does sin()
     expect(code).toContain(g.hills.rock.rise.toFixed(4));
@@ -63,5 +64,25 @@ describe("ground look", () => {
     const bad = copy();
     bad.wet.dampStrength = 3;
     expect(() => parseGroundLook(bad)).toThrow(/wet/);
+  });
+
+  it("washes a faint tone over all the ground, and refuses a loud one", () => {
+    const g = parseGroundLook(groundJson);
+    const code = groundShaderCode(g);
+    expect(code).toContain(g.tone.scale.toFixed(4));
+    expect(code).toContain((g.tone.amount * 2).toFixed(4));
+    const loud = copy();
+    loud.tone.amount = 0.5;
+    expect(() => parseGroundLook(loud)).toThrow(/tone/);
+  });
+
+  it("leaves how far into dirt and rock each spot is, from the same edges as the colours", () => {
+    const g = parseGroundLook(groundJson);
+    const code = groundShaderCode(g);
+    expect(code).toContain("vec2 groundDetailMeters;");
+    for (const edge of [g.regions.dirt.above, g.hills.dirt.rise, g.hills.rock.rise, g.gravel.above, g.hills.flatBelow]) {
+      expect(code).toContain(`, ${edge.toFixed(4)}, `);
+    }
+    expect(code.lastIndexOf("fwidth(")).toBeGreaterThan(code.lastIndexOf("if (")); // derivatives outside any branch
   });
 });

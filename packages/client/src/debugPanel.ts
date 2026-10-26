@@ -34,7 +34,7 @@ export class DebugPanel {
   private render = { frameMedian: 0, frameWorst: 0, workMedian: 0, workWorst: 0, gpuMedian: 0, gpuWorst: 0, drawCalls: 0, triangles: 0, pixelRatio: 0 };
   private costs = { progress: "not run", result: "" };
   private frame = { median: 0, worst: 0 };
-  private status = { note: "offline: changes apply at once" };
+  private status = { note: "waiting for the room" };
   private gameplay: GUI[] = [];
   private perf: GUI;
 

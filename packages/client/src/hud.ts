@@ -1,5 +1,6 @@
 import { ZONE_BROKEN, ZONE_DAMAGED, zoneState, type Loadout, type MatchProgress, type RingNow, type RosterMech, type UpgradeDef, type WeaponStats, type ZoneSet } from "@rustbucket/shared";
 import { percentLeft } from "./damageDiagram";
+import { upgradeEffectText } from "./upgradeText";
 import { countUp, cssSeconds, replay } from "./uiMotion";
 
 export interface RoomView {
@@ -49,21 +50,15 @@ export function bossBarShown(shown: boolean, fallen: boolean, dx: number, dz: nu
 
 // The right-click meter beside the gun in hand (gate 18a), in whole steps so the page changes only when it moves.
 // windup: `value` is heat, `flag` overheated; charge: `value` is the charge share, `flag` full; slug: `flag` ready.
-// Gate 18b: detonate: `value` is the share of the most rivets you can have stuck, `count` how many are; reel: `value`
-// is how far the harpoon has cooled down, `flag` ready.
+// Gate 18b: detonate: `value` is the share of the most rivets you can have stuck, `count` how many are.
 export const ALT_STEPS = 20;
-export type AltKind = "windup" | "slug" | "charge" | "detonate" | "reel";
+export type AltKind = "windup" | "slug" | "charge" | "detonate";
 export interface AltMeter { step: number; label: string; state: "" | "hot" | "overheat" | "full" | "ready" }
 export function altMeter(kind: AltKind, value: number, flag: boolean, out: AltMeter, count = 0): AltMeter {
   out.step = kind === "slug" ? (flag ? ALT_STEPS : 0) : Math.max(0, Math.min(ALT_STEPS, Math.round(value * ALT_STEPS)));
   if (kind === "detonate") {
     out.state = count > 0 ? "ready" : "";
     out.label = count > 0 ? `${count} STUCK` : "";
-    return out;
-  }
-  if (kind === "reel") {
-    out.state = flag ? "ready" : "";
-    out.label = flag ? "READY" : "";
     return out;
   }
   if (kind === "windup") {
@@ -221,8 +216,14 @@ export class Hud {
         const name = l.slots[i]! >= 0 ? weapons[l.slots[i]!]?.name ?? "?" : "empty";
         return `<div class="${i === l.active ? "on" : ""}"><span class="key">${i + 1}</span>${name}</div>`;
       };
-      const fitted = l.upgrades.filter((u) => u >= 0).map((u) => `<span class="swatch" style="background:${upgrades[u]?.color ?? "#fff"}"></span>${upgrades[u]?.name ?? "?"}`);
-      const html = `${slot(0)}${slot(1)}<div class="on"><span class="key">G</span>Grenades <span class="num">x${l.grenades}</span></div>${fitted.length ? `<div class="upgrades">${fitted.join("")}</div>` : ""}`;
+      // Each upgrade slot, filled or not, with what the upgrade does, so a pickup's worth is clear without the mech
+      // wearing it.
+      const upgradeSlot = (u: number) => {
+        const def = u >= 0 ? upgrades[u] : undefined;
+        if (!def) return `<div class="upgrade empty"><span class="swatch"></span>Empty slot</div>`;
+        return `<div class="upgrade"><span class="swatch" style="background:${def.color}"></span>${def.name}<small>${upgradeEffectText(def)}</small></div>`;
+      };
+      const html = `${slot(0)}${slot(1)}<div class="on"><span class="key">G</span>Grenades <span class="num">x${l.grenades}</span></div><div class="upgrades"><span class="label">Upgrades</span>${l.upgrades.map(upgradeSlot).join("")}</div>`;
       this.loadoutBox.innerHTML = html;
       this.loadoutBox.children[l.active]?.after(this.altBox);
     }
@@ -255,15 +256,15 @@ export class Hud {
   }
 
   // The gun in hand's right-click: its name, and a heat bar (OVERHEAT when it locks), a charge ring (it kicks and says
-  // PIERCE when full), a ready dot, the rivets stuck (a bar of them and the count) or the harpoon's cooldown ring.
+  // PIERCE when full), a ready dot, or the rivets stuck (a bar of them and the count).
   // Hidden with a null name. `count` is the rivets stuck, for detonate.
   setAltFire(name: string | null, kind: AltKind, value: number, flag: boolean, count = 0): void {
     const m = altMeter(kind, value, flag, this.altScratch, count);
     const shown = this.altShown;
     const shownName = name ?? "";
     if (shown.name === shownName && shown.kind === kind && shown.step === m.step && shown.state === m.state && shown.label === m.label) return;
-    // A rivet more, or the harpoon ready again: the gauge kicks, so it is felt without looking.
-    const kick = shown.kind === kind && ((kind === "detonate" && m.label !== shown.label && m.step > shown.step) || (kind === "reel" && m.state === "ready" && shown.state !== "ready"));
+    // A rivet more: the gauge kicks, so it is felt without looking.
+    const kick = shown.kind === kind && kind === "detonate" && m.label !== shown.label && m.step > shown.step;
     shown.label = m.label;
     const newly = m.state !== shown.state;
     if (shown.name !== shownName) { shown.name = shownName; this.altBox.style.display = name ? "flex" : "none"; this.altName.textContent = shownName; }

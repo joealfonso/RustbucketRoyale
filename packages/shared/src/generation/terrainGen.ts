@@ -7,9 +7,10 @@ import { SeededRng, deriveSeed } from "./SeededRng";
 //  2. Level pads: ground under and around anything built is held at its chunk's pad height, and the pads of
 //     neighbouring chunks are pulled close enough that the ground between them can ease from one to the other.
 //  3. Aprons: everything else is squeezed between "no steeper than the apron slope up from any pad" and "no steeper
-//     down", which keeps the pads exact and eases the hills into them instead of cutting cliffs. The noise itself is
-//     gentler than the slope cap, so nothing anywhere is steeper than the cap. The map's outer edge is a pad at height 0, so the
-//     edge wall and the junkyard beyond it stand on level ground.
+//     down", which keeps the pads exact and eases the hills into them instead of cutting cliffs. The noise (and an
+//     island's shore) can be steeper than the slope cap where its bumps line up, so it is first cut down to the cap;
+//     then nothing anywhere is steeper than the cap. The map's outer edge is a pad at height 0, so the edge wall and
+//     the junkyard beyond it stand on level ground.
 
 export const ONE = 4096; // fixed point 1 for blend weights
 const FAR = 1 << 30;
@@ -76,8 +77,10 @@ function gapBetween(a: Rect, b: Rect): number {
 // ground between any two neighbouring pads, and between a pad and the map's edge (held at 0), can ease from one to
 // the other at the gentle apron slope across the real gap between them. Wide gaps allow big height changes, so the
 // hills still roll; buildings packed close together share a level. `held` lists each chunk's level areas (empty for
-// an unbuilt chunk). Returns centimetres per chunk.
-export function padHeights(noise: Int32Array, meters: number, chunkSize: number, held: readonly Rect[][], settings: TerrainSettings): Int32Array {
+// an unbuilt chunk). `edgeGap` measures a level area's distance to that 0 edge: by default the map's edge, on an
+// island the waterline, so no pad stands so high near the shore that its apron runs off a cliff into the sea.
+// Returns centimetres per chunk.
+export function padHeights(noise: Int32Array, meters: number, chunkSize: number, held: readonly Rect[][], settings: TerrainSettings, edgeGap?: (r: Rect) => number): Int32Array {
   const n = cornersFor(meters, settings.cellMeters);
   const chunks = meters / chunkSize;
   const perChunk = chunkSize / settings.cellMeters;
@@ -95,9 +98,9 @@ export function padHeights(noise: Int32Array, meters: number, chunkSize: number,
   const neighbours: number[][] = [];
   for (let z = 0; z < chunks; z++) for (let x = 0; x < chunks; x++) {
     const a = z * chunks + x;
-    let edgeGap = Infinity;
-    for (const r of held[a]!) edgeGap = Math.min(edgeGap, r.minX + half, half - r.maxX, r.minZ + half, half - r.maxZ);
-    fromEdge[a] = Number.isFinite(edgeGap) ? rise(Math.max(0, edgeGap)) : FAR;
+    let gapToEdge = Infinity;
+    for (const r of held[a]!) gapToEdge = Math.min(gapToEdge, edgeGap ? edgeGap(r) : Math.min(r.minX + half, half - r.maxX, r.minZ + half, half - r.maxZ));
+    fromEdge[a] = Number.isFinite(gapToEdge) ? rise(Math.max(0, gapToEdge)) : FAR;
     const list: number[] = [];
     if (built(a)) {
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
@@ -178,31 +181,45 @@ export function shapeTerrain(noise: Int32Array, meters: number, pads: readonly P
   // and the junkyard beyond stand on it.
   if (holdEdge) for (let i = 0; i < n; i++) for (const k of [i, (n - 1) * n + i, i * n, i * n + n - 1]) { value[k] = 0; fixed[k] = 1; }
 
+  // The free ground, cut down wherever it rises faster than the slope cap from any corner near it. Lowering, not
+  // raising, so a steep hillside loses its top rather than burying the foot of it.
+  const ground = Int32Array.from(noise);
+  const capStraight = Math.floor(cell * settings.maxRisePercent), capDiagonal = Math.floor(cell * Math.SQRT2 * settings.maxRisePercent);
+  chamferSweeps(n, (k, from, diagonal) => {
+    const rise = diagonal ? capDiagonal : capStraight;
+    if (ground[from]! + rise < ground[k]!) ground[k] = ground[from]! + rise;
+  });
+
   // Upper and lower bounds: from every held corner, the highest and lowest the ground may be at each other corner.
-  // Two sweeps of a 3x3 chamfer (straight and diagonal steps), forward then back, reach every corner.
   const straight = Math.floor(cell * settings.apronRisePercent), diagonal = Math.floor(cell * Math.SQRT2 * settings.apronRisePercent);
   const upper = new Int32Array(n * n).fill(FAR), lower = new Int32Array(n * n).fill(-FAR);
   for (let k = 0; k < n * n; k++) if (fixed[k]) { upper[k] = value[k]!; lower[k] = value[k]!; }
-  const relax = (k: number, from: number, rise: number) => {
+  chamferSweeps(n, (k, from, isDiagonal) => {
+    const rise = isDiagonal ? diagonal : straight;
     if (upper[from]! + rise < upper[k]!) upper[k] = upper[from]! + rise;
     if (lower[from]! - rise > lower[k]!) lower[k] = lower[from]! - rise;
-  };
+  });
+
+  const out = new Int32Array(n * n);
+  for (let k = 0; k < n * n; k++) out[k] = fixed[k] ? value[k]! : Math.min(upper[k]!, Math.max(lower[k]!, ground[k]!));
+  return out;
+}
+
+// Two sweeps of a 3x3 chamfer (straight and diagonal steps) over an n by n grid, forward then back, which carry a
+// slope limit from every corner to every other. `visit` pulls corner k into line with its neighbour `from`.
+function chamferSweeps(n: number, visit: (k: number, from: number, diagonal: boolean) => void): void {
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const k = j * n + i;
-    if (i > 0) relax(k, k - 1, straight);
-    if (j > 0) relax(k, k - n, straight);
-    if (i > 0 && j > 0) relax(k, k - n - 1, diagonal);
-    if (i < n - 1 && j > 0) relax(k, k - n + 1, diagonal);
+    if (i > 0) visit(k, k - 1, false);
+    if (j > 0) visit(k, k - n, false);
+    if (i > 0 && j > 0) visit(k, k - n - 1, true);
+    if (i < n - 1 && j > 0) visit(k, k - n + 1, true);
   }
   for (let j = n - 1; j >= 0; j--) for (let i = n - 1; i >= 0; i--) {
     const k = j * n + i;
-    if (i < n - 1) relax(k, k + 1, straight);
-    if (j < n - 1) relax(k, k + n, straight);
-    if (i < n - 1 && j < n - 1) relax(k, k + n + 1, diagonal);
-    if (i > 0 && j < n - 1) relax(k, k + n - 1, diagonal);
+    if (i < n - 1) visit(k, k + 1, false);
+    if (j < n - 1) visit(k, k + n, false);
+    if (i < n - 1 && j < n - 1) visit(k, k + n + 1, true);
+    if (i > 0 && j < n - 1) visit(k, k + n - 1, true);
   }
-
-  const out = new Int32Array(n * n);
-  for (let k = 0; k < n * n; k++) out[k] = fixed[k] ? value[k]! : Math.min(upper[k]!, Math.max(lower[k]!, noise[k]!));
-  return out;
 }

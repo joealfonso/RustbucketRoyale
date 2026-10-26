@@ -17,12 +17,16 @@ export class FxSprites {
   readonly water: SpritePool; // splashes and ripples where mechs wade, land in water, or shots hit it
   private pools: SpritePool[];
 
-  constructor(scene: THREE.Scene, color: (name: string) => string, scorchFade: { fadeFromMeters: number; fadeToMeters: number }) {
-    const { growSteps, palettes, clearFromMeters, clearToMeters } = vfxConfig.sprites;
+  // `sun` is the world's light (Toon.toSun and look.json bandEdges), for the pools data/vfx.json lights by it.
+  constructor(scene: THREE.Scene, color: (name: string) => string, scorchFade: { fadeFromMeters: number; fadeToMeters: number }, sun: SpriteLook["sun"]) {
+    const { growSteps, palettes, clearFromMeters, clearToMeters, rim, rimmed, sunLit } = vfxConfig.sprites;
     const look = (palette: string, extra: Partial<SpriteLook> = {}): SpriteLook => {
       const colors = palettes[palette];
       if (!colors) throw new Error(`vfx.json: sprites.palettes needs ${palette}`);
-      return { colors: colors as [string, string, string], growSteps, clearFromMeters, clearToMeters, ...extra };
+      return {
+        colors: colors as [string, string, string], growSteps, clearFromMeters, clearToMeters,
+        rim: rimmed.includes(palette) ? rim : undefined, sun: sunLit.includes(palette) ? sun : undefined, ...extra,
+      };
     };
     const cap = (key: string) => () => vfxLevel()[key] ?? 0;
     this.fire = new SpritePool(scene, look("fire"), color, mostOf(vfxConfig, "fire"), cap("fire"), mostOf(vfxConfig, "flames"), cap("flames"));

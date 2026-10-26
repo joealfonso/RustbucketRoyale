@@ -1,7 +1,9 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { CELL, COLUMNS, FRAMES, paintSpriteSheet, ROWS } from "./spriteArt";
-import { SpritePool } from "./sprites";
+import vfxJson from "../../../../data/vfx.json";
+import { parseVfx } from "./quality";
+import { CELL, COLUMNS, FRAMES, INK_SPAN, paintSpriteNormals, paintSpriteSheet, ROWS } from "./spriteArt";
+import { rimColor, rimInkScale, SpritePool } from "./sprites";
 
 const look = { colors: ["#ffffff", "#888888", "#000000"] as [string, string, string], growSteps: 4 };
 
@@ -43,5 +45,42 @@ describe("paintSpriteSheet", () => {
       expect(inside, `frame ${frame}`).toBeGreaterThan(CELL * CELL * 0.03);
       expect(inside, `frame ${frame}`).toBeLessThan(CELL * CELL * 0.95);
     }
+  });
+});
+
+describe("sprite rims and sun-lit puffs (V16b)", () => {
+  it("rims in the pool's own dark colour, darker but never black", () => {
+    const dark = new THREE.Color("#2A2F2E");
+    const rim = rimColor("#2A2F2E", 0.62);
+    expect(rim.r + rim.g + rim.b).toBeLessThan(dark.r + dark.g + dark.b);
+    expect(rim.r + rim.g + rim.b).toBeGreaterThan(0);
+    expect(rim.g).toBeGreaterThan(rim.r); // keeps the soot's own tint
+  });
+
+  it("sizes the rim in screen pixels: a sprite filling the screen's height gets pixels / 1080 of it", () => {
+    // A sprite whose width is the screen's height is 2 cell units across that height.
+    const cellUnits = rimInkScale(2) * INK_SPAN / 2;
+    expect(cellUnits).toBeCloseTo(2 / 1080);
+  });
+
+  it("refuses a black rim and pools that are not palettes", () => {
+    const black = JSON.parse(JSON.stringify(vfxJson)) as typeof vfxJson;
+    black.sprites.rim.darken = 0;
+    expect(() => parseVfx(black)).toThrow(/never black/);
+    const unknown = JSON.parse(JSON.stringify(vfxJson)) as typeof vfxJson;
+    unknown.sprites.sunLit = ["fog"];
+    expect(() => parseVfx(unknown)).toThrow(/sunLit/);
+  });
+
+  it("paints a facing for the smoke puffs only, pointing out from the middle of each ball", () => {
+    const data = paintSpriteNormals();
+    const width = COLUMNS * CELL;
+    const at = (frame: number, u: number, v: number) => (((Math.floor(frame / COLUMNS) * CELL) + Math.floor(v * CELL)) * width + (frame % COLUMNS) * CELL + Math.floor(u * CELL)) * 4;
+    const puff = FRAMES.smoke.first;
+    // Toward a puff's right edge the facing points right; toward its top, up.
+    expect(data[at(puff, 0.8, 0.45)]!).toBeGreaterThan(128 + 40);
+    expect(data[at(puff, 0.5, 0.8) + 1]!).toBeGreaterThan(128 + 40);
+    // A fireball has no facing: it faces the viewer.
+    expect(data[at(FRAMES.fireball.first, 0.7, 0.5)]).toBe(128);
   });
 });

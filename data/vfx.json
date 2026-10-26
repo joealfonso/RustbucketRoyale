@@ -63,6 +63,9 @@
       "scorch": ["soot", "#3B302A", "#55493D"],
       "teal": ["#E6FFFB", "#3FF0E0", "#1C8C86"],
       "water": ["#DDE2CF", "#A3AE95", "#6A7861"]
-    }
+    },
+    "rim": { "darken": 0.62, "pixels": 1.6, "holeWidth": 0.04, "maxShare": 0.6 },
+    "rimmed": ["fire", "smoke", "thinSmoke", "dust", "teal"],
+    "sunLit": ["smoke", "thinSmoke", "dust"]
   }
 }

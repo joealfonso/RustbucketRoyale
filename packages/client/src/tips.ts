@@ -2,9 +2,10 @@
 // is said once, at the moment it is useful, in the same prompt box as "Hold F: repair". Each tip is shown once per
 // player, remembered in this browser, and a real prompt (take, loot, repair) always wins over a tip.
 
-// "detonate" and "reel" (gate 18b) teach the rivet gun's and the harpoon's right-click, in place of "secondary".
-// "health" is said the first time a health plate lies close by.
-export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "drop", "secondary", "detonate", "reel", "health"] as const;
+// "detonate" (gate 18b) teaches the rivet gun's right-click, in place of "secondary".
+// "health" is said the first time a health plate lies close by. "supplyDrop" is said when the first drop is announced
+// and "titan" the first time the Junk Titan's boss bar shows.
+export const TIP_IDS = ["sprint", "ability", "grenade", "weapons", "drop", "secondary", "detonate", "health", "supplyDrop", "titan"] as const;
 export type TipId = (typeof TIP_IDS)[number];
 
 export interface TipsConfig {
@@ -21,22 +22,29 @@ export function parseTips(raw: unknown): TipsConfig {
   return d;
 }
 
-// Where the tips already shown are kept. Private windows and blocked storage throw: then tips repeat each visit.
+// Where the tips already shown are kept, as plain strings: a tip id, or "secondary:<gun>" so each gun teaches its own
+// right-click once. Old lists holding a bare "secondary" still load and are simply never matched again.
+// Private windows and blocked storage throw: then tips repeat each visit.
 export interface TipStore {
-  load(): TipId[];
-  save(ids: TipId[]): void;
+  load(): string[];
+  save(keys: string[]): void;
 }
 
 const KEY = "rustbucket.tips";
 export function browserTipStore(storage: () => Storage): TipStore {
   return {
-    load: () => { try { return JSON.parse(storage().getItem(KEY) ?? "[]") as TipId[]; } catch { return []; } },
-    save: (ids) => { try { storage().setItem(KEY, JSON.stringify(ids)); } catch { /* not remembered */ } },
+    load: () => {
+      try {
+        const saved: unknown = JSON.parse(storage().getItem(KEY) ?? "[]");
+        return Array.isArray(saved) ? saved.filter((k): k is string => typeof k === "string") : [];
+      } catch { return []; }
+    },
+    save: (keys) => { try { storage().setItem(KEY, JSON.stringify(keys)); } catch { /* not remembered */ } },
   };
 }
 
 export class Tips {
-  private shown: Set<TipId>;
+  private shown: Set<string>;
   private text = "";
   private showingFor = 0;
   private walked = 0;
@@ -45,13 +53,19 @@ export class Tips {
     this.shown = new Set(store.load());
   }
 
-  // Shows a tip unless it was shown before. `name` fills in the ability tip's ability or the secondary tip's fire.
-  offer(id: TipId, name = ""): void {
-    if (this.shown.has(id) || this.showingFor > 0) return;
-    this.shown.add(id);
+  // Shows a tip unless it was shown before. `name` fills in the ability tip's ability or the secondary tip's fire; the
+  // secondary tip is remembered per gun, so each gun with a right-click teaches it once.
+  // Returns true when there is nothing left to do (shown now, or seen before), false when another tip is on screen,
+  // so a caller holding a one-off event can try again next frame.
+  offer(id: TipId, name = ""): boolean {
+    const key = id === "secondary" ? `secondary:${name}` : id;
+    if (this.shown.has(key)) return true;
+    if (this.showingFor > 0) return false;
+    this.shown.add(key);
     this.store.save([...this.shown]);
     this.text = this.config.tips[id].replace("{ability}", name).replace("{secondary}", name);
     this.showingFor = this.config.showSeconds;
+    return true;
   }
 
   // Counts plain walking toward the sprint tip. Call each frame of a match with whether you walked without sprinting.

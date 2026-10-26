@@ -12,14 +12,6 @@ const CHEST_HEIGHT = 2.0;
 const LOOT_REACH = 1.2;
 const LOOT_DIRECT = 6; // nearer than this a bot walks straight at loot, not along a route that stops short
 const SAME_LOOT = 0.5;
-// Reeling (gate 18b). Guesses: how far round it looks for a roof to reel onto, the headings tried when reeling away
-// from a target (straight away, then off to either side), how far above level it aims those, and how long it keeps
-// turning toward one before giving up.
-const REEL_HIGH_SEARCH = 40;
-const REEL_AWAY_TURNS = [0, 0.7, -0.7];
-const REEL_AWAY_PITCH = 0.15;
-const REEL_PLAN_SECONDS = 1; // loot offered this near the last is the same thing; things spilled from a wreck lie further apart
-
 type GoalKind = "ring" | "loot" | "heard" | "hunt" | "wander";
 
 export interface BotTarget {
@@ -68,6 +60,8 @@ export class Bot {
   private heardX = 0;
   private heardZ = 0;
   private heardFor = 0;
+  private atX = 0; // where it was at its last think, for judging which sound is nearer
+  private atZ = 0;
   needsRepair = false; // set by the room: a part is bad enough that the bot stops to fix it when nobody is in sight
   abilityKind: AbilityStats["kind"] | null = null; // set by the room: the Q ability of the mech this bot drives
   // Set by the room: the size of the mech this bot drives, for stepping round trunks and crates in its way. Null
@@ -80,13 +74,6 @@ export class Bot {
   weapon: WeaponStats | null = null; // the gun in hand, for its projectile kind and range (gate 18b)
   rivetsReady = 0; // its own rivets riding other mechs near enough to pop now, worked out by the room
   private detonateDown = false; // right-click was pressed last think: let go so the next press is a fresh one
-  private lastDistance = 0; // to the current target last think, for whether it is running away
-  private awaySpeed = 0; // how fast the current target is moving away, m/s
-  private reelFor = 0; // seconds left of trying to reel to (reelX, reelY, reelZ)
-  private reelX = 0;
-  private reelY = 0;
-  private reelZ = 0;
-  private boxScratch: number[] = [];
   private venting = false; // let go of a spun up autocannon to cool, until the heat is down again
   private charging = false; // holding a spike driver charge
   private trackId = 0; // the target whose speed is being watched, for charging on one that stands still
@@ -132,8 +119,11 @@ export class Bot {
     this.replanIn = random() * pathStats.replanSeconds; // so a room full of bots does not all search on the same tick
   }
 
-  // Something was heard here. With nobody in sight, the bot goes to have a look for a while.
+  // Something was heard here. With nobody in sight, the bot goes to have a look for a while: at the nearest thing it
+  // has heard lately. Taking every newest sound instead, a bot near a big fight turned round with each shot, the sounds
+  // a little off the real spots, and stood still.
   hear(x: number, z: number, seconds: number): void {
+    if (this.heardFor > 0 && Math.hypot(x - this.atX, z - this.atZ) > Math.hypot(this.heardX - this.atX, this.heardZ - this.atZ)) return;
     this.heardX = x;
     this.heardZ = z;
     this.heardFor = seconds;
@@ -159,6 +149,10 @@ export class Bot {
 
   clearLootGoal(): void {
     this.hasLoot = false;
+  }
+
+  get hasLootGoal(): boolean {
+    return this.hasLoot;
   }
 
   // The nearest other mech, set by the room whether or not it can be seen. With nothing better to do the bot goes
@@ -216,6 +210,7 @@ export class Bot {
 
   think(self: MechState, targets: readonly BotTarget[], ring: RingNow | null, world: World, dt: number, out: MechInput): void {
     this.drop.forget(); // down: the next drop picks afresh
+    this.atX = self.x; this.atZ = self.z;
     out.moveX = 0; out.moveY = 0; out.run = false; out.jet = false; out.dash = false; out.fire = false; out.altFire = false; out.grenade = false; out.interact = false; out.repair = false; out.ability = false;
     const s = this.stats;
     this.retargetIn -= dt;
@@ -264,10 +259,8 @@ export class Bot {
         out.targetX = target.x; out.targetY = target.y; out.targetZ = target.z;
       }
       this.watchSpeed(target, dt);
-      this.awaySpeed = target.id === this.lastTargetId && dt > 0 && this.spottedFor > dt ? (distance - this.lastDistance) / dt : 0;
-      this.lastDistance = distance;
       this.useSecondary(distance, dt, out);
-      this.useProjectile(self, target, distance, world, dt, out);
+      this.useProjectile(out);
       if (this.abilityKind && this.abilities) this.useAbility(self, target, distance, dt, out);
     } else {
       this.lastTargetId = 0;
@@ -397,70 +390,14 @@ export class Bot {
     }
   }
 
-  // The rivet gun and the harpoon in a fight (gate 18b). Rivets go on whatever it shoots, and right-click pops them
-  // once enough ride mechs that are close but not on top of it. The harpoon is kept for a target far off or running
-  // away, to yank it in. Hurt, a bot sometimes reels away from its target; now and then it reels up onto high ground.
-  private useProjectile(self: MechState, target: BotTarget, distance: number, world: World, dt: number, out: MechInput): void {
-    const weapon = this.weapon, b = this.abilities?.secondary;
-    const kind = weapon?.projectile.kind;
-    if (!weapon || !b || (kind !== "rivet" && kind !== "harpoon")) { this.reelFor = 0; this.detonateDown = false; return; }
-    if (kind === "rivet") {
-      const press = !this.detonateDown && this.rivetsReady >= b.detonateMinRivets;
-      this.detonateDown = press;
-      if (press) { out.altFire = true; out.fire = false; }
-      return;
-    }
-    if (out.fire && distance < b.harpoonMinRange && this.awaySpeed < b.harpoonFleeSpeed) out.fire = false;
-    this.reelFor -= dt;
-    if (this.reelFor <= 0 && this.hurtFor > 0 && this.random() < b.reelHurtChancePerSecond * dt) this.planReel(self, target, weapon, world, false);
-    else if (this.reelFor <= 0 && this.random() < b.reelHighChancePerSecond * dt) this.planReel(self, target, weapon, world, true);
-    if (this.reelFor <= 0) return;
-    this.turnToward(self, this.reelX, this.reelY, this.reelZ, dt);
-    out.fire = false;
-    if (this.angleTo(self, this.reelX, this.reelY, this.reelZ) < this.stats.fireToleranceDegrees * 2 * DEG) {
-      out.altFire = true;
-      out.targetX = this.reelX; out.targetY = this.reelY; out.targetZ = this.reelZ;
-    }
-  }
-
-  // Somewhere to reel to: a box top at least reelMinClimb above it and in reach, or with `high` false, a wall or
-  // slope behind it, away from the target. Leaves it in reelX/Y/Z for a second of turning and firing.
-  private planReel(self: MechState, target: BotTarget, weapon: WeaponStats, world: World, high: boolean): void {
-    const b = this.abilities!.secondary;
-    const range = weapon.maxAimDistance;
-    const eyeY = self.y + EYE_HEIGHT;
-    let found = false;
-    if (high) {
-      const r = Math.min(range, REEL_HIGH_SEARCH);
-      const count = world.query(self.x - r, self.z - r, self.x + r, self.z + r, this.boxScratch);
-      let best = Infinity;
-      for (let i = 0; i < count; i++) {
-        const index = this.boxScratch[i]!;
-        const box = world.boxes[index]!;
-        if (box.maxY - self.y < b.reelMinClimb) continue;
-        // Just under the top edge of its nearest side, where a reel lifts you over.
-        const x = Math.max(box.minX, Math.min(self.x, box.maxX)), z = Math.max(box.minZ, Math.min(self.z, box.maxZ)), y = box.maxY - 0.5;
-        const d = Math.hypot(x - self.x, y - eyeY, z - self.z);
-        if (d < b.reelMinMeters || d > range || d >= best) continue;
-        // Only a top it can see the edge of: the first thing on the way is that box, near the spot.
-        if (world.raycast(self.x, eyeY, self.z, (x - self.x) / d, (y - eyeY) / d, (z - self.z) / d, d + 1, this.hit) && this.hit.distance < d - 1) continue;
-        best = d; this.reelX = x; this.reelY = y; this.reelZ = z; found = true;
-      }
-    } else {
-      const ax = self.x - target.x, az = self.z - target.z;
-      const length = Math.hypot(ax, az) || 1;
-      for (const turn of REEL_AWAY_TURNS) {
-        const cos = Math.cos(turn), sin = Math.sin(turn);
-        const dx = (ax * cos - az * sin) / length, dz = (ax * sin + az * cos) / length;
-        const lift = Math.sin(REEL_AWAY_PITCH), flat = Math.cos(REEL_AWAY_PITCH);
-        if (!world.raycast(self.x, eyeY, self.z, dx * flat, lift, dz * flat, range, this.hit) || this.hit.distance < b.reelMinMeters) continue;
-        const d = this.hit.distance;
-        this.reelX = self.x + dx * flat * d; this.reelY = eyeY + lift * d; this.reelZ = self.z + dz * flat * d;
-        found = true;
-        break;
-      }
-    }
-    if (found) this.reelFor = REEL_PLAN_SECONDS;
+  // The rivet gun in a fight (gate 18b). Rivets go on whatever it shoots, and right-click pops them once enough ride
+  // mechs that are close but not on top of it.
+  private useProjectile(out: MechInput): void {
+    const b = this.abilities?.secondary;
+    if (this.weapon?.projectile.kind !== "rivet" || !b) { this.detonateDown = false; return; }
+    const press = !this.detonateDown && this.rivetsReady >= b.detonateMinRivets;
+    this.detonateDown = press;
+    if (press) { out.altFire = true; out.fire = false; }
   }
 
   // Q in a fight: a ram once the target is close and lined up dead ahead, since it charges the way the bot looks, a
@@ -528,16 +465,23 @@ export class Bot {
     }
   }
 
-  // The direction to walk to reach a spot. Far spots are walked to along a planned route round obstacles,
-  // near ones straight. If no route can be found it just heads straight there, and so it does once past the end of a
-  // route that stops short of the spot.
+  // The direction to walk to reach a spot. Far spots are walked to along a planned route round obstacles, and so are
+  // near ones with something in the way: walked straight at, a noise behind a building's wall pinned bots to the wall.
+  // Near ones in the clear are walked to straight. If no route can be found it just heads straight there, and so it
+  // does once past the end of a route that stops short of the spot.
   private travel(self: MechState, goalX: number, goalZ: number, dt: number): { x: number; z: number } {
     const out = this.heading;
     let tx = goalX, tz = goalZ;
+    let onTheWay = false; // heading for a waypoint, not the end of its route
     const straight = Math.hypot(goalX - self.x, goalZ - self.z);
 
-    if (this.finder && straight > this.pathStats.minPathDistance) {
-      const goalMoved = Math.hypot(goalX - this.pathGoalX, goalZ - this.pathGoalZ) > this.pathStats.goalMoveReplan;
+    if (this.finder && (straight > this.pathStats.minPathDistance || !this.finder.canWalkStraight(self.x, self.z, goalX, goalZ))) {
+      // A whole route ends where the goal was when it was planned. Arrived there with the goal moved on a little since,
+      // less than goalMoveReplan, it plans again rather than standing at the old spot.
+      const n = this.path.length;
+      const arrivedElsewhere = this.pathWhole && n > 0 && Math.hypot(this.path[n - 2]! - self.x, this.path[n - 1]! - self.z) < 3 &&
+        Math.hypot(this.path[n - 2]! - goalX, this.path[n - 1]! - goalZ) > this.pathStats.waypointReach;
+      const goalMoved = arrivedElsewhere || Math.hypot(goalX - this.pathGoalX, goalZ - this.pathGoalZ) > this.pathStats.goalMoveReplan;
       // Replanning on the clock used to be most of a large room's tick, and on a map that never changes it mostly
       // found the same route again. So the clock only replans when the bot has been pushed off its route (it can no
       // longer walk straight to its next waypoint), or is on the last leg of one that stopped short of the goal.
@@ -550,16 +494,17 @@ export class Bot {
         this.pathIndex = 0;
         this.pathGoalX = goalX; this.pathGoalZ = goalZ;
         this.replanIn = this.pathStats.replanSeconds * (0.8 + this.random() * 0.4);
-        if (!this.finder.findPath(self.x, self.z, goalX, goalZ, this.path)) this.path.length = 0;
+        if (!this.finder.findPath(self.x, self.z, goalX, goalZ, this.path, self.y)) this.path.length = 0;
         this.pathWhole = this.path.length > 0 && this.finder.reachedGoal;
         this.noteRouteEnd(goalMoved);
       }
       // The last point of a whole route is the goal itself. The last of one that stops short is passed like any other.
       const last = this.pathWhole ? this.path.length - 2 : this.path.length;
-      while (this.pathIndex * 2 < last && Math.hypot(this.path[this.pathIndex * 2]! - self.x, this.path[this.pathIndex * 2 + 1]! - self.z) < this.pathStats.waypointReach) this.pathIndex++;
+      while (this.pathIndex * 2 < last && this.passed(self)) this.pathIndex++;
       if (this.path.length > 0 && this.pathIndex * 2 < this.path.length) {
         tx = this.path[this.pathIndex * 2]!;
         tz = this.path[this.pathIndex * 2 + 1]!;
+        onTheWay = this.pathIndex * 2 < last;
       } else if (this.path.length > 0) {
         this.shortFor += dt;
       }
@@ -571,8 +516,20 @@ export class Bot {
 
     const dx = tx - self.x, dz = tz - self.z;
     const distance = Math.hypot(dx, dz);
-    if (distance > 3) { out.x = dx / distance; out.z = dz / distance; } else { out.x = 0; out.z = 0; }
+    // Only the end is stopped short of: a waypoint on the way is walked right up to until it counts as passed.
+    if (distance > 3 || (onTheWay && distance > 1e-3)) { out.x = dx / distance; out.z = dz / distance; } else { out.x = 0; out.z = 0; }
     return out;
+  }
+
+  // Whether the waypoint it is heading for counts as reached: within waypointReach of it, as long as it can walk
+  // straight on to the one after from here. Cutting the corner from further off took bots into the end of the wall
+  // the route goes round. Close enough, it moves on anyway.
+  private passed(self: MechState): boolean {
+    const i = this.pathIndex * 2, path = this.path;
+    const distance = Math.hypot(path[i]! - self.x, path[i + 1]! - self.z);
+    if (distance >= this.pathStats.waypointReach) return false;
+    if (distance < this.pathStats.cornerReachMeters || i + 2 >= path.length) return true;
+    return this.finder!.canWalkStraight(self.x, self.z, path[i + 2]!, path[i + 3]!);
   }
 
   // Time past the end of short routes adds up for as long as the new routes keep ending in the same place, so a bot
@@ -640,10 +597,13 @@ export class Bot {
       const inside = !ring || Math.hypot(this.lootX - ring.cx, this.lootZ - ring.cz) < ring.radius;
       if (inside) return { x: this.lootX, z: this.lootZ, urgent: false, kind: "loot" };
     }
-    // A sound worth checking, as long as going there does not mean leaving the safe area.
+    // A sound worth checking, as long as going there does not mean leaving the safe area. Once there it has had its
+    // look, and the next sound it hears, near or far, is the one to go to.
     if (this.heardFor > 0) {
       const inside = !ring || Math.hypot(this.heardX - ring.cx, this.heardZ - ring.cz) < ring.radius - this.stats.ringMargin;
-      if (inside && Math.hypot(this.heardX - self.x, this.heardZ - self.z) > 6) return { x: this.heardX, z: this.heardZ, urgent: false, kind: "heard" };
+      const there = Math.hypot(this.heardX - self.x, this.heardZ - self.z) <= 6;
+      if (there) this.heardFor = 0;
+      else if (inside) return { x: this.heardX, z: this.heardZ, urgent: false, kind: "heard" };
     }
     if (this.hasHunt) {
       const inside = !ring || Math.hypot(this.huntX - ring.cx, this.huntZ - ring.cz) < ring.radius - this.stats.ringMargin;

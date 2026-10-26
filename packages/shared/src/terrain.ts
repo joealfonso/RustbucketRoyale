@@ -16,7 +16,8 @@ export interface TerrainSettings {
   // is never deeper than maxDepthMeters, so a mech always wades and never goes under.
   water: { maxDepthMeters: number; wadeMeters: number };
   // `outcropSpacingMeters` packs a tier's outcrops closer than outcrops.spacingMeters: a small yard needs them denser.
-  // `island` makes the tier an island in the sea instead of a yard inside the edge wall (generation/islandGen.ts).
+  // `island` makes the tier an island in the sea instead of a yard inside the edge wall (generation/islandGen.ts). On an
+  // island `waterShare` is the share of the land that lies under the sea's level, as ponds and marsh.
   tiers: Record<string, { octaves: { spacingMeters: number; amplitudeMeters: number }[]; waterShare?: number; outcropSpacingMeters?: number; island?: IslandSettings }>;
   // Woods of breakable pines on open ground: a slow random mask (from -1000 to 1000) is wooded where above
   // `maskAbove`; trees stand about `spacingMeters` apart, nudged up to `jitterMeters`. Whole metres throughout.
@@ -54,7 +55,7 @@ export interface IslandSettings {
   buildInlandMeters: number;
 }
 
-function checkIsland(tier: string, island: IslandSettings, maxRisePercent: number, waterShare: number | undefined): void {
+function checkIsland(tier: string, island: IslandSettings, maxRisePercent: number): void {
   const where = `terrain.json: ${tier} island`;
   for (const key of ["radiusMeters", "beachRisePercent", "wadeOutMeters", "dropRisePercent", "seabedMeters", "openSeaMeters", "buildInlandMeters"] as const) {
     if (!(typeof island[key] === "number" && island[key] > 0)) throw new Error(`${where}: ${key} must be above 0`);
@@ -69,8 +70,6 @@ function checkIsland(tier: string, island: IslandSettings, maxRisePercent: numbe
   for (const o of island.octaves) {
     if (!(Number.isInteger(o.perSide) && o.perSide > 0 && o.amplitudeMeters >= 0)) throw new Error(`${where}: each octave needs a whole perSide above 0 and amplitudeMeters`);
   }
-  // The sea is the island's only water; ponds would need a second water level.
-  if (waterShare) throw new Error(`terrain.json: ${tier} is an island, so its waterShare must be 0`);
 }
 
 export function parseTerrainSettings(raw: unknown): TerrainSettings {
@@ -98,7 +97,7 @@ export function parseTerrainSettings(raw: unknown): TerrainSettings {
   for (const [tier, t] of Object.entries(d.tiers ?? {})) {
     if (t.waterShare !== undefined && !(t.waterShare >= 0 && t.waterShare < 0.5)) throw new Error(`terrain.json: ${tier} waterShare must be from 0 to under 0.5`);
     if (t.outcropSpacingMeters !== undefined && !(Number.isInteger(t.outcropSpacingMeters) && t.outcropSpacingMeters > 0)) throw new Error(`terrain.json: ${tier} outcropSpacingMeters must be a whole number above 0`);
-    if (t.island !== undefined) checkIsland(tier, t.island, d.maxRisePercent, t.waterShare);
+    if (t.island !== undefined) checkIsland(tier, t.island, d.maxRisePercent);
     for (const o of t.octaves ?? []) {
       if (!(o.spacingMeters > 0) || o.spacingMeters % d.cellMeters !== 0) throw new Error(`terrain.json: ${tier} spacingMeters must be a whole number of cells`);
       if (!(o.amplitudeMeters >= 0)) throw new Error(`terrain.json: ${tier} amplitudeMeters must be 0 or more`);

@@ -65,19 +65,9 @@ export interface RivetStats {
   kind: "rivet";
   fuseSeconds: number; blastDamage: number; blastRadius: number; maxStuck: number;
 }
-// A harpoon on a mech yanks it toward the shooter (yankSpeed for up to yankSeconds, stopping yankStopMeters short, with
-// yankLift m/s upward); on a pickup (passing within itemHitRadius) it slides the pickup over itemPullSeconds to
-// itemStopMeters in front of the shooter; on a prop of a type in smashProps it smashes it and slides its loot the same way.
-export interface HarpoonStats {
-  kind: "harpoon";
-  yankSpeed: number; yankSeconds: number; yankLift: number; yankStopMeters: number;
-  itemPullSeconds: number; itemStopMeters: number; itemHitRadius: number;
-  smashProps: string[];
-}
-export type ProjectileStats = HitscanStats | RivetStats | HarpoonStats;
+export type ProjectileStats = HitscanStats | RivetStats;
 
 const RIVET_KEYS = ["fuseSeconds", "blastDamage", "blastRadius", "maxStuck"] as const;
-const HARPOON_KEYS = ["yankSpeed", "yankSeconds", "yankLift", "yankStopMeters", "itemPullSeconds", "itemStopMeters", "itemHitRadius"] as const;
 
 export function parseProjectile(raw: unknown, name: string): ProjectileStats {
   if (raw === undefined) return { kind: "hitscan" };
@@ -90,14 +80,7 @@ export function parseProjectile(raw: unknown, name: string): ProjectileStats {
     if (!Number.isInteger(s.maxStuck) || s.maxStuck! < 1) throw new Error(`${name}: "maxStuck" must be a whole number of at least 1`);
     return { ...s, kind } as RivetStats;
   }
-  if (kind === "harpoon") {
-    const s = parseNumbers<Record<string, number>>(raw, name, [...HARPOON_KEYS]);
-    above(s, "yankSpeed"); above(s, "itemPullSeconds"); above(s, "itemHitRadius");
-    const smash = (raw as { smashProps?: unknown }).smashProps;
-    if (!Array.isArray(smash) || !smash.every((p) => typeof p === "string")) throw new Error(`${name}: "smashProps" must be a list of prop type ids`);
-    return { ...s, kind, smashProps: [...smash] } as HarpoonStats;
-  }
-  throw new Error(`${name}: "kind" must be hitscan, rivet or harpoon`);
+  throw new Error(`${name}: "kind" must be hitscan or rivet`);
 }
 
 // Right-click fire, built from a few kinds so no gun needs code of its own (gate 18a).
@@ -120,21 +103,13 @@ export interface ChargeStats {
 }
 // Right-click pops every rivet of yours that has stuck, at once. Fires on the press only.
 export interface DetonateStats { kind: "detonate" }
-// A grapple: fires the harpoon (sharing the gun's fire gate, at its own rate) and pulls you at `speed` for up to
-// maxSeconds toward where it lands, aimed standOffMeters out from the surface and climbMeters above it so a reel at a
-// ledge ends on top, stopping stopMeters short.
-export interface ReelStats {
-  kind: "reel";
-  shotsPerSecond: number; speed: number; maxSeconds: number; standOffMeters: number; climbMeters: number; stopMeters: number;
-}
-export type SecondaryStats = WindupStats | SlugStats | ChargeStats | DetonateStats | ReelStats;
+export type SecondaryStats = WindupStats | SlugStats | ChargeStats | DetonateStats;
 
 const SECONDARY_KEYS: Record<SecondaryStats["kind"], readonly string[]> = {
   windup: ["windupSeconds", "maxRateMultiplier", "heatPerShot", "coolPerSecond", "overheatSeconds", "spreadDegrees"],
   slug: ["shotsPerSecond", "damage", "spreadDegrees", "maxAimDistance", "shakeForce"],
   charge: ["chargeSeconds", "minDamageShare", "pierceMechs", "pinSeconds", "pinSpeedShare", "shakeForce"],
   detonate: [],
-  reel: ["shotsPerSecond", "speed", "maxSeconds", "standOffMeters", "climbMeters", "stopMeters"],
 };
 
 // Divided by, or a share that must stay a share: anything else is a typo that would hang or break a gun.
@@ -146,8 +121,6 @@ function checkSecondary(s: SecondaryStats, name: string): void {
     if (!(s.maxRateMultiplier >= 1)) throw new Error(`${name}: "maxRateMultiplier" must be at least 1`);
   } else if (s.kind === "slug") {
     above("shotsPerSecond", s.shotsPerSecond); above("maxAimDistance", s.maxAimDistance);
-  } else if (s.kind === "reel") {
-    above("shotsPerSecond", s.shotsPerSecond); above("speed", s.speed); above("maxSeconds", s.maxSeconds);
   } else if (s.kind === "charge") {
     above("chargeSeconds", s.chargeSeconds); share("minDamageShare", s.minDamageShare); share("pinSpeedShare", s.pinSpeedShare);
     if (!Number.isInteger(s.pierceMechs) || s.pierceMechs < 0) throw new Error(`${name}: "pierceMechs" must be a whole number of at least 0`);
@@ -156,7 +129,7 @@ function checkSecondary(s: SecondaryStats, name: string): void {
 
 export function parseSecondary(raw: unknown, name: string): SecondaryStats {
   const kind = (raw as { kind?: unknown } | null)?.kind;
-  if (kind !== "windup" && kind !== "slug" && kind !== "charge" && kind !== "detonate" && kind !== "reel") throw new Error(`${name}: "kind" must be windup, slug, charge, detonate or reel`);
+  if (kind !== "windup" && kind !== "slug" && kind !== "charge" && kind !== "detonate") throw new Error(`${name}: "kind" must be windup, slug, charge or detonate`);
   const numbers = parseNumbers<Record<string, number>>(raw, name, SECONDARY_KEYS[kind] as string[]);
   const s = { ...numbers, kind } as SecondaryStats;
   checkSecondary(s, name);
@@ -230,13 +203,26 @@ export interface BotPathStats {
   steerClearanceMeters: number; // the gap left between its side and the thing it passes
   steerMaxSizeMeters: number; // anything wider or deeper than this is a wall, left to the route
   steerKeepSideMeters: number; // keeps the side it picked unless the other way is shorter by more than this
+  steerGrazeMeters: number; // a wall it would only catch by this much of its side is stepped off too, not left to the route
   // How long a bot keeps at a goal it is getting nowhere with before it gives up on it: standing at the end of a route
   // that stops short of the goal, or holding E on loot that never comes.
   giveUpSeconds: number;
+  // A route from a cell the coarse grid calls blocked (a mech beside a wall, or among crates) first finds its way out
+  // on the fine nav grid from where the mech stands, looking this far. Past it, the old nearest open cell is used.
+  escapeMeters: number;
+  // Route legs pass anything the routes go round with this much to spare either side of a bot's middle, so its
+  // shoulder does not catch the end of a wall. A guess: a mech's half width and a little.
+  routeClearanceMeters: number;
+  // A bot only moves on to its next waypoint from up to waypointReach away when it can walk straight there from where
+  // it is; otherwise it first comes this near, so it does not cut a corner into the wall.
+  cornerReachMeters: number;
 }
 
 export interface BotLootStats {
   searchMeters: number; // with nobody in sight, a bot goes for useful loot and full wrecks this close
+  // ...and keeps looking this far while it is already after something, so loot near the edge of searchMeters is not
+  // lost and found again with every step, turning the bot round each time.
+  keepMeters: number;
   refreshTicks: number; // how often it looks again for the nearest thing worth having
 }
 
@@ -344,7 +330,7 @@ export const parseCombatStats = (raw: unknown) => parseNumbers<CombatStats>(raw,
 export const parseBotStats = (raw: unknown, name = "bots.json") => parseNumbers<BotStats>(raw, name, BOT_KEYS);
 
 const LOD_KEYS: (keyof BotLodStats & string)[] = ["fullRangeMeters", "cheapEveryTicks", "abstractFightRange", "abstractFightSeconds", "abstractLoserDamage", "abstractWinnerDamage"];
-const PATH_KEYS: (keyof BotPathStats & string)[] = ["cellMeters", "maxNodes", "replanSeconds", "waypointReach", "minPathDistance", "goalMoveReplan", "searchesPerTick", "heuristicWeight", "waterCost", "steerLookMeters", "steerClearanceMeters", "steerMaxSizeMeters", "steerKeepSideMeters", "giveUpSeconds"];
+const PATH_KEYS: (keyof BotPathStats & string)[] = ["cellMeters", "maxNodes", "replanSeconds", "waypointReach", "minPathDistance", "goalMoveReplan", "searchesPerTick", "heuristicWeight", "waterCost", "steerLookMeters", "steerClearanceMeters", "steerMaxSizeMeters", "steerKeepSideMeters", "steerGrazeMeters", "giveUpSeconds", "escapeMeters", "routeClearanceMeters", "cornerReachMeters"];
 
 export function parseBotConfig(raw: unknown): BotConfig {
   const d = raw as Record<string, Record<string, unknown>>;
@@ -362,7 +348,7 @@ export function parseBotConfig(raw: unknown): BotConfig {
     mix, fill: numbersIn(d?.fill, "fill"), difficulties,
     lod: parseNumbers<BotLodStats>(d?.lod, "bots.json lod", LOD_KEYS),
     path: parseNumbers<BotPathStats>(d?.path, "bots.json path", PATH_KEYS),
-    loot: parseNumbers<BotLootStats>(d?.loot, "bots.json loot", ["searchMeters", "refreshTicks"]),
+    loot: parseNumbers<BotLootStats>(d?.loot, "bots.json loot", ["searchMeters", "keepMeters", "refreshTicks"]),
     hunt: parseNumbers<BotHuntStats>(d?.hunt, "bots.json hunt", ["searchMeters", "personDistanceScale"]),
   };
 }

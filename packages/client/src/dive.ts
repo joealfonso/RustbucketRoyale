@@ -89,10 +89,3 @@ export function parseDive(raw: unknown): DiveConfig {
 export function share(value: number, from: number, to: number): number {
   return Math.min(1, Math.max(0, (value - from) / (to - from)));
 }
-
-// Metres above the spawn's ground a match starts from on this tier, from data/drop.json's altitudeMeters (the
-// server's own numbers), or null for a tier without a drop-in (the range), the same as the server's rule.
-export function startAltitude(altitudes: Record<string, unknown>, tier: string): number | null {
-  const value = altitudes[tier];
-  return typeof value === "number" && value > 0 ? value : null;
-}

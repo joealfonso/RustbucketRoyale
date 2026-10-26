@@ -27,10 +27,11 @@ function bars(roster: Roster, m: RosterMech): string {
   }).join("");
 }
 
-// One row of mech cards inside `box`. Each knows its place in the row (--i), so they arrive one after another. Clicking a card picks it, remembers it in this browser and calls `onPick`.
+// One row of mech cards inside `box`, each with its Q ability's name (from `abilityName`) and what it does. Each knows its place in the row (--i), so they arrive one after another. Clicking a card picks it, remembers it in this browser and calls `onPick`.
 // Returns a function that moves the highlight, for when the pick changes elsewhere.
-export function mechCards(box: HTMLElement, roster: Roster, selected: number, onPick: (mech: number) => void): (mech: number) => void {
-  box.innerHTML = roster.mechs.map((m, i) => `<button type="button" data-mech="${i}" style="--i:${i}"><strong>${m.name}</strong><em>${m.role}</em><div class="stats">${bars(roster, m)}</div></button>`).join("");
+export function mechCards(box: HTMLElement, roster: Roster, selected: number, onPick: (mech: number) => void, abilityName: (id: string) => string = () => ""): (mech: number) => void {
+  const power = (m: RosterMech) => `<p class="power"><span class="key">Q</span>${abilityName(m.id)}<small>${m.power}</small></p>`;
+  box.innerHTML = roster.mechs.map((m, i) => `<button type="button" data-mech="${i}" style="--i:${i}"><strong>${m.name}</strong><em>${m.role}</em>${power(m)}<div class="stats">${bars(roster, m)}</div></button>`).join("");
   const buttons = [...box.querySelectorAll<HTMLButtonElement>("button")];
   const highlight = (mech: number) => buttons.forEach((b, i) => b.classList.toggle("on", i === mech));
   highlight(selected);

@@ -5,8 +5,7 @@ import { ITEM_GRENADE, itemArmorZone, itemUpgrade, itemWeapon, type PickupState 
 
 const SPIN = 1.6; // radians a second
 const BOB = 0.15; // metres up and down
-// How quickly a pickup the server moved slides to its new spot (gate 18b: the magnet harpoon drags loot to the
-// shooter): the share of the way left closed each second, eased so it starts fast and settles.
+// How quickly a pickup the server moved slides to its new spot ): the share of the way left closed each second, eased so it starts fast and settles.
 const SLIDE_RATE = 9;
 
 interface Shown {
@@ -110,14 +109,6 @@ export class PickupView {
       // The bob is phased by the mesh id rather than its x, so a sliding pickup does not shimmy.
       s.mesh.position.y = s.baseY + Math.sin(t * 2 + s.mesh.id) * BOB;
     }
-  }
-
-  // Where a pickup is drawn now, for a harpoon latched onto it. False when it is not shown.
-  positionOf(id: number, out: { x: number; y: number; z: number }): boolean {
-    const s = this.shown.get(id);
-    if (!s) return false;
-    out.x = s.x; out.y = s.mesh.position.y; out.z = s.z;
-    return true;
   }
 
   clear(): void {

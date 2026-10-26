@@ -14,6 +14,7 @@
     "anchorAboveMeters": 1.2,
     "openShare": 0.2,
     "bushByTree": 0.35,
+    "bushRound": 0.85,
     "mix": {
       "tyreFlat": 14,
       "tyreStack": 10,
@@ -25,6 +26,11 @@
     }
   },
   "buildAtOnce": 2,
+  "stone": {
+    "smoothDegrees": 70,
+    "round": 0.4,
+    "centreAt": 0.4
+  },
   "triangleBudget": {
     "perCubicMetre": 60,
     "min": 150,
@@ -35,7 +41,7 @@
     "fadeMeters": 12,
     "cellMeters": 8,
     "recheckMeters": 1.5,
-    "triesPerCell": 56,
+    "triesPerCell": 40,
     "patchMeters": 18,
     "patchEdge": [
       0.32,
@@ -61,11 +67,22 @@
       1.12,
       0.62
     ],
+    "grass": {
+      "blades": 6,
+      "width": [0.11, 0.16],
+      "height": [0.32, 0.55],
+      "spread": 0.14,
+      "lean": [0.15, 0.45],
+      "skyward": 0.7,
+      "rootShade": 0.55,
+      "tipShade": 0.94,
+      "rootMeters": 0.32
+    },
     "kinds": {
       "grass": {
         "scale": [
-          1.0,
-          1.8
+          1.2,
+          2.0
         ]
       },
       "weeds": {

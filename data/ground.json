@@ -91,6 +91,10 @@
       "meters": 0.9
     }
   },
+  "tone": {
+    "scale": 0.11,
+    "amount": 0.045
+  },
   "mesh": {
     "tileMeters": 256,
     "lod": {

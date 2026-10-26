@@ -1,7 +1,7 @@
 {
   "pine": {
     "trunk": { "paint": "#5C3B24", "radius": 0.36, "topRadius": 0.2, "sides": 6, "sinkMeters": 0.6 },
-    "crown": { "sides": 7, "jag": 0.22, "fromMeters": 4.6 },
+    "crown": { "sides": 7, "jag": 0.22, "fromMeters": 4.6, "round": { "share": 0.85, "centreAt": 0.3 } },
     "shapes": [
       {
         "weight": 3,

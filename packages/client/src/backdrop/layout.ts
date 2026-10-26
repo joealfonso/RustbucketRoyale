@@ -11,7 +11,8 @@ export interface HeapRow {
   outMeters: Range; // from the outside of the edge wall
   heightMeters: Range;
   radiusMeters: Range;
-  sides: Range;
+  sides: Range; // points round a heap
+  rings: number; // rings from the foot to the top of a heap
   junkPerHeap: number;
   paints: string[];
 }
@@ -66,6 +67,7 @@ export function parseBackdrop(raw: unknown): BackdropConfig {
     const row = c[name];
     for (const key of ["outMeters", "heightMeters", "radiusMeters", "sides"] as const) range(row?.[key], `${name}.${key}`);
     if (!(row.spacingMeters > 0) || !Array.isArray(row.paints) || row.paints.length === 0) throw new Error(`backdrop.json: ${name} needs spacingMeters and paints`);
+    if (!(Number.isInteger(row.rings) && row.rings >= 2 && row.sides[0] >= 6)) throw new Error(`backdrop.json: ${name} needs whole rings (2 or more) and sides of 6 or more`);
   }
   const l = c.landmarks;
   if (!(l?.spacingMeters > 0) || !Array.isArray(l.kinds) || l.kinds.length === 0) throw new Error("backdrop.json: landmarks need spacingMeters and kinds");
@@ -77,6 +79,7 @@ export function parseBackdrop(raw: unknown): BackdropConfig {
   for (const key of ["outMeters", "heightMeters", "deckMeters"] as const) range(sea.rigs?.[key], `sea.rigs.${key}`);
   if (!(Number.isInteger(sea.islets.count) && sea.islets.count >= 0 && Number.isInteger(sea.rigs.count) && sea.rigs.count >= 0 && sea.rigs.legMeters > 0)) throw new Error("backdrop.json: sea needs whole islet and rig counts and rigs.legMeters");
   if (!Array.isArray(sea.islets.paints) || sea.islets.paints.length === 0) throw new Error("backdrop.json: sea.islets needs paints");
+  if (!(Number.isInteger(sea.islets.rings) && sea.islets.rings >= 2 && sea.islets.sides[0] >= 6)) throw new Error("backdrop.json: sea.islets needs whole rings (2 or more) and sides of 6 or more");
   return c;
 }
 

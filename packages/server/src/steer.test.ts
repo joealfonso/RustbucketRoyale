@@ -79,6 +79,24 @@ describe("steering round trunks", () => {
     }
   });
 
+  it("steps off the edge of a wall its line only catches by the shoulder", () => {
+    // Small seed 2019: a bot going along a gap in a scrap pile caught the corner of a 8 m block by 0.35 m with its side
+    // and pressed flat into its face for 9 s, the block too big to step round and the route running along its edge.
+    const block: Box = { minX: 10, maxX: 18, minZ: -11.85, maxZ: -4.15, minY: 0, maxY: 6 };
+    const world = new World([ground, block]);
+    const bot = new Bot(botConfig.difficulties.normal!, lcg(1), botConfig.path, null);
+    bot.body = mech;
+    const self = createMechState(mech, 0, 0, -3.6, 0);
+    const input = createMechInput();
+    const east: RingNow = { ...ring, cx: 200, cz: -3.6 };
+    for (let i = 0; i < 6 * 60; i++) {
+      bot.think(self, [], east, world, DT, input);
+      input.jet = false;
+      stepMech(self, input, mech, DT, world);
+    }
+    expect(self.x).toBeGreaterThan(30);
+  });
+
   it("leaves the way alone when nothing small is in it", () => {
     const wall: Box = { minX: -40, maxX: 40, minZ: -11, maxZ: -9, minY: 0, maxY: 10 }; // a wall is the route's job
     const world = new World([ground, trunk(5, -3), wall, { minX: -1, maxX: 1, minZ: -4, maxZ: -2, minY: 0, maxY: 0.4 }]); // the last one is stepped onto

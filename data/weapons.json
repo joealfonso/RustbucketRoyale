@@ -57,21 +57,6 @@
       "shakeForce": 0.05,
       "projectile": { "kind": "rivet", "fuseSeconds": 1.5, "blastDamage": 12, "blastRadius": 3.5, "maxStuck": 8 },
       "secondary": { "kind": "detonate" }
-    },
-    {
-      "id": "magnetHarpoon",
-      "name": "Magnet Harpoon",
-      "color": "#d8423a",
-      "shotsPerSecond": 0.5,
-      "damage": 15,
-      "spreadDegrees": 0,
-      "pellets": 1,
-      "maxAimDistance": 90,
-      "projectileSpeed": 150,
-      "projectileLifetime": 1,
-      "shakeForce": 0.25,
-      "projectile": { "kind": "harpoon", "yankSpeed": 26, "yankSeconds": 0.6, "yankLift": 3, "yankStopMeters": 5, "itemPullSeconds": 0.5, "itemStopMeters": 2, "itemHitRadius": 1.2, "smashProps": ["crate"] },
-      "secondary": { "kind": "reel", "shotsPerSecond": 0.5, "speed": 30, "maxSeconds": 1.2, "standOffMeters": 1, "climbMeters": 2, "stopMeters": 1 }
     }
   ]
 }

@@ -45,20 +45,7 @@ export interface RivetLook {
   rippleSeconds: number; popShakeRadius: number; popShake: number;
 }
 
-// The magnet harpoon (gate 18b): the head and its cable, flying out, latching, pulling, and winding back in.
-// `cable` is a thin inked line from the muzzle to the head; `tug` the sparks spitting off the latch while it pulls;
-// `yankShake` the jerk on your camera when you are the one yanked; `holdSeconds` how long the cable stays taut when
-// the server does not say; `reelLines` the speed lines rushing past while you reel in.
-export interface HarpoonLook {
-  pool: number; speed: number; retractSpeed: number; holdSeconds: number; missSeconds: number;
-  head: { lengthMeters: number; widthMeters: number; core: string };
-  cable: { widthMeters: number; color: string; core: string; coreShare: number };
-  tug: { everySeconds: number; sparks: number; sparkSpeed: number };
-  yankShake: number; reelShake: number;
-  reelLines: { count: number; radiusMeters: number; clearRadiusMeters: number; lengthMeters: number; widthMeters: number; fromSpeed: number; fullSpeed: number };
-}
-
-export type WeaponLook = WeaponFx & { alt: AltFx; rivet?: RivetLook; harpoon?: HarpoonLook };
+export type WeaponLook = WeaponFx & { alt: AltFx; rivet?: RivetLook };
 
 export interface WeaponFxConfig {
   lowShare: number; // share of every pool kept on the low effects setting
@@ -108,7 +95,6 @@ export function parseWeaponFx(raw: unknown): WeaponFxConfig {
     if (alt.vent) { numbers(alt.vent, ["everySeconds", "lifeSeconds", "rise"], `weapons.${id}.alt.vent`); pair(alt.vent.size, `weapons.${id}.alt.vent.size`); }
     if (alt.pin) numbers(alt.pin, ["everySeconds", "sparks", "sparkSpeed", "ringMeters", "ringSeconds"], `weapons.${id}.alt.pin`);
     if (w.rivet) checkRivet(w.rivet, `weapons.${id}.rivet`);
-    if (w.harpoon) checkHarpoon(w.harpoon, `weapons.${id}.harpoon`);
   }
   return d;
 }
@@ -119,17 +105,6 @@ function checkRivet(r: RivetLook, where: string): void {
   numbers(r.fuse, ["steps", "slowHz", "fastHz"], `${where}.fuse`);
   if (r.fuse.steps < 1) throw new Error(`weaponFx.json: ${where}.fuse.steps must be 1 or more`);
   pair(r.fuse.sizes, `${where}.fuse.sizes`);
-}
-
-function checkHarpoon(h: HarpoonLook, where: string): void {
-  numbers(h, ["pool", "speed", "retractSpeed", "holdSeconds", "missSeconds", "yankShake", "reelShake"], where);
-  numbers(h.head, ["lengthMeters", "widthMeters"], `${where}.head`);
-  numbers(h.cable, ["widthMeters", "coreShare"], `${where}.cable`);
-  for (const [part, key] of [[h.head, "core"], [h.cable, "color"], [h.cable, "core"]] as const) {
-    if (typeof (part as Record<string, unknown>)[key] !== "string") throw new Error(`weaponFx.json: ${where} needs colours for its head and cable`);
-  }
-  numbers(h.tug, ["everySeconds", "sparks", "sparkSpeed"], `${where}.tug`);
-  numbers(h.reelLines, ["count", "radiusMeters", "clearRadiusMeters", "lengthMeters", "widthMeters", "fromSpeed", "fullSpeed"], `${where}.reelLines`);
 }
 
 // Which step of a rivet's fuse it is in `age` seconds into a `fuse` (0 to steps - 1), or -1 while the light is

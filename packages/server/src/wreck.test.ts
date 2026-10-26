@@ -125,6 +125,24 @@ describe("bots and loot", () => {
     expect(config.bots.loot.searchMeters).toBeGreaterThan(13);
   });
 
+  it("keep after loot a little past the range they first look in, so it is not lost and found again with each step", () => {
+    // Medium seed 2008: a wreck right at the edge of searchMeters was found, lost and found again as the bot moved, the
+    // far supply drop taking its place each time, and the bot turned round every quarter second.
+    const { room, config } = makeRoom(undefined, "small", 1);
+    room.tick();
+    const bot = [...players(room).values()].find((p) => p.bot)!;
+    const pickups = (room as unknown as { pickups: { add(i: number, x: number, y: number, z: number): void } }).pickups;
+    const aim = (room as unknown as { aimBotAtLoot(p: Player): void });
+    const { searchMeters, keepMeters } = config.bots.loot;
+    const at = (distance: number) => { bot.state.x = gx - distance; aim.aimBotAtLoot(bot); return bot.bot!.hasLootGoal; };
+    const gx = bot.state.x + searchMeters + 5, gz = bot.state.z;
+    pickups.add(ITEM_GRENADE, gx, 0.5, gz);
+    expect(at(searchMeters + 5)).toBe(false); // not after anything yet: too far to notice
+    expect(at(searchMeters - 5)).toBe(true);
+    expect(at(searchMeters + 5)).toBe(true); // after it now: kept
+    expect(at(keepMeters + 5)).toBe(false);
+  });
+
   it("take two things lying together, pressing E for each rather than holding it down after the first", () => {
     const { room } = makeRoom(undefined, "small", 1);
     room.tick();

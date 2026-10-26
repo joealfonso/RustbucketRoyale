@@ -25,10 +25,9 @@ export const isBinaryType = (first: number) => first === TYPE_SNAPSHOT || first 
 // stamina, the fuel scale, the facing while standing). A 3-byte mask says which are sent; one left out is the same
 // float as last time (0 for a fresh memory), so prediction replays from exactly the numbers the server has. Then one
 // byte of flags.
-// Gate 18a added six more (heat, vent, spin, charge, pin time and pin speed) and a fourth mask byte; gate 18b four
-// more (the harpoon pull) and a fifth.
-const SELF_FLOATS = 33;
-const SELF_MASK_BYTES = 5;
+// Gate 18a added six more (heat, vent, spin, charge, pin time and pin speed) and a fourth mask byte.
+const SELF_FLOATS = 29;
+const SELF_MASK_BYTES = 4;
 // Another mech: id, a byte saying what follows, its flags, its position, its yaw, then its details (hit points,
 // weapon, armour, upgrades). Once a client has been sent a mech, the position goes as the change since last time,
 // 1 byte an axis, and the details only when one changes, so a mech in view usually costs 9 bytes instead of 21.
@@ -109,7 +108,7 @@ export function encodeSnapshot(m: Extract<ServerMessage, { t: "snapshot" }>, mem
   const noises = m.noises.slice(0, 255);
   const pickups = m.pickups?.slice(0, PICKUPS_UNCHANGED - 1) ?? [];
   const s = m.you;
-  const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale, s.speedScale, s.dropPhase, s.dropTime, s.heat, s.overheat, s.windup, s.charge, s.pinTime, s.pinSpeed, s.pullTime, s.pullVx, s.pullVy, s.pullVz];
+  const selfNumbers = [s.x, s.y, s.z, s.vx, s.vz, s.vy, s.bodyYaw, s.dashTime, s.dashCooldown, s.dashX, s.dashZ, s.abilityTime, s.abilityCooldown, s.abilityX, s.abilityZ, s.fuel, s.fuelTimer, s.stamina, s.staminaTimer, s.fuelScale, s.speedScale, s.dropPhase, s.dropTime, s.heat, s.overheat, s.windup, s.charge, s.pinTime, s.pinSpeed];
   // More than 32 bits, so the mask is kept as bytes.
   const mask = new Uint8Array(SELF_MASK_BYTES);
   let present = 0;
@@ -236,10 +235,10 @@ export function decodeSnapshot(bytes: Uint8Array, memory = new SnapshotMemory())
     x: f(), y: f(), z: f(), vx: f(), vz: f(), vy: f(), bodyYaw: f(), dashTime: f(), dashCooldown: f(), dashX: f(), dashZ: f(),
     abilityTime: f(), abilityCooldown: f(), abilityX: f(), abilityZ: f(),
     fuel: f(), fuelTimer: f(), stamina: f(), staminaTimer: f(), fuelScale: f(), speedScale: f(), dropPhase: f(), dropTime: f(),
-    heat: f(), overheat: f(), windup: f(), charge: f(), pinTime: f(), pinSpeed: f(), pullTime: f(), pullVx: f(), pullVy: f(), pullVz: f(), mech: 0,
+    heat: f(), overheat: f(), windup: f(), charge: f(), pinTime: f(), pinSpeed: f(), mech: 0,
     grounded: false, running: false, jetting: false, crawling: false, fuelLocked: false, staminaLocked: false,
   };
-  const selfOrder = [you.x, you.y, you.z, you.vx, you.vz, you.vy, you.bodyYaw, you.dashTime, you.dashCooldown, you.dashX, you.dashZ, you.abilityTime, you.abilityCooldown, you.abilityX, you.abilityZ, you.fuel, you.fuelTimer, you.stamina, you.staminaTimer, you.fuelScale, you.speedScale, you.dropPhase, you.dropTime, you.heat, you.overheat, you.windup, you.charge, you.pinTime, you.pinSpeed, you.pullTime, you.pullVx, you.pullVy, you.pullVz];
+  const selfOrder = [you.x, you.y, you.z, you.vx, you.vz, you.vy, you.bodyYaw, you.dashTime, you.dashCooldown, you.dashX, you.dashZ, you.abilityTime, you.abilityCooldown, you.abilityX, you.abilityZ, you.fuel, you.fuelTimer, you.stamina, you.staminaTimer, you.fuelScale, you.speedScale, you.dropPhase, you.dropTime, you.heat, you.overheat, you.windup, you.charge, you.pinTime, you.pinSpeed];
   const flags = v.getUint8(o); o += 1;
   you.grounded = (flags & 1) !== 0; you.running = (flags & 2) !== 0; you.jetting = (flags & 4) !== 0;
   you.fuelLocked = (flags & 8) !== 0; you.staminaLocked = (flags & 16) !== 0; you.crawling = (flags & 32) !== 0;

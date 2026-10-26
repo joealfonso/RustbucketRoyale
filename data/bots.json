@@ -88,10 +88,15 @@
     "steerClearanceMeters": 0.6,
     "steerMaxSizeMeters": 5,
     "steerKeepSideMeters": 0.5,
-    "giveUpSeconds": 4
+    "steerGrazeMeters": 1,
+    "giveUpSeconds": 4,
+    "escapeMeters": 24,
+    "routeClearanceMeters": 1.2,
+    "cornerReachMeters": 1.5
   },
   "loot": {
     "searchMeters": 40,
+    "keepMeters": 60,
     "refreshTicks": 15
   },
   "hunt": {
@@ -107,13 +112,7 @@
     "chargeStillSpeed": 2,
     "chargeChancePerSecond": 0.8,
     "detonateMinRivets": 3,
-    "detonateMaxRange": 25,
-    "harpoonMinRange": 25,
-    "harpoonFleeSpeed": 3,
-    "reelHurtChancePerSecond": 0.5,
-    "reelHighChancePerSecond": 0.1,
-    "reelMinClimb": 3,
-    "reelMinMeters": 8
+    "detonateMaxRange": 25
   },
   "abilities": {
     "ramChancePerSecond": 0.6,

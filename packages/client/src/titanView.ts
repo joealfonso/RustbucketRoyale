@@ -409,7 +409,7 @@ export class TitanView {
       this.cars.removeNear(m.x, m.y, m.z);
       const floor = this.deps.ground(m.x, m.y + 1, m.z);
       this.deps.explosions.fling(m.x, floor + 0.5, m.z, floor, Math.round(look.stomp.debris * vfxShare("blastDebris")), look.stomp.debrisSpeed);
-      this.deps.sound("smash", this.at);
+      this.deps.sound("carCrash", this.at);
       this.deps.shake(m.x, floor, m.z, look.throw.shakeRadius, look.throw.shakeForce);
     } else if (m.event === "fall") {
       // A last roar, low and long, as it starts to go over.

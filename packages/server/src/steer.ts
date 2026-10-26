@@ -2,10 +2,11 @@ import type { BotPathStats, MechStats, World } from "@rustbucket/shared";
 
 // Bot routes run straight through woods, because trunks are too thin to be walls on the 8 m route grid. So a bot
 // steps round what is right in front of it itself: a trunk, a crate, a barrel, a boulder. Long walls and buildings
-// are left to the route. The numbers are in data/bots.json "path" (steer...), guesses tuned by watching bots cross a
-// dense wood in steer.test.ts. A bot keeps going round the side it picked unless the other way round is shorter by
-// steerKeepSideMeters, so a wobbling heading does not flip it from side to side.
-export type SteerSettings = Pick<BotPathStats, "steerLookMeters" | "steerClearanceMeters" | "steerMaxSizeMeters" | "steerKeepSideMeters">;
+// are left to the route, unless the bot's line only catches one by its shoulder: then it steps off the edge, or it
+// presses flat into the face with nothing to slide it along. The numbers are in data/bots.json "path" (steer...),
+// guesses tuned by watching bots cross a dense wood in steer.test.ts. A bot keeps going round the side it picked unless
+// the other way round is shorter by steerKeepSideMeters, so a wobbling heading does not flip it from side to side.
+export type SteerSettings = Pick<BotPathStats, "steerLookMeters" | "steerClearanceMeters" | "steerMaxSizeMeters" | "steerKeepSideMeters" | "steerGrazeMeters">;
 const MAX_NEARBY = 64; // more boxes than this within a few metres is not a wood, and the rest are ignored
 
 export type SteerBody = Pick<MechStats, "halfWidth" | "height" | "stepHeight">;
@@ -54,7 +55,7 @@ export function steerRound(
     const b = world.boxes[nearby[i]!]!;
     if (b.maxY <= y + body.stepHeight || b.minY >= y + body.height) continue; // stepped onto, or passed under
     const hx = (b.maxX - b.minX) / 2, hz = (b.maxZ - b.minZ) / 2;
-    if (hx * 2 > maxSize || hz * 2 > maxSize) continue;
+    const big = hx * 2 > maxSize || hz * 2 > maxSize;
     const cx = b.minX + hx, cz = b.minZ + hz;
     const along = (cx - x) * dx + (cz - z) * dz;
     const depth = hx * Math.abs(dx) + hz * Math.abs(dz) + mechAlong;
@@ -64,6 +65,8 @@ export function steerRound(
     const ahead = along >= depth;
     const half = hx * Math.abs(acrossX) + hz * Math.abs(acrossZ) + mechAcross + (ahead ? clearance : 0);
     const side = (cx - x) * acrossX + (cz - z) * acrossZ;
+    // A wall counts only when the bot's line is just inside its edge, a short step from clear.
+    if (big && !((side - half < 0 && side - half > -settings.steerGrazeMeters) || (side + half > 0 && side + half < settings.steerGrazeMeters))) continue;
     lows[bands] = side - half; highs[bands] = side + half; alongs[bands] = ahead ? along : Infinity; joined[bands] = 0;
     bands++;
   }

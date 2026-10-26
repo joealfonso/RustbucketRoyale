@@ -10,7 +10,8 @@
     "drop": "Look where you want to land",
     "secondary": "Right-click: {secondary}",
     "detonate": "Right-click: pop every rivet you have stuck",
-    "reel": "Right-click: harpoon a wall and reel yourself to it",
-    "health": "Red cross: walk over it for + health on that part"
+    "health": "Red cross: walk over it for + health on that part",
+    "supplyDrop": "Yellow beam: top loot lands there. Not under it",
+    "titan": "Junk Titan: hit the core. It chases whoever hit it last"
   }
 }

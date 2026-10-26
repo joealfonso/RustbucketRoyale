@@ -1,15 +1,13 @@
-// Rivets and harpoons between the trigger pull and what they do (gate 18b). Plain bookkeeping: the room decides what a
+// Rivets between the trigger pull and what they do (gate 18b). Plain bookkeeping: the room decides what a
 // shot hits when it is fired, files it here to land when the drawn projectile gets there, and does the effects.
 
-// A shot on its way. What it hit was settled when it was fired, against where targets were then.
+// A rivet shot on its way. What it hit was settled when it was fired, against where targets were then.
 export interface Landing {
-  kind: "rivet" | "harpoon";
   owner: number; // the shooter's id
   weapon: number; // the gun's index in weapons.json
   tick: number; // the room tick it lands on
-  reel: boolean; // a harpoon fired with right-click
-  hit: "mech" | "pickup" | "prop" | "world" | "none";
-  target: number; // the mech's, pickup's or prop's id, 0 otherwise
+  hit: "mech" | "prop" | "world";
+  target: number; // the mech's or prop's id, 0 otherwise
   zone: number; // the mech's hit zone
   damage: number; // what it does to that mech (shield already counted)
   x: number; y: number; z: number; // where it struck, in the world

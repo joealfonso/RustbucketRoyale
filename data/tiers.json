@@ -82,8 +82,37 @@
             "amplitudeMeters": 2.5
           }
         ],
-        "waterShare": 0.06,
-        "outcropSpacingMeters": 16
+        "waterShare": 0.08,
+        "outcropSpacingMeters": 16,
+        "island": {
+          "radiusMeters": 128,
+          "roundPercent": 35,
+          "octaves": [
+            {
+              "perSide": 2,
+              "amplitudeMeters": 14
+            },
+            {
+              "perSide": 3,
+              "amplitudeMeters": 14
+            },
+            {
+              "perSide": 5,
+              "amplitudeMeters": 8
+            },
+            {
+              "perSide": 12,
+              "amplitudeMeters": 3
+            }
+          ],
+          "seaLevelMeters": -1,
+          "beachRisePercent": 15,
+          "wadeOutMeters": 5,
+          "dropRisePercent": 35,
+          "seabedMeters": 3,
+          "openSeaMeters": 1,
+          "buildInlandMeters": 10
+        }
       },
       "medium": {
         "octaves": [
@@ -96,7 +125,41 @@
             "amplitudeMeters": 4
           }
         ],
-        "waterShare": 0.08
+        "waterShare": 0.08,
+        "outcropSpacingMeters": 24,
+        "island": {
+          "radiusMeters": 430,
+          "roundPercent": 35,
+          "octaves": [
+            {
+              "perSide": 2,
+              "amplitudeMeters": 50
+            },
+            {
+              "perSide": 3,
+              "amplitudeMeters": 45
+            },
+            {
+              "perSide": 5,
+              "amplitudeMeters": 25
+            },
+            {
+              "perSide": 12,
+              "amplitudeMeters": 10
+            },
+            {
+              "perSide": 24,
+              "amplitudeMeters": 4
+            }
+          ],
+          "seaLevelMeters": -1,
+          "beachRisePercent": 15,
+          "wadeOutMeters": 5,
+          "dropRisePercent": 40,
+          "seabedMeters": 3,
+          "openSeaMeters": 1,
+          "buildInlandMeters": 10
+        }
       },
       "large": {
         "octaves": [
@@ -109,7 +172,40 @@
             "amplitudeMeters": 4.5
           }
         ],
-        "waterShare": 0.08
+        "waterShare": 0.08,
+        "island": {
+          "radiusMeters": 860,
+          "roundPercent": 35,
+          "octaves": [
+            {
+              "perSide": 2,
+              "amplitudeMeters": 100
+            },
+            {
+              "perSide": 3,
+              "amplitudeMeters": 90
+            },
+            {
+              "perSide": 5,
+              "amplitudeMeters": 50
+            },
+            {
+              "perSide": 12,
+              "amplitudeMeters": 20
+            },
+            {
+              "perSide": 24,
+              "amplitudeMeters": 8
+            }
+          ],
+          "seaLevelMeters": -1,
+          "beachRisePercent": 15,
+          "wadeOutMeters": 5,
+          "dropRisePercent": 40,
+          "seabedMeters": 3,
+          "openSeaMeters": 1,
+          "buildInlandMeters": 10
+        }
       }
     },
     "forest": {

@@ -1,4 +1,5 @@
 import { convex, cylinder, merge, prism, type MeshData, type V3 } from "../dressing/shapes";
+import { towardEllipsoid } from "../dressing/softNormals";
 import type { PineLook } from "./config";
 
 // The toon pine, built once per shape and drawn many times (treeView.ts). In its own frame: the foot of the trunk at
@@ -41,6 +42,16 @@ export function tierCone(bottom: number, height: number, radius: number, sides: 
   return outward(faces, bottom + height * 0.3);
 }
 
+// A tier with its normals bent toward an ellipsoid round it (look.crown.round, V16a), so under the toon bands it
+// shades as one soft blob, lit on top and dark underneath, instead of a ring of hard facets. The ellipsoid's middle
+// sits `centreAt` of the way up the tier and reaches the tip, so the tip faces up and the rim faces out and a little
+// down. Only the shading changes: the spiky rim still makes the outline.
+function roundTier(mesh: MeshData, bottom: number, height: number, radius: number, look: PineLook): MeshData {
+  const { share, centreAt } = look.crown.round;
+  const up = height * (1 - centreAt);
+  return towardEllipsoid(mesh, [0, bottom + height * centreAt, 0], [radius, up, radius], share);
+}
+
 // Triangles wound to face away from a point on the y axis at `axisY`, for shapes that are not convex but are
 // star-shaped round it, like a tier's spiky rim and hollow underside.
 function outward(faces: V3[][], axisY: number): MeshData {
@@ -73,7 +84,7 @@ export function pineModel(look: PineLook, shape: number): PineModel {
   const stem = cylinder([0, (trunkTop - trunk.sinkMeters) / 2, 0], trunk.radius, length, "y", trunk.sides, trunk.topRadius);
   const wood: Part[] = [{ mesh: stem, shade: 1, paint: trunk.paint }];
   const parts: Part[] = tiers.map((t, i) => ({
-    mesh: tierCone(t.bottom, t.height, t.radius, crown.sides, crown.jag, (i * Math.PI) / crown.sides / 2),
+    mesh: roundTier(tierCone(t.bottom, t.height, t.radius, crown.sides, crown.jag, (i * Math.PI) / crown.sides / 2), t.bottom, t.height, t.radius, look),
     shade: look.tierShades[i % look.tierShades.length]!,
     paint: null,
   }));
@@ -89,12 +100,14 @@ export function farPine(look: PineLook): Part[] {
   const top = Math.max(...tiers.map((t) => t.bottom + t.height));
   const mid = low.bottom + (top - low.bottom) * 0.45;
   const r = look.trunk.radius;
+  // Rounded like the near tiers, so a pine does not change its shading when it switches.
+  const lowHeight = (top - low.bottom) * 0.62, lowRadius = low.radius * 0.95, midRadius = low.radius * 0.66;
   const stub = prism([[-r, -r], [r, -r], [r, r], [-r, r]], "y", -look.trunk.sinkMeters, low.bottom + 0.5);
   return [
     { mesh: stub, shade: look.far.trunkShade, paint: null },
     // Three sides and no jag: a ring of six even points.
-    { mesh: tierCone(low.bottom, (top - low.bottom) * 0.62, low.radius * 0.95, 3, 0, 0), shade: look.tierShades[0]!, paint: null },
-    { mesh: tierCone(mid, top - mid, low.radius * 0.66, 3, 0, Math.PI / 6), shade: look.tierShades[1 % look.tierShades.length]!, paint: null },
+    { mesh: roundTier(tierCone(low.bottom, lowHeight, lowRadius, 3, 0, 0), low.bottom, lowHeight, lowRadius, look), shade: look.tierShades[0]!, paint: null },
+    { mesh: roundTier(tierCone(mid, top - mid, midRadius, 3, 0, Math.PI / 6), mid, top - mid, midRadius, look), shade: look.tierShades[1 % look.tierShades.length]!, paint: null },
   ];
 }
 

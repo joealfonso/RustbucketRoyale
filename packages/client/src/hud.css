@@ -129,7 +129,13 @@ canvas { display: block; width: 100%; height: 100%; }
 #loadout > div.on { color: var(--hud-amber); }
 #loadout > div.on .key { background: var(--hud-amber); color: var(--hud-soot); border-color: var(--hud-amber); }
 #loadout .swatch { display: inline-block; width: 0.55em; height: 0.55em; margin: 0 0.3em 0 0.5em; vertical-align: 0.05em; }
-#loadout .upgrades { color: var(--hud-amber); }
+/* Upgrades: every slot shows, filled with a name and what it does, or empty, so it is clear there is room for more. */
+#loadout .upgrades { margin-top: 0.3rem; padding-top: 0.3rem; border-top: 1px solid var(--hud-amber-dim); color: var(--hud-amber); }
+#loadout .upgrades > .label { display: block; font-size: 0.7rem; color: var(--hud-amber-dim); }
+#loadout .upgrade { line-height: 1.35; }
+#loadout .upgrade .swatch { margin-left: 0; border: 1px solid var(--hud-amber-dim); }
+#loadout .upgrade small { display: block; padding-left: 0.85em; font: 400 0.75rem var(--hud-body); text-transform: none; letter-spacing: 0; color: var(--hud-text); opacity: 0.85; }
+#loadout .upgrade.empty { color: var(--hud-amber-dim); }
 /* The right-click under the gun in hand: a heat bar, a charge ring or a ready dot. Overheat is red, striped and says
    so; a full charge kicks and says PIERCE, so neither rests on colour alone. */
 #altFire { display: none; align-items: center; gap: 0.45rem; padding-left: 1.6rem; font: 500 0.78rem/1.5 var(--hud-word); color: var(--hud-amber); }
@@ -146,12 +152,9 @@ canvas { display: block; width: 100%; height: 100%; }
 #altFire i.slug { width: 0.6rem; height: 0.6rem; border-radius: 50%; border: 1px solid var(--hud-amber); }
 #altFire[data-state="ready"] i.slug { background: var(--hud-amber); }
 #altFire .altLabel { font: 400 0.75rem var(--hud-num); letter-spacing: 0.1em; }
-/* Gate 18b. The rivets stuck: a bar cut into rivet-sized cells, one lit per rivet. The harpoon: a cooldown ring like
-   the charge's, solid when the next harpoon is ready. */
+/* Gate 18b. The rivets stuck: a bar cut into rivet-sized cells, one lit per rivet.  */
 #altFire i.detonate { width: 4.5rem; height: 0.45rem; background: rgba(0, 0, 0, 0.45); border: 1px solid var(--hud-amber-dim); }
 #altFire i.detonate b { display: block; height: 100%; width: calc(var(--fill, 0) * 100%); background: repeating-linear-gradient(90deg, var(--hud-amber) 0 0.32rem, transparent 0.32rem 0.45rem); }
-#altFire i.reel { width: 0.95rem; height: 0.95rem; border-radius: 50%; background: conic-gradient(var(--hud-amber-dim) calc(var(--fill, 0) * 1turn), rgba(0, 0, 0, 0.45) 0); -webkit-mask: radial-gradient(circle, transparent 0 38%, #000 40%); mask: radial-gradient(circle, transparent 0 38%, #000 40%); }
-#altFire[data-state="ready"] i.reel { background: var(--hud-amber); }
 
 /* Bottom right: the radar. The canvas sits inside its frame and is sized in rem, so the two can never drift apart and
    both grow with the HUD; radar.ts matches the canvas pixels to this size. */
@@ -305,6 +308,8 @@ body.titleScreen > :not(#menu, #game) { display: none !important; }
 #hint.resume { inset: auto 0 auto 0; top: 22%; background: none; pointer-events: none; }
 #hint.resume .screen { display: none; }
 #hint.resume .resumeLine { display: block; pointer-events: auto; margin: 0; padding: 0.6rem 1.2rem; font: 700 1.1rem var(--hud-word); letter-spacing: 0.1em; cursor: pointer; }
+#hint.resume .resumeLine button { display: block; margin: 0.5rem auto 0; font: 700 0.8rem var(--hud-word); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; border: var(--hud-border) solid var(--hud-amber); border-radius: 0; padding: 0.35rem 0.8rem; background: transparent; color: var(--hud-amber); }
+#hint.resume .resumeLine button:hover { background: var(--hud-amber); color: var(--hud-soot); }
 #hint.resume .resumeLine small { display: block; margin-top: 0.2rem; font: 500 0.75rem var(--hud-word); letter-spacing: 0.08em; color: var(--hud-amber-dim); }
 #hint h2 { margin: 0; font: 700 2.2rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.08em; color: var(--hud-amber); }
 #hint .screen.panel { cursor: pointer; }
@@ -331,6 +336,11 @@ body.titleScreen > :not(#menu, #game) { display: none !important; }
 :is(#menu, #hint) .mechCards button.on::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--hud-amber); transform-origin: left; }
 .mechCards strong { display: block; font: 700 1rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.04em; }
 .mechCards em { display: block; font: 400 0.8rem var(--hud-body); font-style: normal; opacity: 0.8; margin-bottom: 0.45rem; }
+.mechCards .power { margin: 0 0 0.5rem; font: 700 0.8rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.06em; }
+.mechCards .power .key { margin-right: 0.35em; }
+/* #menu small sets its own size and colour, so these name the menu too. On the picked card the text turns soot. */
+:is(#menu, #hint) .mechCards .power small { display: block; margin-top: 0.2rem; font: 400 0.75rem/1.3 var(--hud-body); text-transform: none; letter-spacing: 0; color: var(--hud-text); opacity: 0.85; }
+:is(#menu, #hint) .mechCards button.on .power small { color: inherit; opacity: 1; }
 .mechCards .stats { display: grid; grid-template-columns: 3.2rem 1fr; gap: 0.2rem 0.4rem; align-items: center; font: 500 0.7rem var(--hud-word); text-transform: uppercase; letter-spacing: 0.08em; }
 .mechCards .stats i { height: 0.35rem; background: rgba(0, 0, 0, 0.35); }
 .mechCards .stats b { display: block; height: 100%; background: currentColor; }

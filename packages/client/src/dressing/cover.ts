@@ -4,7 +4,7 @@ import type { Toon } from "../toonMaterial";
 import { withoutCreases } from "../creasePass";
 import { COVER_KINDS, type CoverConfig } from "./coverConfig";
 import { CoverSites, ITEM_FLOATS, planCell, type CoverMap } from "./coverPlan";
-import { coverModel, OUTLINED } from "./coverShapes";
+import { bladeShade, coverModel, OUTLINED } from "./coverShapes";
 
 const CACHED_CELLS = 600; // planned cells kept; a cell walked away from is planned again if you come back
 
@@ -70,7 +70,8 @@ export class GroundCover {
   }
 
   private geometryOf(kind: (typeof COVER_KINDS)[number]): THREE.BufferGeometry {
-    const pieces = coverModel(kind);
+    const pieces = coverModel(kind, this.config.grass);
+    const shaded = kind === "grass"; // each blade darkens toward its root
     let vertices = 0, indices = 0;
     for (const p of pieces) { vertices += p.mesh.positions.length; indices += p.mesh.indices.length; }
     const positions = new Float32Array(vertices), normals = new Float32Array(vertices), colors = new Float32Array(vertices);
@@ -82,7 +83,10 @@ export class GroundCover {
       const base = v / 3;
       positions.set(p.mesh.positions, v);
       normals.set(p.mesh.normals, v);
-      for (let k = 0; k < p.mesh.positions.length; k += 3) colors.set([color.r, color.g, color.b], v + k);
+      for (let k = 0; k < p.mesh.positions.length; k += 3) {
+        const shade = shaded ? bladeShade(p.mesh.positions[k + 1]!, this.config.grass) : 1;
+        colors.set([color.r * shade, color.g * shade, color.b * shade], v + k);
+      }
       for (const k of p.mesh.indices) index[i++] = k + base;
       v += p.mesh.positions.length;
     }

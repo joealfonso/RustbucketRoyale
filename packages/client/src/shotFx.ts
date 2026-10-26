@@ -16,7 +16,7 @@ export class ShotFx {
   private altFlashes: MuzzleFlashes;
   readonly impacts: ImpactFx;
   // Called where a bullet hits the map, for the sound; with the weapon (index in weapons.json) and the face it hit,
-  // so offline a rivet can stick there.
+  // so the style test page can stick a rivet there.
   onImpact?: (x: number, y: number, z: number, weapon: number, nx: number, ny: number, nz: number) => void;
   // Called where a bullet the shooter was told hit a mech arrives (the style page's firing range sticks rivets there).
   onMechImpact?: (x: number, y: number, z: number, weapon: number) => void;
@@ -62,13 +62,6 @@ export class ShotFx {
     const lifetime = Math.min(stats.projectileLifetime, shot.length / stats.projectileSpeed);
     const altLook = usesAltLook(stats.secondary.kind, alt);
     (altLook ? this.altTracers : this.tracers)[w]!.spawn(shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz, stats.projectileSpeed, lifetime, hitMech);
-    (altLook ? this.altFlashes : this.flashes).spawn(w, shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz);
-  }
-
-  // Only the muzzle flash, for a shot drawn some other way (the harpoon, whose head and cable are harpoonView's).
-  flash(shot: Shot, weapon: number, alt = -1): void {
-    const w = this.tracers[weapon] ? weapon : 0;
-    const altLook = usesAltLook(this.weapons[w]!.secondary.kind, alt);
     (altLook ? this.altFlashes : this.flashes).spawn(w, shot.ox, shot.oy, shot.oz, shot.dx, shot.dy, shot.dz);
   }
 

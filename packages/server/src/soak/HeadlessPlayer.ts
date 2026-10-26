@@ -92,9 +92,6 @@ export class HeadlessPlayer {
     // Its own rivets, from what it is told, so the brain knows when popping them is worth it.
     if (message.t === "rivet" && message.event === "stick" && message.owner === this.id) this.stuckOn.set(message.id, message.on ?? 0);
     if (message.t === "explode" && message.rivet !== undefined) this.stuckOn.delete(message.rivet);
-    // A harpoon yank on it, or its own reel, starts on the server. The browser books its own reel from its own aim;
-    // this pretend player does not, so neither is judged.
-    if (message.t === "harpoon" && message.seconds !== undefined && ((message.hit === "mech" && message.target === this.id && !message.reel) || (message.reel && message.id === this.id))) this.settleSnapshots = 3;
     // So is the Junk Titan's stomp.
     if (message.t === "titan" && message.event === "stomp" && this.predictor && Math.hypot(message.x - this.predictor.state.x, message.z - this.predictor.state.z) <= (message.radius ?? 0) + 1) this.settleSnapshots = 3;
   }

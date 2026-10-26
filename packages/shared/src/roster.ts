@@ -8,6 +8,7 @@ export interface RosterMech {
   id: string; // matches the kit of the same name in data/mechKits.json
   name: string;
   role: string;
+  power: string; // what its Q ability does, one line for the mech cards
   speed: number; // walk and run speed
   jets: number; // fuel tank: how long it can fly
   lift: number; // jet push and climb rate: how fast it gets up
@@ -30,7 +31,7 @@ export function parseRoster(raw: unknown): Roster {
   if (!Array.isArray(list) || list.length === 0 || list.length > MAX_ROSTER) throw new Error(`roster.json: needs 1 to ${MAX_ROSTER} mechs`);
   const mechs = list.map((entry): RosterMech => {
     const m = entry as Record<string, unknown>;
-    if (typeof m.id !== "string" || typeof m.name !== "string" || typeof m.role !== "string") throw new Error("roster.json: every mech needs id, name and role");
+    if (typeof m.id !== "string" || typeof m.name !== "string" || typeof m.role !== "string" || typeof m.power !== "string") throw new Error("roster.json: every mech needs id, name, role and power");
     for (const key of ["speed", "jets", "lift"]) if (!positive(m[key])) throw new Error(`roster.json: ${m.id} ${key} must be above 0`);
     const taken = m.damageTaken as Record<string, unknown> | undefined;
     for (const zone of ZONE_KEYS) if (!positive(taken?.[zone])) throw new Error(`roster.json: ${m.id} damageTaken.${zone} must be above 0`);

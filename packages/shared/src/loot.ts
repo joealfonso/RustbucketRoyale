@@ -26,7 +26,7 @@ export interface LootConfig {
   colors: { grenade: string }; // health plates look as data/pickupLook.json says
   drops: Record<string, LootDrop>;
   // Per map tier, weights that replace a table's own for the items named, in every table that has them (gate 18b: the
-  // rivet gun suits small maps' close fights, the harpoon large maps' distances). A tier left out uses the tables as they are.
+  // rivet gun suits small maps' close fights). A tier left out uses the tables as they are.
   tierWeights?: Record<string, Record<string, number>>;
 }
 

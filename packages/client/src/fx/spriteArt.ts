@@ -30,7 +30,9 @@ export const FRAMES = {
 // an eighth of a cell wide.
 export const INK_SPAN = 0.25;
 
-interface Ink { band: number; dissolve: number; inside: number } // band 0 to 3, dissolve 0 to 1, inside as a signed distance in cell units
+// band 0 to 3, dissolve 0 to 1, inside as a signed distance in cell units; nx and ny the surface's facing across the
+// cell for shapes that have one (smoke puffs), for sprites lit by the sun (sprites.ts, paintSpriteNormals).
+interface Ink { band: number; dissolve: number; inside: number; nx?: number; ny?: number }
 
 function noise(x: number, y: number, seed: number): number {
   const ix = Math.floor(x), iy = Math.floor(y);
@@ -88,7 +90,7 @@ function smoke(x: number, y: number, variant: number): Ink {
   const lit = nx * LIGHT[0]! + ny * LIGHT[1]! + nz * LIGHT[2]!;
   const band = lit > 0.6 ? (1 - lit) / 0.4 : lit > 0.1 ? 1 + (0.6 - lit) / 0.5 : 2 + Math.min(0.99, (0.1 - lit) / 1.1);
   const n = noise(x * 3, y * 3, variant + 60);
-  return { band, dissolve: 0.5 * Math.min(1, Math.max(0, best) * 2) + 0.5 * n, inside: best * 0.5 };
+  return { band, dissolve: 0.5 * Math.min(1, Math.max(0, best) * 2) + 0.5 * n, inside: best * 0.5, nx, ny };
 }
 
 // A shockwave ring, thinning frame by frame, with a ragged inside edge; dark at its outer lip where the dust piles up.
@@ -171,6 +173,26 @@ export function paintSpriteSheet(): Uint8Array {
         data[at + 1] = Math.round(Math.max(0, Math.min(1, ink.dissolve)) * 255);
         data[at + 2] = Math.round(Math.max(0, Math.min(1, ink.inside / INK_SPAN)) * 255);
         data[at + 3] = Math.round(Math.max(0, Math.min(1, 0.5 + ink.inside * SOFT_EDGE)) * 255);
+      }
+    }
+  }
+  return data;
+}
+
+// The facing of every shape that has one, as RG bytes (0 to 255 for -1 to 1) in the same layout as the sheet, so a
+// sun-lit pool (sprites.ts) can light a puff from wherever the sun is rather than from the sheet's painted upper left.
+// Shapes without a facing face the viewer (128, 128).
+export function paintSpriteNormals(): Uint8Array {
+  const width = COLUMNS * CELL, height = ROWS * CELL;
+  const data = new Uint8Array(width * height * 4).fill(128);
+  for (let frame = FRAMES.smoke.first; frame < FRAMES.smoke.first + FRAMES.smoke.count; frame++) {
+    const cx = (frame % COLUMNS) * CELL, cy = Math.floor(frame / COLUMNS) * CELL;
+    for (let j = 0; j < CELL; j++) {
+      for (let i = 0; i < CELL; i++) {
+        const ink = inkAt(frame, (i + 0.5) / CELL, (j + 0.5) / CELL);
+        const at = ((cy + j) * width + cx + i) * 4;
+        data[at] = Math.round((Math.max(-1, Math.min(1, ink.nx ?? 0)) * 0.5 + 0.5) * 255);
+        data[at + 1] = Math.round((Math.max(-1, Math.min(1, ink.ny ?? 0)) * 0.5 + 0.5) * 255);
       }
     }
   }

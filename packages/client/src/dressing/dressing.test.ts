@@ -52,7 +52,9 @@ describe("junkyard dressing", () => {
     expect(near.size).toBeGreaterThan(0);
     for (const i of near) {
       const b = map.boxes[i]!;
-      expect(Math.hypot((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2)).toBeLessThan(120 + 50 * 1.5);
+      // Chunks count as near when their middles are within the radius plus half a chunk of the camera's chunk's
+      // middle; a box is filed by its own middle, and the camera and the box can each be half a chunk's diagonal off.
+      expect(Math.hypot((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2)).toBeLessThan(120 + 50 * 0.5 + 50 * Math.SQRT2);
     }
     for (let frame = 0; frame < 60; frame++) dressing.update(400, 400);
     for (const i of near) {

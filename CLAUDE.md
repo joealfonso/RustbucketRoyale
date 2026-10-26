@@ -24,6 +24,9 @@ Open these on demand. Do not import them.
 - Plain names, small files, one job per module, no speculative abstractions. Comments explain why, never what. If something is a guess, say so in a comment or in your reply.
 - Every milestone ends with a playtest gate. Tell me when it is ready for the gate. Never start the next milestone on your own.
 
+## Agent team
+Role agents live in `.claude/agents/`: `designer`, `engineer`, `art-director`, `artist`, `playtester`, `marketer`, each with a small crew (e.g. `engineer-checker`). Send work to the matching role. Subagents cannot start subagents, so leads list "Crew tasks" and the main session dispatches them. Review every result before it lands.
+
 ## Fun rules
 - Game feel comes first: movement weight, jump jet response, hit feedback, screen shake, and sound hooks get tuned before later systems are built on top.
 - Every system must create a good story or a good clip. If it only adds a rule, propose cutting it.
@@ -64,7 +67,7 @@ Open these on demand. Do not import them.
 - `npm run build` then `npm start`: production mode, as on the public host: one address serves the page and the game (PORT, default 8080), compressed, game connections only from its own pages (or `ALLOWED_ORIGINS`), `/health` for the host. `Dockerfile` builds the same as an image.
 - `SIM_LAG_MS=120 SIM_JITTER_MS=20 npm run server`: pretend every player is that far away, to try internet lag on one machine. Development only.
 - `DEV_TUNING=1 npm run server`: the same, with live tuning: the F1 panel changes gameplay numbers for everyone in the room. Never on a public host.
-- Offline practice: `?offline&tier=small|medium|large|range&seed=123`. Add `&overview` to look down on the whole map.
+- Offline practice: `?offline&tier=small|medium|large|range&seed=123`. It runs the server's own room inside the page (`packages/client/src/localRoom.ts`), with no bots unless `&bots=N`. Add `&overview` to look down on the whole map.
 - `npm test`: Vitest. `npm run typecheck`: TypeScript. `npm run build`: production client build.
 - `npm run gauntlet`: typecheck, the determinism scan, the asset checker (`scripts/check-assets.ts`: models in `assets/models` against `data/assetRules.json`), tests (including a real two-client server test and a full small-tier soak match), and build in one pass or fail verdict. Results in `artifacts/`.
 - http://localhost:5173/style.html with `npm run dev`: the V1 style test, keys 1 / 2 / 3 for 10, 50 and 150 m.

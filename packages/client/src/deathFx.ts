@@ -297,7 +297,6 @@ export class DeathFx {
     for (const o of model.gunParts) loose(o);
     for (const o of model.plates[ARMS] ?? []) loose(o);
     for (const s of model.serials) if (s.zone === ARMS) loose(s.object);
-    for (const o of model.upgradeParts) if (o && Math.abs(o.position.x) > middleMeters) loose(o);
     // One leg, while there is still a leg to lose.
     if (cfg.legs > 0 && model.hp[0]! > 0) {
       const legs = model.legs.length > 0 ? model.legs.length : model.legMeshes.length;

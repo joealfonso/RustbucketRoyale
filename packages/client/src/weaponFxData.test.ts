@@ -128,11 +128,10 @@ describe("rivet fuse", () => {
     expect(fuseBlink(9, 1.5, 3, 2, 8)).toBe(2); // past the fuse it stays on the last step
   });
 
-  it("has rivet and harpoon looks wherever weapons.json has those guns", () => {
+  it("has a rivet look wherever weapons.json has the rivet gun", () => {
     const weapons = parseWeapons(weaponsJson).weapons;
     weaponFxFor(config, weapons).forEach((fx, i) => {
       if (weapons[i]!.projectile.kind === "rivet") expect(fx.rivet).toBeDefined();
-      if (weapons[i]!.projectile.kind === "harpoon") expect(fx.harpoon).toBeDefined();
     });
   });
 });
